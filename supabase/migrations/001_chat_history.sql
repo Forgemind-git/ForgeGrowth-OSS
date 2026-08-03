@@ -37,6 +37,11 @@ CREATE INDEX IF NOT EXISTS idx_chat_timestamp
 -- RLS: enable but allow service_role to bypass
 ALTER TABLE coexistence.chat_history ENABLE ROW LEVEL SECURITY;
 
+-- Postgres has no CREATE POLICY IF NOT EXISTS, so a bare CREATE makes this
+-- whole migration fail on the second run — which breaks the documented upgrade
+-- path (`git pull && ./scripts/install.sh` re-applies every file). Drop first:
+-- the policy is fully defined here, so recreating it is lossless.
+DROP POLICY IF EXISTS service_role_all ON coexistence.chat_history;
 CREATE POLICY service_role_all ON coexistence.chat_history
   FOR ALL TO service_role USING (true) WITH CHECK (true);
 

@@ -1,0 +1,28 @@
+# Force LF on everything that is executed rather than merely read.
+#
+# Git on Windows defaults to core.autocrlf=true, which rewrites checked-out text
+# files to CRLF. A shell script with CRLF endings fails before it runs a line —
+# bash reads the shebang as "/usr/bin/env bash\r" and reports "bad interpreter",
+# or trips over "\r: command not found". The same applies inside the Docker
+# images, whose base layers are Linux regardless of the host.
+#
+# These rules make the ending part of the file's identity, so a Windows clone
+# gets LF no matter how the user has configured autocrlf.
+
+* text=auto eol=lf
+
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.sql       text eol=lf
+*.conf      text eol=lf
+.env.example text eol=lf
+
+# Binary — never touch.
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.woff  binary
+*.woff2 binary

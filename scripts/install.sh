@@ -81,8 +81,14 @@ ok "docker $(docker version --format '{{.Server.Version}}' 2>/dev/null || echo '
 
 # Building the frontend needs real memory; a 1 GB VPS OOMs mid-build with an
 # error that looks like a code fault rather than a resource limit.
-if [ -r /proc/meminfo ]; then
+mem_mb=''
+if [ -r /proc/meminfo ]; then                                   # Linux
   mem_mb=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
+elif command -v sysctl >/dev/null 2>&1; then                    # macOS / BSD
+  bytes=$(sysctl -n hw.memsize 2>/dev/null || echo '')
+  case "$bytes" in ''|*[!0-9]*) : ;; *) mem_mb=$((bytes / 1048576)) ;; esac
+fi
+if [ -n "$mem_mb" ]; then
   if [ "$mem_mb" -lt 1800 ]; then
     warn "only ${mem_mb} MB RAM detected — the frontend build may be OOM-killed."
     warn "If it dies without a clear error, add swap or build elsewhere and push the image."
@@ -118,7 +124,7 @@ get_env() { sed -n "s/^${1}=//p" "$ENV_FILE" | head -1; }
 # legal for compose (last wins) but is the kind of file nobody can debug later.
 set_env() {
   local key="$1" val="$2" tmp
-  tmp=$(mktemp)
+  tmp=$(mktemp "${TMPDIR:-/tmp}/forgegrowth.XXXXXX")
   if grep -q "^${key}=" "$ENV_FILE"; then
     # value goes through the environment, so any character is safe in it
     KEY="$key" VAL="$val" awk '
@@ -148,9 +154,29 @@ fi
 case "$WEB_PORT" in ''|*[!0-9]*) die "--port must be a number (got '$WEB_PORT')" ;; esac
 
 # Refuse a port already in use rather than letting `compose up` fail later with
-# a bind error buried in the output.
-if command -v ss >/dev/null 2>&1 && ss -ltn "( sport = :$WEB_PORT )" 2>/dev/null | grep -q LISTEN; then
-  die "port $WEB_PORT is already in use. Re-run with --port <other>."
+# a bind error buried in the output. Each tool here exists on a different
+# platform (ss = Linux, lsof = macOS, netstat = both + Git Bash); if none is
+# present we simply skip the check rather than guessing.
+port_in_use() {
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn 2>/dev/null | grep -qE "[:.]${1}[[:space:]]"
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"${1}" -sTCP:LISTEN >/dev/null 2>&1
+  elif command -v netstat >/dev/null 2>&1; then
+    netstat -an 2>/dev/null | grep -qE "[:.]${1}[[:space:]].*LISTEN"
+  else
+    return 1
+  fi
+}
+# ...but the port being busy is EXPECTED when re-running against a stack that
+# is already up — that container is the one holding it. Only object when the
+# listener is somebody else's.
+ours_running=0
+if docker compose ps --status running --services 2>/dev/null | grep -qx web; then
+  ours_running=1
+fi
+if [ "$ours_running" = 0 ] && port_in_use "$WEB_PORT"; then
+  die "port $WEB_PORT is already in use by another process. Re-run with --port <other>."
 fi
 
 if [ -z "$PUBLIC_URL" ]; then
@@ -280,6 +306,10 @@ if [ -n "$ADMIN_PASSWORD" ]; then
   else
     printf '    Password  %s(the one you supplied)%s\n' "$DIM" "$N"
   fi
+elif [ -n "$(get_env BOOTSTRAP_ADMIN_PASSWORD)" ]; then
+  # Re-run against an existing install: we did not touch the password, and it is
+  # sitting in .env — so do not send the reader to a log line that is long gone.
+  printf '    Password  %s(unchanged — see BOOTSTRAP_ADMIN_PASSWORD in .env)%s\n' "$DIM" "$N"
 else
   echo '    Password  printed once in the backend log:'
   echo '                docker compose logs backend | grep -A5 "FIRST-RUN ADMIN"'

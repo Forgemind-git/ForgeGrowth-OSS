@@ -12,9 +12,38 @@ Source-available under **AGPL-3.0**. Self-hosted, single-tenant, no SaaS tier, n
 
 ---
 
-## Quick start
+## Requirements
 
-You need Docker with the Compose v2 plugin. Nothing else.
+| | |
+|---|---|
+| **Docker** | with the **Compose v2** plugin — `docker compose version` must work (not `docker-compose`) |
+| **Shell** | anything POSIX-ish that can run bash: Linux, macOS, or Windows via WSL2 / Git Bash |
+| **RAM** | 2 GB to build. The frontend build is the peak; on 1 GB it gets OOM-killed with an error that reads like a code fault |
+| **Disk** | ~3 GB for the images |
+
+Nothing else — no Node, Postgres, Redis or MinIO on the host. Everything runs in containers.
+
+### Platform notes
+
+**Linux** — works as written.
+
+**macOS** — works as written, with Docker Desktop, OrbStack or Colima. The installer detects the
+platform differences it cares about (it reads memory via `sysctl` rather than `/proc`, and checks
+ports with `lsof` rather than `ss`). Apple Silicon is fine; the images build natively for arm64.
+
+**Windows** — the installer is a shell script, so run it inside a Unix shell:
+
+- **WSL2 (recommended).** Install Docker Desktop, enable *Settings → Resources → WSL integration*
+  for your distro, then clone and run inside WSL.
+  **Clone into the Linux filesystem** (`~/forge-growth`), not into `/mnt/c/...` — a repo on the
+  Windows drive is dramatically slower and can confuse file-watching during development.
+- **Git Bash** also works for the install itself.
+
+There is no PowerShell or `.bat` installer. If you would rather not use a shell at all, the
+[manual path](#installing-without-the-script) below is four commands you can run from any terminal,
+PowerShell included.
+
+## Quick start
 
 ```bash
 git clone <your-fork-url> forge-growth
@@ -22,16 +51,56 @@ cd forge-growth
 ./scripts/install.sh
 ```
 
-That one command checks prerequisites, generates every secret, builds the images, starts Postgres /
-Redis / MinIO / backend / frontend, applies all 81 migrations, and prints the URL and admin
-credentials to sign in with. It is safe to re-run — an existing `.env` is never overwritten, so
-`git pull && ./scripts/install.sh` is also the upgrade path.
+That one command:
 
-Non-interactive:
+1. checks the prerequisites above and fails with a specific reason if one is missing,
+2. creates `.env` and generates every secret into it,
+3. builds the images and starts Postgres, Redis, MinIO, the backend and the frontend,
+4. waits for the database to be genuinely accepting connections (not merely started),
+5. applies all 81 migrations,
+6. prints the URL and the admin credentials to sign in with.
+
+It asks three questions — host port, public URL, admin email — each with a default you can accept by
+pressing return. To skip the questions entirely:
 
 ```bash
 ./scripts/install.sh --yes --port 8080 --url https://crm.example.com \
   --admin-email you@example.com --admin-password 'choose-a-strong-one'
+```
+
+| Flag | |
+|---|---|
+| `--port <n>` | host port for the UI (default 8080) |
+| `--url <origin>` | public origin the browser will use; sets CORS and the cookie domain |
+| `--admin-email <addr>` | first-run admin |
+| `--admin-password <pw>` | first-run password (omit and one is generated) |
+| `--no-build` | skip the image build |
+| `--yes` / `-y` | accept every default, never prompt |
+
+**Re-running is safe and is the upgrade path.** An existing `.env` is never overwritten — only empty
+or placeholder values get filled in — and every migration is idempotent, so:
+
+```bash
+git pull && ./scripts/install.sh
+```
+
+### Installing without the script
+
+The script only automates these steps; you can run them yourself from any shell, PowerShell
+included:
+
+```bash
+cp .env.example .env
+# edit .env: set FORGECRM_JWT_SECRET, FORGECRM_ENCRYPTION_KEY (32 bytes hex),
+# META_WEBHOOK_VERIFY_TOKEN, POSTGRES_PASSWORD, MINIO_ROOT_PASSWORD
+docker compose up -d --build
+./scripts/migrate.sh        # or apply supabase/migrations/*.sql in filename order
+```
+
+Then read the generated admin password out of the backend log:
+
+```bash
+docker compose logs backend | grep -A5 "FIRST-RUN ADMIN"
 ```
 
 | | |
