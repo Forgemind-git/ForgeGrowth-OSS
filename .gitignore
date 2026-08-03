@@ -1,0 +1,69 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+dist/
+build/
+**/dist/
+**/build/
+*.tgz
+
+# Environment & secrets — NEVER commit
+.env
+.env.local
+.env.production
+.env.*.local
+**/.env
+!.env.example
+!**/.env.example
+
+# Runtime data (mounted as docker volumes in prod)
+backend/uploads/
+backend/media/
+uploads/
+media/
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Coverage & cache
+coverage/
+.nyc_output/
+.cache/
+.parcel-cache/
+.vite/
+
+# Temp / scratch
+*.tmp
+*.bak
+/tmp/
+scratch/
+
+# PDFs / large generated artifacts
+ForgeCRM_LLD.html
+*.pdf
+
+# Local Claude memory (machine-specific)
+.claude/
+
+# Backups
+*.dump
+*.sql.gz
+*.backup
+
+# Local stack state
+.env

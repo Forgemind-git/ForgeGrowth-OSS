@@ -1,0 +1,104 @@
+# Forge Growth — self-contained stack.
+#
+#   cp .env.example .env
+#   ./scripts/generate-secrets.sh >> .env
+#   docker compose up -d
+#   ./scripts/migrate.sh
+#
+# Then open http://localhost:8080 and sign in with the credentials printed in
+# `docker compose logs backend`.
+#
+# ⚠ Only the web frontend publishes a host port. Postgres, Redis and MinIO stay
+#   on the internal network — exposing a database to the internet is the single
+#   most common way a self-hosted deployment gets compromised. Uncomment a
+#   `ports:` block only for local debugging, and bind to 127.0.0.1 when you do.
+
+name: forgegrowth
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-forgegrowth}
+      POSTGRES_USER: ${POSTGRES_USER:-forgegrowth}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # Depends-on alone only waits for the container to START. Postgres accepts
+      # connections seconds later, so without this the backend's first query
+      # fails and it exits before Postgres is genuinely ready.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-forgegrowth} -d ${POSTGRES_DB:-forgegrowth}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # ports: ["127.0.0.1:5432:5432"]   # local debugging only
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # AOF on: a queued-but-unsent WhatsApp message should survive a restart.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-forgegrowth}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # ports: ["127.0.0.1:9001:9001"]   # MinIO console, local debugging only
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+      minio:    { condition: service_healthy }
+    env_file: [.env]
+    environment:
+      # Pinned here rather than left to .env: these must match the service names
+      # on this network, and a stale value in a hand-edited .env is a confusing
+      # failure ("connection refused" against a host that does not exist).
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      PORT: "3013"
+      NODE_ENV: production
+    volumes:
+      - uploads:/app/uploads   # team profile pictures
+      - media:/app/media       # downloaded WhatsApp media
+
+  web:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    depends_on: [backend]
+    ports:
+      - "${WEB_PORT:-8080}:80"
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
+  uploads:
+  media:
