@@ -1,28 +1,22 @@
 -- ─── Migration 077: Conversion Leads Optimisation (CLO) ─────────────────────
 --
 --  WHAT CLO IS: a Meta Ads performance goal that consumes down-funnel CRM stage
---  data delivered over the Conversions API, so delivery optimises toward leads
---  that become customers rather than leads that merely fill a form.
---
---    CAPI without CLO  = reporting only, delivery unchanged
---    CLO without CAPI  = no data
---    Both are required.
+--  data delivered over Meta's Conversions API for CRM, so delivery optimises
+--  toward leads that become customers rather than leads that merely fill a form.
+--  This migration ships the whole path — the CLO client posts the events itself.
 --
 --  ⚠ SCOPE: CLO works with Facebook/Instagram LEAD ADS (Instant Forms) ONLY.
---  It does NOT work with Click-to-WhatsApp. This is a SEPARATE integration from
---  the CTWA Conversions API in migration 073 — different action_source
---  ('system_generated' vs 'business_messaging'), different identifier (Meta
---  lead id vs ctwa_clid), different attribution window (28d vs 7d), and it MUST
---  post to a different dataset. Nothing here touches capi_* tables.
+--  It does NOT work with Click-to-WhatsApp, whose attribution is read-only and
+--  lives in migration 073 — different action_source ('system_generated' vs
+--  'business_messaging'), different identifier (Meta lead id vs ctwa_clid),
+--  different attribution window (28d vs 7d), and a different dataset.
 --
---  ⚠ PRECONDITION, stated plainly: at the time of writing this instance has NO
---  Lead Ads. Every ad set is CONVERSATIONS / LANDING_PAGE_VIEWS / PROFILE_VISIT,
---  and no lead carries a Meta lead id. These tables are therefore correct but
---  inert until Instant Form campaigns run and their leads are ingested. The
---  readiness endpoint reports exactly that rather than pretending otherwise.
+--  ⚠ PRECONDITION: these tables are inert until Instant Form campaigns run and
+--  their leads are ingested carrying a Meta lead id. The readiness endpoint
+--  reports exactly that rather than pretending otherwise.
 --
 --  Single-tenant: this app has no workspace concept — every config table is a
---  singleton id=1 row (capi_config, meta_ads_config, mcp_settings). clo_settings
+--  singleton id=1 row (meta_ads_config, mcp_settings). clo_settings
 --  follows that convention instead of carrying a workspace_id that would only
 --  ever hold one value.
 --

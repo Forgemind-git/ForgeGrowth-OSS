@@ -560,8 +560,8 @@ function pickApiKey(agent) {
 
 // Resolve an OpenAI key for Whisper transcription: the agent's own key if it's
 // an OpenAI agent, otherwise any OpenAI credential connected in the AI Models
-// registry (falling back to the env key). Lets a claude_code/anthropic agent
-// still transcribe voice notes using the workspace's OpenAI key.
+// registry (falling back to the env key). Lets an Anthropic agent still
+// transcribe voice notes using the workspace's OpenAI key.
 async function resolveOpenAiKey(agent, agentApiKey) {
   if (agent.ai_provider === 'openai' && agentApiKey) return agentApiKey;
   try {
@@ -827,8 +827,8 @@ async function runAgent({ agentId, contactNumber, inboundMessageId, inboundText 
       model: agent.llm_model,
       apiKey,
       maxIterations: Math.max(1, Math.min(20, agent.max_tool_iterations || 6)),
-      // claude_code routes to a sandboxed runner keyed by conversation;
-      // anthropic/openai ignore these extra fields.
+      // Conversation identity, for providers that keep server-side session
+      // state. The bundled anthropic/openai adapters ignore these fields.
       conversationKey: `${agent.id}:${contactNumber}`,
       contactNumber,
       agentId: agent.id,
@@ -968,7 +968,7 @@ async function runAgentTest({ agentId, messages }) {
     apiKey,
     maxIterations: Math.max(1, Math.min(20, agent.max_tool_iterations || 6)),
     // Test chat: a synthetic, per-agent conversation key (isolated from real
-    // contacts). claude_code needs it; anthropic/openai ignore it.
+    // contacts).
     conversationKey: `${agent.id}:test`,
     contactNumber: 'test',
     agentId: agent.id,

@@ -573,37 +573,7 @@ export const api = {
     ad: (sourceId) => req(`/ctwa/ads/${encodeURIComponent(sourceId)}`),
     backfillDailySpend: (days) => req('/marketing/meta-ads/backfill-daily', { method: 'POST', body: JSON.stringify({ days }) }),
   },
-  // Meta Conversions API — send the click id back when a lead converts.
-  capi: {
-    config: () => req('/capi/config'),
-    updateConfig: (data) => req('/capi/config', { method: 'PUT', body: JSON.stringify(data) }),
-    discoverDatasets: () => req('/capi/datasets/discover', { method: 'POST' }),
-    createDataset: (wabaId) => req(`/capi/datasets/${encodeURIComponent(wabaId)}/create`, { method: 'POST' }),
-    linkDataset: (wabaId, datasetId) => req(`/capi/datasets/${encodeURIComponent(wabaId)}`, { method: 'PUT', body: JSON.stringify({ datasetId }) }),
-    createMapping: (data) => req('/capi/mappings', { method: 'POST', body: JSON.stringify(data) }),
-    updateMapping: (id, data) => req(`/capi/mappings/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    deleteMapping: (id) => req(`/capi/mappings/${id}`, { method: 'DELETE' }),
-    events: (params = {}) => {
-      const qs = new URLSearchParams();
-      Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
-      return req(`/capi/events${qs.toString() ? `?${qs}` : ''}`);
-    },
-    resend: (id) => req(`/capi/events/${id}/resend`, { method: 'POST' }),
-    send: (leadId, opts = {}) => req('/capi/send', { method: 'POST', body: JSON.stringify({ leadId, ...opts }) }),
-    backfill: (limit) => req('/capi/backfill', { method: 'POST', body: JSON.stringify({ limit }) }),
-    test: (eventName) => req('/capi/test', { method: 'POST', body: JSON.stringify({ eventName }) }),
-    clickIds: (params = {}) => {
-      const qs = new URLSearchParams();
-      Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
-      return req(`/capi/click-ids${qs.toString() ? `?${qs}` : ''}`);
-    },
-    learning: () => req('/capi/learning'),
-    performance: () => req('/capi/performance'),
-    fieldPreview: () => req('/capi/field-preview'),
-    timing: () => req('/capi/timing'),
-  },
-
-  // Conversion Leads Optimisation — Meta Lead Ads only, separate from capi.*
+  // Conversion Leads Optimisation — Meta Lead Ads only.
   clo: {
     settings: () => req('/marketing/clo/settings'),
     updateSettings: (data) => req('/marketing/clo/settings', { method: 'PUT', body: JSON.stringify(data) }),

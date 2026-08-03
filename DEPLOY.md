@@ -166,7 +166,16 @@ Without these, you'll still get inbound webhooks + manual sends + manual refresh
 
 ## 8. Initial app setup (after first deploy)
 
-1. **Log in** to `https://crm.<yourdomain>` with the seeded admin (`admin@example.com` / `admin123` — **change this immediately** via Admin Settings → Team)
+1. **Log in** to `https://crm.<yourdomain>` as the first-run admin. There is no
+   default password: set `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` in `.env`
+   before the first start, or let the backend generate one and print it **once** to its log:
+
+   ```bash
+   docker compose logs backend | grep -A5 'FIRST-RUN ADMIN'
+   ```
+
+   That block is printed only on the run that creates the account. If you miss it, delete the
+   user row and restart the backend to have another generated.
 2. **Admin Settings → WhatsApp Accounts → Add** — paste:
    - Display Phone Number (digits only — see normalization rule below)
    - Phone Number ID (from Meta's WABA dashboard)

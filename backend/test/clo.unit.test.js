@@ -12,7 +12,7 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert');
 
 const clo = require('../src/integrations/metaCloClient');
-const capi = require('../src/integrations/metaCapiClient');
+const match = require('../src/integrations/metaMatchUtil');
 
 const SHA256_HEX = /^[a-f0-9]{64}$/;
 
@@ -126,18 +126,22 @@ describe('CLO token handling', () => {
 });
 
 describe('shared normalisation (imported, not duplicated)', () => {
-  test('CLO and CTWA hash the same person identically', () => {
-    // Both integrations must agree, or the same customer looks like two people.
-    const viaCapi = capi.sha256(capi.normalizeMatchValue('ph', '+91 98765-43210'));
+  test('CLO hashes a phone number the way Meta expects', () => {
+    // The event must carry sha256 of the NORMALISED value. Hashing the raw
+    // string instead is accepted by Meta and then matches nobody — a silent
+    // attribution failure, which is why this is asserted rather than trusted.
+    const expected = match.sha256(match.normalizeMatchValue('ph', '+91 98765-43210'));
     const viaClo = clo.buildCloEvent({
       eventName: 'X', eventTime: Date.now(), leadEventSource: 'S', phone: '+91 98765-43210',
     }).user_data.ph;
-    assert.strictEqual(viaClo, viaCapi);
+    assert.strictEqual(viaClo, expected);
   });
 
-  test('a single-word name sets only the first name', () => {
-    // Duplicating it into last name would send a hash matching nobody.
-    assert.deepStrictEqual(capi.splitName('Ravi'), { fn: 'Ravi', ln: null });
-    assert.deepStrictEqual(capi.splitName('Anand Kumar'), { fn: 'Anand', ln: 'Kumar' });
+  test('normalisation strips punctuation and adds the country code', () => {
+    assert.strictEqual(match.normalizeMatchValue('ph', '+91 98765-43210'), '919876543210');
+    assert.strictEqual(match.normalizeMatchValue('ph', '9876543210'), '919876543210');
+    // A value that isn't an email is dropped rather than hashed into noise.
+    assert.strictEqual(match.normalizeMatchValue('em', 'Not An Email'), null);
+    assert.strictEqual(match.normalizeMatchValue('em', 'A.User@Example.COM'), 'a.user@example.com');
   });
 });

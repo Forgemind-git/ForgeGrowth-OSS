@@ -4,10 +4,10 @@
 // the Conversions API, so delivery optimises toward leads that become customers
 // rather than leads that merely fill a form.
 //
-// ⚠ SEPARATE from the CTWA Conversions API in routes/ctwa.js. Different
+// ⚠ SEPARATE from the read-only CTWA attribution in routes/ctwa.js. Different
 // action_source ('system_generated'), different identifier (Meta lead id),
-// different window (28 days), and a different dataset. Nothing here reads or
-// writes capi_* tables, and nothing in ctwa.js reads clo_* tables.
+// different window (28 days), and a different dataset. Nothing in ctwa.js reads
+// clo_* tables.
 //
 // ⚠ CLO only works with Facebook/Instagram Lead Ads (Instant Forms). It does not
 // work with Click-to-WhatsApp.

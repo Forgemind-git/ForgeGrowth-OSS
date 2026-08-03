@@ -31,7 +31,7 @@ const MODEL_CATALOG = {
     { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
   ],
 };
-const PROVIDER_LABELS = { anthropic: 'Anthropic Claude', openai: 'OpenAI', claude_code: 'Claude Code' };
+const PROVIDER_LABELS = { anthropic: 'Anthropic Claude', openai: 'OpenAI' };
 // Per-area "full access" capabilities for the generic proxy + bulk tool.
 // Each maps to a set of internal /api path prefixes (PROXY_AREAS below).
 const AREA_CAPABILITY_KEYS = [
@@ -57,17 +57,13 @@ const PROXY_AREAS = [
   // deliberately resolved to the SENSITIVE admin area, not area_payments, so
   // enabling the payment ledger never hands over the gateway credentials. This
   // entry must stay ABOVE area_payments: resolveArea() is first-match-wins.
-  // /capi/* sends real conversion events into the Meta ad account, which moves
-  // ad spend — same sensitivity tier as gateway credentials, so it lives in the
-  // admin area rather than area_marketing. Read-only CTWA analytics (/ctwa) stay
-  // in area_marketing below.
   // /payment-requests CREATES Razorpay payment links a customer can really pay.
   // The gate is path-prefix only and cannot split reads from writes, so the
   // whole path sits at the highest tier rather than letting the ledger
   // capability (area_payments) also mint live links. Note this is
   // `payment-requests`, distinct from `payment-links` under area_courses — that
   // one is the local price registry, which charges nobody.
-  { cap: 'area_admin',      label: 'Admin (users, WA accounts, integrations)', test: /^\/(users|whatsapp-accounts|integrations|ai-models|razorpay\/config|capi|payment-requests)(\/|$|\?)/ },
+  { cap: 'area_admin',      label: 'Admin (users, WA accounts, integrations)', test: /^\/(users|whatsapp-accounts|integrations|ai-models|razorpay\/config|payment-requests)(\/|$|\?)/ },
   { cap: 'area_insights',   label: 'Dashboard & logs',    test: /^\/(dashboard|webhook-history)(\/|$|\?)/ },
   { cap: 'area_leads',      label: 'Leads & funnel',      test: /^\/(leads|lead-sources|funnel)(\/|$|\?)/ },
   { cap: 'area_leadforms',  label: 'Lead forms',          test: /^\/(lead-forms)(\/|$|\?)/ },
@@ -705,9 +701,9 @@ async function proxyRequest({ method, path, query, body } = {}, capabilities = {
 
   // SECURITY: gate on the path the SERVER will actually receive, not the one the
   // caller typed. internalApiCall hands this string to fetch(), and the WHATWG
-  // URL parser removes dot-segments — so "/marketing/../capi/config" would be
-  // gated as area_marketing and then delivered to /api/capi/config with an admin
-  // cookie, defeating every area capability (and the /mcp + /auth block). %2e%2e
+  // URL parser removes dot-segments — so "/marketing/../users" would be gated
+  // as area_marketing and then delivered to /api/users with an admin cookie,
+  // defeating every area capability (and the /mcp + /auth block). %2e%2e
   // normalises identically. Canonicalise FIRST, then gate on the result.
   {
     const u = new URL(`http://127.0.0.1${p}`);
@@ -760,19 +756,12 @@ const ENDPOINT_CATALOG = {
   area_admin: [
     'GET /users · POST /users (admin) — SENSITIVE',
     'GET /whatsapp-accounts · GET /ai-models · GET /integrations — SENSITIVE',
-    'GET /capi/config — Conversions API state: datasets, stage→event mappings, master switch, counters',
-    'PUT /capi/config {enabled,mode,testEventCode,maxClickAgeDays} — SENSITIVE: enabling in live mode starts influencing Meta ad delivery',
-    'POST/PUT/DELETE /capi/mappings — funnel stage → Meta standard event',
-    'GET /capi/events?status=&days=&search= — transmission history · POST /capi/events/:id/resend',
-    'POST /capi/send {leadId} · POST /capi/backfill {limit} · POST /capi/test — SENSITIVE: these send real conversions',
     'GET /payment-requests?status=&q=&leadId= — Razorpay links raised from ForgeGrowth · GET /payment-requests/summary · GET /payment-requests/:id (link + payments received)',
     'POST /payment-requests {leadId,customerName,customerPhone,customerEmail,courseId,purpose,kind,amount,minAmount,description} — SENSITIVE: creates a REAL Razorpay payment link a customer can pay. kind is "fixed" | "partial" (needs minAmount) | "open". Amounts are in RUPEES.',
     'POST /payment-requests/:id/refresh — re-read status from Razorpay · POST /payment-requests/:id/cancel — stop a link being paid',
     'These sit in the admin area, NOT area_payments: the gate is path-based and cannot separate reading the list from minting a live link.',
   ],
   area_insights: ['GET /dashboard?range=30d · GET /webhook-history'],
-  // NOTE: /capi/* resolves to area_admin (see PROXY_AREAS) because sending
-  // conversions changes how Meta spends the ad budget.
   area_leads: [
     'GET /leads?stage=&search=&view= — funnel lead list; view=hot (arrived <24h)|my|unassigned|needs-follow-up (also see list_leads tool)',
     'GET /leads/board — Kanban grouped by stage + conversion %',

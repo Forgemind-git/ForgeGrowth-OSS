@@ -1,25 +1,24 @@
 // Meta Conversions API for CRM — the transport for Conversion Leads
 // Optimisation (CLO).
 //
-// ⚠ Deliberately a SEPARATE client from metaCapiClient.js, which speaks the
-// Click-to-WhatsApp dialect. The two are not interchangeable:
+// ⚠ CLO speaks a different dialect from the Click-to-WhatsApp one, and the two
+// are not interchangeable:
 //
-//                      CTWA (metaCapiClient)        CLO (this file)
+//                      CTWA                         CLO (this file)
 //   action_source      business_messaging           system_generated
 //   identifier         ctwa_clid (raw)              Meta lead id
 //   extra required     messaging_channel            lead_event_source
 //   window             7 days                       28 days
 //   dataset            per-WABA dataset             a separate CRM dataset
 //
-// Sending a CLO event with business_messaging, or a CTWA event with
-// system_generated, is accepted by Meta and then silently unattributable — so
-// keeping the two builders apart is the point, not an accident of layout.
+// Sending a CLO event with business_messaging is accepted by Meta and then
+// silently unattributable — so this client only ever builds the CLO shape.
 
 // The normalisation + hashing helpers are IMPORTED rather than reimplemented.
 // A wrongly-normalised value hashes to something matching nobody while Meta
 // still returns 200 OK, so a second copy of that logic is the exact shape of
 // bug that never surfaces. One implementation, used by both integrations.
-const { sha256, normalizeMatchValue } = require('./metaCapiClient');
+const { sha256, normalizeMatchValue } = require('./metaMatchUtil');
 
 // Meta's cap on events per request.
 const MAX_EVENTS_PER_REQUEST = 1000;

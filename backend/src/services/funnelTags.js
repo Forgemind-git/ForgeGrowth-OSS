@@ -174,7 +174,7 @@ async function syncAllLeadTags({ limit = 100000 } = {}) {
 // Keep tags in step with stage changes by walking lead_events, NOT by hooking
 // each call site: eight code paths write leads.stage and several do it with raw
 // SQL. A cursor covers all of them, and any future one, for free. Same pattern
-// (and same reasoning) as the CAPI and CLO dispatchers.
+// (and same reasoning) as the CLO dispatcher.
 async function sweepStageEvents({ batch = 500 } = {}) {
   const { rows: cfgRows } = await pool.query(
     `SELECT last_event_id FROM coexistence.funnel_tag_state WHERE id = 1`);

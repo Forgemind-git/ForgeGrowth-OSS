@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Megaphone, Kanban } from 'lucide-react';
+import { Megaphone, Kanban, Radio } from 'lucide-react';
 import { api } from './api.js';
 import { C, FONT } from './constants.js';
 import { useHashRoute } from './hooks/useHashRoute.js';
@@ -23,8 +23,8 @@ import AiAgentBuilderPage from './pages/AiAgentBuilderPage.jsx';
 import MarketingOverviewPage from './pages/marketing/OverviewPage.jsx';
 import CampaignsPage from './pages/marketing/CampaignsPage.jsx';
 import CtwaPage from './pages/marketing/CtwaPage.jsx';
-import ConversionApiPage from './pages/marketing/ConversionApiPage.jsx';
 import CloPage from './pages/marketing/CloPage.jsx';
+import PlaceholderPage from './components/PlaceholderPage.jsx';
 // AI Academy — Sales
 import SalesPipelinePage from './pages/sales/PipelinePage.jsx';
 import FunnelViewerPage from './pages/sales/FunnelViewerPage.jsx';
@@ -206,7 +206,10 @@ export default function App() {
       case 'mkt-overview': return <MarketingOverviewPage user={user} navigate={navigate} />;
       case 'campaigns': return <CampaignsPage user={user} />;
       case 'ctwa-ads': return <CtwaPage user={user} navigate={navigate} />;
-      case 'conversion-api': return <ConversionApiPage user={user} subParts={subParts} navigate={navigate} />;
+      // Conversions API is not shipped in this release. The tab stays in the nav
+      // so the funnel story stays legible; the send path itself is absent.
+      case 'conversion-api': return <PlaceholderPage title="Conversion API" icon={Radio}
+        subtitle="Send down-funnel conversions back to Meta — Coming Soon" />;
       case 'clo': return <CloPage user={user} subParts={subParts} navigate={navigate} />;
       // Sales
       case 'sales-pipeline': return <SalesPipelinePage user={user} navigate={navigate} />;

@@ -1,7 +1,14 @@
 import { test, expect } from '@playwright/test';
 
-const LOGIN_EMAIL = 'admin@example.com';
-const LOGIN_PASSWORD = 'admin123';
+// No default credentials exist — the first admin's password is either set via
+// BOOTSTRAP_ADMIN_PASSWORD or generated and printed once to the backend log.
+// Export the same values here before running the suite.
+const LOGIN_EMAIL = process.env.E2E_EMAIL || 'admin@example.com';
+const LOGIN_PASSWORD = process.env.E2E_PASSWORD;
+
+if (!LOGIN_PASSWORD) {
+  throw new Error('Set E2E_PASSWORD (and optionally E2E_EMAIL) to the admin credentials of the instance under test.');
+}
 
 async function login(page) {
   await page.goto('/');

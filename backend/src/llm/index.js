@@ -23,15 +23,10 @@
 
 const anthropic = require('./anthropic');
 const openai = require('./openai');
-const claudeCode = require('./claudeCode');
 
 const PROVIDERS = {
   anthropic,
   openai,
-  // Drives the real Claude Code CLI via a sandboxed runner (see claudeCode.js).
-  // Session-based: the engine passes conversationKey/contactNumber/agentId
-  // alongside the standard fields; standard providers ignore those extras.
-  claude_code: claudeCode,
 };
 
 function getProvider(name) {

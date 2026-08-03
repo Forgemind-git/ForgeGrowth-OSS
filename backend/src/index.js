@@ -40,7 +40,7 @@ const { router: marketingRouter, syncMetaAds, ensureAdSetTables } = require('./r
 const { router: resourcesRouter } = require('./routes/resources');
 const { router: bdaRouter } = require('./routes/bda');
 const { router: leadFormsRouter, publicRouter: leadFormsPublicRouter, ensureLeadFormTables } = require('./routes/leadForms');
-const { router: ctwaRouter, ensureCtwaTables, sweepStageEvents } = require('./routes/ctwa');
+const { router: ctwaRouter, ensureCtwaTables } = require('./routes/ctwa');
 const { router: cloRouter, ensureCloTables } = require('./routes/clo');
 const { router: integrationsRouter, publicRouter: integrationsPublicRouter } = require('./routes/integrations');
 const { router: agentsRouter } = require('./routes/agents');
@@ -419,18 +419,9 @@ async function start() {
   setTimeout(runRazorpayLedgerSync, 2 * 60 * 1000).unref();
   setInterval(runRazorpayLedgerSync, RZP_LEDGER_MS).unref();
 
-  // Conversions API sweeper: walks new 'stage_changed' rows in lead_events and
-  // sends the mapped conversion back to Meta with the lead's CTWA click id. The
-  // bus already kicks a sweep seconds after any lead change — this interval is
-  // the safety net for anything that changed a stage without emitting. Idle
-  // unless the master switch is on. Override with CAPI_SWEEP_INTERVAL_MS.
-  const CAPI_SWEEP_MS = parseInt(process.env.CAPI_SWEEP_INTERVAL_MS || '', 10) || 5 * 60 * 1000;
-  setTimeout(sweepStageEvents, 60 * 1000).unref();
-  setInterval(sweepStageEvents, CAPI_SWEEP_MS).unref();  // every 5 min (gated by capi_config.enabled)
-
-  // Funnel-stage tags: same cursor-over-lead_events shape as CAPI above. The
-  // bus kick inside funnelTags.js does the real-time work; this is the safety
-  // net for a stage change that never emitted. Override with
+  // Funnel-stage tags: a cursor over the append-only lead_events log. The bus
+  // kick inside funnelTags.js does the real-time work; this is the safety net
+  // for a stage change that never emitted. Override with
   // FUNNEL_TAG_SWEEP_INTERVAL_MS.
   const TAG_SWEEP_MS = parseInt(process.env.FUNNEL_TAG_SWEEP_INTERVAL_MS || '', 10) || 5 * 60 * 1000;
   const sweepFunnelTags = () => funnelTags.sweepStageEvents()

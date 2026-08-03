@@ -415,7 +415,7 @@ function StagesView({ cfg, confirm, onSettingsChanged }) {
         )}
       </Card>
 
-      <CtwaRoutePanel navigate={navigate} />
+      <CtwaRoutePanel />
 
       {stats && stats.leadsPerMonth < stats.bands.minLeadsPerMonth && (
         <div style={{
@@ -444,47 +444,22 @@ function StagesView({ cfg, confirm, onSettingsChanged }) {
 // This panel exists so that route is discoverable from here rather than being
 // something you have to already know about, and it shows the one number that
 // decides whether it can work at all: how long from ad click to the stage.
-function CtwaRoutePanel({ navigate }) {
-  const [timing, setTiming] = useState(null);
-  useEffect(() => { api.capi.timing().then(setTiming).catch(() => setTiming(false)); }, []);
-
-  const blocked = timing && timing !== false && !timing.movedBeyondEntry;
-
+function CtwaRoutePanel() {
   return (
     <Card title="Running click-to-WhatsApp ads instead?" style={{ marginBottom: 16 }}>
       <div style={{ fontSize: 12.5, color: C.textSecondary, lineHeight: 1.6, marginBottom: 12, fontFamily: FONT }}>
         Everything above applies to Instant Forms. For click-to-WhatsApp, Meta does not offer the Conversion Leads
         goal at all — the equivalent is a <strong>custom conversion</strong> sent on <span style={{ fontFamily: MONO, fontSize: 12 }}>business_messaging</span>,
-        which you configure on the <strong>Conversion API</strong> tab. Map your qualifying stage to a custom event
-        such as <span style={{ fontFamily: MONO, fontSize: 12 }}>Qualified</span>, then set that event as the ad
-        set&apos;s conversion event in Ads Manager.
+        which is what the <strong>Conversion API</strong> tab will configure. That tab is not shipped yet; until it
+        is, the Click-to-WhatsApp tab still attributes every ad tap through to revenue — it simply reports locally
+        rather than sending conversions back to Meta.
       </div>
 
-      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
         <Diff label="Attribution window" clo="28 days" ctwa="7 days" />
         <Diff label="Identifier" clo="Meta Lead ID" ctwa="Click ID (ctwa_clid)" />
         <Diff label="Performance goal" clo="Conversion Leads" ctwa="Custom conversion" />
         <Diff label="Personal data sent" clo="Hashed, optional" ctwa="None needed" />
-      </div>
-
-      {/* The decisive number, surfaced here rather than only on the other tab. */}
-      {timing && timing !== false && (
-        <div style={{
-          display: 'flex', gap: 9, padding: '11px 13px', borderRadius: 10, fontFamily: FONT,
-          background: blocked ? '#FFF8E6' : C.surfaceAlt,
-          border: `1px solid ${blocked ? '#F0DCA8' : C.border}`,
-        }}>
-          {blocked
-            ? <AlertTriangle size={15} color="#B7791F" style={{ flexShrink: 0, marginTop: 1 }} />
-            : <Info size={15} color={C.textMuted} style={{ flexShrink: 0, marginTop: 1 }} />}
-          <span style={{ fontSize: 12.5, color: blocked ? '#6B5312' : C.textSecondary, lineHeight: 1.55 }}>
-            {timing.diagnosis || `Measured against Meta's ${timing.windowDays}-day window on the Conversion API tab.`}
-          </span>
-        </div>
-      )}
-
-      <div style={{ marginTop: 12 }}>
-        <Button icon={Radio} onClick={() => navigate && navigate('conversion-api')}>Open Conversion API</Button>
       </div>
     </Card>
   );

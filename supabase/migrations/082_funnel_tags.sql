@@ -15,8 +15,8 @@ BEGIN;
 
 -- Cursor for the lead_events sweeper. Eight code paths write leads.stage and
 -- several use raw SQL, so tags are kept in step by walking the append-only
--- event log rather than by hooking each call site (same pattern as capi_config
--- and clo_settings).
+-- event log rather than by hooking each call site (same pattern as
+-- clo_settings).
 CREATE TABLE IF NOT EXISTS coexistence.funnel_tag_state (
   id            SMALLINT PRIMARY KEY DEFAULT 1,
   last_event_id BIGINT NOT NULL DEFAULT 0,

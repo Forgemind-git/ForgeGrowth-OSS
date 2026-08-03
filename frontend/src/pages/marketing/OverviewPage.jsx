@@ -37,7 +37,6 @@ export default function OverviewPage({ user, navigate }) {
   // user whose role can't reach those tabs, so a rejection means "hide the
   // strip", never an error modal.
   const [ctwa, setCtwa] = useState(null);
-  const [capi, setCapi] = useState(null);
 
   const isAdmin = user?.role === 'admin';
   const canSeeCtwa = isAdmin || (user?.pages || []).includes('ctwa-ads');
@@ -58,11 +57,6 @@ export default function OverviewPage({ user, navigate }) {
     if (!canSeeCtwa) { setCtwa(false); return; }
     api.ctwa.overview({ days: String(days) }).then(setCtwa).catch(() => setCtwa(false));
   }, [days, canSeeCtwa]);
-
-  useEffect(() => {
-    if (!isAdmin) { setCapi(false); return; }   // /capi/config is admin-only by design
-    api.capi.config().then(setCapi).catch(() => setCapi(false));
-  }, [isAdmin]);
 
   const k = data?.kpis || {};
 
@@ -95,10 +89,9 @@ export default function OverviewPage({ user, navigate }) {
 
       {/* Ad-loop activity: the two halves of the click → conversation → conversion
           chain, each a summary with a way through to the full tab. */}
-      {(canSeeCtwa || isAdmin) && (
+      {canSeeCtwa && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 16, marginBottom: 16 }}>
-          {canSeeCtwa && <CtwaStrip data={ctwa} days={days} navigate={navigate} />}
-          {isAdmin && <CapiStrip data={capi} navigate={navigate} />}
+          <CtwaStrip data={ctwa} days={days} navigate={navigate} />
         </div>
       )}
 
@@ -212,47 +205,3 @@ function CtwaStrip({ data, days, navigate }) {
   );
 }
 
-// ── Conversion API strip ────────────────────────────────────────────────────
-function CapiStrip({ data, navigate }) {
-  const cfg = data && data.config;
-  const s = (data && data.stats) || {};
-  const on = !!cfg?.enabled;
-
-  return (
-    <Card title="Conversion API"
-      right={<LinkText onClick={() => navigate && navigate('conversion-api')}>Open</LinkText>}>
-      {data === null ? <Shimmer height={110} /> : data === false ? (
-        <div style={{ fontSize: 12.5, color: C.textMuted, fontFamily: FONT }}>Not available for your account.</div>
-      ) : (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
-            {on ? <CheckCircle2 size={15} color={C.green} /> : <AlertTriangle size={15} color="#854F0B" />}
-            <span style={{ fontSize: 12.5, color: C.textSecondary, fontFamily: FONT }}>
-              {on
-                ? `Sending conversions to Meta in ${cfg.mode === 'live' ? 'live' : 'test'} mode.`
-                : 'Off — stage changes are recorded but nothing is sent to Meta.'}
-            </span>
-            <Badge label={on ? (cfg.mode === 'live' ? 'LIVE' : 'TEST') : 'OFF'}
-              color={on ? (cfg.mode === 'live' ? '#dc2626' : '#854F0B') : C.textMuted}
-              bg={on ? (cfg.mode === 'live' ? '#FCEBEB' : '#FAEEDA') : C.hover}
-              style={{ marginLeft: 'auto' }} />
-          </div>
-          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 12 }}>
-            <Stat label="Sent" value={num(s.sent)} accent={C.green} />
-            <Stat label="Failed" value={num(s.failed)} accent={Number(s.failed) ? '#dc2626' : C.text} />
-            <Stat label="Skipped" value={num(s.skipped)} />
-            <Stat label="Waiting" value={num(s.eligible)} />
-          </div>
-          <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10, fontSize: 11.5, color: C.textMuted, fontFamily: FONT }}>
-            {cfg?.lastSentAt ? `Last sent ${fmtDate(cfg.lastSentAt)}` : 'Nothing transmitted yet'}
-            {data.unreachableClicks > 0 && (
-              <span style={{ color: '#8A1F1F' }}>
-                {' · '}{num(data.unreachableClicks)} clicks on an account with no dataset
-              </span>
-            )}
-          </div>
-        </>
-      )}
-    </Card>
-  );
-}
