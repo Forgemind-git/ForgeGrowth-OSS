@@ -47,6 +47,38 @@ const STATUS_META = {
 
 const KIND_LABEL = { fixed: 'Fixed', partial: 'Part payment', open: 'Open amount' };
 
+// ── Filter/sort controls shared by both tabs ────────────────────────────────
+// Values are keys into the backend's whitelisted sort maps — never raw SQL.
+const SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+  { value: 'amount_desc', label: 'Amount: high to low' },
+  { value: 'amount_asc', label: 'Amount: low to high' },
+];
+
+const METHOD_LABELS = {
+  upi: 'UPI', card: 'Card', netbanking: 'Netbanking', wallet: 'Wallet',
+  emi: 'EMI', bank_transfer: 'Bank transfer', paylater: 'Pay Later',
+};
+const methodLabel = (m) => METHOD_LABELS[m] || (m ? m.charAt(0).toUpperCase() + m.slice(1) : m);
+
+function DateRangeFilter({ from, to, setFrom, setTo }) {
+  const dateStyle = { ...inputStyle, width: 138 };
+  return (
+    <div style={{ display: 'flex', gap: 7, alignItems: 'center', fontFamily: FONT, fontSize: 12.5, color: C.textSecondary }}>
+      <input type="date" value={from} onChange={e => setFrom(e.target.value)} title="From date" style={dateStyle} />
+      <span>to</span>
+      <input type="date" value={to} onChange={e => setTo(e.target.value)} title="To date" style={dateStyle} />
+      {(from || to) && (
+        <button onClick={() => { setFrom(''); setTo(''); }} title="Clear dates"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textMuted, display: 'inline-flex', padding: 2 }}>
+          <XCircle size={14} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function StatusPill({ request }) {
   const key = request.created ? request.status : 'not_created';
   const m = STATUS_META[key] || STATUS_META.created;
@@ -445,25 +477,38 @@ function PaymentsList({ navigate, user, tab, setTab }) {
   const [error, setError] = useState(null);
   const [status, setStatus] = useState('');
   const [q, setQ] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [sort, setSort] = useState('newest');
   const [showNew, setShowNew] = useState(false);
   const [busyId, setBusyId] = useState(null);
   const [confirmEl, confirm] = useConfirm();
   const isAdmin = user?.role === 'admin';
 
-  const filters = { status: status || undefined, q: q || undefined };
+  // The export honours status + dates (its backend ignores q/sort — a
+  // reconciliation CSV is always newest-first).
+  const filters = { status: status || undefined, q: q || undefined, from: from || undefined, to: to || undefined };
 
   const load = useCallback(async () => {
     try {
       setLoading(true); setError(null);
       const [list, sum] = await Promise.all([
-        api.paymentRequests.list({ status: status || undefined, q: q || undefined, limit: 100 }),
-        api.paymentRequests.summary().catch(() => null),
+        api.paymentRequests.list({
+          status: status || undefined, q: q || undefined,
+          from: from || undefined, to: to || undefined,
+          sort: sort !== 'newest' ? sort : undefined,
+          limit: 100,
+        }),
+        // KPIs follow the date slice (the backend summary accepts from/to only).
+        api.paymentRequests.summary({
+          from: from || undefined, to: to || undefined,
+        }).catch(() => null),
       ]);
       setRequests(list.requests || []);
       setSummary(sum);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
-  }, [status, q]);
+  }, [status, q, from, to, sort]);
 
   // Debounce the search so typing doesn't fire a request per keystroke.
   useEffect(() => { const t = setTimeout(load, q ? 300 : 0); return () => clearTimeout(t); }, [load, q]);
@@ -535,6 +580,11 @@ function PaymentsList({ navigate, user, tab, setTab }) {
           <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: C.textMuted }} />
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name, number, purpose…"
             style={{ ...inputStyle, paddingLeft: 30 }} />
+        </div>
+        <DateRangeFilter from={from} to={to} setFrom={setFrom} setTo={setTo} />
+        <div style={{ width: 190 }}>
+          <SearchableSelect value={sort} onChange={setSort} options={SORT_OPTIONS}
+            placeholder="Sort" triggerStyle={{ padding: '8px 30px 8px 11px' }} />
         </div>
       </div>
 
@@ -663,6 +713,13 @@ function AllPaymentsList({ tab, setTab, user }) {
   const [error, setError] = useState(null);
   const [status, setStatus] = useState('captured');
   const [q, setQ] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [method, setMethod] = useState('');
+  const [sort, setSort] = useState('newest');
+  // The method option list lives in its OWN state so a failed summary refetch
+  // can't unmount the control that created the filter (anti-pattern #25).
+  const [methods, setMethods] = useState([]);
   const [syncing, setSyncing] = useState(false);
   const isAdmin = user?.role === 'admin';
 
@@ -670,14 +727,26 @@ function AllPaymentsList({ tab, setTab, user }) {
     try {
       setLoading(true); setError(null);
       const [list, sum] = await Promise.all([
-        api.razorpay.payments({ status: status || undefined, q: q || undefined, limit: 100 }),
-        api.razorpay.paymentsSummary().catch(() => null),
+        api.razorpay.payments({
+          status: status || undefined, q: q || undefined,
+          from: from || undefined, to: to || undefined,
+          method: method || undefined,
+          sort: sort !== 'newest' ? sort : undefined,
+          limit: 100,
+        }),
+        // KPIs follow the slice (dates/method/search) but NOT the status pills —
+        // the cards themselves are the status breakdown.
+        api.razorpay.paymentsSummary({
+          from: from || undefined, to: to || undefined,
+          method: method || undefined, q: q || undefined,
+        }).catch(() => null),
       ]);
       setRows(list.payments || []);
       setSummary(sum);
+      if (Array.isArray(sum?.methods)) setMethods(sum.methods);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
-  }, [status, q]);
+  }, [status, q, from, to, method, sort]);
 
   useEffect(() => { const t = setTimeout(load, q ? 300 : 0); return () => clearTimeout(t); }, [load, q]);
 
@@ -764,6 +833,19 @@ function AllPaymentsList({ tab, setTab, user }) {
             Synced {fmtDate(summary.syncedAt)}
           </span>
         )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
+        <DateRangeFilter from={from} to={to} setFrom={setFrom} setTo={setTo} />
+        <div style={{ width: 160 }}>
+          <SearchableSelect value={method} onChange={setMethod}
+            options={[{ value: '', label: 'All methods' }, ...methods.map(m => ({ value: m, label: methodLabel(m) }))]}
+            placeholder="All methods" triggerStyle={{ padding: '8px 30px 8px 11px' }} />
+        </div>
+        <div style={{ width: 190 }}>
+          <SearchableSelect value={sort} onChange={setSort} options={SORT_OPTIONS}
+            placeholder="Sort" triggerStyle={{ padding: '8px 30px 8px 11px' }} />
+        </div>
       </div>
 
       {error ? (

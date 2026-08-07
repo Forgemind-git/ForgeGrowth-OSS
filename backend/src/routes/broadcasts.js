@@ -179,6 +179,36 @@ async function enqueueBroadcastRecipient({ broadcast, template, account, recipie
         });
       }
     }
+
+    // ── Payment templates: one LIVE link per recipient ───────────────────────
+    // Checked AFTER the lead-form paths and only when the button actually points
+    // at /pay/, so an ordinary dynamic-URL template is completely unaffected.
+    //
+    // ⚠ This is the one place in the app that mints real payment links in a
+    // loop. `payment_amount_paise` is required on the broadcast — without it we
+    // refuse the recipient rather than guess an amount, because a guessed figure
+    // multiplied by a recipient list is the worst failure this feature has.
+    const paymentFlow = require('../services/paymentFlow');
+    if (paymentFlow.templateHasPaymentButton(template)) {
+      if (!broadcast.payment_amount_paise) {
+        throw new Error('This template carries a payment button but the broadcast has no amount set. Set the product or amount before sending.');
+      }
+      const created = await paymentFlow.createPaymentForChat({
+        waNumber: account.displayPhoneNumber || broadcast.wa_number,
+        contactNumber: recipient.contact_number,
+        contactName: recipient.name || null,
+        amountPaise: Number(broadcast.payment_amount_paise),
+        courseId: broadcast.payment_course_id || null,
+        purpose: broadcast.payment_purpose || broadcast.name || null,
+        kind: 'fixed',
+        source: 'broadcast',
+        createdBy: `broadcast:${broadcast.id}`,
+      });
+      if (created.error) throw new Error(`Could not raise a payment link: ${created.error}`);
+      // Overwrites the lead-form token deliberately — a template cannot be both
+      // a form link and a payment link on the same button.
+      leadFormToken = await paymentFlow.ensurePublicToken(created.request.id);
+    }
     // resolvedMediaId doubles as the header image for media-header templates.
     const components = buildTemplateComponents(template, broadcast.variable_mapping, recipient, resolvedMediaId, leadFormToken);
     // CAROUSEL templates: append the prebuilt carousel component (resolved once
@@ -199,6 +229,7 @@ async function enqueueBroadcastRecipient({ broadcast, template, account, recipie
       toNumber: recipient.contact_number,
       messageType: 'template',
       messageBody: resolvedBody || `Template: ${template.name}`,
+      templateId: template.id, sendOrigin: 'broadcast',
       templateMeta: {
         header_type: template.header_type || 'NONE',
         header_text: template.header_text || null,
@@ -225,8 +256,16 @@ async function enqueueBroadcastRecipient({ broadcast, template, account, recipie
   }
 
   // ── Text ──────────────────────────────────────────────────────────────
+  // Direct modes fill {{name}}/{{contact_number}} TOO — the composer hint has
+  // always advertised those forms, but only the template-mapping path filled
+  // them, so operators following the on-screen hint sent literal braces.
+  const fillDirect = (s) => String(s || '')
+    .replace(/\{\{contact\.name\}\}/g, recipient.name || '')
+    .replace(/\{\{contact\.number\}\}/g, recipient.contact_number || '')
+    .replace(/\{\{\s*name\s*\}\}/gi, recipient.name || '')
+    .replace(/\{\{\s*contact_number\s*\}\}/gi, recipient.contact_number || '');
   if (msgType === 'text') {
-    const body = (broadcast.body || '').replace(/\{\{contact\.name\}\}/g, recipient.name || '').replace(/\{\{contact\.number\}\}/g, recipient.contact_number || '');
+    const body = fillDirect(broadcast.body);
     const localId = await insertPendingRow({
       account,
       toNumber: recipient.contact_number,
@@ -246,7 +285,7 @@ async function enqueueBroadcastRecipient({ broadcast, template, account, recipie
 
   // ── Link ──────────────────────────────────────────────────────────────
   if (msgType === 'link') {
-    const body = (broadcast.url || '').replace(/\{\{contact\.name\}\}/g, recipient.name || '').replace(/\{\{contact\.number\}\}/g, recipient.contact_number || '');
+    const body = fillDirect(broadcast.url);
     const localId = await insertPendingRow({
       account,
       toNumber: recipient.contact_number,
@@ -266,9 +305,7 @@ async function enqueueBroadcastRecipient({ broadcast, template, account, recipie
 
   // ── Media (image / video / audio / document) ──────────────────────────
   if (['image', 'video', 'audio', 'document'].includes(msgType)) {
-    const caption = (broadcast.caption || '')
-      .replace(/\{\{contact\.name\}\}/g, recipient.name || '')
-      .replace(/\{\{contact\.number\}\}/g, recipient.contact_number || '');
+    const caption = fillDirect(broadcast.caption);
     const localId = await insertPendingRow({
       account,
       toNumber: recipient.contact_number,
@@ -448,6 +485,7 @@ router.post('/broadcasts', async (req, res) => {
       from_number, recipient_numbers, template_id, status, test_number,
       name, variable_mapping, message_type, body, url, media_library_id, caption,
       lead_form_id, scheduled_at, recipient_filter,
+      payment_course_id, payment_amount, payment_purpose,
     } = req.body;
 
     if (!from_number || !recipient_numbers) {
@@ -481,8 +519,9 @@ router.post('/broadcasts', async (req, res) => {
         `INSERT INTO coexistence.broadcasts
          (from_number, recipient_numbers, template_id, status, test_number, name,
           variable_mapping, message_type, body, url, media_library_id, caption, lead_form_id,
-          scheduled_at, recipient_filter, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
+          scheduled_at, recipient_filter,
+          payment_course_id, payment_amount_paise, payment_purpose, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW())
          RETURNING *`,
         [
           from_number,
@@ -500,6 +539,11 @@ router.post('/broadcasts', async (req, res) => {
           lead_form_id || null,
           schedAt ? schedAt.toISOString() : null,
           recipient_filter ? JSON.stringify(recipient_filter) : null,
+          payment_course_id || null,
+          // Rupees at the API boundary, paise in storage — the same convention
+          // as payment_requests and courses.default_price_paise.
+          payment_amount != null && payment_amount !== '' ? Math.round(Number(payment_amount) * 100) : null,
+          payment_purpose || null,
         ]
       );
       const broadcast = rows[0];

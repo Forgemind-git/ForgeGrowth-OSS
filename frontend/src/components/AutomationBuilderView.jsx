@@ -72,6 +72,7 @@ const IC = {
   branch:(s)=>I(<><circle cx="6" cy="3" r="2"/><circle cx="18" cy="3" r="2"/><circle cx="12" cy="21" r="2"/><path d="M6 5v6a6 6 0 0 0 6 6M18 5v6a6 6 0 0 1-6 6"/></>,s),
   clock:(s)=>I(<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>,s),
   api:(s)=>I(<><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></>,s),
+  payment:(s)=>I(<><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/></>,s),
   tag:(s)=>I(<><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></>,s),
   agent:(s)=>I(<><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,s),
   ai:(s)=>I(<><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></>,s),
@@ -393,6 +394,7 @@ const NT = {
   ai:      { bg:"#F8F0F0", border:"#D0B0B0", color:"#8B3A3A", accent:"#A32D2D", label:"AI",            icon:IC.ai },
   ai_agent:{ bg:"#F4ECEC", border:"#C8A8A8", color:"#7A2E2E", accent:"#791F1F", label:"AI AGENT",      icon:IC.ai },
   subflow: { bg:"#F0E8E8", border:"#C0A0A0", color:"#6A2A2A", accent:"#791F1F", label:"SUB-FLOW",      icon:IC.flow },
+  payment: { bg:"#EDF6F1", border:"#9CC9B4", color:"#0F6E56", accent:"#0F6E56", label:"PAYMENT",       icon:IC.payment },
 };
 
 const NODE_W = 240;
@@ -401,6 +403,7 @@ export const nodeH = (n) => {
   if (n.type === "condition") return 118;
   if (n.type === "message") return 102;
   if (n.type === "ai_agent") return 116;
+  if (n.type === "payment") return 110;
   return 96;
 };
 
@@ -434,6 +437,10 @@ export const getTriggerDisplay = (n) => {
 export const outputHandlesOf = (n) => {
   if (n.type === "condition") return ["yes","no"];
   if (n.type === "ai_agent") return ["default","model","tool"];
+  // A Payment node only branches when it actually waits for the money. Without
+  // the wait there is nothing to branch on, so it keeps a single output — two
+  // dead handles would invite wiring a "not paid" path that could never fire.
+  if (n.type === "payment") return n.waitForPayment === true ? ["paid","unpaid"] : ["default"];
   if (n.type === "message" && n.messageMode === "direct") {
     const dd = n.directData || {};
     if (n.directType === "quick_reply" && Array.isArray(dd.buttons) && dd.buttons.length > 0) {
@@ -470,6 +477,8 @@ export const handlePos = (n, kind, which="default") => {
   }
   if (n.type === "condition" && which === "yes") return { x: n.x + NODE_W/3,     y: n.y + h };
   if (n.type === "condition" && which === "no")  return { x: n.x + (NODE_W*2)/3, y: n.y + h };
+  if (n.type === "payment" && which === "paid")   return { x: n.x + NODE_W/3,     y: n.y + h };
+  if (n.type === "payment" && which === "unpaid") return { x: n.x + (NODE_W*2)/3, y: n.y + h };
   if (n.type === "ai_agent" && which === "model") return { x: n.x,            y: n.y + h/2 };
   if (n.type === "ai_agent" && which === "tool")  return { x: n.x + NODE_W,   y: n.y + h/2 };
   return { x: n.x + NODE_W/2, y: n.y + h };
@@ -521,6 +530,7 @@ export const makeNode = (type, x, y, id, templates) => {
     ai:         { title:"AI step", sub:"Let AI generate a response" },
     ai_agent:   { title:"AI Agent", sub:"Reasoning agent with model & tools" },
     subflow:    { title:"Sub-flow", sub:"Run another automation" },
+    payment:    { title:"Collect payment", sub:"Send a Razorpay link on this chat" },
   }[type] || { title: type, sub: "" };
   const base = { id, type, x, y, title: defs.title, sub: defs.sub };
   if (type === "trigger") return { ...base, triggerKind: "keyword", keyword: "", matchType: "exact", caseSensitive: false };
@@ -533,6 +543,33 @@ export const makeNode = (type, x, y, id, templates) => {
   if (type === "ai") return { ...base, aiTask: "lead_qualification", aiGoal: "", aiContext: "", aiSaveTo: "", aiModelRef: null, aiFallback: "fallback_message", fallbackTemplateId: "" };
   if (type === "ai_agent") return { ...base, systemPrompt: "", agentContext: "", modelRef: null, toolRefs: [] };
   if (type === "subflow") return { ...base, flowId: "", waitMode: "await" };
+  if (type === "payment") return {
+    ...base,
+    paymentSource: "product",      // product | amount
+    courseId: "",
+    amount: "",
+    paymentKind: "fixed",          // fixed | partial | open
+    minAmount: "",
+    purpose: "",
+    paymentDescription: "",
+    messageText: "Here is your payment link for {{product}} — ₹{{amount}}. Tap to pay securely.",
+    linkExpiryHours: "24",
+    // auto = plain message inside WhatsApp's 24h window, approved template
+    // outside it. The operator cannot know which it will be at build time.
+    deliveryMode: "auto",
+    paymentTemplateId: "",
+    templateVariables: [],
+    // Waiting is ON by default: a payment node that fires and forgets is almost
+    // never what someone wants when they add it, and the whole point of the
+    // block is knowing whether this person paid.
+    waitForPayment: true,
+    waitMinutes: "30",
+    followUpEnabled: true,
+    followUpMinutes: "10",
+    followUpMax: "1",
+    followUpText: "Just checking — were you able to complete the payment? If the link gave you any trouble, tell me and I will sort it out.",
+    confirmText: "Payment received — thank you! You are all set.",
+  };
   return base;
 };
 
@@ -664,6 +701,14 @@ const FlowNode = ({ n, selected, isDropTarget, onSelect, onStartDrag, onStartCon
                 via {maskPhone(whatsappAccounts.find(a => String(a.id) === String(n.whatsappAccountId))?.displayPhoneNumber) || 'custom number'}
               </div>
             )}
+            {/* A payment node's most important fact is what it charges — shown
+                on the card so nobody has to open it to find out. */}
+            {n.type === "payment" && (
+              <div style={{ fontSize:9.5, color:"#0F6E56", fontWeight:700, marginTop:3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontFamily:"'DM Mono'" }}>
+                {n.paymentSource === "amount" && n.amount ? `₹${n.amount}` : n.courseId ? "Product price" : "Not configured"}
+                {n.waitForPayment ? " · waits for payment" : ""}
+              </div>
+            )}
           </div>
           {n.warn && <div title="Compliance warning" style={{ color:C.orange, flexShrink:0, paddingTop:2 }}>{IC.warn(14)}</div>}
           {(n.error || (isCondition && (!n.rules || n.rules.length === 0))) && <div title="Set up rules to complete this condition" style={{ color:C.red, flexShrink:0, paddingTop:2 }}>{IC.err(14)}</div>}
@@ -710,8 +755,8 @@ const FlowNode = ({ n, selected, isDropTarget, onSelect, onStartDrag, onStartCon
               ? { left:-6, top:"50%", transform:"translateY(-50%)" }
               : { right:-6, top:"50%", transform:"translateY(-50%)" })
           : { bottom:-6, left:`${(()=>{
-              if(h==="yes")return 33.3;
-              if(h==="no")return 66.7;
+              if(h==="yes"||h==="paid")return 33.3;
+              if(h==="no"||h==="unpaid")return 66.7;
               if(typeof h==="string" && h.startsWith("btn:")){
                 const idx=parseInt(h.slice(4),10);
                 const dd=n.directData||{};
@@ -738,6 +783,8 @@ const FlowNode = ({ n, selected, isDropTarget, onSelect, onStartDrag, onStartCon
             : { top:-16, left:"50%", transform:"translateX(-50%)" };
         let labelText = h === "yes" ? "Yes"
           : h === "no" ? "No"
+          : h === "paid" ? "Paid"
+          : h === "unpaid" ? "Not paid"
           : h === "model" ? "Model"
           : h === "tool" ? "Tool"
           : h.startsWith("btn:") ? (() => {
@@ -811,7 +858,10 @@ const Connectors = ({ nodes, edges, ghost }) => {
         const p2 = handlePos(b, "input");
         const d = edgePath(p1.x, p1.y, p2.x, p2.y);
         const isCond = e.fromHandle==="yes"||e.fromHandle==="no";
-        const color = isCond ? (e.fromHandle==="yes"?"#C44A4A":"#A32D2D") : "#9C9B92";
+        const isPay  = e.fromHandle==="paid"||e.fromHandle==="unpaid";
+        const color = isCond ? (e.fromHandle==="yes"?"#C44A4A":"#A32D2D")
+          : isPay ? (e.fromHandle==="paid"?"#0F6E56":"#A05040")
+          : "#9C9B92";
         return <g key={i}>
           <path d={d} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" markerEnd="url(#arr)"/>
           <path d={d} fill="none" stroke={color} strokeWidth={10} strokeOpacity={0} style={{ pointerEvents:"stroke", cursor:"pointer" }}/>
@@ -1049,6 +1099,18 @@ const BLOCK_GROUPS = [
     { name:"Human Handoff",       type:"handoff",icon:IC.agent,  desc:"Assign to a live user & end the flow",
       defaults:{ assignMode:"specific", priority:"high", assigned:[], notifyEmail:false, internalNote:"" } },
   ]},
+  { title:"Payments", color:"#0F6E56", items:[
+    { name:"Collect Payment",     type:"payment", icon:IC.payment, desc:"Send a Razorpay link and wait for the money",
+      defaults:{ summary:"Raise a payment link on this chat and branch on whether it is paid" } },
+    { name:"Sell a Product",      type:"payment", icon:IC.payment, desc:"Charge a product's listed price",
+      defaults:{ paymentSource:"product", paymentKind:"fixed", waitForPayment:true, waitMinutes:"30",
+                 messageText:"Here is your payment link for {{product}} — ₹{{amount}}. Tap to pay securely.",
+                 summary:"Charge a product at its listed price" } },
+    { name:"Take a Part Payment", type:"payment", icon:IC.payment, desc:"Booking amount now, balance later",
+      defaults:{ paymentSource:"product", paymentKind:"partial", waitForPayment:true, waitMinutes:"60",
+                 messageText:"You can reserve your place with a part payment now — the link below accepts the booking amount.",
+                 summary:"Accept a first instalment against a larger total" } },
+  ]},
   { title:"API & Integrations", color:C.navy, items:[
     { name:"External API Request", type:"api", icon:IC.api, desc:"Any REST call (GET/POST/PUT)",
       defaults:{ method:"POST", apiUrl:"https://api.example.com/endpoint" } },
@@ -1244,7 +1306,7 @@ const WebhookTriggerConfig = ({ automationId }) => {
   </>);
 };
 
-const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDeleteNode=()=>{}, onDuplicateNode=()=>{}, onSaveAndClose=()=>{}, onToggleDisable=()=>{}, onDeleteButton=()=>{}, onSelectTemplate=()=>{}, onCreateTemplate=()=>{}, templates=[], teamMembers=[], tags=[], contactFields=[], otherAutomations=[], whatsappAccounts=[], assignableUsers=[], aiModels=[], automationId=null }) => {
+const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDeleteNode=()=>{}, onDuplicateNode=()=>{}, onSaveAndClose=()=>{}, onToggleDisable=()=>{}, onDeleteButton=()=>{}, onSelectTemplate=()=>{}, onCreateTemplate=()=>{}, templates=[], teamMembers=[], tags=[], contactFields=[], otherAutomations=[], whatsappAccounts=[], assignableUsers=[], aiModels=[], products=[], automationId=null }) => {
   // Flattened list of connected AI models, for the legacy AI node's picker.
   const aiModelOptions = [];
   (aiModels || []).forEach(cred => {
@@ -3129,6 +3191,178 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
     </>);
   }
 
+  else if (node.type === "payment") {
+    // Approved templates carrying a payment button. Derived from the list the
+    // panel already receives, so there is no second fetch to keep in step.
+    const paymentTemplates = (templates || []).filter(t =>
+      t.hasPaymentButton && String(t.status || "").toUpperCase() === "APPROVED");
+    const src = node.paymentSource || "product";
+    const kind = node.paymentKind || "fixed";
+    const waiting = node.waitForPayment === true;
+    const chasing = waiting && node.followUpEnabled === true;
+    const product = products.find(p => String(p.id) === String(node.courseId));
+    const productPrice = product && product.defaultPrice != null ? Number(product.defaultPrice) : null;
+    // Everything the flow will actually charge, worked out here rather than
+    // left for the operator to infer — this is real money and the amount must
+    // never be a surprise.
+    const effectiveAmount = src === "product" ? productPrice : (node.amount === "" ? null : Number(node.amount));
+
+    content = (<>
+      <Alert kind="warn">This raises a <strong>real Razorpay payment link</strong> and sends it to the customer on this chat. Test the flow on your own number before switching the automation on.</Alert>
+
+      <Field label="What are you charging for?" hint="A product uses its listed price, so the flow can never charge the wrong amount after someone edits it.">
+        <div style={{ display:"flex", gap:5 }}>
+          <Pill active={src==="product"} onClick={()=>onUpdateNode(node.id, { paymentSource:"product" })}>A product</Pill>
+          <Pill active={src==="amount"}  onClick={()=>onUpdateNode(node.id, { paymentSource:"amount"  })}>A set amount</Pill>
+        </div>
+      </Field>
+
+      {src === "product" ? (
+        <Field label="Product" hint={products.length === 0 ? "No products yet — add one in Sales → Products, or switch to a set amount." : "The price comes from the product, so changing it there changes it here."}>
+          <Select value={node.courseId || ""} onChange={(e)=>onUpdateNode(node.id, { courseId: e.target.value })}
+            style={{ borderColor: node.courseId ? C.inputBorder : C.red }}>
+            <option value="">— Select a product —</option>
+            {products.map(p => (
+              <option key={p.id} value={p.id}>
+                {p.name}{p.defaultPrice != null ? ` — ₹${Number(p.defaultPrice).toLocaleString("en-IN")}` : " (no price set)"}
+              </option>
+            ))}
+          </Select>
+          {node.courseId && productPrice == null && (
+            <div style={{ fontSize:10.5, color:C.red, marginTop:5 }}>
+              This product has no price. Set one in Sales → Products, or switch to a set amount — the node will fail at run time otherwise.
+            </div>
+          )}
+        </Field>
+      ) : (
+        <Field label="Amount (₹)" hint="Supports variables, e.g. {{course_fee}} from a custom field.">
+          <VarInput value={node.amount || ""} onChange={(e)=>onUpdateNode(node.id, { amount: e.target.value })}
+            placeholder="5499"/>
+        </Field>
+      )}
+
+      <Field label="Payment type">
+        <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+          <Pill active={kind==="fixed"}   onClick={()=>onUpdateNode(node.id, { paymentKind:"fixed"   })}>Full amount</Pill>
+          <Pill active={kind==="partial"} onClick={()=>onUpdateNode(node.id, { paymentKind:"partial" })}>Part payment — a minimum now, balance later</Pill>
+          <Pill active={kind==="open"}    onClick={()=>onUpdateNode(node.id, { paymentKind:"open"    })}>Open amount — they choose what to pay</Pill>
+        </div>
+      </Field>
+
+      {kind === "partial" && (
+        <Field label="Minimum first payment (₹)" hint="Razorpay refuses anything below this. Must not exceed the total.">
+          <Input type="number" value={node.minAmount || ""} onChange={(e)=>onUpdateNode(node.id, { minAmount: e.target.value })} placeholder="1000"
+            style={{ borderColor: node.minAmount ? C.inputBorder : C.red }}/>
+        </Field>
+      )}
+
+      <Field label="Message sent with the link" hint="Tokens: {{product}} {{amount}} {{name}}. The payment URL is added automatically, so you never have to place it.">
+        <VarTextarea rows={3} value={node.messageText || ""} onChange={(e)=>onUpdateNode(node.id, { messageText: e.target.value })}
+          placeholder="Here is your payment link for {{product}} — ₹{{amount}}."/>
+      </Field>
+
+      <Field label="If the chat has gone quiet" hint="WhatsApp refuses a normal message more than 24 hours after the customer last wrote. Only an approved template gets through then.">
+        <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+          <Pill active={(node.deliveryMode||"auto")==="auto"}     onClick={()=>onUpdateNode(node.id, { deliveryMode:"auto" })}>Message if I can, template if I can't</Pill>
+          <Pill active={node.deliveryMode==="template"} onClick={()=>onUpdateNode(node.id, { deliveryMode:"template" })}>Always send the template</Pill>
+          <Pill active={node.deliveryMode==="text"}     onClick={()=>onUpdateNode(node.id, { deliveryMode:"text" })}>Message only — skip if the window is shut</Pill>
+        </div>
+      </Field>
+
+      {(node.deliveryMode || "auto") !== "text" && (
+        <Field label="Payment template" hint={paymentTemplates.length ? "Must be APPROVED and carry a Payment Link button." : "None yet — build one in Template Builder with a Payment Link button."}>
+          <Select value={node.paymentTemplateId || ""} onChange={(e)=>onUpdateNode(node.id, { paymentTemplateId: e.target.value })}
+            style={{ borderColor: node.paymentTemplateId ? C.inputBorder : C.orange }}>
+            <option value="">— None —</option>
+            {paymentTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </Select>
+          {!node.paymentTemplateId && (
+            <Alert kind="warn">
+              Without a template this step can only reach customers who messaged in the last 24 hours. Everyone else is skipped and the step logs why.
+            </Alert>
+          )}
+        </Field>
+      )}
+
+      <Field label="Purpose (internal)" hint="Shown to your team on the Payments page, never to the customer.">
+        <Input value={node.purpose || ""} onChange={(e)=>onUpdateNode(node.id, { purpose: e.target.value })} placeholder="Course fee"/>
+      </Field>
+
+      <Field label="Link expires after (hours)" hint="After this the link stops working. Leave 24 unless you have a reason.">
+        <Input type="number" value={node.linkExpiryHours || ""} onChange={(e)=>onUpdateNode(node.id, { linkExpiryHours: e.target.value })} placeholder="24"/>
+      </Field>
+
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, padding:"11px 0", borderTop:`1px solid ${C.rowDiv}`, marginTop:6 }}>
+        <div>
+          <div style={{ fontSize:12, fontWeight:700, color:C.text1 }}>Wait for the payment</div>
+          <div style={{ fontSize:10.5, color:C.muted, marginTop:2 }}>Hold the flow here, then continue down <strong>Paid</strong> or <strong>Not paid</strong>.</div>
+        </div>
+        <Toggle value={waiting} onChange={(v)=>onUpdateNode(node.id, { waitForPayment: v })}/>
+      </div>
+
+      {waiting && (<>
+        <Field label="Give up after (minutes)" hint="If the money has not arrived by then, the flow continues down Not paid.">
+          <Input type="number" value={node.waitMinutes || ""} onChange={(e)=>onUpdateNode(node.id, { waitMinutes: e.target.value })} placeholder="30"/>
+        </Field>
+
+        <Field label="Message when the payment arrives" hint="Sent the moment the gateway confirms it. Leave blank to send nothing.">
+          <VarTextarea rows={2} value={node.confirmText || ""} onChange={(e)=>onUpdateNode(node.id, { confirmText: e.target.value })}
+            placeholder="Payment received — thank you!"/>
+        </Field>
+
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, padding:"11px 0", borderTop:`1px solid ${C.rowDiv}` }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700, color:C.text1 }}>Chase if they have not paid</div>
+            <div style={{ fontSize:10.5, color:C.muted, marginTop:2 }}>Ask whether they ran into trouble, while they are still waiting.</div>
+          </div>
+          <Toggle value={chasing} onChange={(v)=>onUpdateNode(node.id, { followUpEnabled: v })}/>
+        </div>
+
+        {chasing && (<>
+          <div style={{ display:"flex", gap:8 }}>
+            <Field label="First reminder after (min)" style={{ flex:1 }}>
+              <Input type="number" value={node.followUpMinutes || ""} onChange={(e)=>onUpdateNode(node.id, { followUpMinutes: e.target.value })} placeholder="10"/>
+            </Field>
+            <Field label="How many reminders" style={{ flex:1 }}>
+              <Input type="number" value={node.followUpMax || ""} onChange={(e)=>onUpdateNode(node.id, { followUpMax: e.target.value })} placeholder="1"/>
+            </Field>
+          </div>
+          <Field label="Reminder message" hint="The payment link is re-attached automatically.">
+            <VarTextarea rows={3} value={node.followUpText || ""} onChange={(e)=>onUpdateNode(node.id, { followUpText: e.target.value })}
+              placeholder="Just checking — were you able to complete the payment?"/>
+          </Field>
+          {Number(node.followUpMinutes || 0) * Math.max(1, Number(node.followUpMax || 1)) >= Number(node.waitMinutes || 0) && (
+            <Alert kind="warn">
+              The reminders run past the give-up time, so the last one{Number(node.followUpMax || 1) > 1 ? "s" : ""} will never be sent. Raise the give-up time or send fewer reminders.
+            </Alert>
+          )}
+        </>)}
+
+        <Alert kind="info">
+          While waiting, this flow ignores anything the customer types — they are answered by your other automations or your AI agent as normal. Only the payment moves it on.
+        </Alert>
+      </>)}
+
+      {effectiveAmount != null && (
+        <div style={{ marginTop:12, padding:"10px 12px", borderRadius:9, background:"#EDF6F1", border:"1px solid #9CC9B4" }}>
+          <div style={{ fontSize:10, fontWeight:700, letterSpacing:".06em", textTransform:"uppercase", color:"#0F6E56" }}>This step will charge</div>
+          <div style={{ fontSize:18, fontWeight:700, color:"#0F6E56", fontFamily:"'DM Mono'", marginTop:3 }}>
+            ₹{Number(effectiveAmount).toLocaleString("en-IN")}
+          </div>
+          <div style={{ fontSize:10.5, color:"#3C6656", marginTop:2 }}>
+            {kind === "fixed" ? "Paid in full." : kind === "partial" ? `Minimum first payment ₹${Number(node.minAmount || 0).toLocaleString("en-IN")}.` : "The customer chooses what to pay."}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display:"flex", gap:6, marginTop:14 }}>
+        <Btn kind="primary" style={{ flex:1, justifyContent:"center" }} onClick={onSaveAndClose}>Save</Btn>
+        <Btn kind="ghost" icon={IC.copy(13)} onClick={()=>onDuplicateNode(node.id)}>Duplicate</Btn>
+        <Btn kind="danger" icon={IC.trash(13)} onClick={()=>onDeleteNode(node.id)}>Delete</Btn>
+      </div>
+    </>);
+  }
+
   if (content === null) {
     content = (<>
       <Field label="Description"><Textarea rows={3} value={node.sub || ""} onChange={(e)=>onUpdateNode(node.id, { sub: e.target.value })} placeholder="Describe what this step does…"/></Field>
@@ -3904,13 +4138,14 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
   const [whatsappAccounts, setWhatsappAccounts] = useState([]);
   const [aiModels,        setAiModels]        = useState([]);
   const [assignableUsers, setAssignableUsers] = useState([]);
+  const [products,        setProducts]        = useState([]);
   const [loading,         setLoading]         = useState(true);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const [tpls, mems, tgs, cFields, flows, accs, ais, usrs] = await Promise.all([
+        const [tpls, mems, tgs, cFields, flows, accs, ais, usrs, prods] = await Promise.all([
           api.templates.list(),
           api.teamMembers.list(),
           api.tags.list(),
@@ -3919,6 +4154,10 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
           api.whatsappAccounts.list(true).catch(() => []),
           api.aiModels.list().catch(() => []),
           api.users.list().catch(() => []),
+          // Products drive the Payment node's price. A non-admin may not be able
+          // to read them; the node then falls back to a typed amount rather than
+          // failing to open.
+          api.products.list().catch(() => ({ products: [] })),
         ]);
         if (!alive) return;
         // Include APPROVED (sendable) and SUBMITTED (pending Meta review) so a
@@ -3936,6 +4175,19 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
         setWhatsappAccounts(accs || []);
         setAiModels(ais || []);
         setAssignableUsers((usrs || []).filter(u => u.isActive !== false && (u.role === 'bda_sales' || u.role === 'admin')));
+        // GET /products returns RAW rows (default_price_paise, active) — not the
+        // camelCase shape the rest of api.js uses. Normalised here, once, so the
+        // Payment panel can't quietly read an undefined price and label every
+        // product "(no price set)". Inactive products are dropped: an automation
+        // must not keep selling something that was retired.
+        const rawProducts = Array.isArray(prods) ? prods : (prods?.products || []);
+        setProducts(rawProducts
+          .filter(p => p.active !== false)
+          .map(p => ({
+            id: p.id,
+            name: p.name,
+            defaultPrice: p.default_price_paise != null ? Number(p.default_price_paise) / 100 : null,
+          })));
       } catch (e) {
         console.error("AutomationBuilderView load error:", e);
       } finally {
@@ -4609,6 +4861,7 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
               whatsappAccounts={whatsappAccounts}
               assignableUsers={assignableUsers}
               aiModels={aiModels}
+              products={products}
               automationId={automation?.id}
             />
           )}

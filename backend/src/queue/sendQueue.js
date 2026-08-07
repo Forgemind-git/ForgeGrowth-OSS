@@ -172,6 +172,14 @@ function startSendWorker() {
           [err.message.slice(0, 500), job.data.originRef.id]
         ).catch(() => {});
       }
+      // Follow-up steps log optimistically as 'sent' the moment they are
+      // handed to this queue — flip that row (keyed on the local id it
+      // stored) so the sequence log never claims a delivery Meta refused.
+      await pool.query(
+        `UPDATE coexistence.follow_up_log SET status='failed', reason=$1
+          WHERE local_message_id=$2 AND status='sent'`,
+        ['meta: ' + err.message.slice(0, 280), localId]
+      ).catch(() => {});
     }
   });
 

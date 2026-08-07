@@ -28,6 +28,7 @@ const pool = require('../db');
 const bus = require('../events');
 const cfg = require('../services/funnelConfig');
 const funnelTags = require('../services/funnelTags');
+const registry = require('../services/fieldRegistry');
 
 const router = Router();
 
@@ -51,6 +52,12 @@ function leadScopeClause(req, idx, alias = 'l') {
 function emitLeadChanged(payload = {}) {
   bus.emit('lead-changed', payload);
 }
+
+// A custom-fields payload must be a PLAIN object: Postgres `jsonb || '[]'`
+// coerces the bag into a jsonb ARRAY (no error), after which every ->> read,
+// export column and {{lead.*}} token goes blank for that lead. Arrays pass
+// `typeof === 'object'`, so the guard must be explicit.
+const asBag = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
 
 function leadRow(r) {
   return {
@@ -113,6 +120,24 @@ function buildLeadFilter(req) {
   if (q.days) {
     const n = parseInt(q.days, 10);
     if (Number.isFinite(n) && n > 0) where.push(`l.created_at >= NOW() - INTERVAL '${n} days'`);
+  }
+
+  // Registry-driven field filters: ?cf_<field_key>=value. The key is checked
+  // against the field registry (never interpolated raw); a system dropdown
+  // filters its real column via a fixed column map, a custom field filters the
+  // custom_fields bag. Unknown keys are ignored.
+  const SYSTEM_FILTER_COLS = { profession: 'profession', city: 'city', pincode: 'pincode', paid_course: 'paid_course' };
+  for (const [qk, qv] of Object.entries(q)) {
+    if (!qk.startsWith('cf_') || qv == null || qv === '') continue;
+    const key = qk.slice(3);
+    const f = registry.fieldByKey('lead', key);
+    if (!f) continue;
+    if (f.isSystem) {
+      const col = SYSTEM_FILTER_COLS[key];
+      if (col) where.push(`l.${col} = ${add(String(qv))}`);
+    } else {
+      where.push(`l.custom_fields ->> ${add(key)} = ${add(String(qv))}`);
+    }
   }
 
   // Saved-view presets.
@@ -319,18 +344,28 @@ router.get('/students/export', async (req, res) => {
         ORDER BY l.id DESC LIMIT 5000`,
       params
     );
-    const cols = ['Customer', 'WhatsApp', 'Email', 'Age', 'Profession', 'Pincode', 'Course', 'Total Paid (INR)', 'Source', 'Payment Date', 'Created At'];
-    const data = rows.map(r => ({
-      Customer: r.name || '', WhatsApp: r.whatsapp_number || '', Email: r.email || '',
-      Age: r.age ?? '', Profession: r.profession || '', Pincode: r.pincode || '',
-      Course: r.paid_course || '', 'Total Paid (INR)': paise2r(r.total_paid_paise),
-      Source: r.source || '', 'Payment Date': r.payment_date ? new Date(r.payment_date).toISOString().slice(0, 10) : '',
-      'Created At': r.created_at ? new Date(r.created_at).toISOString().slice(0, 10) : '',
-    }));
+    const baseCols = ['Customer', 'WhatsApp', 'Email', 'Age', 'Profession', 'Pincode', 'Course', 'Total Paid (INR)', 'Source', 'Payment Date', 'Created At'];
+    // Custom Sales-Log fields (registry entity 'lead', sale-visible) ride along.
+    const customCols = registry.customFields('lead').filter(f => f.showInSales);
+    const cols = [...baseCols, ...customCols.map(f => f.label)];
+    const bagStr = (v) => (Array.isArray(v) ? v.join(', ') : typeof v === 'boolean' ? (v ? 'Yes' : 'No') : v ?? '');
+    // Position-aligned arrays, NOT label-keyed objects: labels are free text
+    // and not unique, so a custom field labelled "Email" must never replace
+    // the real Email column's data.
+    const rowVals = (r) => [
+      r.name || '', r.whatsapp_number || '', r.email || '',
+      r.age ?? '', r.profession || '', r.pincode || '',
+      r.paid_course || '', paise2r(r.total_paid_paise),
+      r.source || '', r.payment_date ? new Date(r.payment_date).toISOString().slice(0, 10) : '',
+      r.created_at ? new Date(r.created_at).toISOString().slice(0, 10) : '',
+      ...customCols.map(f => bagStr((r.custom_fields || {})[f.fieldKey])),
+    ];
+    const aoa = [cols, ...rows.map(rowVals)];
 
     if (req.query.format === 'xlsx') {
-      const ws = XLSX.utils.json_to_sheet(data, { header: cols });
-      ws['!cols'] = [{ wch: 22 }, { wch: 16 }, { wch: 24 }, { wch: 6 }, { wch: 20 }, { wch: 10 }, { wch: 22 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 12 }];
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = [{ wch: 22 }, { wch: 16 }, { wch: 24 }, { wch: 6 }, { wch: 20 }, { wch: 10 }, { wch: 22 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 12 },
+        ...customCols.map(() => ({ wch: 16 }))];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Sales Log');
       const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
@@ -344,8 +379,7 @@ router.get('/students/export', async (req, res) => {
       const s = String(v);
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    const lines = [cols.join(',')];
-    for (const row of data) lines.push(cols.map(c => esc(row[c])).join(','));
+    const lines = aoa.map(row => row.map(esc).join(','));
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename="sales-log.csv"');
     res.send(lines.join('\n'));
@@ -362,13 +396,14 @@ router.get('/students/:id/installments', async (req, res) => {
     const { rows: lrows } = await pool.query(`${SELECT_LEAD} WHERE l.id = $1`, [id]);
     if (!lrows.length) return res.status(404).json({ error: 'Student not found' });
     const { rows } = await pool.query(
-      `SELECT kind, id, amount_paise, pay_date, method, ref, notes FROM (
+      `SELECT kind, id, amount_paise, pay_date, method, ref, notes, custom_fields, product_label FROM (
          SELECT 'razorpay' AS kind, id, amount_paise, created_at::date AS pay_date,
-                COALESCE(NULLIF(method,''),'Razorpay') AS method, payment_id AS ref, NULL::text AS notes
+                COALESCE(NULLIF(method,''),'Razorpay') AS method, payment_id AS ref, NULL::text AS notes,
+                NULL::jsonb AS custom_fields, NULL::text AS product_label
            FROM ( ${RZP_CAPTURED('matched_lead_id = $1')} ) rz
          UNION ALL
          SELECT 'manual' AS kind, id, amount_paise, payment_date AS pay_date,
-                COALESCE(NULLIF(method,''),'Manual') AS method, NULL AS ref, notes
+                COALESCE(NULLIF(method,''),'Manual') AS method, NULL AS ref, notes, custom_fields, product_label
            FROM coexistence.sales_log WHERE lead_id=$1
        ) t ORDER BY pay_date ASC NULLS LAST, id ASC`,
       [id]
@@ -376,6 +411,8 @@ router.get('/students/:id/installments', async (req, res) => {
     const installments = rows.map(r => ({
       kind: r.kind, id: Number(r.id), amount: paise2r(r.amount_paise),
       date: r.pay_date, method: r.method, ref: r.ref, notes: r.notes,
+      customFields: r.custom_fields || {},
+      productLabel: r.product_label || null,
     }));
     res.json({
       student: { ...leadRow(lrows[0]), ...(await chatLinkFor(lrows[0].whatsapp_number)) },
@@ -405,10 +442,11 @@ router.post('/students/:id/installments', async (req, res) => {
       const c = await pool.query(`SELECT name FROM coexistence.courses WHERE id=$1`, [courseId]);
       if (c.rows[0]) productLabel = c.rows[0].name;
     }
+    const txCustom = asBag(b.customFields);
     await pool.query(
-      `INSERT INTO coexistence.sales_log (lead_id, student_name, course_id, product_label, amount_paise, payment_date, funnel_source, notes, method, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [id, lr[0].name || 'Student', courseId, productLabel, Math.round(amount * 100), b.paymentDate, lr[0].source || null, b.notes || null, b.method || null, actorOf(req)]
+      `INSERT INTO coexistence.sales_log (lead_id, student_name, course_id, product_label, amount_paise, payment_date, funnel_source, notes, method, created_by, custom_fields)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb)`,
+      [id, lr[0].name || 'Student', courseId, productLabel, Math.round(amount * 100), b.paymentDate, lr[0].source || null, b.notes || null, b.method || null, actorOf(req), JSON.stringify(txCustom)]
     );
     await refreshPaidTotal(id);
     emitLeadChanged({ leadId: id });
@@ -435,6 +473,9 @@ router.post('/students', async (req, res) => {
     const ageVal = Number.isFinite(Number(b.age)) && String(b.age).trim() !== '' ? parseInt(b.age, 10) : null;
     const profession = b.profession ? String(b.profession).trim() : null;
     const pincode = b.pincode ? String(b.pincode).trim() : null;
+    // Sale-level custom fields (registry entity 'lead') — merged IN SQL so a
+    // concurrent editor's keys survive.
+    const saleCustom = asBag(b.customFields);
 
     const { rows: found } = await pool.query(
       `SELECT id, stage FROM coexistence.leads WHERE right(regexp_replace(whatsapp_number,'\\D','','g'),10)=$1 ORDER BY id LIMIT 1`, [last10]);
@@ -449,15 +490,18 @@ router.post('/students', async (req, res) => {
                 payment_date = COALESCE(payment_date, $2), name = COALESCE(name, $3),
                 email = COALESCE($4, email), age = COALESCE($5, age),
                 profession = COALESCE($6, profession), pincode = COALESCE($7, pincode),
-                source = COALESCE($8, source), updated_at = NOW()
+                source = COALESCE($8, source),
+                custom_fields = custom_fields || $9::jsonb, updated_at = NOW()
           WHERE id = $1`,
-        [leadId, b.paymentDate || null, name, email, ageVal, profession, pincode, b.source || null]);
+        [leadId, b.paymentDate || null, name, email, ageVal, profession, pincode, b.source || null,
+         JSON.stringify(saleCustom)]);
       if (!wasEnrolled) await logEvent(leadId, 'stage_changed', found[0].stage, 'enrolled', actorOf(req));
     } else {
       const ins = await pool.query(
-        `INSERT INTO coexistence.leads (whatsapp_number, name, email, age, profession, pincode, source, stage, has_whatsapp_thread, payment_date, stage_changed_at, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,'enrolled',FALSE,$8,NOW(),NOW(),NOW()) RETURNING id`,
-        [phone, name, email, ageVal, profession, pincode, b.source || 'Direct', b.paymentDate || null]);
+        `INSERT INTO coexistence.leads (whatsapp_number, name, email, age, profession, pincode, source, stage, has_whatsapp_thread, payment_date, custom_fields, stage_changed_at, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'enrolled',FALSE,$8,$9::jsonb,NOW(),NOW(),NOW()) RETURNING id`,
+        [phone, name, email, ageVal, profession, pincode, b.source || 'Direct', b.paymentDate || null,
+         JSON.stringify(saleCustom)]);
       leadId = ins.rows[0].id;
       await logEvent(leadId, 'stage_changed', null, 'enrolled', actorOf(req));
     }
@@ -468,10 +512,11 @@ router.post('/students', async (req, res) => {
       let productLabel = null;
       if (courseId) { const c = await pool.query(`SELECT name FROM coexistence.courses WHERE id=$1`, [courseId]); productLabel = c.rows[0]?.name || null; }
       if (courseId && productLabel) await pool.query(`UPDATE coexistence.leads SET paid_course = COALESCE(paid_course,$2) WHERE id=$1`, [leadId, productLabel]);
+      const txCustom = asBag(b.transactionCustomFields);
       await pool.query(
-        `INSERT INTO coexistence.sales_log (lead_id, student_name, course_id, product_label, amount_paise, payment_date, funnel_source, notes, method, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [leadId, name, courseId, productLabel, Math.round(amount * 100), b.paymentDate, b.source || null, b.notes || null, b.method || null, actorOf(req)]);
+        `INSERT INTO coexistence.sales_log (lead_id, student_name, course_id, product_label, amount_paise, payment_date, funnel_source, notes, method, created_by, custom_fields)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb)`,
+        [leadId, name, courseId, productLabel, Math.round(amount * 100), b.paymentDate, b.source || null, b.notes || null, b.method || null, actorOf(req), JSON.stringify(txCustom)]);
     }
     await refreshPaidTotal(leadId);
     // Mirror the (now enrolled) stage onto their WhatsApp contact right away so
@@ -569,13 +614,23 @@ router.get('/leads/export', async (req, res) => {
       `${SELECT_LEAD} ${clause} ORDER BY l.id DESC LIMIT 5000`, params
     );
     const cols = ['name', 'whatsappNumber', 'email', 'city', 'role', 'source', 'goal', 'stage', 'followUpCount', 'assignedUserName', 'createdAt'];
+    // Custom Leads-table fields ride along, labelled by their registry label.
+    const customCols = registry.customFields('lead').filter(f => f.showInLeads);
     const esc = (v) => {
       if (v == null) return '';
       const s = String(v);
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    const lines = [cols.join(',')];
-    for (const r of rows.map(leadRow)) lines.push(cols.map(c => esc(r[c])).join(','));
+    const bagStr = (v) => (Array.isArray(v) ? v.join(', ') : typeof v === 'boolean' ? (v ? 'Yes' : 'No') : v ?? '');
+    // Header cells escaped like data cells — a comma in a custom label must
+    // not shift every column after it.
+    const lines = [[...cols, ...customCols.map(f => f.label)].map(esc).join(',')];
+    for (const r of rows.map(leadRow)) {
+      lines.push([
+        ...cols.map(c => esc(r[c])),
+        ...customCols.map(f => esc(bagStr(r.customFields?.[f.fieldKey]))),
+      ].join(','));
+    }
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename="leads.csv"');
     res.send(lines.join('\n'));
@@ -653,7 +708,7 @@ router.post('/leads', async (req, res) => {
         b.city || null, b.role || null, b.source || null, b.goal || null,
         b.webinarSlot || null, b.referredBy || null, stage,
         b.assignedBda || null, assignedUserId,
-        !!b.hasWhatsappThread, b.customFields || {},
+        !!b.hasWhatsappThread, asBag(b.customFields),
       ]
     );
     await logEvent(rows[0].id, 'stage_changed', null, stage, actorOf(req));
@@ -696,7 +751,16 @@ router.put('/leads/:id', async (req, res) => {
       const ageVal = b.age === '' || b.age === null ? null : parseInt(b.age, 10);
       fields.push(`age = $${i++}`); vals.push(Number.isFinite(ageVal) ? ageVal : null);
     }
-    if (b.customFields !== undefined) { fields.push(`custom_fields = $${i++}`); vals.push(b.customFields || {}); }
+    if (b.customFields !== undefined) { fields.push(`custom_fields = $${i++}`); vals.push(asBag(b.customFields)); }
+    // Merge-based custom-field write — the field editors use THIS, never the
+    // wholesale replace above: the merge happens IN SQL so two concurrent
+    // editors can't discard each other's keys (funnelTags invariant 3).
+    if (b.customFieldsMerge !== undefined || b.customFieldsRemove !== undefined) {
+      const removeKeys = (Array.isArray(b.customFieldsRemove) ? b.customFieldsRemove : []).map(String);
+      const merge = asBag(b.customFieldsMerge);
+      fields.push(`custom_fields = (custom_fields - $${i++}::text[]) || $${i++}::jsonb`);
+      vals.push(removeKeys, JSON.stringify(merge));
+    }
     if (b.assignedUserId !== undefined && isAdmin(req)) {
       fields.push(`assigned_user_id = $${i++}`);
       vals.push(b.assignedUserId ? parseInt(b.assignedUserId, 10) : null);

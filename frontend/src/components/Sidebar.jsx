@@ -1,24 +1,37 @@
 import {
   Home, Zap, LayoutTemplate, MessageCircle, Users,
-  Megaphone, Image as ImageIcon, Link, Kanban, Bot,
+  Megaphone, Image as ImageIcon, Link, Kanban, Bot, ListChecks,
   ChevronLeft, ChevronRight, UserCog,
   LayoutDashboard,
   KanbanSquare, Trophy, ClipboardCheck, Package,
-  Filter, Receipt, FormInput, MousePointerClick, Radio, Target, CreditCard,
+  Receipt, FormInput, MousePointerClick, Radio, CreditCard,
+  FolderKanban, IndianRupee,
 } from 'lucide-react';
 import { C, FONT } from '../constants.js';
 
 const NAV_ITEMS = [
   { id: 'home', label: 'Home', Icon: Home },
+  // Projects group templates + automations + agents for one campaign, so it
+  // sits above the three lists it organises.
+  { id: 'projects', label: 'Projects', Icon: FolderKanban },
   { id: 'chatbot-builder', label: 'Automations', Icon: Zap },
   { id: 'ai-agent-builder', label: 'AI Agents', Icon: Bot },
+  // Route key stays `follow-up-sequence` — the permission key has existed
+  // since migration 031 and renaming a page key silently drops stored
+  // per-user permission overrides.
+  { id: 'follow-up-sequence', label: 'Follow-ups', Icon: ListChecks },
   { id: 'template-builder', label: 'Template Builder', Icon: LayoutTemplate },
   { id: 'media-library', label: 'Media', Icon: ImageIcon },
-  { id: 'wa-links', label: 'Generate Link', Icon: Link },
+  // Route key stays `wa-links` — renaming a page key would drop stored
+  // per-user permission overrides. Only the label changed.
+  { id: 'wa-links', label: 'Message Formats', Icon: Link },
   { id: 'lead-forms', label: 'Forms', Icon: FormInput },
   { id: 'chats', label: 'Chats', Icon: MessageCircle },
   { id: 'contacts', label: 'Contacts', Icon: Users },
   { id: 'bulk-message', label: 'Bulk Message', Icon: Megaphone },
+  // What the messaging above actually costs. Sits with Chats rather than in
+  // Admin Settings: it is a dashboard people read, not a setting they configure.
+  { id: 'message-costs', label: 'Message Costs', Icon: IndianRupee },
   { id: 'team-members', label: 'Team Members', Icon: UserCog },
 ];
 
@@ -27,13 +40,12 @@ const MARKETING_NAV = [
   { id: 'campaigns', label: 'Campaigns', Icon: Megaphone },
   { id: 'ctwa-ads', label: 'Click-to-WhatsApp', Icon: MousePointerClick },
   { id: 'conversion-api', label: 'Conversion API', Icon: Radio },
-  { id: 'clo', label: 'Lead Optimisation', Icon: Target },
 ];
 
 const SALES_NAV = [
-  { id: 'sales-pipeline', label: 'Pipeline', Icon: KanbanSquare },
-  { id: 'sales-funnel', label: 'Funnel', Icon: Filter },
-  { id: 'leads', label: 'Leads', Icon: Users },
+  // One tab for the whole leads model — Pipeline / Funnel / All Leads are
+  // internal views of LeadsHubPage.
+  { id: 'leads', label: 'Leads', Icon: KanbanSquare },
   { id: 'bda-performance', label: 'BDA Performance', Icon: Trophy },
   { id: 'products', label: 'Products', Icon: Package },
   { id: 'payments', label: 'Payments', Icon: CreditCard },

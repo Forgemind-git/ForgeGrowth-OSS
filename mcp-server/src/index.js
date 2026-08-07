@@ -357,6 +357,38 @@ server.registerTool('list_form_submissions', {
   return call('GET', `/lead-forms-submissions?${p.toString()}`);
 }));
 
+/* ========================= projects (campaign folders) ================= */
+
+server.registerTool('list_projects', {
+  title: 'List projects',
+  description:
+    'List the campaign projects (folders), each with a count of the templates, automations, AI agents, follow-up sequences and forms filed under it. ' +
+    'Pass projectId to open one and list the actual items inside. Use this to turn a project NAME the user said into the id move_to_project needs — never guess an id.',
+  inputSchema: {
+    projectId: z.union([z.string(), z.number()]).optional().describe('Open one project and list what it holds. Omit to list every project.'),
+  },
+}, tool(({ projectId }) => {
+  const p = new URLSearchParams();
+  if (projectId != null && projectId !== '') p.set('projectId', String(projectId));
+  const qs = p.toString();
+  return call('GET', `/projects-list${qs ? `?${qs}` : ''}`);
+}));
+
+server.registerTool('move_to_project', {
+  title: 'Move items into a project',
+  description:
+    'File one or more items into a campaign project, or take them out of one. ' +
+    "kind is 'template' | 'automation' | 'agent' | 'followup' | 'form' ('form' = a lead-capture form from list_lead_forms). " +
+    'ids[] are that kind\'s ids — resolve them first with list_lead_forms / list_templates / list_agents, never guess. ' +
+    'Pass projectId to file them there (from list_projects), or null to unfile them. ' +
+    'This ONLY changes which folder the items are listed under: nothing is created, edited, published, activated or sent, and no customer is contacted.',
+  inputSchema: {
+    kind: z.enum(['template', 'automation', 'agent', 'followup', 'form']),
+    ids: z.array(z.union([z.string(), z.number()])),
+    projectId: z.union([z.string(), z.number()]).nullable().optional(),
+  },
+}, tool((args) => call('POST', '/projects-assign', args)));
+
 /* ================= AI Academy funnel: leads / marketing / BDA ========== */
 
 server.registerTool('list_leads', {

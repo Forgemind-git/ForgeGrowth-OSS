@@ -87,6 +87,12 @@ services:
     volumes:
       - uploads:/app/uploads   # team profile pictures
       - media:/app/media       # downloaded WhatsApp media
+      # The Claude plugin, served as a .zip from Admin Settings -> MCP Tools.
+      # Bind-mounted rather than COPYed because the build context is ./backend
+      # and this lives beside it. Read-only: the app only ever packages it.
+      # Without this the download returns a 404 explaining the mount is missing,
+      # which is a clear message rather than a broken button.
+      - ./forge-growth-plugin:/app/plugin:ro
 
   web:
     build:

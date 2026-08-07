@@ -100,10 +100,10 @@ export default function OverviewPage({ user, navigate }) {
           {loading ? <Shimmer height={180} /> :
             <Donut data={(data.bySource || []).map((s, i) => ({ label: s.source, value: s.count, color: SERIES[i % SERIES.length] }))} />}
         </Card>
-        <Card title="Funnel snapshot" right={<LinkText onClick={() => navigate && navigate('sales-pipeline')}>Open pipeline</LinkText>}>
+        <Card title="Funnel snapshot" right={<LinkText onClick={() => navigate && navigate('leads')}>Open pipeline</LinkText>}>
           {loading ? <Shimmer height={180} /> :
             <FunnelBars data={(data.funnel || []).map(f => ({ stage: f.stage, count: f.count }))}
-              colorFor={(f) => STAGE_META[f.stage]?.color} onClick={() => navigate && navigate('sales-pipeline')} />}
+              colorFor={(f) => STAGE_META[f.stage]?.color} onClick={() => navigate && navigate('leads')} />}
         </Card>
       </div>
 
@@ -122,7 +122,7 @@ export default function OverviewPage({ user, navigate }) {
             rows={sources} keyOf={s => s.source}
             empty={<EmptyState Icon={GitBranch} title="No lead sources yet"
               hint="Sources are set automatically from where each conversation started." />}
-            onRowClick={() => navigate && navigate('leads')}
+            onRowClick={() => navigate && navigate('leads', 'list')}
             renderRow={(s) => (
               <>
                 <Td bold>{s.source}</Td>

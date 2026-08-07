@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { notify } from '../lib/feedback.js';
 import { Send, ArrowLeft, Trash2, Loader2, Clock, Users, Phone, FileText, Repeat, X, CheckCircle, Eye, Search, ChevronDown, Filter, Plus, Play, Library, Image, Video, Music } from 'lucide-react';
 import { api } from '../api.js';
-import { C, FONT, formatDate, formatTime, maskPhone } from '../constants.js';
+import { C, FONT, MONO, formatDate, formatTime, maskPhone } from '../constants.js';
 import MaskedNumber from '../components/MaskedNumber.jsx';
 import SearchableSelect from '../components/SearchableSelect.jsx';
 import WhatsAppPreview from '../components/WhatsAppPreview.jsx';
@@ -299,6 +299,14 @@ export default function BulkMessagePage({ onNavigate }) {
   const [numbers, setNumbers] = useState([]);
   const [selectedNumber, setSelectedNumber] = useState('');
   const [recipientScope, setRecipientScope] = useState('number'); // 'number' | 'all'
+  // Payment broadcasts: the template carries the button, the broadcast carries
+  // the price (chosen design — one template serves every product).
+  const [payProductId, setPayProductId] = useState('');
+  const [payAmount, setPayAmount] = useState('');
+  const [payPurpose, setPayPurpose] = useState('');
+  const [payProducts, setPayProducts] = useState([]);
+  const [payConfirm, setPayConfirm] = useState(null);   // {status} while the typed gate is open
+  const [payConfirmText, setPayConfirmText] = useState('');
   const [contacts, setContacts] = useState([]);
   const [contactsLoading, setContactsLoading] = useState(false);
   const [contactSearch, setContactSearch] = useState('');
@@ -415,6 +423,8 @@ export default function BulkMessagePage({ onNavigate }) {
     setNewBroadcastBody('');
     setNewBroadcastUrl('');
     setNewBroadcastMediaLibraryId('');
+    setPayProductId(''); setPayAmount(''); setPayPurpose('');
+    setPayConfirm(null); setPayConfirmText('');
     setNewBroadcastMediaItems([]);
     setNewBroadcastCaption('');
     setNewBroadcastMediaLoading(false);
@@ -765,6 +775,11 @@ export default function BulkMessagePage({ onNavigate }) {
         payload.template_id = selectedTemplate.id;
         payload.variable_mapping = newBroadcastVariableMapping;
         if (headerMediaType && newBroadcastMediaLibraryId) payload.media_library_id = Number(newBroadcastMediaLibraryId);
+        if (isPaymentBroadcast) {
+          payload.payment_course_id = payProductId ? Number(payProductId) : null;
+          payload.payment_amount = payAmountNum;      // rupees; backend stores paise
+          payload.payment_purpose = payPurpose.trim() || undefined;
+        }
       } else if (newBroadcastMessageType === 'text') {
         payload.body = newBroadcastBody;
       } else if (newBroadcastMessageType === 'link') {
@@ -783,6 +798,26 @@ export default function BulkMessagePage({ onNavigate }) {
     }
   };
 
+  useEffect(() => {
+    let alive = true;
+    api.products.list()
+      .then(r => {
+        if (!alive) return;
+        const raw = Array.isArray(r) ? r : (r?.products || []);
+        setPayProducts(raw.filter(p => p.active !== false).map(p => ({
+          id: p.id, name: p.name,
+          price: p.default_price_paise != null ? Number(p.default_price_paise) / 100 : null,
+        })));
+      })
+      .catch(() => { if (alive) setPayProducts([]); });
+    return () => { alive = false; };
+  }, []);
+
+  // Does the chosen template mint a live payment link per recipient?
+  const isPaymentBroadcast = newBroadcastMessageType === 'template' && !!selectedTemplate?.hasPaymentButton;
+  const payAmountNum = payAmount === '' ? null : Number(payAmount);
+  const payTotal = isPaymentBroadcast && payAmountNum ? payAmountNum * selectedRecipients.length : 0;
+
   const handleNewBroadcastSave = async (status) => {
     if (!newBroadcastFrom || selectedRecipients.length === 0) return;
     if (newBroadcastMessageType === 'template' && !selectedTemplate) return;
@@ -790,6 +825,18 @@ export default function BulkMessagePage({ onNavigate }) {
     if (newBroadcastMessageType === 'link' && !newBroadcastUrl.trim()) return;
     if (['image', 'video', 'audio', 'document'].includes(newBroadcastMessageType) && !newBroadcastMediaLibraryId) return;
     if (headerMediaType && !newBroadcastMediaLibraryId) return;
+    if (isPaymentBroadcast) {
+      if (!payAmountNum || payAmountNum < 1) {
+        notify('This template carries a payment button — set the product or amount each recipient will be charged.');
+        return;
+      }
+      // Every recipient gets their OWN live payment link, so the person sending
+      // must see the total exposure and type it back before anything is minted.
+      if (status === 'SENT' && payConfirmText !== 'CREATE LINKS') {
+        setPayConfirm({ status });
+        return;
+      }
+    }
     setNewBroadcasting(true);
     try {
       const payload = {
@@ -839,10 +886,58 @@ export default function BulkMessagePage({ onNavigate }) {
     }
   };
 
+  // Declared HERE, above the first early return, because the LIST view renders
+  // it. `const` is in the temporal dead zone until its declaration executes, so
+  // while this lived further down (in the detail-view section) every render of
+  // the list view threw "Cannot access 'payConfirmModal' before initialization"
+  // and — with no error boundary in this app — blanked the whole page.
+  // Every value it reads (payConfirm, payConfirmText, selectedRecipients,
+  // payAmountNum, payTotal, handleNewBroadcastSave) is already defined above.
+  const payConfirmModal = payConfirm && (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex',
+      alignItems: 'center', justifyContent: 'center', zIndex: 4000, padding: 20 }}
+      onClick={() => { setPayConfirm(null); setPayConfirmText(''); }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: C.cardBg, borderRadius: 14, padding: 26,
+        maxWidth: 460, width: '100%', boxShadow: C.shadowLg, fontFamily: FONT }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 10 }}>
+          Create {selectedRecipients.length} live payment links?
+        </div>
+        <div style={{ fontSize: 13, color: C.textSecondary, lineHeight: 1.6 }}>
+          Each of the <strong>{selectedRecipients.length}</strong> recipients gets their own Razorpay
+          link for <strong>₹{payAmountNum ? payAmountNum.toLocaleString('en-IN') : 0}</strong> — a total of{' '}
+          <strong style={{ fontFamily: MONO }}>₹{payTotal.toLocaleString('en-IN')}</strong> in links that
+          can really be paid. They cannot be un-sent.
+        </div>
+        <div style={{ fontSize: 12.5, color: C.textSecondary, marginTop: 16, marginBottom: 7 }}>
+          Type <strong style={{ fontFamily: MONO, color: C.text }}>CREATE LINKS</strong> to continue.
+        </div>
+        <input autoFocus value={payConfirmText} onChange={e => setPayConfirmText(e.target.value)}
+          placeholder="CREATE LINKS"
+          style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: `1.5px solid ${C.border}`,
+            borderRadius: 8, fontSize: 13, fontFamily: MONO, background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none' }} />
+        <div style={{ display: 'flex', gap: 8, marginTop: 18, justifyContent: 'flex-end' }}>
+          <button onClick={() => { setPayConfirm(null); setPayConfirmText(''); }}
+            style={{ padding: '9px 16px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent',
+              color: C.text, fontSize: 13, fontFamily: FONT, cursor: 'pointer' }}>Cancel</button>
+          <button
+            disabled={payConfirmText !== 'CREATE LINKS'}
+            onClick={() => { const st = payConfirm.status; setPayConfirm(null); handleNewBroadcastSave(st); }}
+            style={{ padding: '9px 16px', borderRadius: 8, border: 'none',
+              background: payConfirmText === 'CREATE LINKS' ? '#0F6E56' : C.border,
+              color: '#fff', fontSize: 13, fontWeight: 600, fontFamily: FONT,
+              cursor: payConfirmText === 'CREATE LINKS' ? 'pointer' : 'not-allowed' }}>
+            Create and send
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   // ─── LIST VIEW ──────────────────────────────────────────────────────────────
   if (view === 'list') {
     return (
       <div style={{ padding: '24px 28px', fontFamily: FONT }}>
+        {payConfirmModal}
         <AccountHealthBanner />
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
@@ -1081,6 +1176,55 @@ export default function BulkMessagePage({ onNavigate }) {
                       ))}
                     </div>
                   </div>
+
+                  {isPaymentBroadcast && (
+                    <div style={{ background: '#EDF6F1', border: '1px solid #9CC9B4', borderRadius: 10, padding: '14px 16px' }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#0F6E56', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+                        Payment template
+                      </div>
+                      <div style={{ fontSize: 12, color: '#3C6656', lineHeight: 1.55, marginBottom: 12 }}>
+                        Every recipient gets their <strong>own live Razorpay link</strong> for the amount below,
+                        created when the broadcast is sent.
+                      </div>
+                      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                        <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: C.textSecondary, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Product</div>
+                          <SearchableSelect
+                            value={payProductId}
+                            onChange={(v) => {
+                              setPayProductId(v);
+                              // Fill the amount from the product, but never clobber a
+                              // figure someone typed on purpose.
+                              const p = payProducts.find(x => String(x.id) === String(v));
+                              const prev = payProducts.find(x => String(x.id) === String(payProductId));
+                              if (p?.price != null && (payAmount === '' || (prev && String(payAmount) === String(prev.price)))) {
+                                setPayAmount(String(p.price));
+                              }
+                            }}
+                            placeholder="— None (amount only) —"
+                            options={payProducts.map(p => ({ value: String(p.id), label: p.name, sublabel: p.price != null ? `₹${p.price.toLocaleString('en-IN')}` : 'no price set' }))}
+                          />
+                        </div>
+                        <div style={{ flex: '0 1 160px' }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: C.textSecondary, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Amount (₹)</div>
+                          <input type="number" min={1} value={payAmount} onChange={e => setPayAmount(e.target.value)}
+                            placeholder="5499"
+                            style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: `1.5px solid ${payAmountNum ? C.border : '#C4534F'}`, borderRadius: 8, fontSize: 13, fontFamily: MONO, background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none' }} />
+                        </div>
+                        <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: C.textSecondary, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Purpose (internal)</div>
+                          <input value={payPurpose} onChange={e => setPayPurpose(e.target.value)} placeholder="August fee"
+                            style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 13, fontFamily: FONT, background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none' }} />
+                        </div>
+                      </div>
+                      {payTotal > 0 && (
+                        <div style={{ marginTop: 12, fontSize: 12.5, color: '#0F6E56', fontWeight: 600 }}>
+                          {selectedRecipients.length} recipient(s) × ₹{payAmountNum.toLocaleString('en-IN')} ={' '}
+                          <span style={{ fontFamily: MONO }}>₹{payTotal.toLocaleString('en-IN')}</span> of live payment links
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Message Type */}
                   <div>
@@ -1746,6 +1890,8 @@ export default function BulkMessagePage({ onNavigate }) {
   const b = selectedBroadcast;
   const tpl = templateForPreview(b);
   const metrics = b ? getMetrics(b) : null;
+
+
 
   return (
     <div style={{ padding: '24px 28px', fontFamily: FONT }}>

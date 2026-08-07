@@ -5,17 +5,23 @@ const publicRouter = express.Router();
 const pool = require('../db');
 const { fireWebhookTrigger } = require('../engine/automationEngine');
 
-// ─── Automation folders ────────────────────────────────────────────────────
-// Folders only organize automations (chatbots.folder_id). They carry no flow
-// config. Responses keep snake_case to match the rest of this module.
+// ─── Automation folders = PROJECTS ─────────────────────────────────────────
+// Migration 094 generalised automation_folders into `projects`, which now also
+// hold message templates and AI agents. These routes are the automations-only
+// view of that table and are kept at their old paths + old response keys
+// (`folder_id`, `automation_count`) so the existing Automations file-manager UI
+// keeps working unchanged. The full cross-entity API lives in routes/projects.js.
+//
+// The SQL below therefore reads `projects` / `project_id` while the JSON still
+// says `folder_id` — the alias is deliberate, not a leftover.
 
-// GET /automation-folders — list folders with a live automation count
+// GET /automation-folders — list projects with a live automation count
 router.get('/automation-folders', async (req, res) => {
   const { rows } = await pool.query(
     `SELECT f.id, f.name, f.created_at, f.updated_at,
             COUNT(c.id)::int AS automation_count
-       FROM coexistence.automation_folders f
-       LEFT JOIN coexistence.chatbots c ON c.folder_id = f.id
+       FROM coexistence.projects f
+       LEFT JOIN coexistence.chatbots c ON c.project_id = f.id
       GROUP BY f.id
       ORDER BY LOWER(f.name) ASC`
   );
@@ -25,9 +31,9 @@ router.get('/automation-folders', async (req, res) => {
 // POST /automation-folders — create
 router.post('/automation-folders', async (req, res) => {
   const name = (req.body?.name || '').trim();
-  if (!name) return res.status(400).json({ error: 'Folder name is required' });
+  if (!name) return res.status(400).json({ error: 'Project name is required' });
   const { rows } = await pool.query(
-    `INSERT INTO coexistence.automation_folders (name) VALUES ($1) RETURNING *`,
+    `INSERT INTO coexistence.projects (name) VALUES ($1) RETURNING *`,
     [name]
   );
   res.status(201).json({ ...rows[0], automation_count: 0 });
@@ -36,41 +42,50 @@ router.post('/automation-folders', async (req, res) => {
 // PUT /automation-folders/:id — rename
 router.put('/automation-folders/:id', async (req, res) => {
   const name = (req.body?.name || '').trim();
-  if (!name) return res.status(400).json({ error: 'Folder name is required' });
+  if (!name) return res.status(400).json({ error: 'Project name is required' });
   const { rows } = await pool.query(
-    `UPDATE coexistence.automation_folders
+    `UPDATE coexistence.projects
         SET name = $1, updated_at = NOW()
       WHERE id = $2
       RETURNING *`,
     [name, req.params.id]
   );
-  if (rows.length === 0) return res.status(404).json({ error: 'Folder not found' });
+  if (rows.length === 0) return res.status(404).json({ error: 'Project not found' });
   res.json(rows[0]);
 });
 
-// DELETE /automation-folders/:id — blocked while the folder still holds automations
+// DELETE /automation-folders/:id — blocked while the project still holds
+// anything. Counts templates and agents too, not just automations: this route
+// deletes the whole project row, so checking only automations would let a
+// delete through and then fail on the templates FK with a raw 500.
 router.delete('/automation-folders/:id', async (req, res) => {
   const { rows: cnt } = await pool.query(
-    `SELECT COUNT(*)::int AS n FROM coexistence.chatbots WHERE folder_id = $1`,
+    `SELECT (SELECT COUNT(*)::int FROM coexistence.chatbots          WHERE project_id = $1) AS automations,
+            (SELECT COUNT(*)::int FROM coexistence.message_templates WHERE project_id = $1) AS templates,
+            (SELECT COUNT(*)::int FROM coexistence.agents            WHERE project_id = $1) AS agents`,
     [req.params.id]
   );
-  const n = cnt[0].n;
-  if (n > 0) {
+  const c = cnt[0];
+  const parts = [];
+  if (c.automations) parts.push(`${c.automations} automation${c.automations === 1 ? '' : 's'}`);
+  if (c.templates) parts.push(`${c.templates} template${c.templates === 1 ? '' : 's'}`);
+  if (c.agents) parts.push(`${c.agents} AI agent${c.agents === 1 ? '' : 's'}`);
+  if (parts.length) {
     return res.status(409).json({
-      error: `This folder still has ${n} automation${n === 1 ? '' : 's'}. Move or delete ${n === 1 ? 'it' : 'them'} before deleting the folder.`,
+      error: `This project still holds ${parts.join(', ')}. Move or delete them before deleting the project.`,
     });
   }
   const { rowCount } = await pool.query(
-    'DELETE FROM coexistence.automation_folders WHERE id = $1', [req.params.id]
+    'DELETE FROM coexistence.projects WHERE id = $1', [req.params.id]
   );
-  if (rowCount === 0) return res.status(404).json({ error: 'Folder not found' });
+  if (rowCount === 0) return res.status(404).json({ error: 'Project not found' });
   res.json({ ok: true });
 });
 
 // GET /chatbots — list all
 router.get('/chatbots', async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT id, name, description, status, trigger_type, config, folder_id, created_at, updated_at
+    `SELECT id, name, description, status, trigger_type, config, project_id AS folder_id, created_at, updated_at
      FROM coexistence.chatbots
      ORDER BY updated_at DESC`
   );
@@ -80,7 +95,7 @@ router.get('/chatbots', async (req, res) => {
 // GET /chatbots/:id — single chatbot
 router.get('/chatbots/:id', async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT id, name, description, status, trigger_type, config, folder_id, created_at, updated_at
+    `SELECT id, name, description, status, trigger_type, config, project_id AS folder_id, created_at, updated_at
      FROM coexistence.chatbots WHERE id = $1`,
     [req.params.id]
   );
@@ -96,14 +111,14 @@ router.post('/chatbots', async (req, res) => {
   }
   try {
     const { rows } = await pool.query(
-      `INSERT INTO coexistence.chatbots (name, description, status, trigger_type, config, folder_id)
+      `INSERT INTO coexistence.chatbots (name, description, status, trigger_type, config, project_id)
        VALUES ($1,$2,$3,$4,$5,$6)
-       RETURNING *`,
+       RETURNING *, project_id AS folder_id`,
       [name.trim(), description || null, status || 'draft', trigger_type || 'keyword', JSON.stringify(config || {}), folder_id || null]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
-    if (err.code === '23503') return res.status(400).json({ error: 'That folder no longer exists' });
+    if (err.code === '23503') return res.status(400).json({ error: 'That project no longer exists' });
     throw err;
   }
 });
@@ -124,10 +139,10 @@ router.put('/chatbots/:id', async (req, res) => {
   if (body.status !== undefined)       { sets.push(`status = $${i++}`);       params.push(body.status); }
   if (body.trigger_type !== undefined) { sets.push(`trigger_type = $${i++}`); params.push(body.trigger_type); }
   if (body.config !== undefined)       { sets.push(`config = $${i++}`);       params.push(JSON.stringify(body.config)); }
-  if (body.folder_id !== undefined)    { sets.push(`folder_id = $${i++}`);    params.push(body.folder_id === null ? null : body.folder_id); }
+  if (body.folder_id !== undefined)    { sets.push(`project_id = $${i++}`);    params.push(body.folder_id === null ? null : body.folder_id); }
 
   if (sets.length === 0) {
-    const { rows } = await pool.query('SELECT * FROM coexistence.chatbots WHERE id = $1', [req.params.id]);
+    const { rows } = await pool.query('SELECT *, project_id AS folder_id FROM coexistence.chatbots WHERE id = $1', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Chatbot not found' });
     return res.json(rows[0]);
   }
@@ -136,13 +151,13 @@ router.put('/chatbots/:id', async (req, res) => {
   params.push(req.params.id);
   try {
     const { rows } = await pool.query(
-      `UPDATE coexistence.chatbots SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
+      `UPDATE coexistence.chatbots SET ${sets.join(', ')} WHERE id = $${i} RETURNING *, project_id AS folder_id`,
       params
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Chatbot not found' });
     res.json(rows[0]);
   } catch (err) {
-    if (err.code === '23503') return res.status(400).json({ error: 'That folder no longer exists' });
+    if (err.code === '23503') return res.status(400).json({ error: 'That project no longer exists' });
     throw err;
   }
 });
@@ -151,16 +166,16 @@ router.put('/chatbots/:id', async (req, res) => {
 // created DISABLED ('inactive') so it can't fire until reviewed/enabled.
 router.post('/chatbots/:id/duplicate', async (req, res) => {
   const { rows: src } = await pool.query(
-    'SELECT name, description, trigger_type, config, folder_id FROM coexistence.chatbots WHERE id = $1',
+    'SELECT name, description, trigger_type, config, project_id AS folder_id FROM coexistence.chatbots WHERE id = $1',
     [req.params.id]
   );
   if (src.length === 0) return res.status(404).json({ error: 'Chatbot not found' });
   const c = src[0];
   // The copy lands in the same folder as the original.
   const { rows } = await pool.query(
-    `INSERT INTO coexistence.chatbots (name, description, status, trigger_type, config, folder_id)
+    `INSERT INTO coexistence.chatbots (name, description, status, trigger_type, config, project_id)
      VALUES ($1,$2,'inactive',$3,$4,$5)
-     RETURNING id, name, description, status, trigger_type, config, folder_id, created_at, updated_at`,
+     RETURNING id, name, description, status, trigger_type, config, project_id AS folder_id, created_at, updated_at`,
     [`${c.name} (copy)`, c.description, c.trigger_type, JSON.stringify(c.config || {}), c.folder_id]
   );
   res.status(201).json(rows[0]);
@@ -197,9 +212,9 @@ router.post('/chatbots/import', async (req, res) => {
   }
   const a = payload.automation;
   const { rows } = await pool.query(
-    `INSERT INTO coexistence.chatbots (name, description, status, trigger_type, config, folder_id)
+    `INSERT INTO coexistence.chatbots (name, description, status, trigger_type, config, project_id)
      VALUES ($1,$2,'inactive',$3,$4,NULL)
-     RETURNING id, name, description, status, trigger_type, config, folder_id, created_at, updated_at`,
+     RETURNING id, name, description, status, trigger_type, config, project_id AS folder_id, created_at, updated_at`,
     [`${String(a.name).trim()} (imported)`.slice(0, 200), a.description || null, a.trigger_type || 'keyword', JSON.stringify(a.config || {})]
   );
   res.status(201).json(rows[0]);

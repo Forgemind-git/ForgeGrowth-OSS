@@ -17,8 +17,10 @@ async function req(path, opts = {}) {
     // Prefer the backend's human-readable { error } message. Never surface the
     // raw HTTP status code to the user — map it to a friendly sentence instead.
     let message = '';
+    let body = null;
     try {
       const data = await res.clone().json();
+      body = data;
       message = data?.error || data?.message || '';
     } catch {
       try { message = (await res.text()) || ''; } catch { message = ''; }
@@ -36,11 +38,30 @@ async function req(path, opts = {}) {
     }
     const e = new Error(message);
     e.status = res.status;
+    // Extra machine-readable keys some endpoints return beside `error`
+    // (e.g. entity-fields' restorableId on a deleted-key conflict).
+    if (body && typeof body === 'object') e.body = body;
     throw e;
   }
 
   // Tolerate empty success bodies (202/204) without throwing a JSON parse error.
   return res.json().catch(() => ({}));
+}
+
+/**
+ * Build a query string, dropping empty values.
+ *
+ * Dropping '' matters: an empty filter must mean "no filter", not
+ * `?status=` — which several backend handlers would read as a real value and
+ * silently return nothing.
+ */
+function qs(params = {}) {
+  const sp = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') sp.set(k, v);
+  });
+  const s = sp.toString();
+  return s ? `?${s}` : '';
 }
 
 export const api = {
@@ -370,7 +391,15 @@ export const api = {
       const s = qs.toString();
       return req(`/razorpay/payments${s ? `?${s}` : ''}`);
     },
-    paymentsSummary: () => req('/razorpay/payments/summary'),
+    // KPI summary for the ledger. Accepts the same from/to/method/q slice as
+    // payments() so the cards describe the current view (status is table-only —
+    // the cards ARE the status breakdown).
+    paymentsSummary: (filters = {}) => {
+      const qs = new URLSearchParams();
+      Object.entries(filters).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
+      const s = qs.toString();
+      return req(`/razorpay/payments/summary${s ? `?${s}` : ''}`);
+    },
     syncPayments: (full = false) =>
       req('/razorpay/payments/sync', { method: 'POST', body: JSON.stringify({ full }) }),
     // Proves the OUTBOUND half works. A connected webhook says nothing about
@@ -506,6 +535,9 @@ export const api = {
     updateKey: (id, data) => req(`/mcp/keys/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteKey: (id) => req(`/mcp/keys/${id}`, { method: 'DELETE' }),
     install: () => req('/mcp/install'),
+    // A plain URL, not a fetch: the browser downloads it via <a download> so the
+    // auth cookie rides along — same pattern as the contacts import template.
+    pluginZipUrl: () => '/api/mcp/plugin.zip',
     // OAuth clients — what Claude's connector dialog wants (Client ID + Secret).
     // Separate from the legacy key-in-URL scheme above, which stays supported.
     oauthClients: () => req('/mcp/oauth/clients'),
@@ -513,11 +545,53 @@ export const api = {
     updateOauthClient: (id, data) => req(`/mcp/oauth/clients/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteOauthClient: (id) => req(`/mcp/oauth/clients/${id}`, { method: 'DELETE' }),
   },
+  // Follow-up Sequences — timed follow-up chains for leads (Chats → Follow-ups).
+  // Auto-enrollment on funnel-stage entry + manual enrollment; the engine runs
+  // server-side (services/followUpEngine.js).
+  followUps: {
+    list: () => req('/follow-up-sequences'),
+    get: (id) => req(`/follow-up-sequences/${id}`),
+    create: (data) => req('/follow-up-sequences', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => req(`/follow-up-sequences/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id) => req(`/follow-up-sequences/${id}`, { method: 'DELETE' }),
+    addStep: (id, data) => req(`/follow-up-sequences/${id}/steps`, { method: 'POST', body: JSON.stringify(data) }),
+    updateStep: (stepId, data) => req(`/follow-up-steps/${stepId}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteStep: (stepId) => req(`/follow-up-steps/${stepId}`, { method: 'DELETE' }),
+    reorderSteps: (id, ids) => req(`/follow-up-sequences/${id}/steps/reorder`, { method: 'PUT', body: JSON.stringify({ ids }) }),
+    enrollments: (id, status) => req(`/follow-up-sequences/${id}/enrollments${status ? `?status=${status}` : ''}`),
+    enroll: (id, leadIds) => req(`/follow-up-sequences/${id}/enroll`, { method: 'POST', body: JSON.stringify({ leadIds }) }),
+    stopEnrollment: (enrollmentId) => req(`/follow-up-enrollments/${enrollmentId}/stop`, { method: 'POST' }),
+    log: (id, limit = 100) => req(`/follow-up-sequences/${id}/log?limit=${limit}`),
+  },
+  // Message Formats — labelled pre-filled WhatsApp openers + their tracking.
+  // The backend answers on /wa-links too; this group uses the canonical path.
+  messageFormats: {
+    list: () => req('/message-formats'),
+    get: (id) => req(`/message-formats/${id}`),
+    create: (data) => req('/message-formats', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => req(`/message-formats/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id) => req(`/message-formats/${id}`, { method: 'DELETE' }),
+    stats: (id, days = 30) => req(`/message-formats/${id}/stats?days=${days}`),
+  },
+  // Pre-093 alias. Kept so nothing that still calls api.waLinks breaks.
   waLinks: {
     list: () => req('/wa-links'),
     create: (data) => req('/wa-links', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => req(`/wa-links/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id) => req(`/wa-links/${id}`, { method: 'DELETE' }),
+  },
+  // Projects — group templates + automations + agents for one campaign.
+  projects: {
+    list: () => req('/projects'),
+    get: (id) => req(`/projects/${id}`),
+    create: (data) => req('/projects', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => req(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id) => req(`/projects/${id}`, { method: 'DELETE' }),
+    // kind: 'template' | 'automation' | 'agent' | 'followup' | 'form'; projectId null unfiles.
+    assign: (kind, ids, projectId) => req('/projects/assign', {
+      method: 'POST', body: JSON.stringify({ kind, ids, projectId }),
+    }),
+    items: (kind) => req(`/projects-items/${kind}`),
   },
   // ── AI Academy Dashboard ──────────────────────────────────────────────────
   leads: {
@@ -573,28 +647,7 @@ export const api = {
     ad: (sourceId) => req(`/ctwa/ads/${encodeURIComponent(sourceId)}`),
     backfillDailySpend: (days) => req('/marketing/meta-ads/backfill-daily', { method: 'POST', body: JSON.stringify({ days }) }),
   },
-  // Conversion Leads Optimisation — Meta Lead Ads only.
-  clo: {
-    settings: () => req('/marketing/clo/settings'),
-    updateSettings: (data) => req('/marketing/clo/settings', { method: 'PUT', body: JSON.stringify(data) }),
-    stages: () => req('/marketing/clo/stages'),
-    createStage: (data) => req('/marketing/clo/stages', { method: 'POST', body: JSON.stringify(data) }),
-    updateStage: (id, data) => req(`/marketing/clo/stages/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    deleteStage: (id) => req(`/marketing/clo/stages/${id}`, { method: 'DELETE' }),
-    reorderStages: (ids) => req('/marketing/clo/stages/reorder', { method: 'PUT', body: JSON.stringify({ ids }) }),
-    stageStats: () => req('/marketing/clo/stage-stats'),
-    testEvent: (data = {}) => req('/marketing/clo/test-event', { method: 'POST', body: JSON.stringify(data) }),
-    flush: () => req('/marketing/clo/flush', { method: 'POST' }),
-    readiness: () => req('/marketing/clo/readiness'),
-    events: (params = {}) => {
-      const qs = new URLSearchParams();
-      Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
-      return req(`/marketing/clo/events${qs.toString() ? `?${qs}` : ''}`);
-    },
-    retryEvent: (id) => req(`/marketing/clo/events/${id}/retry`, { method: 'POST' }),
-    retryBulk: (filters) => req('/marketing/clo/events/retry-bulk', { method: 'POST', body: JSON.stringify(filters) }),
-    backfill: (opts = {}) => req('/marketing/clo/backfill', { method: 'POST', body: JSON.stringify(opts) }),
-  },
+
 
   resources: {
     list: (dynamic) => {
@@ -645,6 +698,16 @@ export const api = {
     createSource: (label) => req('/funnel/sources', { method: 'POST', body: JSON.stringify({ label }) }),
     updateSource: (id, data) => req(`/funnel/sources/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteSource: (id) => req(`/funnel/sources/${id}`, { method: 'DELETE' }),
+  },
+  // Entity-field registry — configurable fields for the Leads table, the
+  // Sales Log (entity 'lead') and Transactions (entity 'transaction').
+  entityFields: {
+    list: () => req('/entity-fields'),
+    create: (data) => req('/entity-fields', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => req(`/entity-fields/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    reorder: (entity, ids) => req('/entity-fields/reorder', { method: 'PUT', body: JSON.stringify({ entity, ids }) }),
+    delete: (id) => req(`/entity-fields/${id}`, { method: 'DELETE' }),
+    restore: (id) => req(`/entity-fields/${id}/restore`, { method: 'POST' }),
   },
   students: {
     list: () => req('/students'),
@@ -710,6 +773,20 @@ export const api = {
     // Builds a Utility/Marketing template with the form's link button attached,
     // and optionally submits it to Meta for approval.
     createTemplate: (id, data) => req(`/lead-forms/${id}/template`, { method: 'POST', body: JSON.stringify(data) }),
+  },
+  // ── Message costs — what we owe Meta, per template and per message type ──
+  messageCosts: {
+    overview: (params = {}) => req(`/message-costs/overview${qs(params)}`),
+    templates: (params = {}) => req(`/message-costs/templates${qs(params)}`),
+    template: (id, params = {}) => req(`/message-costs/templates/${id}${qs(params)}`),
+    breakdown: (params = {}) => req(`/message-costs/breakdown${qs(params)}`),
+    trend: (params = {}) => req(`/message-costs/trend${qs(params)}`),
+    config: () => req('/message-costs/config'),
+    saveConfig: (data) => req('/message-costs/config', { method: 'PUT', body: JSON.stringify(data) }),
+    saveRate: (id, rate) => req(`/message-costs/rates/${id}`, { method: 'PUT', body: JSON.stringify({ rate }) }),
+    addRate: (data) => req('/message-costs/rates', { method: 'POST', body: JSON.stringify(data) }),
+    sync: (days) => req('/message-costs/sync', { method: 'POST', body: JSON.stringify({ days }) }),
+    backfill: (days) => req('/message-costs/backfill', { method: 'POST', body: JSON.stringify({ days }) }),
   },
   // ── Lead Forms (public — no auth, used by PublicLeadFormPage) ────────────
   publicLeadForms: {

@@ -219,6 +219,182 @@ async function buildToolsForAgent(agent, sendCtx = null) {
     }
   }
 
+  // Payments — let the agent take money mid-conversation.
+  //
+  // ⚠ THE AMOUNT IS NOT THE LLM'S TO INVENT. `allowCustomAmount` is off by
+  // default, which means the only figure the agent can charge is a Product's
+  // own price. When it IS on, min/max are enforced in resolveAmount() — never
+  // in the prompt, because a prompt is a suggestion and a customer who argues
+  // long enough will get past it. Live keys make this the difference between a
+  // guard rail and a refund.
+  if (agent.payments_enabled && liveContact) {
+    const paymentFlow = require('../services/paymentFlow');
+    const { resolveWaNumber } = require('../services/agentCrmTools');
+    const waNumber = sendCtx.waNumber || await resolveWaNumber(sendCtx.waAccountId);
+    const cfg = (agent.payment_config && typeof agent.payment_config === 'object') ? agent.payment_config : {};
+    const allowCustom = cfg.allowCustomAmount === true;
+    const allowedIds = Array.isArray(cfg.productIds) ? cfg.productIds.map(Number).filter(Boolean) : [];
+
+    if (waNumber) {
+      // The catalogue goes into the tool DESCRIPTION, not into a lookup the LLM
+      // has to make first: a model that has to guess a product id will guess.
+      // The column is `active`, not `is_active`. Logged rather than swallowed:
+      // a silent empty catalogue would leave the agent unable to sell anything
+      // while looking perfectly configured.
+      const { rows: products } = await pool.query(
+        `SELECT id, name, default_price_paise FROM coexistence.courses
+          WHERE active IS DISTINCT FROM FALSE ORDER BY id`
+      ).catch((err) => { console.error('[agent] product catalogue load failed:', err.message); return { rows: [] }; });
+      const sellable = allowedIds.length ? products.filter(p => allowedIds.includes(Number(p.id))) : products;
+      const catalogue = sellable.length
+        ? sellable.map(p => `  id ${p.id} = "${p.name}"${p.default_price_paise ? ` (₹${paymentFlow.toRupees(p.default_price_paise).toLocaleString('en-IN')})` : ' (no price set)'}`).join('\n')
+        : '  (no products configured — ask the team to add one in Sales → Products)';
+
+      const amountRule = allowCustom
+        ? `You may instead pass \`amount\` in rupees for a custom figure, but ONLY between ₹${paymentFlow.toRupees(cfg.minAmountPaise || 100).toLocaleString('en-IN')} and ₹${paymentFlow.toRupees(cfg.maxAmountPaise || 0).toLocaleString('en-IN')}. Anything outside that is refused.`
+        : 'You CANNOT set your own amount. Every link is for a product at its listed price. If the customer asks for a different price, tell them you will check with the team — do not improvise a figure.';
+
+      const properties = {
+        product_id: { type: 'integer', description: `Which product to charge for. Available:\n${catalogue}` },
+        purpose: { type: 'string', description: 'Short note on what this payment is for, e.g. "Full course fee" or "Registration". Shown to the team, not the customer.' },
+        message: { type: 'string', description: 'The message to send with the link, in your own words and the customer\'s language. The payment URL is appended automatically — do not write it yourself.' },
+      };
+      if (allowCustom) {
+        properties.amount = { type: 'number', description: 'Custom amount in rupees. Only use when no product fits; a product id is always preferred.' };
+      }
+
+      tools.push({
+        name: 'create_payment_link',
+        description:
+          'Raise a real Razorpay payment link for this customer and send it to them on WhatsApp. '
+          + 'This CHARGES REAL MONEY — only call it once the customer has clearly agreed to pay for something specific.\n'
+          + amountRule
+          + '\nThe link is delivered by this tool. Do NOT paste the URL in your reply — just tell them it has been sent. '
+          + 'Calling this twice for the same thing returns the SAME link rather than making a second one.',
+        input_schema: { type: 'object', properties, required: [] },
+      });
+
+      executors['create_payment_link'] = async (args = {}) => {
+        const resolved = await paymentFlow.resolveAmount({
+          courseId: args.product_id || null,
+          amount: allowCustom ? (args.amount ?? null) : null,
+          allowCustom,
+          minPaise: cfg.minAmountPaise != null ? Number(cfg.minAmountPaise) : null,
+          maxPaise: cfg.maxAmountPaise != null ? Number(cfg.maxAmountPaise) : null,
+          allowedProductIds: allowedIds.length ? allowedIds : null,
+        });
+        // Returned as data, not thrown: the model should apologise and carry on,
+        // not see the turn fail.
+        if (resolved.error) return { ok: false, error: resolved.error };
+
+        const created = await paymentFlow.createPaymentForChat({
+          waNumber,
+          contactNumber: sendCtx.contactNumber,
+          contactName: sendCtx.contactName || null,
+          amountPaise: resolved.amountPaise,
+          courseId: resolved.product?.id || null,
+          purpose: args.purpose || null,
+          kind: 'fixed',
+          expiryHours: cfg.expiryHours ? Number(cfg.expiryHours) : null,
+          source: 'agent',
+          agentId: agent.id,
+          createdBy: `agent:${agent.id}`,
+        });
+        if (created.error) return { ok: false, error: created.error };
+
+        const request = created.request;
+        // `auto`: free-form text while the 24-hour window is open, the approved
+        // payment template once it has shut. Without the template fallback an
+        // agent physically cannot reach a customer who went quiet overnight —
+        // which is exactly when a payment reminder matters most.
+        const sent = await paymentFlow.deliverPaymentLink({
+          waNumber, contactNumber: sendCtx.contactNumber, request, mode: 'auto',
+          text: args.message || 'Here is your payment link.',
+          templateId: agent.payment_template_id || null,
+          templateVariables: [
+            request.product_label || request.purpose || 'your payment',
+            paymentFlow.toRupees(request.amount_paise).toLocaleString('en-IN'),
+          ],
+          contactName: sendCtx.contactName,
+        });
+
+        if (cfg.followUpEnabled) {
+          await paymentFlow.openWatch({
+            requestId: request.id,
+            watcherKind: 'agent',
+            agentId: agent.id,
+            waNumber,
+            contactNumber: sendCtx.contactNumber,
+            followUpMinutes: Math.max(1, parseInt(cfg.followUpMinutes || 15, 10)),
+            followUpMax: Math.max(1, parseInt(cfg.followUpMax || 1, 10)),
+            followUpText: cfg.followUpText || null,
+            confirmText: cfg.confirmText || null,
+            expiryMinutes: Math.max(1, parseInt(cfg.expiryHours || 24, 10) * 60),
+            templateId: agent.payment_template_id || null,
+          }).catch(err => console.error('[agent] openWatch:', err.message));
+        }
+
+        return {
+          ok: true,
+          sent: sent.sent,
+          reused: !!created.reused,
+          delivered_via: sent.via || null,
+          amount_rupees: paymentFlow.toRupees(request.amount_paise),
+          product: request.product_label || null,
+          note: sent.sent
+            ? (sent.via === 'template'
+                // The model must know the customer did NOT see its own wording,
+                // or its next turn will refer back to a message it never sent.
+                ? 'The chat had gone quiet, so the link was sent as an approved WhatsApp template instead of your message text. The customer has the link. Do not repeat the URL.'
+                : 'The payment link has been delivered to the customer. Do not repeat the URL — just confirm you have sent it.')
+            : `The link was created but WhatsApp would not deliver it: ${sent.detail || sent.reason}. Tell the customer you will have someone send it across.`,
+        };
+      };
+
+      tools.push({
+        name: 'check_payment_status',
+        description:
+          'Check whether this customer has actually paid a link you raised. Call this whenever they say they have paid, '
+          + 'or ask you to confirm — it reads the live status from the payment gateway, so it is the real answer, '
+          + 'not a guess. Never tell a customer their payment is confirmed without calling this first.',
+        input_schema: { type: 'object', properties: {}, required: [] },
+      });
+
+      executors['check_payment_status'] = async () => {
+        const { rows } = await pool.query(
+          `SELECT pr.*, c.name AS product_name FROM coexistence.payment_requests pr
+             LEFT JOIN coexistence.courses c ON c.id = pr.course_id
+            WHERE right(regexp_replace(pr.customer_phone, '\\D', '', 'g'), 10) = right($1, 10)
+              AND pr.razorpay_link_id IS NOT NULL
+            ORDER BY pr.id DESC LIMIT 1`,
+          [String(sendCtx.contactNumber).replace(/\D/g, '')]
+        );
+        if (!rows[0]) return { ok: true, found: false, note: 'No payment link has been raised for this customer yet.' };
+
+        // Read from the gateway, not from our mirror. A webhook we never
+        // received would otherwise make us tell a paying customer they still
+        // owe money — the single worst thing this tool could do.
+        const fresh = await paymentFlow.verifyBeforeChasing(rows[0]);
+        const settled = paymentFlow.isSettled(fresh);
+        return {
+          ok: true,
+          found: true,
+          paid: settled,
+          status: fresh.status,
+          amount_rupees: paymentFlow.toRupees(fresh.amount_paise),
+          amount_paid_rupees: paymentFlow.toRupees(fresh.amount_paid_paise),
+          product: fresh.product_label || null,
+          checked_live: !fresh.__verifyError,
+          note: settled
+            ? 'Payment confirmed by the gateway. You can thank them and move on to what happens next.'
+            : fresh.__verifyError
+              ? 'Could not reach the payment gateway just now, so this may be out of date. Do not tell the customer their payment failed — say you are checking and someone will confirm shortly.'
+              : 'The gateway shows this as unpaid. Ask politely whether they ran into any trouble with the link.',
+        };
+      };
+    }
+  }
+
   // Human handoff — let the agent hand the conversation to a person.
   if (agent.handoff_enabled && liveContact) {
     const { performHandoff } = require('../services/agentHandoff');
@@ -476,6 +652,7 @@ async function sendMediaGroup({ group, waAccountId, contactNumber }) {
         const localMessageId = await insertPendingRow({
           account, toNumber: contactNumber, messageType: 'template',
           messageBody: tpl.body || `Template: ${tpl.name}`,
+          templateId: tpl.id, sendOrigin: 'agent',
           templateMeta: {
             header_type: tpl.header_type || 'NONE',
             header_text: tpl.header_text || null,

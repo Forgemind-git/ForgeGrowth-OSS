@@ -19,7 +19,7 @@ const TOOL_TYPES = [
 
 const toolMeta = (type) => TOOL_TYPES.find(t => t.type === type) || TOOL_TYPES[0];
 
-export default function AgentToolsList({ agentId, tools, onChange, ensureAgentId }) {
+export default function AgentToolsList({ agentId, tools, onChange, ensureAgentId, capabilities = [], onOpenCapability }) {
   const [adding, setAdding] = useState(false);   // false | tool-type string
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(null); // tool row when editing existing
@@ -60,7 +60,52 @@ export default function AgentToolsList({ agentId, tools, onChange, ensureAgentId
         </div>
       )}
 
+      {capabilities.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase',
+            color: C.textMuted, marginBottom: 7 }}>Built in</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {capabilities.map(cap => {
+              const Icon = cap.icon;
+              return (
+                <div key={cap.key}
+                  onClick={() => onOpenCapability && onOpenCapability(cap.key)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px',
+                    background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 9,
+                    cursor: onOpenCapability ? 'pointer' : 'default', opacity: cap.on ? 1 : 0.65 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: 7, flexShrink: 0,
+                    background: cap.on ? cap.iconBg : C.surfaceAlt,
+                    color: cap.on ? cap.iconColor : C.textMuted,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon size={14} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: C.text }}>{cap.label}</div>
+                    <div style={{ fontSize: 11, color: C.textSecondary, marginTop: 1 }}>
+                      {cap.on ? cap.onDesc : cap.offDesc}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.04em', flexShrink: 0,
+                    padding: '3px 8px', borderRadius: 20,
+                    background: cap.on ? '#E6F4EA' : C.surfaceAlt,
+                    color: cap.on ? '#0F7A38' : C.textMuted }}>
+                    {cap.on ? 'ON' : 'OFF'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 10.5, color: C.textMuted, marginTop: 7 }}>
+            Switched on in Advanced settings. Everything above is a tool the model can call during a chat.
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {capabilities.length > 0 && (
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase',
+            color: C.textMuted, marginBottom: -1 }}>Connected</div>
+        )}
         {tools.length === 0 && !adding && (
           <div style={{ padding: 16, background: C.surfaceAlt, borderRadius: 8,
             border: `1px dashed ${C.border}`, textAlign: 'center', fontSize: 12, color: C.textSecondary }}>

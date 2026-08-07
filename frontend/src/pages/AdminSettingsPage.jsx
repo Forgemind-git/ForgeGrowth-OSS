@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { notify } from '../lib/feedback.js';
+import { notify, showError, showSuccess } from '../lib/feedback.js';
 import {
   Settings, Users, Tag, FolderOpen, LayoutList,
   LogOut, Trash2, Moon, Sun, Monitor,
@@ -8,6 +8,7 @@ import {
   Bot, Copy, Check, Plug, Calendar as CalendarIcon, FileSpreadsheet, Link2, Unplug,
   ChevronRight, ExternalLink, Sheet, Table2, Inbox, PlugZap, Terminal,
   IndianRupee, CreditCard, Link as LinkIcon, SlidersHorizontal,
+  ChevronDown, Wrench, ShieldAlert, Package, Download,
 } from 'lucide-react';
 import { api } from '../api.js';
 import { C, FONT, MONO, maskPhone } from '../constants.js';
@@ -18,6 +19,7 @@ import SearchableSelect from '../components/SearchableSelect.jsx';
 import { useTableSelection, SelectAllCheckbox, RowCheckbox, BulkDeleteButton, runBulkDelete } from '../components/TableSelection.jsx';
 import { MetaAdsPanel } from '../components/MarketingConnections.jsx';
 import { FunnelSettingsContent } from './sales/FunnelSettingsPage.jsx';
+import EntityFieldsManager from '../components/EntityFieldsManager.jsx';
 
 const TABS = [
   { key: 'general', label: 'General', icon: Settings },
@@ -604,6 +606,10 @@ const FIELD_TYPES = [
 ];
 
 function FieldsTab({ contactFields, onRefresh }) {
+  // Which table's fields are being managed: Chats contacts (the original
+  // contact_field_definitions CRUD below) or the entity-field registry behind
+  // the Leads table / Sales Log / Transactions (migration 097).
+  const [section, setSection] = useState('contacts');
   const [showAdd, setShowAdd] = useState(false);
   const [editingField, setEditingField] = useState(null);
   const [form, setForm] = useState({ name: '', description: '', field_type: 'text', sort_order: 0 });
@@ -678,6 +684,12 @@ function FieldsTab({ contactFields, onRefresh }) {
     textarea: '#db2777',
   };
 
+  const FIELD_SECTIONS = [
+    { key: 'contacts', label: 'Contacts (Chats)' },
+    { key: 'lead', label: 'Leads & Sales Log' },
+    { key: 'transaction', label: 'Transactions' },
+  ];
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <div style={{
@@ -685,20 +697,40 @@ function FieldsTab({ contactFields, onRefresh }) {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         borderBottom: `1px solid ${C.border}`,
       }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>Fields</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <BulkDeleteButton sel={sel} label="field" onConfirm={handleBulkDelete} />
-          <button onClick={openAdd} style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '8px 14px', borderRadius: 8, border: 'none',
-            background: C.primary, color: '#fff', cursor: 'pointer',
-            fontFamily: FONT, fontSize: 13, fontWeight: 600,
-          }}>
-            <Plus size={14} /> Add field
-          </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>Fields</h1>
+          <div style={{ display: 'inline-flex', background: 'var(--c-hover, #F1F1EE)', borderRadius: 9, padding: 3, gap: 2 }}>
+            {FIELD_SECTIONS.map(s => (
+              <button key={s.key} onClick={() => setSection(s.key)} style={{
+                padding: '6px 12px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
+                background: section === s.key ? C.cardBg : 'transparent',
+                color: section === s.key ? C.text : C.textSecondary,
+                boxShadow: section === s.key ? '0 1px 2px rgba(0,0,0,.08)' : 'none',
+              }}>{s.label}</button>
+            ))}
+          </div>
         </div>
+        {section === 'contacts' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <BulkDeleteButton sel={sel} label="field" onConfirm={handleBulkDelete} />
+            <button onClick={openAdd} style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 14px', borderRadius: 8, border: 'none',
+              background: C.primary, color: '#fff', cursor: 'pointer',
+              fontFamily: FONT, fontSize: 13, fontWeight: 600,
+            }}>
+              <Plus size={14} /> Add field
+            </button>
+          </div>
+        )}
       </div>
 
+      {section !== 'contacts' ? (
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 32px' }}>
+          <EntityFieldsManager entity={section} />
+        </div>
+      ) : (
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 32px' }}>
         {contactFields.length === 0 ? (
           <div style={{ textAlign: 'center', color: C.textMuted, fontSize: 14, marginTop: 60 }}>
@@ -756,6 +788,7 @@ function FieldsTab({ contactFields, onRefresh }) {
           </div>
         )}
       </div>
+      )}
 
       <DeleteConfirmModal
         open={deleteModal.open}
@@ -1759,7 +1792,11 @@ const iconBtnStyle = { background: 'transparent', border: 'none', cursor: 'point
 /*  Main Page                                                          */
 /* ------------------------------------------------------------------ */
 export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [], navigate, user }) {
-  const VALID_TABS = ['general', 'team', 'tags', 'category', 'fields', 'funnel', 'whatsapp-accounts', 'ai-models', 'integrations', 'mcp', 'users', 'webhooks'];
+  // DERIVED from TABS, never restated. A hand-maintained copy silently drifts:
+  // a tab missing from this list still RENDERS its button, and clicking it
+  // falls through to visibleTabs[0] — so the tab appears to exist and does
+  // nothing. That is exactly how the Message Costs tab shipped broken.
+  const VALID_TABS = TABS.map(t => t.key);
   // Filter tabs to those this user is allowed to see. Admin sees everything;
   // non-admins must have 'admin-settings:<tab>' in their pages array.
   const isAdmin = user?.role === 'admin';
@@ -3274,35 +3311,108 @@ function AppCard({ color, logo, label, blurb, badge, onClick }) {
 
 // Human labels for the per-capability toggles. Keys match backend
 // mcp_settings.capabilities / routes/mcp.js CAPABILITY_KEYS.
-const MCP_CAPABILITIES = [
-  { key: 'discovery', label: 'Discovery / read', desc: 'List WhatsApp numbers, models, spreadsheets, tabs, media, templates, and existing agents.' },
-  { key: 'create_agent', label: 'Create agents', desc: 'Create new AI agents.' },
-  { key: 'update_agent', label: 'Update agents', desc: 'Edit existing agents (name, prompt, model, trigger, etc.).' },
-  { key: 'manage_tools', label: 'Configure tools', desc: 'Add or edit agent tools — Google Sheets and HTTP request (external API/device).' },
-  { key: 'delete', label: 'Delete', desc: 'Delete agents and remove tools.' },
-  { key: 'read_messages', label: 'Read conversations', desc: 'List WhatsApp conversations and read message history (with 24-hour window status).' },
-  { key: 'send_messages', label: 'Send messages', desc: 'Reply with free-form text (inside the 24-hour window) and send approved templates.' },
-  // Full-access (generic proxy + bulk) per-area toggles. High-trust: an MCP key
-  // with these on can perform admin actions on that area from an external client.
-  { key: 'area_contacts', label: 'Full: Contacts & tags', desc: 'Read/write contacts, saved contacts, tags, categories, custom fields, team members.', group: 'Full access (admin proxy)' },
-  { key: 'area_messaging', label: 'Full: Messages', desc: 'Read/send chat messages, reactions, mark-read via the generic proxy.' },
-  { key: 'area_broadcasts', label: 'Full: Broadcasts & content', desc: 'Create/send broadcasts, manage templates & media library — plus the config tools upload_media, create_template, submit_template, sync_template, create_wa_link, and broadcast to an uploaded list (send_bulk_message).' },
-  { key: 'area_automations', label: 'Full: Automations', desc: 'Read/write automation flows, folders, and executions — plus create_automation (build a flow from a chat plan).' },
-  { key: 'area_admin', label: 'Full: Admin (users, accounts)', desc: 'SENSITIVE — manage users/RBAC, WhatsApp accounts, AI models, integrations.' },
-  { key: 'area_insights', label: 'Full: Dashboard & logs', desc: 'Read dashboard analytics and webhook history.' },
-  // AI Academy funnel (Marketing/Sales) — also backed by dedicated tools
-  // (list_leads, move_lead_stage, get_campaign_performance, list_webinars, get_bda_activity).
-  { key: 'area_leads', label: 'Full: Leads', desc: 'Read/write the lead funnel — list, stage moves, timeline.', group: 'Full access (admin proxy)' },
-  { key: 'area_leadforms', label: 'Full: Lead forms', desc: 'Create/publish lead-capture forms and read their submissions — backed by create_lead_form, list_lead_forms, list_form_submissions.' },
-  { key: 'area_marketing', label: 'Full: Marketing', desc: 'Campaigns (incl. Meta Ads sync), webinars, registrations, social overview.' },
-  { key: 'area_resources', label: 'Full: Resources', desc: 'Content library, live links, and the trigger library.' },
-  { key: 'area_bda', label: 'Full: BDA activity', desc: 'BDA leaderboard, raw activity log, and webinar conversion.' },
-  // Products + Payments — also backed by dedicated tools (list_products,
-  // get_product_revenue, list_payments). The Razorpay gateway secret is NOT in
-  // area_payments; it sits under area_admin.
-  { key: 'area_courses', label: 'Full: Products', desc: 'Product catalog, payment links, and per-product revenue.' },
-  { key: 'area_payments', label: 'Full: Payments', desc: 'Razorpay payment ledger and webhook events — read who paid, who failed, and what was collected. The gateway secret stays under Admin.' },
+// API areas for the generic `forgechat_request` proxy ONLY.
+//
+// These used to gate named tools as well, which is what made the old screen
+// unreadable — a single key like `discovery` controlled ten unrelated tools
+// across templates, media, agents and Google Drive. Named tools are now gated
+// by CATEGORY (served by the backend from services/mcpCatalog.js), and these
+// area switches do only the job they were designed for: scoping which internal
+// API paths the Direct API access tool may reach.
+const MCP_API_AREAS = [
+  { key: 'area_contacts', label: 'Contacts & tags', desc: 'Contacts, saved contacts, tags, categories, custom fields, team members.' },
+  { key: 'area_messaging', label: 'Messages', desc: 'Chat messages, reactions and mark-read.' },
+  { key: 'area_broadcasts', label: 'Broadcasts & content', desc: 'Broadcasts, templates, media library and click-to-chat links.' },
+  { key: 'area_automations', label: 'Automations', desc: 'Automation flows, projects, executions and follow-up sequences.' },
+  { key: 'area_admin', label: 'Admin (users, accounts, payments)', desc: 'SENSITIVE — users/RBAC, WhatsApp accounts, AI models, integrations, the Razorpay gateway secret, conversion sending and live payment links.', sensitive: true },
+  { key: 'area_insights', label: 'Dashboard & logs', desc: 'Dashboard analytics, webhook history and message costs.' },
+  { key: 'area_leads', label: 'Leads & funnel', desc: 'The lead funnel, lead sources, funnel config and the field registry.' },
+  { key: 'area_leadforms', label: 'Lead forms', desc: 'Lead-capture forms and their submissions.' },
+  { key: 'area_marketing', label: 'Marketing', desc: 'Campaigns (incl. Meta Ads sync), webinars, registrations and click-to-WhatsApp analytics.' },
+  { key: 'area_resources', label: 'Resources', desc: 'Content library, live links and the trigger library.' },
+  { key: 'area_bda', label: 'BDA activity', desc: 'BDA leaderboard, activity log and webinar conversion.' },
+  { key: 'area_courses', label: 'Products', desc: 'Product catalogue, payment links and per-product revenue.' },
+  { key: 'area_payments', label: 'Payments', desc: 'Razorpay ledger, sales log and students. The gateway secret stays under Admin.' },
 ];
+
+// Tier -> pill styling. The tier is advisory signalling for the admin reading
+// the screen; the category toggle is the only real gate. Red is reserved for
+// the two things that cost money or reach a real customer, so the eye lands on
+// them first.
+const MCP_TIER_STYLE = {
+  read:        { bg: '#E8F3EF', fg: C.green },
+  build:       { bg: '#EDEBF7', fg: C.purple },
+  send:        { bg: '#FCEBEB', fg: '#A32D2D' },
+  destructive: { bg: '#4A1414', fg: '#FFE8E8' },
+  advanced:    { bg: '#FBF0E4', fg: '#8A5A1B' },
+};
+
+function TierPill({ tier, label }) {
+  const s = MCP_TIER_STYLE[tier] || MCP_TIER_STYLE.read;
+  return (
+    <span style={{
+      background: s.bg, color: s.fg, fontSize: 10.5, fontWeight: 700,
+      letterSpacing: '.04em', textTransform: 'uppercase',
+      padding: '3px 8px', borderRadius: 999, whiteSpace: 'nowrap', flexShrink: 0,
+    }}>{label}</span>
+  );
+}
+
+// One category = one switch = one thing a person actually does ("Template
+// Builder"). Expanding it lists the exact tools that switch controls, so the
+// blast radius of turning it off is visible before you turn it off — the old
+// flat list gave no way to know that `discovery` also owned Google Drive.
+function McpCategoryCard({ cat, disabled, saving, onToggle }) {
+  const [open, setOpen] = useState(false);
+  const Chevron = open ? ChevronDown : ChevronRight;
+  return (
+    <div style={{
+      border: `1px solid ${C.border}`, borderRadius: 10, marginBottom: 10,
+      background: cat.enabled ? C.cardBg : 'transparent',
+      opacity: disabled ? 0.55 : 1,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '13px 14px' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>{cat.label}</span>
+            <TierPill tier={cat.tier} label={cat.tierLabel} />
+          </div>
+          <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 4, lineHeight: 1.5 }}>
+            {cat.description}
+          </div>
+          <button
+            type="button"
+            onClick={() => setOpen(o => !o)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8,
+              background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+              fontFamily: FONT, fontSize: 11.5, fontWeight: 600, color: C.textSecondary,
+            }}
+          >
+            <Chevron size={13} strokeWidth={2.5} />
+            <span style={{ fontFamily: MONO }}>{cat.toolCount}</span>
+            {cat.toolCount === 1 ? ' tool' : ' tools'}
+          </button>
+        </div>
+        <Toggle checked={cat.enabled} disabled={disabled || saving} onChange={onToggle} />
+      </div>
+
+      {open && (
+        <div style={{ borderTop: `1px solid ${C.border}`, padding: '10px 14px 12px' }}>
+          {cat.tools.map(t => (
+            <div key={t.name} style={{ display: 'flex', gap: 10, padding: '5px 0', alignItems: 'baseline' }}>
+              <code style={{
+                fontFamily: MONO, fontSize: 11.5, color: cat.enabled ? C.text : C.textMuted,
+                whiteSpace: 'nowrap',
+              }}>{t.name}</code>
+              <span style={{ fontSize: 11.5, color: C.textSecondary, lineHeight: 1.45 }}>{t.summary}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Small inline pill toggle — consistent with the settings look, no extra deps.
 function Toggle({ checked, onChange, disabled }) {
@@ -3380,11 +3490,22 @@ function McpToolsTab() {
   const saveSettings = async (patch) => {
     setSavingCap(true);
     const prev = settings;
-    setSettings(s => ({                       // optimistic
-      ...s,
-      ...(patch.masterEnabled !== undefined ? { masterEnabled: patch.masterEnabled } : {}),
-      capabilities: { ...s.capabilities, ...(patch.capabilities || {}) },
-    }));
+    setSettings(s => {
+      const categories = { ...s.categories, ...(patch.categories || {}) };
+      return {                                // optimistic
+        ...s,
+        ...(patch.masterEnabled !== undefined ? { masterEnabled: patch.masterEnabled } : {}),
+        capabilities: { ...s.capabilities, ...(patch.capabilities || {}) },
+        categories,
+        // Re-project the catalog's per-category `enabled` flags too, otherwise
+        // the optimistic update writes state the cards do not read and the
+        // switch visibly snaps back until the server responds.
+        catalog: s.catalog && {
+          ...s.catalog,
+          categories: s.catalog.categories.map(c => ({ ...c, enabled: categories[c.key] === true })),
+        },
+      };
+    });
     try {
       const updated = await api.mcp.updateSettings(patch);
       setSettings(updated);
@@ -3442,6 +3563,16 @@ function McpToolsTab() {
   const card = { background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, marginBottom: 18 };
   const h2 = { fontSize: 15, fontWeight: 700, color: C.text, margin: '0 0 4px' };
   const sub = { fontSize: 12.5, color: C.textSecondary, margin: '0 0 16px', lineHeight: 1.5 };
+
+  // The category list, tool counts and per-tool summaries all come from the
+  // backend catalog (services/mcpCatalog.js) — this screen deliberately keeps
+  // NO copy of its own. A hand-maintained frontend mirror of a backend list is
+  // how a Settings tab once rendered a button that silently did nothing.
+  const cats = settings.catalog?.categories || [];
+  const totalTools = settings.catalog?.totalTools || 0;
+  const enabledCats = cats.filter(c => c.enabled);
+  const enabledTools = enabledCats.reduce((n, c) => n + c.toolCount, 0);
+  const directApiOn = cats.some(c => c.key === 'direct_api' && c.enabled);
   const codeBox = {
     background: '#0F0F10', color: '#E5E5E2', fontFamily: MONO, fontSize: 12,
     borderRadius: 8, padding: 14, overflowX: 'auto', whiteSpace: 'pre', lineHeight: 1.5,
@@ -3466,6 +3597,43 @@ function McpToolsTab() {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'flex-start' }}>
       <div style={{ flex: '1 1 420px', minWidth: 0 }}>
 
+      {/* Claude plugin — first thing on the page: it is how you START using any of this. */}
+      <div style={{
+        ...card,
+        background: C.headerBg, border: 'none', color: C.headerText,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 320px', minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Package size={17} strokeWidth={2} color={C.headerText} />
+              <h2 style={{ ...h2, color: C.headerText, margin: 0 }}>Claude plugin</h2>
+            </div>
+            <p style={{ fontSize: 12.5, color: '#B9B9B4', margin: '8px 0 0', lineHeight: 1.55 }}>
+              Everything Claude needs to run Forge Growth: the connector plus a set of skills
+              covering the funnel, follow-ups, templates, messaging, automations, agents, ads
+              and revenue. The download is already pointed at <strong style={{ color: C.headerText }}>this</strong> instance,
+              so there is nothing to edit.
+            </p>
+            <p style={{ fontSize: 11.5, color: '#8E8E89', margin: '10px 0 0', lineHeight: 1.5 }}>
+              Unzip it, then add the folder to Claude Code as a plugin — or paste the connector
+              URL into Claude&nbsp;&rarr;&nbsp;Settings&nbsp;&rarr;&nbsp;Connectors. Signing in
+              uses OAuth, so no key is stored in the file.
+            </p>
+          </div>
+          <a
+            href={api.mcp.pluginZipUrl()}
+            download="forge-growth-plugin.zip"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px',
+              background: C.primary, color: '#fff', borderRadius: 10, textDecoration: 'none',
+              fontSize: 13.5, fontWeight: 700, fontFamily: FONT, flexShrink: 0,
+            }}
+          >
+            <Download size={16} strokeWidth={2.5} /> Download plugin
+          </a>
+        </div>
+      </div>
+
       {/* Access (master switch) */}
       <div style={card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
@@ -3487,23 +3655,82 @@ function McpToolsTab() {
         )}
       </div>
 
-      {/* Capabilities */}
+      {/* Tool categories */}
       <div style={{ ...card, opacity: master ? 1 : 0.6 }}>
-        <h2 style={h2}>Capabilities</h2>
-        <p style={sub}>Fine-grained control over what an MCP client may do.</p>
-        {MCP_CAPABILITIES.map((c, i) => (
-          <div key={c.key} style={{
+        <h2 style={h2}>Tool categories</h2>
+        <p style={sub}>
+          Every MCP tool belongs to one category. Switch a category on to give Claude
+          that whole process — expand it to see exactly which tools it controls.
+        </p>
+
+        {/* Summary strip — answers "how much is Claude allowed to do right now?"
+            at a glance, which the old flat toggle list could not. */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          background: C.pageBg, border: `1px solid ${C.border}`, borderRadius: 10,
+          padding: '11px 14px', marginBottom: 16,
+        }}>
+          <Wrench size={15} strokeWidth={2} color={C.textSecondary} />
+          <span style={{ fontSize: 12.5, color: C.text, fontWeight: 600 }}>
+            <span style={{ fontFamily: MONO }}>{enabledTools}</span>
+            {' of '}
+            <span style={{ fontFamily: MONO }}>{totalTools}</span>
+            {' tools available to Claude'}
+          </span>
+          <span style={{ fontSize: 12, color: C.textSecondary }}>
+            · <span style={{ fontFamily: MONO }}>{enabledCats.length}</span>
+            {' of '}
+            <span style={{ fontFamily: MONO }}>{cats.length}</span>
+            {' categories on'}
+          </span>
+        </div>
+
+        {cats.length === 0 ? (
+          <div style={{ fontSize: 12.5, color: C.textSecondary }}>
+            No tool catalog was returned by the server. Rebuild the backend to pick up the
+            category catalog.
+          </div>
+        ) : cats.map(c => (
+          <McpCategoryCard
+            key={c.key}
+            cat={c}
+            disabled={!master}
+            saving={savingCap}
+            onToggle={(v) => saveSettings({ categories: { [c.key]: v } })}
+          />
+        ))}
+      </div>
+
+      {/* API areas — scope for the Direct API access tool only. */}
+      <div style={{ ...card, opacity: master && directApiOn ? 1 : 0.6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <h2 style={{ ...h2, margin: 0 }}>API areas</h2>
+          <TierPill tier="advanced" label="Full API access" />
+        </div>
+        <p style={sub}>
+          These scope the <code style={{ fontFamily: MONO, fontSize: 11.5 }}>forgechat_request</code> tool
+          in <strong>Direct API access</strong> — which internal endpoints it may call.
+          {' '}
+          {directApiOn
+            ? 'Anything not covered by an area below is refused.'
+            : 'Direct API access is switched off, so none of these apply right now.'}
+        </p>
+        {MCP_API_AREAS.map((a, i) => (
+          <div key={a.key} style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16,
             padding: '12px 0', borderTop: i === 0 ? 'none' : `1px solid ${C.border}`,
           }}>
             <div>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: C.text }}>{c.label}</div>
-              <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 2 }}>{c.desc}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {a.sensitive && <ShieldAlert size={13} strokeWidth={2.5} color={C.primary} />}
+                <span style={{ fontSize: 13.5, fontWeight: 600, color: C.text }}>{a.label}</span>
+              </div>
+              <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 2, lineHeight: 1.45 }}>{a.desc}</div>
             </div>
             <Toggle
-              checked={!!settings.capabilities[c.key]}
+              checked={!!settings.capabilities[a.key]}
               disabled={!master || savingCap}
-              onChange={(v) => saveSettings({ capabilities: { [c.key]: v } })}
+              onChange={(v) => saveSettings({ capabilities: { [a.key]: v } })}
             />
           </div>
         ))}

@@ -6,13 +6,15 @@ import {
   Image, Video, FileText, Type, Link, Phone, Reply, KeyRound, Loader2, Send,
   Clock, AlertCircle, CheckCircle2, XCircle, Info, Download, RefreshCw,
   Play, Smile, Paperclip, Mic, History, RotateCcw, User, BarChart3, MousePointerClick,
-  Library, Music
+  Library, Music, CreditCard, FolderKanban
 } from 'lucide-react';
 import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx';
 import { useConfirm } from '../components/ConfirmDialog.jsx';
 import { useTableSelection, SelectAllCheckbox, RowCheckbox, BulkDeleteButton, runBulkDelete } from '../components/TableSelection.jsx';
 import { PhoneFrame } from '../components/WhatsAppPreview.jsx';
 import SearchableSelect from '../components/SearchableSelect.jsx';
+import SortControl from '../components/SortControl.jsx';
+import { sortList, DEFAULT_SORT } from '../lib/listSort.js';
 import AccountHealthBanner from '../components/AccountHealthBanner.jsx';
 import { api } from '../api.js';
 import { C, FONT, maskPhone } from '../constants.js';
@@ -93,6 +95,51 @@ const QUALITY_STYLES = {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const extractVars = (t) => { const m = [...(t || '').matchAll(/\{\{(\d+)\}\}/g)]; return [...new Set(m.map(x => x[1]))].sort((a, b) => +a - +b); };
 const applyVars = (t, s) => (t || '').replace(/\{\{(\d+)\}\}/g, (_, n) => s[n] || `{{${n}}}`);
+
+// The public path a payment-link button points at. MUST match PAY_PATH in
+// backend/src/services/paymentFlow.js — the backend detects a payment template
+// by this path, so the two are a contract.
+const PAY_PATH = '/pay/';
+
+/**
+ * Build a new button row for the editor.
+ *
+ * PAYMENT_LINK is NOT a Meta button type — Meta has only URL / PHONE_NUMBER /
+ * QUICK_REPLY / COPY_CODE / OTP. It is a preset that produces a plain URL button
+ * whose URL is our own redirect with a {{1}} token.
+ *
+ * ⚠ The base is OURS, never Razorpay's. Meta bakes a URL button's base in at
+ * approval; pointing it at rzp.io would mean every approved template dies the
+ * day Razorpay changes its short-link format, and re-approval takes days.
+ *
+ * ⚠ The scheme is pinned to https and only the HOST comes from the browser —
+ * Meta rejects a non-https URL button, and the same trap already bit the Lead
+ * Forms template flow when the scheme was read from the request.
+ */
+function makeButton(type) {
+  if (type === 'PAYMENT_LINK') {
+    const base = `https://${window.location.host}${PAY_PATH}`;
+    return {
+      type: 'URL',
+      text: 'Pay now',
+      value: `${base}{{1}}`,
+      // Meta requires a sample for a dynamic URL. A realistic-looking token
+      // matters: a sample that does not resolve like the real thing is a common
+      // review rejection.
+      urlSample: `${base}a1b2c3d4e5f6a7b8c9`,
+      isPaymentLink: true,
+      otpType: 'COPY_CODE',
+    };
+  }
+  return { type, text: '', value: '', otpType: 'COPY_CODE' };
+}
+
+// A stored button is a payment button when its URL points at our /pay/ path and
+// carries a variable. DERIVED, never read from a flag — the same rule the
+// backend applies, so the two can never disagree about what a template is.
+const isPaymentButton = (b) =>
+  b?.type === 'URL' && String(b.value || '').includes(PAY_PATH) && /\{\{\s*\d+\s*\}\}/.test(b.value || '');
+
 const nameOk = (n) => /^[a-z0-9_]+$/.test(n);
 
 function runValidation({ name, body, headerType, headerText, mediaHandle, footer, buttons, samples, category, codeExpiry, templateType, carouselCards }) {
@@ -394,6 +441,10 @@ function ButtonsSection({ buttons, onAdd, onRemove, onUpdate, category, errors }
         { type: 'URL', icon: <Link size={16} />, label: 'Visit Website', hint: 'Opens a URL', disabled: urlCount >= 2, disabledMsg: 'Max 2 URL buttons' },
         { type: 'PHONE_NUMBER', icon: <Phone size={16} />, label: 'Call Phone', hint: 'Dials a number', disabled: phoneCount >= 1, disabledMsg: 'Max 1 phone button' },
         { type: 'COPY_CODE', icon: <KeyRound size={16} />, label: 'Copy Coupon Code', hint: 'One-tap copy of a promo code', disabled: couponCount >= 1, disabledMsg: 'Max 1 coupon button' },
+        // A payment button IS a URL button — Meta has no payment button type.
+        // Picking this just pre-fills the URL with our /pay/{{1}} redirect, so
+        // it counts against the same 2-URL limit.
+        { type: 'PAYMENT_LINK', icon: <CreditCard size={16} />, label: 'Payment Link', hint: 'Each recipient gets their own Razorpay link', disabled: urlCount >= 2, disabledMsg: 'Max 2 URL buttons' },
       ];
 
   const tColor = { QUICK_REPLY: B.accent, URL: '#1565C0', PHONE_NUMBER: B.green, OTP: B.green, COPY_CODE: '#8E24AA' };
@@ -441,7 +492,11 @@ function ButtonsSection({ buttons, onAdd, onRemove, onUpdate, category, errors }
           return (
             <div key={i} style={{ border: `1.5px solid ${hasErr ? B.red + '44' : B.innerBorder}`, borderRadius: 10, padding: '12px 14px', background: B.innerBg }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99, background: tBg[btn.type], color: tColor[btn.type], fontFamily: FONT }}>{tLabel[btn.type]}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99,
+                  background: isPaymentButton(btn) ? '#EDF6F1' : tBg[btn.type],
+                  color: isPaymentButton(btn) ? '#0F6E56' : tColor[btn.type], fontFamily: FONT }}>
+                  {isPaymentButton(btn) ? 'Payment Link' : tLabel[btn.type]}
+                </span>
                 <button onClick={() => onRemove(i)} style={{ width: 22, height: 22, borderRadius: 99, background: B.redBg, border: 'none', cursor: 'pointer', color: B.red, fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>×</button>
               </div>
               {btn.type === 'OTP' ? (
@@ -491,6 +546,23 @@ function ButtonsSection({ buttons, onAdd, onRemove, onUpdate, category, errors }
                           ? <Hint error>{errors[`btn_code_${i}`]}</Hint>
                           : <Hint>WhatsApp shows a "Copy offer code" button; tapping copies this code (max 15 chars).</Hint>}
                       </div>
+                    ) : isPaymentButton(btn) ? (
+                      <div>
+                        <Lbl>Payment link</Lbl>
+                        <div style={{ border: '1.5px solid #9CC9B4', background: '#EDF6F1', borderRadius: 8, padding: '9px 12px' }}>
+                          <div style={{ fontSize: 11.5, color: '#0F6E56', fontWeight: 600, fontFamily: FONT }}>
+                            Each recipient gets their own Razorpay link
+                          </div>
+                          <div style={{ fontSize: 10.5, color: '#3C6656', marginTop: 4, lineHeight: 1.5, fontFamily: FONT }}>
+                            The link is created when the message is sent — by the automation Payment node, the AI
+                            agent, or a broadcast — so one approved template works for every customer and every amount.
+                          </div>
+                          <div style={{ fontSize: 10, color: '#3C6656', marginTop: 6, fontFamily: "'DM Mono', monospace", wordBreak: 'break-all' }}>
+                            {btn.value}
+                          </div>
+                        </div>
+                        <Hint>Do not edit this URL — the sending code recognises a payment template by it.</Hint>
+                      </div>
                     ) : btn.type !== 'QUICK_REPLY' ? (
                       <div>
                         <Lbl required>{btn.type === 'URL' ? 'Website URL' : 'Phone Number (E.164)'}</Lbl>
@@ -504,7 +576,7 @@ function ButtonsSection({ buttons, onAdd, onRemove, onUpdate, category, errors }
                       </div>
                     ) : null}
                   </div>
-                  {btn.type === 'URL' && urlVars.length > 0 && (
+                  {btn.type === 'URL' && urlVars.length > 0 && !isPaymentButton(btn) && (
                     <div style={{ padding: '10px 12px', background: B.sectionBg, border: `1px solid ${errors[`btn_urlsample_${i}`] ? B.red + '44' : B.sectionBorder}`, borderRadius: 8 }}>
                       <div style={{ fontSize: 11, fontWeight: 600, color: B.t4, marginBottom: 6, fontFamily: FONT }}>
                         URL has <span style={{ fontFamily: "'DM Mono', monospace", background: B.accentBg, padding: '1px 5px', borderRadius: 4, fontSize: 11, color: B.accentDark }}>{'{{1}}'}</span> — provide a sample URL:
@@ -629,6 +701,7 @@ function TemplateList({ templates, loading, onAdd, onEdit, onDelete, onView, onB
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [sort, setSort] = useState(DEFAULT_SORT);
 
   // Apply text/status filters first
   const filteredFlat = useMemo(() => {
@@ -649,8 +722,13 @@ function TemplateList({ templates, loading, onAdd, onEdit, onDelete, onView, onB
   // Group by template_group_key when toggle is on. Each "row" in the displayed
   // list is either a single template (no siblings) or a group representative
   // with siblings collected.
+  // Sorting is applied AFTER grouping, never before: the representative of a
+  // translation group is deliberately its most-recently-updated sibling, and
+  // reordering the input would change which row represents the group rather
+  // than just where the group sits in the list.
   const filtered = useMemo(() => {
-    if (!groupByTranslation) return filteredFlat;
+    const fields = { created: t => t.created_at, updated: t => t.updated_at, name: t => t.name };
+    if (!groupByTranslation) return sortList(filteredFlat, sort, fields);
     const groups = new Map();
     for (const t of filteredFlat) {
       const key = t.template_group_key || `__${t.id}`;
@@ -658,11 +736,12 @@ function TemplateList({ templates, loading, onAdd, onEdit, onDelete, onView, onB
       groups.get(key).push(t);
     }
     // Pick the most-recently-updated row as the representative; attach siblings
-    return Array.from(groups.values()).map(siblings => {
+    const reps = Array.from(groups.values()).map(siblings => {
       const sorted = [...siblings].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
       return { ...sorted[0], _siblings: sorted };
     });
-  }, [filteredFlat, groupByTranslation]);
+    return sortList(reps, sort, fields);
+  }, [filteredFlat, groupByTranslation, sort]);
 
   const sel = useTableSelection(filtered);
 
@@ -745,6 +824,7 @@ function TemplateList({ templates, loading, onAdd, onEdit, onDelete, onView, onB
             onChange={e => setSearch(e.target.value)}
           />
         </div>
+        <SortControl value={sort} onChange={setSort} />
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: B.t4, fontFamily: FONT, cursor: 'pointer' }}>
           <input type="checkbox" checked={groupByTranslation} onChange={e => onToggleGroup(e.target.checked)} />
           Group translations
@@ -789,7 +869,7 @@ function TemplateList({ templates, loading, onAdd, onEdit, onDelete, onView, onB
             <thead>
               <tr style={{ background: B.innerBg, borderBottom: `1px solid ${B.cardBorder}` }}>
                 <th style={{ padding: '10px 14px', width: 36 }}><SelectAllCheckbox sel={sel} /></th>
-                {['Name', 'Account', 'Category', 'Language', 'Status', 'Sent', 'Created', 'Actions'].map(h => (
+                {['Name', 'Account', 'Project', 'Category', 'Language', 'Status', 'Sent', 'Created', 'Actions'].map(h => (
                   <th key={h} style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: B.t4, textAlign: 'left', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -811,6 +891,16 @@ function TemplateList({ templates, loading, onAdd, onEdit, onDelete, onView, onB
                       ) : (
                         <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 99, background: '#FFF3E0', color: '#E65100', fontWeight: 600, fontFamily: FONT }}>Unassigned</span>
                       )}
+                    </td>
+                    {/* Which campaign this template belongs to. Read-only here —
+                        filing happens on the Projects page, which can move all
+                        three kinds at once. */}
+                    <td style={{ padding: '12px 14px', fontSize: 12, fontFamily: FONT }}>
+                      {t.projectName
+                        ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 99, background: '#F1F1EC', color: B.t3, fontWeight: 600 }}>
+                            <FolderKanban size={11} /> {t.projectName}
+                          </span>
+                        : <span style={{ color: B.t7 }}>—</span>}
                     </td>
                     <td style={{ padding: '12px 14px' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 4, background: cat?.bg || B.innerBg, color: cat?.color || B.t4, fontSize: 11, fontWeight: 700, fontFamily: FONT }}>
@@ -2221,7 +2311,7 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
             {/* 6 — Buttons */}
             {!readOnly && templateType !== 'CAROUSEL' && (
               <ButtonsSection buttons={buttons} category={category} errors={showErrors ? errors : {}}
-                onAdd={(type) => setButtons([...buttons, { type, text: '', value: '', otpType: 'COPY_CODE' }])}
+                onAdd={(type) => setButtons([...buttons, makeButton(type)])}
                 onRemove={(i) => setButtons(buttons.filter((_, idx) => idx !== i))}
                 onUpdate={(i, field, val) => { const b = [...buttons]; b[i] = { ...b[i], [field]: val }; setButtons(b); }}
               />

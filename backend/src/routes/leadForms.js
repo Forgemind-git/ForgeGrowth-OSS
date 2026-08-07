@@ -24,10 +24,10 @@
 //
 // Endpoints:
 //   GET    /lead-forms                        list (+ submission counts)
-//   POST   /lead-forms                         create { name, description, formType }
+//   POST   /lead-forms                         create { name, description, formType, projectId }
 //   GET    /lead-forms/:id                     full form incl. fields[]
 //   PUT    /lead-forms/:id                     update (name/description/fields/status/successMessage/
-//                                              defaultSource/formType/waAccountId/templateId)
+//                                              defaultSource/formType/waAccountId/templateId/projectId)
 //   DELETE /lead-forms/:id                     delete (cascades submissions)
 //   POST   /lead-forms/:id/logo                upload logo (multipart)        [admin]
 //   DELETE /lead-forms/:id/logo
@@ -159,9 +159,26 @@ function sanitizeFields(fields) {
   return fields.map((f, i) => {
     const key = String(f.key || '').trim() || `field_${i + 1}`;
     if (seen.has(key)) throw { status: 400, message: `Duplicate field key "${key}"` };
+    // Keys must fit the {{form.<slug>.<key>}} token grammar (no spaces/dots),
+    // or the follow-up variable picker mints a chip whose token neither
+    // validates nor resolves — literal braces reach the customer. The builder
+    // always mints safe keys (field_<ts>_<n>); this gates API/MCP callers.
+    if (!/^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(key)) {
+      throw { status: 400, message: `Field key "${key}" may only use letters, numbers, _ and - (no spaces or dots).` };
+    }
     seen.add(key);
     const type = FIELD_TYPES.includes(f.type) ? f.type : 'text';
-    const mapsTo = MAPS_TO.includes(f.mapsTo) ? f.mapsTo : null;
+    // mapsTo: a real lead column ('name', 'phone', …) OR 'cf:<field_key>' — a
+    // registered custom Leads field (Admin Settings → Fields). The cf: target
+    // is validated against the live registry so a deleted field silently stops
+    // being a valid mapping target instead of writing orphan keys.
+    let mapsTo = MAPS_TO.includes(f.mapsTo) ? f.mapsTo : null;
+    if (!mapsTo && typeof f.mapsTo === 'string' && f.mapsTo.startsWith('cf:')) {
+      const registry = require('../services/fieldRegistry');
+      const cfKey = f.mapsTo.slice(3);
+      const target = registry.fieldByKey('lead', cfKey);
+      if (target && !target.isSystem) mapsTo = `cf:${cfKey}`;
+    }
     const needsOptions = ['dropdown', 'radio', 'checkbox'].includes(type);
     // Trimmed, not just non-empty: the dashboard's per-field breakdown groups
     // answers by exact value, so a stray space would split " Red" and "Red"
@@ -182,6 +199,11 @@ function rowToForm(r, submissionCount) {
   return {
     id: Number(r.id), name: r.name, slug: r.slug, description: r.description,
     formType: r.form_type || 'link',
+    // Which campaign folder this form is filed under (migration 100). Purely
+    // organisational — it has no effect on the form, its link or its
+    // submissions. projectName is only present when the caller joined it.
+    projectId: r.project_id == null ? null : Number(r.project_id),
+    projectName: r.project_name || null,
     waAccountId: r.wa_account_id == null ? null : Number(r.wa_account_id),
     templateId: r.template_id == null ? null : Number(r.template_id),
     fields: r.fields || [], hasLogo: !!r.logo_key, hasBanner: !!r.banner_key,
@@ -189,6 +211,19 @@ function rowToForm(r, submissionCount) {
     createdAt: r.created_at, updatedAt: r.updated_at,
     ...(submissionCount != null ? { submissionCount: Number(submissionCount) } : {}),
   };
+}
+
+// Resolve a caller-supplied projectId to a real project, so a bad id comes back
+// as a sentence rather than a raw foreign-key violation surfaced as a 500.
+// `''`/null/undefined all mean "no project" — the PUT below distinguishes
+// "omitted" (leave the filing alone) from an explicit null (unfile).
+async function resolveProject(value) {
+  if (value == null || value === '') return { id: null, name: null };
+  const id = parseInt(value, 10);
+  if (!Number.isFinite(id)) { const e = new Error('Invalid project'); e.status = 400; throw e; }
+  const { rows } = await pool.query(`SELECT name FROM coexistence.projects WHERE id = $1`, [id]);
+  if (!rows.length) { const e = new Error('Project not found'); e.status = 404; throw e; }
+  return { id, name: rows[0].name };
 }
 
 // Public-safe subset — no logo/banner keys, no internal ids beyond what's needed to render.
@@ -282,8 +317,11 @@ async function mintTokenForButtonUrl(buttonUrl, phoneNumber, opts = {}) {
 router.get('/lead-forms', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT f.*, (SELECT COUNT(*) FROM coexistence.lead_form_submissions s WHERE s.form_id = f.id)::int AS submission_count
-         FROM coexistence.lead_forms f ORDER BY f.created_at DESC`
+      `SELECT f.*, p.name AS project_name,
+              (SELECT COUNT(*) FROM coexistence.lead_form_submissions s WHERE s.form_id = f.id)::int AS submission_count
+         FROM coexistence.lead_forms f
+         LEFT JOIN coexistence.projects p ON p.id = f.project_id
+        ORDER BY f.created_at DESC`
     );
     res.json({ forms: rows.map(r => rowToForm(r, r.submission_count)) });
   } catch (err) {
@@ -297,14 +335,17 @@ router.post('/lead-forms', adminOnly, async (req, res) => {
     const name = String(req.body?.name || '').trim();
     if (!name) return res.status(400).json({ error: 'Name is required' });
     const formType = FORM_TYPES.includes(req.body?.formType) ? req.body.formType : 'link';
+    const project = await resolveProject(req.body?.projectId);
     const slug = await uniqueSlug(name);
     const { rows } = await pool.query(
-      `INSERT INTO coexistence.lead_forms (name, slug, description, form_type, created_by)
-       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [name, slug, req.body?.description || null, formType, req.user?.id ? parseInt(req.user.id, 10) : null]
+      `INSERT INTO coexistence.lead_forms (name, slug, description, form_type, created_by, project_id)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [name, slug, req.body?.description || null, formType,
+       req.user?.id ? parseInt(req.user.id, 10) : null, project.id]
     );
-    res.status(201).json({ form: rowToForm(rows[0], 0) });
+    res.status(201).json({ form: rowToForm({ ...rows[0], project_name: project.name }, 0) });
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('[lead-forms] create error:', err.message);
     res.status(500).json({ error: 'Failed to create form' });
   }
@@ -312,7 +353,11 @@ router.post('/lead-forms', adminOnly, async (req, res) => {
 
 router.get('/lead-forms/:id', async (req, res) => {
   try {
-    const { rows } = await pool.query(`SELECT * FROM coexistence.lead_forms WHERE id = $1`, [req.params.id]);
+    const { rows } = await pool.query(
+      `SELECT f.*, p.name AS project_name
+         FROM coexistence.lead_forms f
+         LEFT JOIN coexistence.projects p ON p.id = f.project_id
+        WHERE f.id = $1`, [req.params.id]);
     if (!rows.length) return res.status(404).json({ error: 'Form not found' });
     res.json({ form: rowToForm(rows[0]) });
   } catch (err) {
@@ -367,13 +412,25 @@ router.put('/lead-forms/:id', adminOnly, async (req, res) => {
     }
     if (b.waAccountId !== undefined) { vals.push(b.waAccountId ? parseInt(b.waAccountId, 10) : null); sets.push(`wa_account_id = $${i++}`); }
     if (b.templateId !== undefined) { vals.push(b.templateId ? parseInt(b.templateId, 10) : null); sets.push(`template_id = $${i++}`); }
+    // Omitting projectId leaves the filing alone; passing null unfiles it.
+    if (b.projectId !== undefined) {
+      const project = await resolveProject(b.projectId);
+      vals.push(project.id); sets.push(`project_id = $${i++}`);
+    }
     if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
     sets.push(`updated_at = NOW()`);
     vals.push(id);
     const { rows } = await pool.query(`UPDATE coexistence.lead_forms SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`, vals);
     if (!rows.length) return res.status(404).json({ error: 'Form not found' });
-    res.json({ form: rowToForm(rows[0]) });
+    // Re-read with the project join so the response carries projectName.
+    const { rows: full } = await pool.query(
+      `SELECT f.*, p.name AS project_name
+         FROM coexistence.lead_forms f
+         LEFT JOIN coexistence.projects p ON p.id = f.project_id
+        WHERE f.id = $1`, [id]);
+    res.json({ form: rowToForm(full[0] || rows[0]) });
   } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('[lead-forms] update error:', err.message);
     res.status(500).json({ error: 'Failed to update form' });
   }
@@ -795,7 +852,12 @@ publicRouter.post('/public/lead-forms/:slug/submit', async (req, res) => {
     for (const f of fields) {
       const v = answers[f.key];
       if (v == null || v === '') continue;
-      if (f.mapsTo) {
+      if (f.mapsTo && f.mapsTo.startsWith('cf:')) {
+        // Mapped to a registered custom Leads field — store under the REGISTRY
+        // key so the value shows on the Leads/Sales Log tables and resolves as
+        // {{lead.<key>}} in follow-ups.
+        customFields[f.mapsTo.slice(3)] = v;
+      } else if (f.mapsTo) {
         if (f.mapsTo === 'phone') { if (!phone) phone = String(v); }
         else if (f.mapsTo === 'age') mapped.age = Number.isFinite(Number(v)) ? parseInt(v, 10) : null;
         else mapped[f.mapsTo] = String(v).trim();

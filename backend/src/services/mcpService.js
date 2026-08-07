@@ -7,6 +7,7 @@
 
 const pool = require('../db');
 const bus = require('../events');
+const mcpCatalog = require('./mcpCatalog');
 const { hashApiKey } = require('../util/crypto');
 const googleClient = require('../integrations/googleClient');
 const { resolveAccount, insertPendingRow, secondsSinceLastIncoming } = require('./messageSender');
@@ -51,8 +52,19 @@ const CAPABILITY_KEYS = [
 const PROXY_AREAS = [
   { cap: 'area_contacts',   label: 'Contacts & tags',     test: /^\/(contacts|saved-contacts|contact|contact-names|contact-fields|categories|tags|team-members|numbers)(\/|$|\?)/ },
   { cap: 'area_messaging',  label: 'Messages',            test: /^\/messages(\/|$|\?)/ },
-  { cap: 'area_broadcasts', label: 'Broadcasts & content', test: /^\/(broadcasts|templates|media-library|media|wa-links)(\/|$|\?)/ },
-  { cap: 'area_automations', label: 'Automations',        test: /^\/(chatbots|automation-folders|automations|executions)(\/|$|\?)/ },
+  // PROXY_AREAS is default-deny, so a renamed path must be listed explicitly or
+  // it is refused: /message-formats is the canonical name for what /wa-links
+  // was, and both are kept.
+  // /projects only sets an organisational pointer (project_id). Its assign
+  // endpoint can touch agents.project_id — and, since migration 100,
+  // lead_forms.project_id too — which is why it sits here rather than needing
+  // an agent or lead-form capability: that column has no runtime effect
+  // whatsoever and cannot create, configure, publish or activate anything.
+  // The named list_projects / move_to_project tools are gated by the `projects`
+  // CATEGORY, which is seeded from this same area so neither route is a way
+  // past the other.
+  { cap: 'area_broadcasts', label: 'Broadcasts & content', test: /^\/(broadcasts|templates|media-library|media|wa-links|message-formats|projects|projects-items)(\/|$|\?)/ },
+  { cap: 'area_automations', label: 'Automations',        test: /^\/(chatbots|automation-folders|automations|executions|follow-up-sequences|follow-up-steps|follow-up-enrollments)(\/|$|\?)/ },
   // /razorpay/config carries the payment-gateway webhook secret (write) — it is
   // deliberately resolved to the SENSITIVE admin area, not area_payments, so
   // enabling the payment ledger never hands over the gateway credentials. This
@@ -64,8 +76,17 @@ const PROXY_AREAS = [
   // `payment-requests`, distinct from `payment-links` under area_courses — that
   // one is the local price registry, which charges nobody.
   { cap: 'area_admin',      label: 'Admin (users, WA accounts, integrations)', test: /^\/(users|whatsapp-accounts|integrations|ai-models|razorpay\/config|payment-requests)(\/|$|\?)/ },
-  { cap: 'area_insights',   label: 'Dashboard & logs',    test: /^\/(dashboard|webhook-history)(\/|$|\?)/ },
-  { cap: 'area_leads',      label: 'Leads & funnel',      test: /^\/(leads|lead-sources|funnel)(\/|$|\?)/ },
+  // Message costs are REPORTING — they show what Meta charged, and cannot move
+  // money or reach a customer. Its mutations only edit fallback rates and
+  // trigger a re-read, so it belongs with the other read surfaces rather than
+  // at admin tier.
+  { cap: 'area_insights',   label: 'Dashboard & logs',    test: /^\/(dashboard|webhook-history|message-costs)(\/|$|\?)/ },
+  // /entity-fields = the field registry behind the Leads table / Sales Log /
+  // Transactions (reads for anyone with the cap; mutations are adminOnly on
+  // the route itself, and the proxy calls as admin — hence leads-tier, not
+  // admin-tier: changing field labels/visibility moves no money and leaks no
+  // credentials).
+  { cap: 'area_leads',      label: 'Leads & funnel',      test: /^\/(leads|lead-sources|funnel|entity-fields)(\/|$|\?)/ },
   { cap: 'area_leadforms',  label: 'Lead forms',          test: /^\/(lead-forms)(\/|$|\?)/ },
   { cap: 'area_marketing',  label: 'Marketing (campaigns, webinars)', test: /^\/(marketing|campaigns|webinars|webinar-registrations|ctwa)(\/|$|\?)/ },
   { cap: 'area_resources',  label: 'Resources & triggers', test: /^\/(resources|trigger-library|trigger-test)(\/|$|\?)/ },
@@ -110,16 +131,52 @@ async function ensureMcpTables() {
       updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`);
   await pool.query(`INSERT INTO coexistence.mcp_settings (id) VALUES (1) ON CONFLICT DO NOTHING`);
+
+  // Mirrors migration 099_mcp_tool_categories.sql. Named tools are gated by
+  // CATEGORY now (see services/mcpCatalog.js); `capabilities` survives because
+  // it still scopes which internal API paths the forgechat_request proxy may
+  // reach (PROXY_AREAS) — the one job the area caps were designed for.
+  await pool.query(`ALTER TABLE coexistence.mcp_settings ADD COLUMN IF NOT EXISTS categories JSONB`);
+
+  // Seed the per-category switches ONCE from the capabilities that were in
+  // force before category gating existed, so an already-connected MCP client
+  // behaves identically the moment this deploys.
+  //
+  // Guarded on `categories IS NULL` ("never seeded"), NOT on "is it empty".
+  // An empty-object guard would re-seed on every boot and silently switch a
+  // category back ON that an admin had deliberately switched OFF. The UPDATE
+  // repeats the IS NULL predicate so two backends booting at once cannot both
+  // seed it.
+  const { rows: cur } = await pool.query(
+    'SELECT capabilities, categories FROM coexistence.mcp_settings WHERE id = 1',
+  );
+  if (cur[0] && cur[0].categories == null) {
+    const seeded = mcpCatalog.seedCategories(cur[0].capabilities || {});
+    await pool.query(
+      'UPDATE coexistence.mcp_settings SET categories = $1 WHERE id = 1 AND categories IS NULL',
+      [JSON.stringify(seeded)],
+    );
+  }
 }
 
 async function loadSettings() {
-  const { rows } = await pool.query('SELECT master_enabled, capabilities FROM coexistence.mcp_settings WHERE id = 1');
-  const r = rows[0] || { master_enabled: false, capabilities: {} };
-  return { masterEnabled: !!r.master_enabled, capabilities: r.capabilities || {} };
+  const { rows } = await pool.query(
+    'SELECT master_enabled, capabilities, categories FROM coexistence.mcp_settings WHERE id = 1',
+  );
+  const r = rows[0] || { master_enabled: false, capabilities: {}, categories: {} };
+  return {
+    masterEnabled: !!r.master_enabled,
+    capabilities: r.capabilities || {},
+    // normalizeCategories drops unknown keys and coerces to strict booleans, so
+    // a category added by a future deploy reads as OFF until an admin enables
+    // it rather than inheriting a stray truthy value.
+    categories: mcpCatalog.normalizeCategories(r.categories || {}),
+  };
 }
 
-// Validate a raw bearer key. Returns { capabilities, keyId } on success.
-// Throws { status, message } on any failure so callers map to HTTP codes.
+// Validate a raw bearer key. Returns { capabilities, categories, keyId } on
+// success. Throws { status, message } on any failure so callers map to HTTP
+// codes.
 async function validateKey(rawKey) {
   const key = String(rawKey || '').trim();
   if (!key) { const e = new Error('Missing API key'); e.status = 401; throw e; }
@@ -132,7 +189,7 @@ async function validateKey(rawKey) {
   const settings = await loadSettings();
   if (!settings.masterEnabled) { const e = new Error('MCP access is disabled'); e.status = 403; throw e; }
   pool.query('UPDATE coexistence.mcp_api_keys SET last_used_at = NOW() WHERE id = $1', [row.id]).catch(() => {});
-  return { keyId: row.id, capabilities: settings.capabilities };
+  return { keyId: row.id, capabilities: settings.capabilities, categories: settings.categories };
 }
 
 /* ------------------------------ discovery ------------------------------- */
@@ -447,6 +504,7 @@ async function sendTemplateMessage({ fromNumber, toNumber, templateId, variables
     toNumber,
     messageType: 'template',
     messageBody: resolvedBody || `Template: ${template.name}`,
+    templateId: template.id, sendOrigin: 'mcp',
     templateMeta: {
       header_type: template.header_type || 'NONE',
       header_text: template.header_text || null,
@@ -751,8 +809,15 @@ const ENDPOINT_CATALOG = {
     'POST /broadcasts/:id/send — enqueue to saved-contact audience',
     'GET /templates · GET /media-library — content for broadcasts',
     'For an UPLOADED LIST use the send_bulk_message tool (one call).',
+    'GET /projects · GET /projects/:id — campaign folders holding templates, automations, agents, follow-ups and forms (also see the list_projects tool)',
+    'POST /projects/assign {kind:"template"|"automation"|"agent"|"followup"|"form", ids:[], projectId} — file items into a project, projectId null unfiles (also see the move_to_project tool)',
+    'GET /projects-items/:kind — every item of one kind with the project it is currently in',
   ],
-  area_automations: ['GET /chatbots · POST /chatbots · GET /chatbots/:id/executions'],
+  area_automations: [
+    'GET /chatbots · POST /chatbots · GET /chatbots/:id/executions',
+    'GET /follow-up-sequences — timed follow-up sequences (stage-entry auto-enroll + manual) · POST /follow-up-sequences · PUT/DELETE /follow-up-sequences/:id',
+    'POST /follow-up-sequences/:id/steps · GET /follow-up-sequences/:id/enrollments · POST /follow-up-sequences/:id/enroll {leadIds} · POST /follow-up-enrollments/:id/stop · GET /follow-up-sequences/:id/log',
+  ],
   area_admin: [
     'GET /users · POST /users (admin) — SENSITIVE',
     'GET /whatsapp-accounts · GET /ai-models · GET /integrations — SENSITIVE',
@@ -761,7 +826,13 @@ const ENDPOINT_CATALOG = {
     'POST /payment-requests/:id/refresh — re-read status from Razorpay · POST /payment-requests/:id/cancel — stop a link being paid',
     'These sit in the admin area, NOT area_payments: the gate is path-based and cannot separate reading the list from minting a live link.',
   ],
-  area_insights: ['GET /dashboard?range=30d · GET /webhook-history'],
+  area_insights: [
+    'GET /dashboard?range=30d · GET /webhook-history',
+    'GET /message-costs/overview?from=&to= — total owed to Meta, charged vs free, reconciled against Meta',
+    'GET /message-costs/templates?from= — cost + run count per template',
+    'GET /message-costs/breakdown?by=category|type|origin|number|pricingType|country',
+    'GET /message-costs/trend?from= · GET /message-costs/config · POST /message-costs/sync',
+  ],
   area_leads: [
     'GET /leads?stage=&search=&view= — funnel lead list; view=hot (arrived <24h)|my|unassigned|needs-follow-up (also see list_leads tool)',
     'GET /leads/board — Kanban grouped by stage + conversion %',
@@ -769,6 +840,9 @@ const ENDPOINT_CATALOG = {
     'GET /leads/:id/timeline · GET /lead-sources',
     'GET /funnel/config — configured stages (ordered) + sources · GET /funnel/chart?source=&from=&to= — per-stage counts',
     'POST/PUT/DELETE /funnel/stages · PUT /funnel/stages/reorder · POST/PUT/DELETE /funnel/sources — funnel config (admin)',
+    'GET /entity-fields — the field registry for the Leads table / Sales Log / Transactions (system + custom fields, labels, options, visibility) + the {{sale.*}} variable tokens',
+    'POST /entity-fields {entity:"lead"|"transaction",label,fieldType,options,showInLeads,showInSales} — add a custom field · PUT /entity-fields/:id — relabel/options/visibility · PUT /entity-fields/reorder {entity,ids} · DELETE /entity-fields/:id (soft; values kept) · POST /entity-fields/:id/restore',
+    'Leads list/export also accept ?cf_<field_key>=value filters on registry fields.',
   ],
   area_leadforms: [
     'GET /lead-forms — list forms + submission counts (also see list_lead_forms tool)',
@@ -779,6 +853,7 @@ const ENDPOINT_CATALOG = {
     'GET /lead-forms/:id/templates?accountId= — templates whose URL button points at this form, with approval status',
     'GET /lead-forms/:id/submissions — collected responses (also see list_form_submissions tool)',
     'GET /lead-forms/:id/dashboard — completion counts (total / people / with-phone / anonymous / leads), 30-day trend, per-field breakdown, latest responses',
+    'A form can be filed under a campaign Project: PUT /lead-forms/:id {projectId} or the move_to_project tool with kind:"form". Filing only — it changes nothing about the form, its link or its responses.',
     'The public form URL is /f/<slug>; use create_wa_link or a template URL button to share it. Logo/banner upload is multipart (UI only).',
   ],
   area_marketing: [
@@ -936,6 +1011,7 @@ async function sendBulkMessage({ fromNumber, name, messageType, templateId, text
         const localId = await insertPendingRow({
           account, toNumber: r.number, messageType: 'template',
           messageBody: resolvedBody || `Template: ${template.name}`,
+          templateId: template.id, sendOrigin: 'broadcast',
           templateMeta: {
             header_type: template.header_type || 'NONE', header_text: template.header_text || null,
             header_media_library_id: template.header_media_library_id || null,
@@ -1449,9 +1525,55 @@ async function listFormSubmissions({ formId, page, pageSize } = {}) {
   return internalApiOrThrow({ method: 'GET', path: `/lead-forms/${parseInt(formId, 10)}/submissions`, query: { page, pageSize }, failMsg: 'Failed to load submissions.' });
 }
 
+/* ── Projects — the campaign folder a template / automation / agent /
+   follow-up / form is filed under ────────────────────────────────────────── */
+
+// Required lazily inside the functions: routes/projects pulls in the DB pool,
+// and a top-level require here would drag it into every consumer of this
+// module. PROJECT_KINDS is DERIVED from that route's KINDS map rather than
+// listed again — a second copy would have to be updated in lockstep, and the
+// half that fell behind would refuse a valid kind while naming the wrong set.
+const projectKinds = () => Object.keys(require('../routes/projects').KINDS);
+
+async function listProjects({ projectId } = {}) {
+  if (projectId != null && projectId !== '') {
+    const id = parseInt(projectId, 10);
+    if (!Number.isFinite(id)) throw svcErr(400, 'projectId must be a number.');
+    return internalApiOrThrow({ method: 'GET', path: `/projects/${id}`, failMsg: 'Failed to load the project.' });
+  }
+  return internalApiOrThrow({ method: 'GET', path: '/projects', failMsg: 'Failed to list projects.' });
+}
+
+// Move items into a project, or out of one with projectId null. Filing only —
+// it sets an organisational pointer and cannot create, edit, activate, publish
+// or send anything.
+async function moveToProject(args = {}) {
+  // The SAME validator the route runs, so a bad kind is refused identically
+  // whichever door the request came through — and the id resolution that would
+  // otherwise happen twice cannot drift.
+  let parsed;
+  try { parsed = require('../routes/projects').parseAssignArgs(args); }
+  catch (e) { throw svcErr(e.status || 400, e.message); }
+  const res = await internalApiOrThrow({
+    method: 'POST', path: '/projects/assign', body: parsed,
+    failMsg: 'Failed to move the items.',
+  });
+  return {
+    ...res,
+    note: parsed.projectId === null
+      ? `Moved ${res.moved} ${parsed.kind}(s) out of their project. They still exist — only the filing changed.`
+      : `Filed ${res.moved} ${parsed.kind}(s) into the project. Filing only: nothing was created, edited, published or sent.`,
+  };
+}
+
 module.exports = {
   MODEL_CATALOG, PROVIDER_LABELS, CAPABILITY_KEYS, AREA_CAPABILITY_KEYS, PROXY_AREAS,
   ensureMcpTables, loadSettings, validateKey,
+  // Category catalog — re-exported so both transports and routes/mcp.js gate on
+  // one implementation rather than importing it in three places and drifting.
+  catalog: mcpCatalog,
+  isToolAllowed: mcpCatalog.isToolAllowed,
+  toolDeniedMessage: mcpCatalog.toolDeniedMessage,
   listWaAccounts, listModels, searchSpreadsheets, listSheetTabs, readSheetValues, listMedia, listTemplates, getTemplate,
   listConversations, getChatHistory, sendTextMessage, sendTemplateMessage,
   sendMediaMessage, sendInteractiveMessage,
@@ -1460,4 +1582,7 @@ module.exports = {
   listCourses, getCourseRevenue, listPayments,
   uploadMediaFromSource, createTemplate, submitTemplate, syncTemplate,
   createAutomation, createWaLink, createLeadForm, listLeadForms, listFormSubmissions,
+  projectKinds, listProjects, moveToProject,
+  // Shared with the follow-up engine — one literal component builder, not a fourth copy.
+  buildLiteralTemplateComponents,
 };

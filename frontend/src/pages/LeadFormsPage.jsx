@@ -1,6 +1,6 @@
 // Forms — a no-presets, Google-Forms-style capture builder. List + per-form
 // Build/Responses/Dashboard, matching the visual conventions of the other
-// Chats-section pages (WaLinksPage, MediaLibraryPage).
+// Chats-section pages (MessageFormatsPage, MediaLibraryPage).
 //
 // Two form types, and the whole page keys off the difference:
 //   link     — shared as a plain URL. The respondent is anonymous unless they
@@ -11,18 +11,21 @@
 //
 // The route key stays `lead-forms` so links already shared over WhatsApp, the
 // broadcast FK and the MCP tools all keep resolving.
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Plus, Trash2, ArrowLeft, FormInput, Loader2, Copy, Check,
   ExternalLink, ArrowUp, ArrowDown, ImagePlus, X, Download, ListChecks,
   BarChart3, Table as TableIcon, Settings, ChevronDown, Send, Link2,
   MessageCircle, Users, UserX, AlertTriangle, Megaphone, Bell, Info,
-  Circle, Square,
+  Circle, Square, FolderKanban,
 } from 'lucide-react';
 import { api } from '../api.js';
 import { C, FONT, MONO } from '../constants.js';
 import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx';
 import SearchableSelect from '../components/SearchableSelect.jsx';
+import SortControl from '../components/SortControl.jsx';
+import { sortList, DEFAULT_SORT } from '../lib/listSort.js';
+import { useFieldRegistry } from '../hooks/useFieldRegistry.js';
 import AccountHealthBanner from '../components/AccountHealthBanner.jsx';
 import { KpiCard, Card, LineTrend, FunnelBars, Shimmer, EmptyChart } from '../components/charts.jsx';
 
@@ -97,12 +100,21 @@ export default function LeadFormsPage({ user, subParts = [], navigate }) {
 }
 
 // ── List ──────────────────────────────────────────────────────────────────────
+const FORM_FIELDS = { created: f => f.createdAt, updated: f => f.updatedAt, name: f => f.name };
+
 function FormsList({ navigate }) {
   const [forms, setForms] = useState(null);
   const [error, setError] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteModal, setDeleteModal] = useState({ open: false, item: null });
   const [toast, setToast] = useState(null);
+  const [sort, setSort] = useState(DEFAULT_SORT);
+
+  // Newest first by default, matching the Created column the table already shows.
+  const sortedForms = useMemo(
+    () => (forms ? sortList(forms, sort, FORM_FIELDS) : forms),
+    [forms, sort]
+  );
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
 
@@ -127,7 +139,10 @@ function FormsList({ navigate }) {
             Build a form with your own fields and branding — share it as a link, or send it over WhatsApp.
           </p>
         </div>
-        <button style={btn('primary')} onClick={() => setCreateOpen(true)}><Plus size={16} /> New Form</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {forms && forms.length > 0 && <SortControl value={sort} onChange={setSort} />}
+          <button style={btn('primary')} onClick={() => setCreateOpen(true)}><Plus size={16} /> New Form</button>
+        </div>
       </div>
 
       {error && <div style={{ padding: 10, background: '#FEF2F2', color: '#991B1B', borderRadius: 8, marginBottom: 14, fontSize: 13 }}>{error}</div>}
@@ -141,13 +156,15 @@ function FormsList({ navigate }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT }}>
             <thead>
               <tr style={{ background: B.innerBg, borderBottom: `1px solid ${B.cardBorder}` }}>
-                {['Name', 'Type', 'Status', 'Fields', 'Responses', 'Created', ''].map((h, i) => (
-                  <th key={i} style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: B.t4, textAlign: i === 4 ? 'right' : 'left', textTransform: 'uppercase', letterSpacing: '.06em' }}>{h}</th>
+                {/* Alignment keys off the LABEL, not the column index — inserting
+                    a column used to silently right-align whatever landed at 4. */}
+                {['Name', 'Type', 'Status', 'Project', 'Fields', 'Responses', 'Created', ''].map((h, i) => (
+                  <th key={i} style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: B.t4, textAlign: h === 'Responses' ? 'right' : 'left', textTransform: 'uppercase', letterSpacing: '.06em' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {forms.map(f => (
+              {sortedForms.map(f => (
                 <tr key={f.id} onClick={() => navigate('lead-forms', f.id)}
                   style={{ borderBottom: `1px solid ${B.rowSep}`, cursor: 'pointer' }}
                   onMouseEnter={e => e.currentTarget.style.background = B.innerBg}
@@ -157,6 +174,16 @@ function FormsList({ navigate }) {
                   </td>
                   <td style={{ padding: '12px 14px' }}><TypeBadge type={f.formType} /></td>
                   <td style={{ padding: '12px 14px' }}><StatusBadge status={f.status} /></td>
+                  {/* Which campaign this form belongs to. Read-only here — filing
+                      happens on the Projects page, which can move every kind at
+                      once (same convention as Templates and Follow-ups). */}
+                  <td style={{ padding: '12px 14px', fontSize: 12, fontFamily: FONT }}>
+                    {f.projectName
+                      ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 99, background: '#F1F1EC', color: B.t3, fontWeight: 600 }}>
+                          <FolderKanban size={11} /> {f.projectName}
+                        </span>
+                      : <span style={{ color: B.t7 }}>—</span>}
+                  </td>
                   <td style={{ padding: '12px 14px', fontSize: 12, color: B.t4, fontFamily: MONO }}>{f.fields.length}</td>
                   <td style={{ padding: '12px 14px', fontSize: 12, color: B.t4, fontFamily: MONO, textAlign: 'right' }}>{f.submissionCount ?? 0}</td>
                   <td style={{ padding: '12px 14px', fontSize: 12, color: B.t5 }}>{fmtDate(f.createdAt)}</td>
@@ -303,6 +330,11 @@ function FormBuilder({ id, navigate }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
         {back}
         <h1 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: B.t1, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{form.name}</h1>
+        {form.projectName && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: B.t4, fontWeight: 600 }}>
+            <FolderKanban size={13} color={C.primary} /> {form.projectName}
+          </span>
+        )}
         <TypeBadge type={form.formType} />
         <StatusBadge status={form.status} />
         {isWhatsApp && form.status === 'published' && (
@@ -858,6 +890,14 @@ function AssetPicker({ label, hasAsset, url, uploading, onPick, onRemove, round 
 }
 
 function FieldEditorRow({ field, index, count, onChange, onRemove, onMove }) {
+  // Registered custom Leads fields (Admin Settings → Fields) are extra mapping
+  // targets: 'cf:<field_key>' stores the answer under that field on the lead,
+  // so it shows on the Leads/Sales Log tables and resolves as {{lead.<key>}}.
+  const { leadCustom } = useFieldRegistry();
+  const mapsToOpts = [
+    ...MAPS_TO_OPTS,
+    ...leadCustom.map(f => ({ value: `cf:${f.fieldKey}`, label: `Custom field: ${f.label}` })),
+  ];
   return (
     <div style={{ border: `1px solid ${B.cardBorder}`, borderRadius: 10, padding: 12, background: B.innerBg }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
@@ -892,7 +932,7 @@ function FieldEditorRow({ field, index, count, onChange, onRemove, onMove }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: '1 1 240px', minWidth: 200 }}>
           <span style={{ fontSize: 12, color: B.t5, whiteSpace: 'nowrap' }}>Save to column</span>
           <div style={{ flex: 1 }}>
-            <SearchableSelect value={field.mapsTo || ''} onChange={v => onChange({ mapsTo: v || null })} options={MAPS_TO_OPTS} triggerStyle={{ padding: '6px 26px 6px 9px', fontSize: 12 }} />
+            <SearchableSelect value={field.mapsTo || ''} onChange={v => onChange({ mapsTo: v || null })} options={mapsToOpts} triggerStyle={{ padding: '6px 26px 6px 9px', fontSize: 12 }} />
           </div>
         </div>
       </div>

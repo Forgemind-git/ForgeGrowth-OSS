@@ -13,13 +13,16 @@
 
 const { Router } = require('express');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const pool = require('../db');
+const { makeZip } = require('../util/zip');
 const { adminOnly } = require('../middleware/access');
 const { hashApiKey } = require('../util/crypto');
 const agentService = require('../services/agentService');
 const mcpService = require('../services/mcpService');
 
-const { CAPABILITY_KEYS, ensureMcpTables, loadSettings } = mcpService;
+const { CAPABILITY_KEYS, ensureMcpTables, loadSettings, catalog } = mcpService;
 
 /* ============================ admin router ============================ */
 
@@ -27,7 +30,12 @@ const adminRouter = Router();
 
 adminRouter.get('/mcp/settings', adminOnly, async (req, res) => {
   try {
-    res.json(await loadSettings());
+    const s = await loadSettings();
+    // Ship the catalog WITH the state. The Settings screen renders its category
+    // cards, tool counts and per-tool lists straight from this — it never keeps
+    // its own copy of the category list. A hand-maintained frontend mirror is
+    // exactly how a tab once rendered a button that silently did nothing.
+    res.json({ ...s, catalog: catalog.catalogForUi(s.categories) });
   } catch (err) {
     console.error('[mcp] settings get error:', err.message);
     res.status(500).json({ error: 'Failed to load MCP settings' });
@@ -39,19 +47,30 @@ adminRouter.put('/mcp/settings', adminOnly, async (req, res) => {
     const b = req.body || {};
     const cur = await loadSettings();
     const masterEnabled = b.masterEnabled !== undefined ? !!b.masterEnabled : cur.masterEnabled;
+    // Both blobs merge key-by-key against a WHITELIST rather than replacing the
+    // stored object, so a client that sends one toggle cannot blank every other
+    // switch, and an unknown key sent by a stale or hostile client is dropped
+    // instead of being persisted as a phantom capability.
     const caps = { ...cur.capabilities };
-    if (b.capabilities && typeof b.capabilities === 'object') {
+    if (b.capabilities && typeof b.capabilities === 'object' && !Array.isArray(b.capabilities)) {
       for (const k of CAPABILITY_KEYS) {
         if (b.capabilities[k] !== undefined) caps[k] = !!b.capabilities[k];
       }
     }
+    const cats = { ...cur.categories };
+    if (b.categories && typeof b.categories === 'object' && !Array.isArray(b.categories)) {
+      for (const k of catalog.CATEGORY_KEYS) {
+        if (b.categories[k] !== undefined) cats[k] = b.categories[k] === true;
+      }
+    }
     await pool.query(
       `UPDATE coexistence.mcp_settings
-          SET master_enabled = $1, capabilities = $2, updated_at = NOW()
+          SET master_enabled = $1, capabilities = $2, categories = $3, updated_at = NOW()
         WHERE id = 1`,
-      [masterEnabled, JSON.stringify(caps)],
+      [masterEnabled, JSON.stringify(caps), JSON.stringify(cats)],
     );
-    res.json(await loadSettings());
+    const next = await loadSettings();
+    res.json({ ...next, catalog: catalog.catalogForUi(next.categories) });
   } catch (err) {
     console.error('[mcp] settings put error:', err.message);
     res.status(500).json({ error: 'Failed to update MCP settings' });
@@ -132,6 +151,63 @@ adminRouter.delete('/mcp/keys/:id', adminOnly, async (req, res) => {
   }
 });
 
+// Download the Claude plugin as a ready-to-use .zip.
+//
+// The point of doing this server-side rather than shipping a static file is the
+// HOST SUBSTITUTION below: the archive is built per request with this instance's
+// own domain already written into .mcp.json. Every customer runs their own Forge
+// Growth, so a checked-in plugin would make "edit this file before it works" the
+// first step of every install — the worst possible place for a manual step.
+const PLUGIN_DIR = process.env.FORGEGROWTH_PLUGIN_DIR || '/app/plugin';
+const PLUGIN_HOST_PLACEHOLDER = 'YOUR-FORGE-GROWTH-HOST';
+
+// Walk the plugin directory into [{ name, data }] with forward-slash paths.
+// Skips anything that is not a small text file — the plugin is markdown + json,
+// and this endpoint has no business shipping binaries or node_modules.
+function collectPluginFiles(dir, base = 'forge-growth', out = []) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules' || entry.name.startsWith('.git')) continue;
+    const full = path.join(dir, entry.name);
+    const rel = `${base}/${entry.name}`;
+    if (entry.isDirectory()) { collectPluginFiles(full, rel, out); continue; }
+    if (!/\.(md|json|ya?ml|txt)$/i.test(entry.name)) continue;
+    out.push({ name: rel, data: fs.readFileSync(full, 'utf8') });
+  }
+  return out;
+}
+
+adminRouter.get('/mcp/plugin.zip', adminOnly, (req, res) => {
+  try {
+    if (!fs.existsSync(PLUGIN_DIR)) {
+      return res.status(404).json({
+        error: 'The plugin files are not available on this server. Mount the forge-growth-plugin directory at ' + PLUGIN_DIR + ' and try again.',
+      });
+    }
+    const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
+    const host = req.headers['x-forwarded-host'] || req.headers.host || process.env.FORGEGROWTH_DOMAIN || '';
+    const files = collectPluginFiles(PLUGIN_DIR);
+    if (!files.length) return res.status(404).json({ error: 'No plugin files found to package.' });
+
+    // Write this instance's real host in, so the download needs no editing.
+    for (const f of files) {
+      if (f.data.includes(PLUGIN_HOST_PLACEHOLDER)) {
+        f.data = f.data.split(PLUGIN_HOST_PLACEHOLDER).join(host);
+      }
+    }
+    const zip = makeZip(files);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="forge-growth-plugin.zip"');
+    res.setHeader('Content-Length', zip.length);
+    // The archive is built from this instance's own config — never let a shared
+    // cache hand one customer's host to another.
+    res.setHeader('Cache-Control', 'no-store');
+    res.end(zip);
+  } catch (err) {
+    console.error('[mcp] plugin download error:', err.message);
+    res.status(500).json({ error: 'Failed to package the plugin.' });
+  }
+});
+
 adminRouter.get('/mcp/install', adminOnly, (req, res) => {
   const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0];
   const host = req.headers['x-forwarded-host'] || req.headers.host || (process.env.FORGECRM_DOMAIN || '');
@@ -168,8 +244,8 @@ async function mcpKeyAuth(req, res, next) {
     const hdr = req.headers.authorization || '';
     const m = hdr.match(/^Bearer\s+(.+)$/i);
     if (!m) return res.status(401).json({ error: 'Missing bearer token' });
-    const { capabilities, keyId } = await mcpService.validateKey(m[1]);
-    req.mcp = { capabilities };
+    const { capabilities, categories, keyId } = await mcpService.validateKey(m[1]);
+    req.mcp = { capabilities, categories };
     req.user = { id: keyId, role: 'admin', viaMcp: true };
     next();
   } catch (err) {
@@ -177,10 +253,16 @@ async function mcpKeyAuth(req, res, next) {
   }
 }
 
-function requireCap(name) {
+// Gate a REST endpoint by the CATEGORY of the tool it backs. The argument is a
+// TOOL NAME, not a capability, so this file and the Streamable HTTP transport
+// enforce the same switch for the same tool. That matters because the stdio MCP
+// server reaches its tools through these endpoints — if the two gates were
+// typed independently, one transport would quietly end up more permissive than
+// the other and only the looser one would ever be noticed.
+function requireTool(tool) {
   return (req, res, next) => {
-    if (req.mcp?.capabilities?.[name] !== true) {
-      return res.status(403).json({ error: `The '${name}' capability is disabled for MCP access.` });
+    if (!catalog.isToolAllowed(tool, req.mcp?.categories || {})) {
+      return res.status(403).json({ error: catalog.toolDeniedMessage(tool) });
     }
     next();
   };
@@ -211,34 +293,34 @@ async function discovery(res, fn, fallback) {
 }
 
 /* --------- discovery --------- */
-apiRouter.get('/wa-accounts', requireCap('discovery'), (req, res) =>
+apiRouter.get('/wa-accounts', requireTool('list_wa_accounts'), (req, res) =>
   discovery(res, () => mcpService.listWaAccounts(), 'Failed to list WhatsApp accounts'));
-apiRouter.get('/models', requireCap('discovery'), (req, res) =>
+apiRouter.get('/models', requireTool('list_models'), (req, res) =>
   discovery(res, () => mcpService.listModels(), 'Failed to list models'));
-apiRouter.get('/spreadsheets', requireCap('discovery'), (req, res) =>
+apiRouter.get('/spreadsheets', requireTool('search_spreadsheets'), (req, res) =>
   discovery(res, () => mcpService.searchSpreadsheets({ q: String(req.query.q || ''), pageSize: parseInt(req.query.pageSize || '50', 10) }), 'Failed to list spreadsheets'));
-apiRouter.get('/spreadsheets/:id/tabs', requireCap('discovery'), (req, res) =>
+apiRouter.get('/spreadsheets/:id/tabs', requireTool('list_sheet_tabs'), (req, res) =>
   discovery(res, () => mcpService.listSheetTabs(req.params.id), 'Failed to load spreadsheet tabs'));
-apiRouter.get('/spreadsheets/:id/values', requireCap('discovery'), (req, res) =>
+apiRouter.get('/spreadsheets/:id/values', requireTool('read_sheet_values'), (req, res) =>
   discovery(res, () => mcpService.readSheetValues({
     spreadsheetId: req.params.id,
     tab: req.query.tab,
     range: req.query.range || undefined,
     maxRows: req.query.maxRows,
   }), 'Failed to read spreadsheet values'));
-apiRouter.get('/media', requireCap('discovery'), (req, res) =>
+apiRouter.get('/media', requireTool('list_media'), (req, res) =>
   discovery(res, () => mcpService.listMedia(
     req.query.type ? String(req.query.type) : null,
     req.query.name ? String(req.query.name) : null,
   ), 'Failed to list media'));
-apiRouter.get('/templates', requireCap('discovery'), (req, res) =>
+apiRouter.get('/templates', requireTool('list_templates'), (req, res) =>
   discovery(res, () => mcpService.listTemplates(req.query.waAccountId), 'Failed to list templates'));
-apiRouter.get('/templates/:id', requireCap('discovery'), (req, res) =>
+apiRouter.get('/templates/:id', requireTool('get_template'), (req, res) =>
   discovery(res, () => mcpService.getTemplate(req.params.id), 'Failed to fetch template'));
-apiRouter.get('/agents', requireCap('discovery'), async (req, res) => {
+apiRouter.get('/agents', requireTool('list_agents'), async (req, res) => {
   try { res.json(await agentService.listAgents()); } catch (err) { sendErr(res, err, 'Failed to list agents'); }
 });
-apiRouter.get('/agents/:id', requireCap('discovery'), async (req, res) => {
+apiRouter.get('/agents/:id', requireTool('get_agent'), async (req, res) => {
   try {
     const agent = await agentService.getAgent(req.params.id);
     if (!agent) return res.status(404).json({ error: 'Not found' });
@@ -247,67 +329,73 @@ apiRouter.get('/agents/:id', requireCap('discovery'), async (req, res) => {
 });
 
 /* --------- conversations: read + reply --------- */
-apiRouter.get('/conversations', requireCap('read_messages'), (req, res) =>
+apiRouter.get('/conversations', requireTool('list_conversations'), (req, res) =>
   discovery(res, () => mcpService.listConversations({
     waNumber: req.query.waNumber, search: req.query.search || req.query.q, limit: req.query.limit,
   }), 'Failed to list conversations'));
-apiRouter.get('/conversations/messages', requireCap('read_messages'), (req, res) =>
+apiRouter.get('/conversations/messages', requireTool('read_messages'), (req, res) =>
   discovery(res, () => mcpService.getChatHistory({
     waNumber: req.query.waNumber, contactNumber: req.query.contactNumber,
     limit: req.query.limit, before: req.query.before,
   }), 'Failed to read messages'));
-apiRouter.post('/messages/text', requireCap('send_messages'), async (req, res) => {
+apiRouter.post('/messages/text', requireTool('send_message'), async (req, res) => {
   try { res.status(202).json(await mcpService.sendTextMessage(req.body || {})); }
   catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to send message' }); }
 });
-apiRouter.post('/messages/template', requireCap('send_messages'), async (req, res) => {
+apiRouter.post('/messages/template', requireTool('send_template'), async (req, res) => {
   try { res.status(202).json(await mcpService.sendTemplateMessage(req.body || {})); }
   catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to send template' }); }
 });
-apiRouter.post('/messages/media', requireCap('send_messages'), async (req, res) => {
+apiRouter.post('/messages/media', requireTool('send_media'), async (req, res) => {
   try { res.status(202).json(await mcpService.sendMediaMessage(req.body || {})); }
   catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to send media' }); }
 });
-apiRouter.post('/messages/interactive', requireCap('send_messages'), async (req, res) => {
+apiRouter.post('/messages/interactive', requireTool('send_interactive'), async (req, res) => {
   try { res.status(202).json(await mcpService.sendInteractiveMessage(req.body || {})); }
   catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to send interactive' }); }
 });
 
 /* --------- funnel: leads / marketing / BDA dedicated tools --------- */
-apiRouter.get('/leads', requireCap('area_leads'), (req, res) =>
+apiRouter.get('/leads', requireTool('list_leads'), (req, res) =>
   discovery(res, () => mcpService.listLeads({ stage: req.query.stage, search: req.query.search, limit: req.query.limit, view: req.query.view }), 'Failed to list leads'));
-apiRouter.put('/leads/:id/move', requireCap('area_leads'), async (req, res) => {
+apiRouter.put('/leads/:id/move', requireTool('move_lead_stage'), async (req, res) => {
   try { res.json(await mcpService.moveLeadStage(req.params.id, req.body?.stage)); }
   catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to move lead' }); }
 });
-apiRouter.get('/campaign-performance', requireCap('area_marketing'), (req, res) =>
+apiRouter.get('/campaign-performance', requireTool('get_campaign_performance'), (req, res) =>
   discovery(res, () => mcpService.getCampaignPerformance({ campaignId: req.query.campaignId }), 'Failed to load campaign performance'));
-apiRouter.get('/webinars-list', requireCap('area_marketing'), (req, res) =>
+apiRouter.get('/webinars-list', requireTool('list_webinars'), (req, res) =>
   discovery(res, () => mcpService.listWebinars(), 'Failed to list webinars'));
-apiRouter.get('/bda-activity-summary', requireCap('area_bda'), (req, res) =>
+apiRouter.get('/bda-activity-summary', requireTool('get_bda_activity'), (req, res) =>
   discovery(res, () => mcpService.getBdaActivity({ bdaId: req.query.bdaId, limit: req.query.limit }), 'Failed to load BDA activity'));
 
 /* --------- courses + payments dedicated tools --------- */
 // Named *-list / *-summary so they can't collide with the real /courses and
 // /payments app routes reachable through the generic proxy.
-apiRouter.get('/courses-list', requireCap('area_courses'), (req, res) =>
+apiRouter.get('/courses-list', requireTool('list_products'), (req, res) =>
   discovery(res, () => mcpService.listCourses(), 'Failed to list courses'));
-apiRouter.get('/courses-revenue', requireCap('area_courses'), (req, res) =>
+apiRouter.get('/courses-revenue', requireTool('get_product_revenue'), (req, res) =>
   discovery(res, () => mcpService.getCourseRevenue(), 'Failed to load course revenue'));
-apiRouter.get('/payments-list', requireCap('area_payments'), (req, res) =>
+apiRouter.get('/payments-list', requireTool('list_payments'), (req, res) =>
   discovery(res, () => mcpService.listPayments({
     state: req.query.state, courseId: req.query.courseId, search: req.query.search, limit: req.query.limit,
   }), 'Failed to list payments'));
 
 /* --------- full access: generic proxy + catalog + bulk --------- */
-apiRouter.get('/endpoints', (req, res) => res.json(mcpService.listEndpoints(req.mcp?.capabilities || {})));
-apiRouter.post('/proxy', async (req, res) => {
+// Both of these were previously UNGATED at this layer — they self-gated on the
+// area caps inside listEndpoints/proxyRequest, so there was no switch that
+// turned them off outright. They now sit behind their category like every other
+// tool; the per-area caps still scope what the proxy may actually reach, so
+// this is a second lock on the same door, not a replacement for it.
+apiRouter.get('/endpoints', requireTool('list_endpoints'),
+  (req, res) => res.json(mcpService.listEndpoints(req.mcp?.capabilities || {})));
+apiRouter.post('/proxy', requireTool('forgechat_request'), async (req, res) => {
   try {
     const out = await mcpService.proxyRequest(req.body || {}, req.mcp?.capabilities || {});
     res.status(200).json(out);
   } catch (err) { res.status(err.status || 500).json({ error: err.message || 'Proxy request failed' }); }
 });
-apiRouter.post('/bulk-message', requireCap('area_broadcasts'), async (req, res) => {
+apiRouter.post('/bulk-message', requireTool('send_bulk_message'), async (req, res) => {
   try { res.status(202).json(await mcpService.sendBulkMessage(req.body || {})); }
   catch (err) { res.status(err.status || 500).json({ error: err.message || 'Bulk send failed' }); }
 });
@@ -315,56 +403,64 @@ apiRouter.post('/bulk-message', requireCap('area_broadcasts'), async (req, res) 
 /* --------- config: media / templates / automations / wa-links / lead forms ---
    Suffixed (*-create / *-list / *-submit) so they never collide with the real
    app paths the generic proxy forwards. --------- */
-apiRouter.post('/media-upload', requireCap('area_broadcasts'), async (req, res) => {
+apiRouter.post('/media-upload', requireTool('upload_media'), async (req, res) => {
   try { res.status(201).json(await mcpService.uploadMediaFromSource(req.body || {})); }
   catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to upload media' }); }
 });
-apiRouter.post('/templates-create', requireCap('area_broadcasts'), async (req, res) => {
+apiRouter.post('/templates-create', requireTool('create_template'), async (req, res) => {
   try { res.status(201).json(await mcpService.createTemplate(req.body || {})); }
   catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to create template' }); }
 });
-apiRouter.post('/templates-submit', requireCap('area_broadcasts'), async (req, res) => {
+apiRouter.post('/templates-submit', requireTool('submit_template'), async (req, res) => {
   try { res.json(await mcpService.submitTemplate(req.body || {})); }
   catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to submit template' }); }
 });
-apiRouter.post('/templates-sync', requireCap('area_broadcasts'), async (req, res) => {
+apiRouter.post('/templates-sync', requireTool('sync_template'), async (req, res) => {
   try { res.json(await mcpService.syncTemplate(req.body || {})); }
   catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to sync template' }); }
 });
-apiRouter.post('/automations-create', requireCap('area_automations'), async (req, res) => {
+apiRouter.post('/automations-create', requireTool('create_automation'), async (req, res) => {
   try { res.status(201).json(await mcpService.createAutomation(req.body || {})); }
   catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to create automation' }); }
 });
-apiRouter.post('/wa-links-create', requireCap('area_broadcasts'), async (req, res) => {
+apiRouter.post('/wa-links-create', requireTool('create_wa_link'), async (req, res) => {
   try { res.status(201).json(await mcpService.createWaLink(req.body || {})); }
   catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to create link' }); }
 });
-apiRouter.post('/lead-forms-create', requireCap('area_leadforms'), async (req, res) => {
+apiRouter.post('/lead-forms-create', requireTool('create_lead_form'), async (req, res) => {
   try { res.status(201).json(await mcpService.createLeadForm(req.body || {})); }
   catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to create lead form' }); }
 });
-apiRouter.get('/lead-forms-list', requireCap('area_leadforms'), (req, res) =>
+apiRouter.get('/lead-forms-list', requireTool('list_lead_forms'), (req, res) =>
   discovery(res, () => mcpService.listLeadForms(), 'Failed to list lead forms'));
-apiRouter.get('/lead-forms-submissions', requireCap('area_leadforms'), (req, res) =>
+apiRouter.get('/lead-forms-submissions', requireTool('list_form_submissions'), (req, res) =>
   discovery(res, () => mcpService.listFormSubmissions({ formId: req.query.formId, page: req.query.page, pageSize: req.query.pageSize }), 'Failed to load submissions'));
+// Suffixed so they can never collide with the real /projects paths the generic
+// proxy forwards — same convention as /courses-list and /lead-forms-list above.
+apiRouter.get('/projects-list', requireTool('list_projects'), (req, res) =>
+  discovery(res, () => mcpService.listProjects({ projectId: req.query.projectId }), 'Failed to list projects'));
+apiRouter.post('/projects-assign', requireTool('move_to_project'), async (req, res) => {
+  try { res.json(await mcpService.moveToProject(req.body || {})); }
+  catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to move the items' }); }
+});
 
 /* --------- mutations --------- */
-apiRouter.post('/agents', requireCap('create_agent'), async (req, res) => {
+apiRouter.post('/agents', requireTool('create_agent'), async (req, res) => {
   try { res.status(201).json(await agentService.createAgent(req.body || {})); } catch (err) { sendErr(res, err, 'Failed to create agent'); }
 });
-apiRouter.put('/agents/:id', requireCap('update_agent'), async (req, res) => {
+apiRouter.put('/agents/:id', requireTool('update_agent'), async (req, res) => {
   try { res.json(await agentService.updateAgent(req.params.id, req.body || {})); } catch (err) { sendErr(res, err, 'Failed to update agent'); }
 });
-apiRouter.post('/agents/:id/tools', requireCap('manage_tools'), async (req, res) => {
+apiRouter.post('/agents/:id/tools', requireTool('add_tool'), async (req, res) => {
   try { res.status(201).json(await agentService.addTool(req.params.id, req.body || {})); } catch (err) { sendErr(res, err, 'Failed to add tool'); }
 });
-apiRouter.put('/agents/:id/tools/:toolId', requireCap('manage_tools'), async (req, res) => {
+apiRouter.put('/agents/:id/tools/:toolId', requireTool('update_tool'), async (req, res) => {
   try { res.json(await agentService.updateTool(req.params.id, req.params.toolId, req.body || {})); } catch (err) { sendErr(res, err, 'Failed to update tool'); }
 });
-apiRouter.delete('/agents/:id/tools/:toolId', requireCap('delete'), async (req, res) => {
+apiRouter.delete('/agents/:id/tools/:toolId', requireTool('delete_tool'), async (req, res) => {
   try { res.json(await agentService.deleteTool(req.params.id, req.params.toolId)); } catch (err) { sendErr(res, err, 'Failed to delete tool'); }
 });
-apiRouter.delete('/agents/:id', requireCap('delete'), async (req, res) => {
+apiRouter.delete('/agents/:id', requireTool('delete_agent'), async (req, res) => {
   try { res.json(await agentService.deleteAgent(req.params.id)); } catch (err) { sendErr(res, err, 'Failed to delete agent'); }
 });
 

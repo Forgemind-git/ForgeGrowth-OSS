@@ -1,0 +1,16 @@
+{
+  "name": "forge-growth",
+  "version": "1.0.0",
+  "description": "Configure Forge Growth end-to-end from a plain-language game plan — posters, WhatsApp templates (with Meta approval), automations, lead forms, bulk sends, agents and links, all driven by Claude with a confirmation step before anything goes live.",
+  "author": {
+    "name": "Forgemind"
+  },
+  "keywords": [
+    "forge-growth",
+    "whatsapp",
+    "marketing",
+    "sales",
+    "funnel",
+    "mcp"
+  ]
+}

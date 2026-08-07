@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { Plus, Flame, RefreshCw, X } from 'lucide-react';
 import { api } from '../../api.js';
 import { C, FONT, MONO } from '../../constants.js';
@@ -7,6 +7,7 @@ import { showError } from '../../lib/feedback.js';
 import { useConfirm } from '../../components/ConfirmDialog.jsx';
 import SearchableSelect from '../../components/SearchableSelect.jsx';
 import { useFunnelConfig } from '../../hooks/useFunnelConfig.js';
+import { useFieldRegistry, formatFieldValue } from '../../hooks/useFieldRegistry.js';
 import {
   PageShell, Button, StageBadge, STAGE_META, STAGE_ORDER,
   Field, inputStyle, Modal, Segmented, daysSince,
@@ -15,7 +16,7 @@ import { Shimmer } from '../../components/charts.jsx';
 
 const FUNNEL = ['new', 'contacted', 'engaged', 'hot', 'enrolled'];
 
-export default function PipelinePage({ user, navigate }) {
+export default function PipelinePage({ user, navigate, tabs, onOpenLeads }) {
   const { sources } = useFunnelConfig();
   const [board, setBoard] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -85,6 +86,7 @@ export default function PipelinePage({ user, navigate }) {
         </>
       }
     >
+      {tabs}
       {loading ? (
         <div style={{ display: 'flex', gap: 12 }}>
           {FUNNEL.map(s => <div key={s} style={{ flex: 1 }}><Shimmer height={340} radius={12} /></div>)}
@@ -116,7 +118,7 @@ export default function PipelinePage({ user, navigate }) {
         </div>
       )}
 
-      {detail && <LeadDrawer lead={detail} onClose={() => setDetail(null)} navigate={navigate} onChanged={() => load(true)} isAdmin={user?.role === 'admin'} />}
+      {detail && <LeadDrawer lead={detail} onClose={() => setDetail(null)} navigate={navigate} onOpenLeads={onOpenLeads} onChanged={() => load(true)} isAdmin={user?.role === 'admin'} />}
       {showAdd && <AddLeadModal onClose={() => setShowAdd(false)} onCreated={() => { setShowAdd(false); load(true); }} />}
       {confirmEl}
     </PageShell>
@@ -196,7 +198,8 @@ function Avatar({ name }) {
   );
 }
 
-function LeadDrawer({ lead, onClose, navigate, onChanged, isAdmin }) {
+function LeadDrawer({ lead, onClose, navigate, onOpenLeads, onChanged, isAdmin }) {
+  const { leadCustom } = useFieldRegistry();
   const [timeline, setTimeline] = useState(null);
   useEffect(() => { api.leads.timeline(lead.id).then(setTimeline).catch(() => setTimeline({ events: [], activity: [] })); }, [lead.id]);
   const row = (k, v) => (
@@ -223,8 +226,12 @@ function LeadDrawer({ lead, onClose, navigate, onChanged, isAdmin }) {
           {row('Goal', lead.goal)}
           {row('Assigned BDA', lead.assignedUserName || lead.assignedBda)}
           {row('Follow-ups', lead.followUpCount)}
+          {/* Custom Leads fields (Admin Settings → Fields), read-only here. */}
+          {leadCustom.map(f => (
+            <Fragment key={f.fieldKey}>{row(f.label, formatFieldValue(lead.customFields?.[f.fieldKey]))}</Fragment>
+          ))}
           <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
-            <Button variant="secondary" onClick={() => navigate && navigate('leads')}>Open in Leads</Button>
+            <Button variant="secondary" onClick={() => (onOpenLeads ? onOpenLeads() : navigate && navigate('leads', 'list'))}>Open in Leads</Button>
             {lead.hasWhatsappThread && <Button variant="secondary" onClick={() => navigate && navigate('chats')}>Open chat</Button>}
           </div>
           <div style={{ marginTop: 22, fontSize: 12, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.textMuted, marginBottom: 8 }}>Activity timeline</div>

@@ -379,6 +379,7 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
   const [hovered, setHovered] = useState(false);
   const [menu, setMenu] = useState(null);      // context-menu position {x,y} | null
   const [infoOpen, setInfoOpen] = useState(false);
+  const [reactionsOpen, setReactionsOpen] = useState(false);
 
   const isVoice = message.message_type === 'audio' || message.message_type === 'voice';
   const isTemplate = message.message_type === 'template';
@@ -386,6 +387,21 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
   // Reactions on this message (badge), and which one WE sent (to toggle/remove).
   const reactions = Array.isArray(message.reactions) ? message.reactions : [];
   const myReaction = reactions.find(r => r.direction === 'outgoing')?.emoji || null;
+
+  // Grouped for display: WhatsApp shows the distinct emojis and a TOTAL count,
+  // so five 😂 read as "😂 5". Collapsing to a bare set (the previous
+  // behaviour) threw the count away and made a heavily-reacted message look
+  // like it had a single reaction.
+  const reactionGroups = useMemo(() => {
+    const by = new Map();
+    for (const r of reactions) {
+      const g = by.get(r.emoji) || { emoji: r.emoji, count: 0, names: [] };
+      g.count += 1;
+      if (r.name) g.names.push(r.name);
+      by.set(r.emoji, g);
+    }
+    return [...by.values()].sort((a, b) => b.count - a.count);
+  }, [reactions]);
   const starred = !!message.starred;
   // Menu actions (react/star/info) need a real Meta wamid — optimistic/failed
   // rows still hold a local-/tmp- id.
@@ -445,9 +461,15 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
     fontFamily: FONT,
   };
 
-  const mediaSrc = message.message_id
-    ? `/api/media/${encodeURIComponent(message.message_id)}?v=${retryNonce}`
-    : null;
+  // `media_src_url` lets a caller supply the file directly instead of going
+  // through /api/media/:messageId, which resolves against `chat_history`. It is
+  // the escape hatch for a message that is already hosted on our storage and
+  // has no chat_history row to look up. Absent for normal 1:1 chats — unchanged
+  // there.
+  const mediaSrc = message.media_src_url
+    || (message.message_id
+      ? `/api/media/${encodeURIComponent(message.message_id)}?v=${retryNonce}`
+      : null);
   const mediaStatus = message.media_status;
   const hasMedia = MEDIA_TYPES.has(message.message_type);
 
@@ -554,7 +576,21 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
       }
 
       case 'document': {
-        const filename = message.media_filename || message.message_body || 'Document';
+        // The caption is its OWN thing, not a fallback filename. Using the body
+        // as the filename (the previous behaviour) meant a document sent with a
+        // caption showed the caption squeezed into a single ellipsised line —
+        // and a document that had both simply lost the caption entirely, which
+        // is how a whole paragraph of context went missing. Image and video
+        // have always rendered their caption below the media; document now
+        // matches them.
+        const filename = message.media_filename || 'Document';
+        // Only a REAL caption, never the filename echoed back. Meta's webhook
+        // stores the filename in the body when a document is sent without a
+        // caption, so rendering the body unconditionally would print the name
+        // twice on every document in Chats.
+        const caption = message.message_body && message.message_body.trim() !== filename.trim()
+          ? message.message_body
+          : null;
         return (
           <div>
             {mediaStatus === 'stored' ? (
@@ -583,6 +619,11 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
               renderMediaShell({
                 Icon: FileText, label: filename, kind: 'document', children: null,
               })
+            )}
+            {caption && (
+              <div style={{ fontSize: 13, marginTop: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                {renderRichText(caption)}
+              </div>
             )}
           </div>
         );
@@ -874,15 +915,70 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
             </div>
           )}
           {/* WhatsApp-style reaction badge, overlapping the bubble's bottom edge */}
-          {reactions.length > 0 && (
-            <div style={{
-              position: 'absolute', bottom: -11, [isOutgoing ? 'left' : 'right']: 6,
-              display: 'flex', alignItems: 'center', gap: 1,
-              background: 'var(--c-cardBg)', border: `1px solid ${C.border}`, borderRadius: 12,
-              padding: '1px 4px', boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
-              fontSize: 12, lineHeight: '15px', zIndex: 2, whiteSpace: 'nowrap',
-            }}>
-              {[...new Set(reactions.map(r => r.emoji))].map((e, i) => <span key={i}>{e}</span>)}
+          {reactionGroups.length > 0 && (
+            <div style={{ position: 'absolute', bottom: -11, [isOutgoing ? 'left' : 'right']: 6, zIndex: 3 }}>
+              <button
+                onClick={(e) => { e.stopPropagation(); setReactionsOpen(o => !o); }}
+                title={reactionGroups.map(g => `${g.emoji} ${g.count}`).join('  ')}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 1,
+                  background: 'var(--c-cardBg)', border: `1px solid ${C.border}`, borderRadius: 12,
+                  padding: '1px 5px', boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
+                  fontSize: 12, lineHeight: '15px', whiteSpace: 'nowrap',
+                  cursor: 'pointer', fontFamily: FONT, color: C.text,
+                }}
+              >
+                {/* WhatsApp caps the emoji run and lets the number carry the rest. */}
+                {reactionGroups.slice(0, 3).map((g, i) => <span key={i}>{g.emoji}</span>)}
+                {reactions.length > 1 && (
+                  <span style={{ fontSize: 11, fontWeight: 600, marginLeft: 2, color: C.textSecondary }}>
+                    {reactions.length}
+                  </span>
+                )}
+              </button>
+
+              {reactionsOpen && (
+                <>
+                  <div onClick={() => setReactionsOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 300 }} />
+                  <div style={{
+                    // Opens AWAY from the wall the bubble is against: an
+                    // incoming bubble hugs the left edge, so anchoring the
+                    // popover's right edge to the badge pushed it outside the
+                    // scroll container and clipped the first characters.
+                    position: 'absolute', bottom: 22, [isOutgoing ? 'right' : 'left']: 0,
+                    minWidth: 170, maxWidth: 260, maxHeight: 220, overflowY: 'auto',
+                    background: 'var(--c-cardBg)', border: `1px solid ${C.border}`, borderRadius: 10,
+                    boxShadow: C.shadowLg, zIndex: 301, padding: '6px 0', fontFamily: FONT,
+                  }}>
+                    <div style={{
+                      fontSize: 10.5, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase',
+                      color: C.textMuted, padding: '2px 12px 6px',
+                    }}>
+                      {reactions.length} reaction{reactions.length === 1 ? '' : 's'}
+                    </div>
+                    {reactionGroups.map((g, i) => (
+                      <div key={i} style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 9, padding: '5px 12px',
+                      }}>
+                        <span style={{ fontSize: 15, lineHeight: '18px' }}>{g.emoji}</span>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontSize: 12.5, color: C.text, fontWeight: 600 }}>
+                            {g.count} {g.count === 1 ? 'person' : 'people'}
+                          </div>
+                          {/* Names only exist where the source provides them
+                              (group chats). A 1:1 chat has none, so the row
+                              simply shows the count. */}
+                          {g.names.length > 0 && (
+                            <div style={{ fontSize: 11.5, color: C.textSecondary, lineHeight: 1.4, wordBreak: 'break-word' }}>
+                              {g.names.join(', ')}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

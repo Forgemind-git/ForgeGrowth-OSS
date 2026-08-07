@@ -587,12 +587,22 @@ router.post('/razorpay/test-api', adminOnly, async (req, res) => {
 // existed. Permission is `payments` (not adminOnly) so the Sales team can see
 // the ledger without being handed the gateway credentials screen.
 
+// Sort is a WHITELIST lookup — the user's string never reaches the SQL; an
+// unknown value silently falls back to newest-first.
+const LEDGER_SORTS = {
+  newest: 'p.paid_at DESC NULLS LAST',
+  oldest: 'p.paid_at ASC NULLS LAST',
+  amount_desc: 'p.amount_paise DESC, p.paid_at DESC NULLS LAST',
+  amount_asc: 'p.amount_paise ASC, p.paid_at DESC NULLS LAST',
+};
+
 router.get('/razorpay/payments', requirePermission('payments'), async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
     const offset = parseInt(req.query.offset, 10) || 0;
-    const { status, from, to } = req.query;
+    const { status, from, to, method } = req.query;
     const q = (req.query.q || '').trim();
+    const orderBy = LEDGER_SORTS[req.query.sort] || LEDGER_SORTS.newest;
 
     const params = [];
     let where = 'WHERE 1=1';
@@ -602,6 +612,7 @@ router.get('/razorpay/payments', requirePermission('payments'), async (req, res)
     else if (status) { params.push(status); where += ` AND p.status = $${params.length}`; }
     if (from) { params.push(from); where += ` AND p.paid_at >= $${params.length}::date`; }
     if (to) { params.push(to); where += ` AND p.paid_at < ($${params.length}::date + INTERVAL '1 day')`; }
+    if (method) { params.push(method); where += ` AND p.method = $${params.length}`; }
     if (q) {
       params.push(`%${q}%`);
       where += ` AND (p.payer_email ILIKE $${params.length} OR p.payer_contact ILIKE $${params.length}
@@ -612,7 +623,7 @@ router.get('/razorpay/payments', requirePermission('payments'), async (req, res)
     const [{ rows }, { rows: [tot] }] = await Promise.all([
       pool.query(
         `SELECT p.* FROM coexistence.razorpay_payments p
-         ${where} ORDER BY p.paid_at DESC NULLS LAST LIMIT ${limit} OFFSET ${offset}`, params),
+         ${where} ORDER BY ${orderBy} LIMIT ${limit} OFFSET ${offset}`, params),
       pool.query(`SELECT COUNT(*)::int AS total FROM coexistence.razorpay_payments p ${where}`, params),
     ]);
 
@@ -638,6 +649,25 @@ router.get('/razorpay/payments', requirePermission('payments'), async (req, res)
 
 router.get('/razorpay/payments/summary', requirePermission('payments'), async (req, res) => {
   try {
+    // The KPI cards describe the CURRENT SLICE: they honour the same date /
+    // method / search filters as the list, so "Collected" answers "in this
+    // view", not all-time. `status` is deliberately NOT accepted here — the
+    // cards themselves are the status breakdown, so filtering by it would
+    // just zero every other card.
+    const { from, to, method } = req.query;
+    const q = (req.query.q || '').trim();
+    const params = [];
+    let where = 'WHERE 1=1';
+    if (from) { params.push(from); where += ` AND paid_at >= $${params.length}::date`; }
+    if (to) { params.push(to); where += ` AND paid_at < ($${params.length}::date + INTERVAL '1 day')`; }
+    if (method) { params.push(method); where += ` AND method = $${params.length}`; }
+    if (q) {
+      params.push(`%${q}%`);
+      where += ` AND (payer_email ILIKE $${params.length} OR payer_contact ILIKE $${params.length}
+                      OR description ILIKE $${params.length} OR payment_id ILIKE $${params.length}
+                      OR matched_lead_name ILIKE $${params.length})`;
+    }
+
     // One query: separate COUNTs can disagree if a sync lands between them.
     const { rows } = await pool.query(`
       SELECT COUNT(*)::int                                                      AS total,
@@ -648,10 +678,17 @@ router.get('/razorpay/payments/summary', requirePermission('payments'), async (r
              COALESCE(SUM(amount_refunded_paise),0)                             AS refunded_paise,
              COUNT(*) FILTER (WHERE status='captured' AND matched_lead_id IS NOT NULL)::int AS matched,
              MIN(paid_at) AS first_payment, MAX(paid_at) AS last_payment
-        FROM coexistence.razorpay_payments`);
+        FROM coexistence.razorpay_payments ${where}`, params);
     const { rows: cfg } = await pool.query(
       `SELECT payments_synced_at, payments_sync_error, (key_secret_encrypted IS NOT NULL) AS has_keys
          FROM coexistence.razorpay_config WHERE id = 1`);
+    // Method options for the ledger filter. Deliberately from a query BLIND to
+    // every filter — an option list built from the filtered result set shrinks
+    // to one entry the moment a method is picked, unmounting the control that
+    // created the filter (anti-pattern #25).
+    const { rows: methodRows } = await pool.query(
+      `SELECT DISTINCT method FROM coexistence.razorpay_payments
+        WHERE method IS NOT NULL AND method <> '' ORDER BY method`);
     const s = rows[0];
     res.json({
       total: s.total, captured: s.captured, failed: s.failed, refunded: s.refunded,
@@ -659,6 +696,7 @@ router.get('/razorpay/payments/summary', requirePermission('payments'), async (r
       collected: Number(s.collected_paise) / 100,
       refundedAmount: Number(s.refunded_paise) / 100,
       firstPayment: s.first_payment, lastPayment: s.last_payment,
+      methods: methodRows.map(r => r.method),
       syncedAt: cfg[0]?.payments_synced_at || null,
       syncError: cfg[0]?.payments_sync_error || null,
       hasApiKeys: !!cfg[0]?.has_keys,

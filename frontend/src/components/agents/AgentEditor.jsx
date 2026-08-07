@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Save, Trash2, Loader2, AlertCircle, ExternalLink, ChevronDown, ChevronUp, Download } from 'lucide-react';
+import { Save, Trash2, Loader2, AlertCircle, ExternalLink, ChevronDown, ChevronUp, Download,
+  CreditCard, UserCog, UserPlus, Images } from 'lucide-react';
 import { api } from '../../api.js';
 import { C, FONT, MONO, downloadJson, slugifyName } from '../../constants.js';
 import { notify } from '../../lib/feedback.js';
@@ -11,6 +12,19 @@ import AgentRunsViewer from './AgentRunsViewer.jsx';
 import AgentLivePreview from './AgentLivePreview.jsx';
 import AgentMediaGroups from './AgentMediaGroups.jsx';
 import { modelsForProvider, providerDisplay } from './modelCatalog.js';
+
+const EMPTY_PAYMENT_CONFIG = {
+  allowCustomAmount: false,   // products-only until an admin deliberately opts out
+  minAmount: null,
+  maxAmount: null,
+  productIds: [],
+  followUpEnabled: false,
+  followUpMinutes: 15,
+  followUpMax: 1,
+  followUpText: '',
+  confirmText: '',
+  expiryHours: 24,
+};
 
 const BLANK = {
   name: '',
@@ -30,6 +44,9 @@ const BLANK = {
   handoffKeywords: '',
   closeSummaryEnabled: false,
   closeIdleMinutes: 30,
+  paymentsEnabled: false,
+  paymentConfig: EMPTY_PAYMENT_CONFIG,
+  paymentTemplateId: '',
   triggerMode: 'any',
   triggerKeyword: '',
   triggerMatchType: 'contains',
@@ -57,6 +74,61 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
   const [pendingDelete, setPendingDelete] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [bdaUsers, setBdaUsers] = useState([]); // eligible users for handoff round-robin
+  const [payTemplates, setPayTemplates] = useState([]); // approved payment templates on this number
+
+  // Only APPROVED templates that actually carry a payment button, scoped to the
+  // agent's own WABA — a template approved on another number is Meta #132001.
+  useEffect(() => {
+    let alive = true;
+    api.templates.list()
+      .then(list => {
+        if (!alive) return;
+        setPayTemplates((list || []).filter(t =>
+          t.hasPaymentButton &&
+          String(t.status || '').toUpperCase() === 'APPROVED' &&
+          (!form.waAccountId || !t.whatsappAccountId || String(t.whatsappAccountId) === String(form.waAccountId))
+        ));
+      })
+      .catch(() => { if (alive) setPayTemplates([]); });
+    return () => { alive = false; };
+  }, [form.waAccountId]);
+
+
+  // Tools the model receives that are switched on by a toggle rather than added
+  // as a row. Listed in the Tools card so it answers "what can this agent do?"
+  // — the question people actually open it with.
+  const builtInCapabilities = [
+    { key: 'payments', label: 'Payments', icon: CreditCard, iconColor: '#0F6E56', iconBg: '#EDF6F1',
+      on: form.paymentsEnabled,
+      onDesc: 'Can raise a Razorpay link and check whether it was paid',
+      offDesc: 'Raise payment links and confirm payment' },
+    { key: 'crm', label: 'CRM writes', icon: UserCog, iconColor: '#8E24AA', iconBg: '#F3E5F5',
+      on: form.crmToolsEnabled,
+      onDesc: 'Can set the contact name, tags and custom fields',
+      offDesc: 'Save the name, tags and custom fields to the CRM' },
+    { key: 'handoff', label: 'Human handoff', icon: UserPlus, iconColor: '#B45309', iconBg: '#FEF3C7',
+      on: form.handoffEnabled,
+      onDesc: 'Can hand the chat to a team member',
+      offDesc: 'Escalate the conversation to a person' },
+    { key: 'media', label: 'Send media', icon: Images, iconColor: '#2563EB', iconBg: '#E6EEFC',
+      on: (form.mediaGroups || []).length > 0,
+      onDesc: `${(form.mediaGroups || []).length} media group(s) it can send`,
+      offDesc: 'Send pre-set files and links' },
+  ];
+
+  // Clicking a built-in row opens the control that owns it: expand Advanced
+  // settings, scroll to the anchor, and flash it so the eye lands on it.
+  const openCapabilitySetting = (key) => {
+    setAdvancedOpen(true);
+    setTimeout(() => {
+      const el = document.querySelector(`[data-cap="${key}"]`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.transition = 'background 220ms';
+      el.style.background = '#FFF6E8';
+      setTimeout(() => { el.style.background = ''; }, 1400);
+    }, 60);
+  };
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -89,6 +161,9 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
           handoffKeywords: a.handoffKeywords || '',
           closeSummaryEnabled: !!a.closeSummaryEnabled,
           closeIdleMinutes: a.closeIdleMinutes || 30,
+          paymentsEnabled: !!a.paymentsEnabled,
+          paymentConfig: { ...EMPTY_PAYMENT_CONFIG, ...(a.paymentConfig || {}) },
+          paymentTemplateId: a.paymentTemplateId ? String(a.paymentTemplateId) : '',
           triggerMode: a.triggerMode || 'any',
           triggerKeyword: a.triggerKeyword || '',
           triggerMatchType: a.triggerMatchType || 'contains',
@@ -184,6 +259,9 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
       handoffKeywords: form.handoffKeywords,
       closeSummaryEnabled: form.closeSummaryEnabled,
       closeIdleMinutes: form.closeIdleMinutes,
+      paymentsEnabled: form.paymentsEnabled,
+      paymentConfig: form.paymentConfig,
+      paymentTemplateId: form.paymentTemplateId || null,
       triggerMode: form.triggerMode,
       triggerKeyword: form.triggerKeyword,
       triggerMatchType: form.triggerMatchType,
@@ -453,7 +531,7 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
                   </div>
                 </div>
               </label>
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginTop: 14 }}>
+              <label data-cap="crm" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginTop: 14 }}>
                 <input
                   type="checkbox"
                   checked={form.crmToolsEnabled}
@@ -472,7 +550,7 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
               </label>
 
               {/* Human handoff */}
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginTop: 14 }}>
+              <label data-cap="handoff" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginTop: 14 }}>
                 <input type="checkbox" checked={form.handoffEnabled}
                   onChange={e => setForm(f => ({ ...f, handoffEnabled: e.target.checked }))}
                   style={{ width: 16, height: 16, marginTop: 2, cursor: 'pointer' }} />
@@ -543,6 +621,136 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
                   </Field>
                 </div>
               )}
+
+              {/* Payments */}
+              <label data-cap="payments" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginTop: 14 }}>
+                <input type="checkbox" checked={form.paymentsEnabled}
+                  onChange={e => setForm(f => ({ ...f, paymentsEnabled: e.target.checked }))}
+                  style={{ width: 16, height: 16, marginTop: 2, cursor: 'pointer' }} />
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', fontSize: 13, fontWeight: 600, color: C.text }}>
+                    Take payments
+                    <InfoDot text="Gives the agent two tools: raise a Razorpay payment link and send it on the chat, and check with the gateway whether it has actually been paid. The agent can only charge for a product at its listed price unless you allow a custom amount below." />
+                  </div>
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
+                    The agent can raise a real payment link and confirm when it is paid.
+                  </div>
+                </div>
+              </label>
+
+              {form.paymentsEnabled && (
+                <div style={{ marginTop: 14, marginLeft: 26 }}>
+                  <div style={{ background: '#FFF6E8', border: '1px solid #F0D08A', borderRadius: 9, padding: '10px 12px', marginBottom: 14, fontSize: 11.5, color: '#7A5510', lineHeight: 1.55 }}>
+                    This charges <strong>real money</strong> on your connected Razorpay account. The agent decides when to raise a link from the conversation — read the amount rules below before switching this on.
+                  </div>
+
+                  <Field label="What the agent may charge" info="Products-only is the safe default: the agent picks a product and the price comes from your Products page, so a customer can never talk it into a different figure.">
+                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, cursor: 'pointer', fontSize: 12.5, color: C.text }}>
+                      <input type="checkbox" checked={form.paymentConfig.allowCustomAmount}
+                        onChange={e => setForm(f => ({ ...f, paymentConfig: { ...f.paymentConfig, allowCustomAmount: e.target.checked } }))}
+                        style={{ width: 15, height: 15, marginTop: 2, cursor: 'pointer' }} />
+                      <span>
+                        Let the agent choose its own amount
+                        <span style={{ display: 'block', fontSize: 11, color: C.textMuted, marginTop: 2 }}>
+                          Off = product prices only. On = the agent may name a figure, but only inside the range below.
+                        </span>
+                      </span>
+                    </label>
+                  </Field>
+
+                  {form.paymentConfig.allowCustomAmount && (
+                    <FieldRow>
+                      <Field label="Minimum (₹)" info="The agent cannot raise a link below this.">
+                        <input type="number" min={1} value={form.paymentConfig.minAmount ?? ''}
+                          onChange={e => setForm(f => ({ ...f, paymentConfig: { ...f.paymentConfig, minAmount: e.target.value === '' ? null : Number(e.target.value) } }))}
+                          placeholder="500" style={{ ...inputStyle, maxWidth: 160 }} />
+                      </Field>
+                      <Field label="Maximum (₹) *" info="Required. An agent with no ceiling on live payment keys can be argued into any price — this is the cap that stops it.">
+                        <input type="number" min={1} value={form.paymentConfig.maxAmount ?? ''}
+                          onChange={e => setForm(f => ({ ...f, paymentConfig: { ...f.paymentConfig, maxAmount: e.target.value === '' ? null : Number(e.target.value) } }))}
+                          placeholder="10000" style={{ ...inputStyle, maxWidth: 160, borderColor: form.paymentConfig.maxAmount ? C.border : '#C4534F' }} />
+                      </Field>
+                    </FieldRow>
+                  )}
+
+                  <div style={{ marginTop: 14 }}>
+                    <Field
+                      label="Template for a quiet chat"
+                      info="WhatsApp refuses a normal message more than 24 hours after the customer last wrote. Without an approved payment template the agent simply cannot reach someone who has gone quiet — which is exactly when a payment reminder matters. Build one in Template Builder with a Payment Link button.">
+                      <SearchableSelect
+                        value={form.paymentTemplateId}
+                        onChange={v => setForm(f => ({ ...f, paymentTemplateId: v }))}
+                        placeholder={payTemplates.length ? '— None (free-form only) —' : '— No approved payment template on this number —'}
+                        options={payTemplates.map(t => ({ value: String(t.id), label: t.name, sublabel: t.language || 'en' }))}
+                      />
+                    </Field>
+                    {!form.paymentTemplateId && (
+                      <div style={{ fontSize: 11, color: '#7A5510', background: '#FFF6E8', border: '1px solid #F0D08A',
+                        borderRadius: 8, padding: '8px 10px', marginTop: 8, lineHeight: 1.5 }}>
+                        With no template, a link can only be sent while the chat is inside WhatsApp's 24-hour window.
+                        Outside it the agent will report that it could not deliver the link.
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ marginTop: 14 }}>
+                    <Field label="Link expires after (hours)" info="After this the payment link stops working and the agent would have to raise a new one.">
+                      <input type="number" min={1} max={720} value={form.paymentConfig.expiryHours}
+                        onChange={e => setForm(f => ({ ...f, paymentConfig: { ...f.paymentConfig, expiryHours: parseInt(e.target.value, 10) || 24 } }))}
+                        style={{ ...inputStyle, maxWidth: 140 }} />
+                    </Field>
+                  </div>
+
+                  <div style={{ marginTop: 14 }}>
+                    <Field label="Message when the payment arrives" info="Sent automatically the moment the gateway confirms the money, even if the customer has gone quiet. Leave blank to send nothing and let the agent handle it in conversation.">
+                      <textarea rows={2} value={form.paymentConfig.confirmText}
+                        onChange={e => setForm(f => ({ ...f, paymentConfig: { ...f.paymentConfig, confirmText: e.target.value } }))}
+                        placeholder="Payment received — thank you! You are all set."
+                        style={{ ...inputStyle, resize: 'vertical' }} />
+                    </Field>
+                  </div>
+
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginTop: 14 }}>
+                    <input type="checkbox" checked={form.paymentConfig.followUpEnabled}
+                      onChange={e => setForm(f => ({ ...f, paymentConfig: { ...f.paymentConfig, followUpEnabled: e.target.checked } }))}
+                      style={{ width: 16, height: 16, marginTop: 2, cursor: 'pointer' }} />
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', fontSize: 13, fontWeight: 600, color: C.text }}>
+                        Chase an unpaid link
+                        <InfoDot text="If the money has not arrived after the wait below, the customer is asked whether they ran into trouble, with the link re-attached. The gateway is re-checked first, so someone who has already paid is never chased." />
+                      </div>
+                      <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
+                        Ask if they hit a problem, a set number of minutes after the link goes out.
+                      </div>
+                    </div>
+                  </label>
+
+                  {form.paymentConfig.followUpEnabled && (
+                    <div style={{ marginTop: 14, marginLeft: 26 }}>
+                      <FieldRow>
+                        <Field label="Wait before asking (minutes)">
+                          <input type="number" min={1} max={1440} value={form.paymentConfig.followUpMinutes}
+                            onChange={e => setForm(f => ({ ...f, paymentConfig: { ...f.paymentConfig, followUpMinutes: parseInt(e.target.value, 10) || 15 } }))}
+                            style={{ ...inputStyle, maxWidth: 140 }} />
+                        </Field>
+                        <Field label="How many times" info="Capped at 5. Each reminder waits the same gap again.">
+                          <input type="number" min={1} max={5} value={form.paymentConfig.followUpMax}
+                            onChange={e => setForm(f => ({ ...f, paymentConfig: { ...f.paymentConfig, followUpMax: parseInt(e.target.value, 10) || 1 } }))}
+                            style={{ ...inputStyle, maxWidth: 140 }} />
+                        </Field>
+                      </FieldRow>
+                      <div style={{ marginTop: 14 }}>
+                        <Field label="Reminder message" info="The payment link is re-attached automatically, so you do not need to include it.">
+                          <textarea rows={3} value={form.paymentConfig.followUpText}
+                            onChange={e => setForm(f => ({ ...f, paymentConfig: { ...f.paymentConfig, followUpText: e.target.value } }))}
+                            placeholder="Just checking — were you able to complete the payment? If the link gave you any trouble, tell me and I will help."
+                            style={{ ...inputStyle, resize: 'vertical' }} />
+                        </Field>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -604,7 +812,7 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
         />
       </Section>
 
-      <Section title="Media" subtitle="Give the agent files it can send during a chat. Each group has a description (when to send) and one or more media; the agent decides which group fits and sends all of its files.">
+      <Section data-cap="media" title="Media" subtitle="Give the agent files it can send during a chat. Each group has a description (when to send) and one or more media; the agent decides which group fits and sends all of its files.">
         <AgentMediaGroups
           waAccountId={form.waAccountId}
           value={form.mediaGroups}
@@ -612,8 +820,12 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
         />
       </Section>
 
-      <Section title="Tools" subtitle="Connect tools the agent can call mid-conversation — e.g. Google Sheets to read or write rows. Adding a tool before the first save will save this agent as a draft automatically. More tool types are on the way.">
-        <AgentToolsList agentId={liveId} tools={tools} onChange={reloadTools} ensureAgentId={ensureSaved} />
+      <Section title="Tools" subtitle="Everything the agent can do mid-conversation. Built-in tools are switched on in Advanced settings; connected tools (Google Sheets, HTTP) are added here. Adding a tool before the first save will save this agent as a draft automatically.">
+        <AgentToolsList
+          agentId={liveId} tools={tools} onChange={reloadTools} ensureAgentId={ensureSaved}
+          capabilities={builtInCapabilities}
+          onOpenCapability={openCapabilitySetting}
+        />
       </Section>
 
 
@@ -705,9 +917,12 @@ const inputStyle = {
   boxSizing: 'border-box',
 };
 
-function Section({ title, subtitle, children, rightSlot }) {
+// `...rest` is forwarded so callers can attach a data- attribute (the Tools card
+// scrolls to a capability by one). Without the spread the attribute would be
+// silently dropped and the jump would just do nothing.
+function Section({ title, subtitle, children, rightSlot, ...rest }) {
   return (
-    <div style={{ marginBottom: 28, padding: 20, background: C.cardBg, borderRadius: 12, border: `1px solid ${C.border}` }}>
+    <div {...rest} style={{ marginBottom: 28, padding: 20, background: C.cardBg, borderRadius: 12, border: `1px solid ${C.border}` }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
           <span style={{ fontSize: 14, fontWeight: 700, color: C.text, letterSpacing: '-.01em' }}>{title}</span>

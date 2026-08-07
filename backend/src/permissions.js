@@ -13,11 +13,14 @@ const PAGES = [
   'home', 'chats', 'contacts', 'bulk-message', 'template-builder',
   'chatbot-builder', 'media-library', 'wa-links', 'pipelines', 'ai-agent-builder',
   'follow-up-sequence',
-  // Chats — additive AI Academy surfaces
-  'team-members', 'lead-forms',
+  // Chats — additive AI Academy surfaces.
+  // 'wa-links' is the route key for what the UI now calls Message Formats. The
+  // key is deliberately unchanged: renaming a page key silently drops any
+  // stored per-user override that granted it.
+  'team-members', 'lead-forms', 'projects',
   // Marketing section — Lead Sources folded into mkt-overview; Content Library,
   // Webinars and Organic/Social removed along with the ForgeSocial integration.
-  'mkt-overview', 'campaigns', 'ctwa-ads', 'conversion-api', 'clo',
+  'mkt-overview', 'campaigns', 'ctwa-ads', 'conversion-api',
   // Sales section
   // 'products' was 'courses' until the rename — no user had a stored override
   // for the old key, so nothing needed migrating.
@@ -25,6 +28,9 @@ const PAGES = [
   'sales-funnel', 'sales-log',
   // Payments — create + track Razorpay links raised from ForgeGrowth.
   'payments',
+  // Message costs — billing data. Lives in the Chats section; admin-only by
+  // default (deliberately absent from every other role's defaults below).
+  'message-costs',
   'admin-settings:general', 'admin-settings:team', 'admin-settings:tags',
   'admin-settings:category', 'admin-settings:fields',
   'admin-settings:whatsapp-accounts', 'admin-settings:ai-models',

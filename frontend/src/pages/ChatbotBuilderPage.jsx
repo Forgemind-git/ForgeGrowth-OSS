@@ -5,6 +5,8 @@ import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx';
 import AutomationBuilderView from '../components/AutomationBuilderView.jsx';
 import AutomationExecutions from '../components/AutomationExecutions.jsx';
 import { useTableSelection, SelectAllCheckbox, RowCheckbox, BulkDeleteButton, runBulkDelete } from '../components/TableSelection.jsx';
+import SortControl from '../components/SortControl.jsx';
+import { sortList, DEFAULT_SORT } from '../lib/listSort.js';
 import { api } from '../api.js';
 import { C, FONT } from '../constants.js';
 
@@ -141,7 +143,7 @@ function FolderModal({ open, mode, initialName, onClose, onSubmit }) {
   if (!open) return null;
 
   const submit = async () => {
-    if (!name.trim()) { notify('Folder name is required'); return; }
+    if (!name.trim()) { notify('Project name is required'); return; }
     setBusy(true);
     try {
       await onSubmit(name.trim());
@@ -161,11 +163,11 @@ function FolderModal({ open, mode, initialName, onClose, onSubmit }) {
     <div style={overlayStyle} onClick={onClose}>
       <div style={modalStyle} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: B.t1, margin: 0, fontFamily: FONT }}>{mode === 'rename' ? 'Rename Folder' : 'New Folder'}</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: B.t1, margin: 0, fontFamily: FONT }}>{mode === 'rename' ? 'Rename Project' : 'New Project'}</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: B.t5 }}><X size={18} /></button>
         </div>
         <div>
-          <label style={{ fontSize: 12, fontWeight: 600, color: B.t3, display: 'block', marginBottom: 5, fontFamily: FONT }}>Folder name <span style={{ color: B.red }}>*</span></label>
+          <label style={{ fontSize: 12, fontWeight: 600, color: B.t3, display: 'block', marginBottom: 5, fontFamily: FONT }}>Project name <span style={{ color: B.red }}>*</span></label>
           <input style={inpStyle} placeholder="e.g. Onboarding flows" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(); }} autoFocus />
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
@@ -209,7 +211,7 @@ function MoveMenu({ folders, currentFolderId, onPick }) {
 
   return (
     <div style={{ display: 'inline-block' }}>
-      <button ref={btnRef} title="Move to folder" onClick={toggle} style={iconBtnStyle}>
+      <button ref={btnRef} title="Move to project" onClick={toggle} style={iconBtnStyle}>
         <FolderInput size={13} />
       </button>
       {open && pos && (
@@ -227,7 +229,7 @@ function MoveMenu({ folders, currentFolderId, onPick }) {
               onMouseEnter={e => { if (currentFolderId != null) e.currentTarget.style.background = B.innerBg; }}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
-              <X size={13} color={B.t5} /> <span style={{ flex: 1 }}>No folder (root)</span>
+              <X size={13} color={B.t5} /> <span style={{ flex: 1 }}>No project</span>
               {currentFolderId == null && <Check size={13} color={B.accent} />}
             </button>
             {folders.map(f => {
@@ -246,7 +248,7 @@ function MoveMenu({ folders, currentFolderId, onPick }) {
                 </button>
               );
             })}
-            {folders.length === 0 && <div style={{ fontSize: 11, color: B.t6, padding: '6px 9px' }}>No folders yet</div>}
+            {folders.length === 0 && <div style={{ fontSize: 11, color: B.t6, padding: '6px 9px' }}>No projects yet</div>}
           </div>
         </>
       )}
@@ -256,6 +258,12 @@ function MoveMenu({ folders, currentFolderId, onPick }) {
 
 const TH = ['Name', 'Description', 'Status', 'Trigger', 'Created', 'Actions'];
 
+// Both automations and project rows come back as raw Postgres rows, so these
+// are snake_case. The table's date column is `created_at`, which is what the
+// default sort orders by — the list used to arrive in `updated_at DESC` order
+// from the API, which made the visible Created dates look shuffled.
+const AUTO_FIELDS = { created: c => c.created_at, updated: c => c.updated_at, name: c => c.name };
+
 // ─── Browser (root list + inside-a-folder view) ─────────────────────────────
 function AutomationsBrowser({
   chatbots, folders, loading, currentFolderId,
@@ -263,6 +271,7 @@ function AutomationsBrowser({
   onCreateFolder, onRenameFolder, onDeleteFolder, onOpenFolder, onExitFolder, onImport,
 }) {
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState(DEFAULT_SORT);
   const importRef = useRef(null);
   const [deleteModal, setDeleteModal] = useState({ open: false, chatbot: null });
   const [folderModal, setFolderModal] = useState({ open: false, mode: 'create', folder: null });
@@ -288,11 +297,19 @@ function AutomationsBrowser({
       : chatbots.filter(c => c.folder_id == null)
   ), [chatbots, inFolder, currentFolderId]);
 
-  const filteredAutos = useMemo(() => scopeAutos.filter(matchesAuto), [scopeAutos, q]);
+  const filteredAutos = useMemo(
+    () => sortList(scopeAutos.filter(matchesAuto), sort, AUTO_FIELDS),
+    [scopeAutos, q, sort]
+  );
   const sel = useTableSelection(filteredAutos);
 
   // Folder rows only appear at root, and live in the same table as automations.
-  const folderRows = inFolder ? [] : folders.filter(f => !q || f.name.toLowerCase().includes(q));
+  // They sort by the same key but stay above the automations — folders first is
+  // the file-manager convention this browser is built on.
+  const folderRows = useMemo(
+    () => (inFolder ? [] : sortList(folders.filter(f => !q || f.name.toLowerCase().includes(q)), sort, AUTO_FIELDS)),
+    [folders, inFolder, q, sort]
+  );
   const folderTotal = (fid) => chatbots.filter(c => String(c.folder_id ?? '') === String(fid)).length;
 
   const handleDeleteFolderClick = (folder) => {
@@ -333,8 +350,8 @@ function AutomationsBrowser({
         <td style={{ padding: '12px 14px', fontSize: 11, color: B.t6, fontFamily: FONT, whiteSpace: 'nowrap' }}>{new Date(f.created_at).toLocaleDateString()}</td>
         <td style={{ padding: '12px 14px' }}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <button onClick={(e) => { e.stopPropagation(); setFolderModal({ open: true, mode: 'rename', folder: f }); }} title="Rename folder" style={iconBtnStyle}><Pencil size={13} /></button>
-            <button onClick={(e) => { e.stopPropagation(); handleDeleteFolderClick(f); }} title="Delete folder" style={{ ...iconBtnStyle, color: B.red }}><Trash2 size={13} /></button>
+            <button onClick={(e) => { e.stopPropagation(); setFolderModal({ open: true, mode: 'rename', folder: f }); }} title="Rename project" style={iconBtnStyle}><Pencil size={13} /></button>
+            <button onClick={(e) => { e.stopPropagation(); handleDeleteFolderClick(f); }} title="Delete project" style={{ ...iconBtnStyle, color: B.red }}><Trash2 size={13} /></button>
             <ChevronRight size={16} color={B.t7} />
           </div>
         </td>
@@ -425,10 +442,10 @@ function AutomationsBrowser({
                 <div style={{ fontSize: 12.5, color: B.t5, fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6 }}>
                   <button onClick={onExitFolder} style={{ background: 'none', border: 'none', padding: 0, color: B.t5, cursor: 'pointer', fontFamily: FONT, fontSize: 12.5, fontWeight: 600 }}>Automations</button>
                   <ChevronRight size={13} />
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: B.accentDark, fontWeight: 700 }}><Folder size={13} /> {currentFolder?.name || 'Folder'}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: B.accentDark, fontWeight: 700 }}><Folder size={13} /> {currentFolder?.name || 'Project'}</span>
                 </div>
               </div>
-              <h1 style={{ fontSize: 22, fontWeight: 700, color: B.t1, margin: '8px 0 0', letterSpacing: '-.02em' }}>{currentFolder?.name || 'Folder'}</h1>
+              <h1 style={{ fontSize: 22, fontWeight: 700, color: B.t1, margin: '8px 0 0', letterSpacing: '-.02em' }}>{currentFolder?.name || 'Project'}</h1>
             </>
           ) : (
             <>
@@ -457,7 +474,7 @@ function AutomationsBrowser({
               onClick={() => setFolderModal({ open: true, mode: 'create', folder: null })}
               style={{ padding: '10px 16px', background: 'var(--c-cardBg)', color: B.t2, border: '1.5px solid #D5D5D0', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6 }}
             >
-              <FolderPlus size={16} /> New Folder
+              <FolderPlus size={16} /> New Project
             </button>
           )}
           <button
@@ -477,11 +494,12 @@ function AutomationsBrowser({
           <Search size={16} color={B.t6} />
           <input
             style={{ flex: 1, border: '1.5px solid #D5D5D0', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontFamily: FONT, background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none' }}
-            placeholder={inFolder ? 'Search in this folder...' : 'Search automations...'}
+            placeholder={inFolder ? 'Search in this project...' : 'Search automations...'}
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
         </div>
+        <SortControl value={sort} onChange={setSort} />
         {filteredAutos.length > 0 && (
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: B.t4, fontFamily: FONT, cursor: 'pointer', userSelect: 'none' }}>
             <SelectAllCheckbox sel={sel} /> Select all
@@ -505,10 +523,10 @@ function AutomationsBrowser({
         <div style={{ textAlign: 'center', padding: '60px 20px', background: B.card, border: `1px solid ${B.cardBorder}`, borderRadius: 12 }}>
           <Bot size={40} color="#ccc" style={{ marginBottom: 12 }} />
           <div style={{ fontSize: 15, fontWeight: 600, color: B.t3, marginBottom: 4, fontFamily: FONT }}>
-            {q ? 'No matches' : (inFolder ? 'No automations in this folder yet' : 'No automations yet')}
+            {q ? 'No matches' : (inFolder ? 'No automations in this project yet' : 'No automations yet')}
           </div>
           <div style={{ fontSize: 12, color: B.t6, marginBottom: 16, fontFamily: FONT }}>
-            {q ? 'Try a different search term.' : (inFolder ? 'Create one here, or move existing automations into this folder.' : 'Create your first automation, or a folder to organize them.')}
+            {q ? 'Try a different search term.' : (inFolder ? 'Create one here, or move existing automations into this project.' : 'Create your first automation, or a project to group it with its templates and agents.')}
           </div>
           {!q && (
             <button onClick={() => onAdd(currentFolderId)} style={{ ...primaryBtnStyle, display: 'inline-flex' }}>
@@ -705,7 +723,7 @@ export default function ChatbotBuilderPage({ subParts = [], navigate }) {
       await api.automationFolders.delete(folder.id);
       setFolders(prev => prev.filter(f => String(f.id) !== String(folder.id)));
     } catch (err) {
-      notify(err.message || 'Failed to delete folder');
+      notify(err.message || 'Failed to delete project');
     }
   };
 

@@ -1,0 +1,10 @@
+{
+  "//": "Forge Growth remote MCP connector. Replace YOUR-FORGE-GROWTH-HOST with your own instance's domain — that is the ONLY edit needed. Auth is OAuth: Claude registers itself and opens a browser window for you to approve, so there is no key to paste and this file never holds a secret.",
+  "//legacy": "The older key-in-URL form (https://<host>/api/mcp/http/<KEY>) still works, but it puts a long-lived credential into a URL that ends up in shell history, proxy logs and referrer headers. Prefer the OAuth URL above.",
+  "mcpServers": {
+    "forge-growth": {
+      "type": "http",
+      "url": "https://YOUR-FORGE-GROWTH-HOST/api/mcp"
+    }
+  }
+}

@@ -26,7 +26,7 @@ function rangeDates(key) {
   return { from: '', to: '' }; // all
 }
 
-export default function FunnelViewerPage({ user }) {
+export default function FunnelViewerPage({ user, tabs }) {
   const { sources } = useFunnelConfig();
   const [range, setRange] = useState('all');
   const [custom, setCustom] = useState({ from: '', to: '' });
@@ -76,6 +76,7 @@ export default function FunnelViewerPage({ user }) {
         </div>
       }
     >
+      {tabs}
       {range === 'custom' && (
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16, fontFamily: FONT, fontSize: 13, color: C.textSecondary }}>
           <span>From</span>

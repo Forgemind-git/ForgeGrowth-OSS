@@ -144,7 +144,7 @@ backend/src/
   db.js            pg Pool (accepts POSTGRES_* or DB_*; POSTGRES_* wins)
   llm/             provider adapters behind one runWithTools() contract
   engine/          automationEngine (flow blocks) · agentEngine (LLM tool loop)
-  integrations/    Meta send/media/templates, Google, CLO client
+  integrations/    Meta send/media/templates, Google
   queue/           BullMQ workers: send · media · agent runs
   routes/          HTTP surface, one file per area
   services/        logic shared by UI routes and MCP — put it here, not in a route

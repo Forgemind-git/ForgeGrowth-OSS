@@ -309,6 +309,7 @@ async function executeMessageNode(client, executionId, node, context) {
     const localId = await insertPendingRow({
       account, toNumber: context.contact_number, messageType: 'template',
       messageBody: resolvedBody || template?.body || `Template: ${template?.name}`,
+      templateId: template?.id || null, sendOrigin: 'automation',
       templateMeta: template ? {
         header_type: template.header_type || 'NONE',
         header_text: template.header_text || null,
@@ -802,6 +803,7 @@ async function executeMessageNode(client, executionId, node, context) {
       `UPDATE coexistence.automation_executions
           SET status='paused',
               awaiting_node_id=$1,
+              awaiting_kind='reply',
               paused_at=NOW(),
               expires_at=NOW() + ($2 || ' hours')::INTERVAL,
               wa_number=$3
@@ -811,6 +813,284 @@ async function executeMessageNode(client, executionId, node, context) {
     step.__pauseExecution = true;
   }
   return step;
+}
+
+/**
+ * Payment node — raise a Razorpay payment link, send it on this conversation,
+ * and (optionally) hold the flow until the money actually arrives.
+ *
+ * The link carries our lead id and request id in its Razorpay `notes`, so when
+ * the payment lands the webhook resolves it back to exactly this person and
+ * this node. That is what makes "this chat person completed the payment" a
+ * fact rather than an amount-matching guess.
+ *
+ * Output handles:
+ *   waitForPayment off → `default`
+ *   waitForPayment on  → `paid` when it settles, `unpaid` when the wait runs out
+ */
+async function executePaymentNode(client, executionId, node, context) {
+  const paymentFlow = require('../services/paymentFlow');
+  const waNumber = context.trigger_data?.wa_number || null;
+  const contactNumber = context.contact_number;
+
+  if (!waNumber || !contactNumber) {
+    return logStep(client, executionId, node, { nodeId: node.id }, { note: 'No conversation to raise a payment on.' },
+      'error', 'Payment node needs a WhatsApp conversation (business number + contact).');
+  }
+
+  // ── Amount. An automation amount was typed by an admin at build time, so a
+  //    custom figure is trusted here — unlike the agent path, where an LLM
+  //    produces it and a cap applies.
+  const amountArg = node.paymentSource === 'product' ? null : node.amount;
+  const resolved = await paymentFlow.resolveAmount({
+    courseId: node.paymentSource === 'product' ? node.courseId : null,
+    amount: amountArg != null && amountArg !== '' ? resolveVariables(String(amountArg), context) : null,
+    allowCustom: true,
+  });
+  if (resolved.error) {
+    return logStep(client, executionId, node, { nodeId: node.id }, { error: resolved.error }, 'error', resolved.error);
+  }
+
+  const kind = ['fixed', 'partial', 'open'].includes(node.paymentKind) ? node.paymentKind : 'fixed';
+  const created = await paymentFlow.createPaymentForChat({
+    waNumber,
+    contactNumber,
+    contactName: context.contact?.name || context.contact?.profile_name || null,
+    amountPaise: resolved.amountPaise,
+    courseId: resolved.product?.id || null,
+    purpose: node.purpose ? resolveVariables(node.purpose, context) : null,
+    description: node.paymentDescription ? resolveVariables(node.paymentDescription, context) : null,
+    kind,
+    minAmountPaise: kind === 'partial' ? paymentFlow.toPaise(node.minAmount) : null,
+    expiryHours: node.linkExpiryHours ? parseInt(node.linkExpiryHours, 10) : null,
+    source: 'automation',
+    automationId: context.__automationId || null,
+    executionId,
+    nodeId: node.id,
+    createdBy: 'automation',
+  });
+
+  if (created.error) {
+    return logStep(client, executionId, node,
+      { nodeId: node.id, amount: paymentFlow.toRupees(resolved.amountPaise) },
+      { error: created.error, requestId: created.requestId || null },
+      'error', created.error);
+  }
+
+  const request = created.request;
+
+  // ── Deliver the link on this thread ──────────────────────────────────────
+  // Sent even when the node was re-entered and reused an existing link: the
+  // customer may never have received the first one.
+  //
+  // `auto` (the default) sends free-form text while the 24-hour window is open
+  // and falls back to the approved template when it is shut. The operator
+  // cannot know at build time which it will be, and picking wrong is either a
+  // send WhatsApp refuses or a template message paid for unnecessarily.
+  const mode = ['text', 'template', 'auto'].includes(node.deliveryMode) ? node.deliveryMode : 'auto';
+  const messageText = node.messageText || 'Here is your payment link for {{product}} — ₹{{amount}}.';
+  const sent = await paymentFlow.deliverPaymentLink({
+    waNumber, contactNumber, request, mode,
+    text: resolveVariables(messageText, context),
+    templateId: node.paymentTemplateId || null,
+    // Body variables for the template, in {{1}},{{2}},… order. Resolved through
+    // the automation's own variable engine first so {{name}} etc. still work.
+    templateVariables: (Array.isArray(node.templateVariables) ? node.templateVariables : [])
+      .map(v => paymentFlow.fillPaymentVars(resolveVariables(String(v ?? ''), context), { request, contactName: context.contact?.name })),
+    contactName: context.contact?.name,
+  });
+
+  const output = {
+    requestId: Number(request.id),
+    reused: !!created.reused,
+    amount: paymentFlow.toRupees(request.amount_paise),
+    kind: request.kind,
+    product: request.product_label || null,
+    shortUrl: request.short_url,
+    razorpayLinkId: request.razorpay_link_id,
+    messageSent: sent.sent,
+    // Which route actually reached them — text inside the 24h window, template
+    // outside it. Surfaced so the execution log explains a template charge.
+    deliveredVia: sent.via || null,
+    messageIssue: sent.sent ? null : (sent.detail || sent.reason),
+    waiting: node.waitForPayment === true,
+  };
+
+  // A link that could not be delivered is a real failure of this node — the
+  // customer has no way to pay. Logged as an error so it is visible in the
+  // execution log rather than looking like a clean run.
+  const status = sent.sent ? 'success' : 'error';
+  const step = await logStep(client, executionId, node,
+    { amount: output.amount, kind, product: output.product },
+    output, status, sent.sent ? null : `Payment link raised but not delivered: ${output.messageIssue}`);
+
+  if (node.waitForPayment !== true) return step;
+
+  // ── Hold the flow until the money lands ──────────────────────────────────
+  const waitMinutes = Math.max(1, parseInt(node.waitMinutes || 30, 10));
+  const followUpMinutes = node.followUpEnabled ? Math.max(1, parseInt(node.followUpMinutes || 15, 10)) : null;
+
+  await paymentFlow.openWatch({
+    requestId: request.id,
+    watcherKind: 'automation',
+    executionId,
+    nodeId: node.id,
+    waNumber,
+    contactNumber,
+    followUpMinutes,
+    followUpMax: node.followUpEnabled ? Math.max(1, parseInt(node.followUpMax || 1, 10)) : 0,
+    followUpText: node.followUpText ? resolveVariables(node.followUpText, context) : null,
+    confirmText: node.confirmText ? resolveVariables(node.confirmText, context) : null,
+    expiryMinutes: waitMinutes,
+    // The reminder may fire after the 24h window shuts, so the chaser needs the
+    // same template fallback the first send had.
+    templateId: node.paymentTemplateId || null,
+  });
+
+  // ⚠ awaiting_kind='payment' is load-bearing. webhook.js resumes paused
+  // executions on the customer's next inbound message; without this marker it
+  // would consume the payment wait the moment they typed anything — and,
+  // because that path skips fresh trigger evaluation, they would also get no
+  // reply at all.
+  await client.query(
+    `UPDATE coexistence.automation_executions
+        SET status='paused',
+            awaiting_node_id=$1,
+            awaiting_kind='payment',
+            paused_at=NOW(),
+            expires_at=NOW() + ($2 || ' minutes')::INTERVAL,
+            wa_number=$3
+      WHERE id=$4`,
+    // +5 minutes of headroom: the execution row must outlive the watch, or the
+    // stale-pause sweeper would error it out moments before the payment
+    // sweeper tries to resume it.
+    [node.id, String(waitMinutes + 5), waNumber, executionId]
+  );
+  step.__pauseExecution = true;
+  return step;
+}
+
+/**
+ * Resume an execution paused at a Payment node, down the `paid` or `unpaid`
+ * branch. Called only by the payment sweeper.
+ *
+ * Deliberately separate from resumeAutomation(): that one rebuilds its context
+ * from a fresh inbound message, and there is no inbound message here. This
+ * rebuilds the same context from the stored execution + contact instead.
+ */
+async function resumePaymentExecution(executionId, { handle = 'paid', request = null, note = null, confirmNote = null } = {}) {
+  const client = await pool.connect();
+  try {
+    const { rows: claimed } = await client.query(
+      `UPDATE coexistence.automation_executions
+          SET status='running'
+        WHERE id=$1 AND status='paused' AND awaiting_kind='payment'
+       RETURNING id, automation_id, awaiting_node_id, trigger_data, contact_number, wa_number`,
+      [executionId]
+    );
+    // Deliberately no `expires_at > NOW()` guard, unlike the reply path. The
+    // watch decides when a payment wait is over; the execution row simply
+    // carries more headroom. Refusing here would strand a payment that landed
+    // in the last few minutes of the window.
+    if (claimed.length === 0) return null;
+    const execRow = claimed[0];
+
+    const { rows: botRows } = await client.query(
+      `SELECT id, name, config FROM coexistence.chatbots WHERE id = $1`, [execRow.automation_id]);
+    if (botRows.length === 0) {
+      await updateExecutionStatus(client, executionId, 'error', 'Automation no longer exists');
+      return null;
+    }
+    const config = botRows[0].config || {};
+    const nodes = config.nodes || [];
+    const edges = config.edges || [];
+
+    const waNumber = execRow.wa_number || execRow.trigger_data?.wa_number || null;
+    const context = {
+      contact_number: execRow.contact_number,
+      message_body: '',
+      message_type: 'payment',
+      trigger_type: 'payment',
+      trigger_data: { ...(execRow.trigger_data || {}), wa_number: waNumber },
+      __automationId: execRow.automation_id,
+      payment: request ? {
+        status: request.status,
+        amount: require('../services/paymentFlow').toRupees(request.amount_paise),
+        amount_paid: require('../services/paymentFlow').toRupees(request.amount_paid_paise),
+        product: request.product_label || null,
+        link: request.short_url || null,
+        request_id: Number(request.id),
+      } : null,
+    };
+
+    try {
+      const { rows: contactRows } = await client.query(
+        `SELECT name, profile_name, tags, custom_fields FROM coexistence.contacts
+          WHERE wa_number = $1 AND contact_number = $2`,
+        [waNumber, execRow.contact_number]);
+      if (contactRows.length > 0) {
+        context.contact = {
+          name: contactRows[0].name,
+          profile_name: contactRows[0].profile_name,
+          contact_number: execRow.contact_number,
+          tags: contactRows[0].tags || [],
+          custom_fields: contactRows[0].custom_fields || {},
+        };
+      }
+    } catch { /* non-fatal */ }
+
+    try {
+      const { rows: fdRows } = await client.query(`SELECT id, name FROM coexistence.contact_field_definitions`);
+      context.field_defs = fdRows;
+    } catch { context.field_defs = []; }
+
+    const pausedNode = nodes.find(n => n.id === execRow.awaiting_node_id);
+    if (!pausedNode) {
+      await updateExecutionStatus(client, executionId, 'error',
+        `Paused node ${execRow.awaiting_node_id} no longer in automation config`);
+      return null;
+    }
+
+    // Record the outcome as its own step so the execution log shows WHY the
+    // flow took the branch it did — an empty jump to the next node would be
+    // unreadable when someone is working out why a customer was not chased.
+    await logStep(client, executionId,
+      { id: `${pausedNode.id}:outcome`, type: 'payment', title: handle === 'paid' ? 'Payment received' : 'Payment not received' },
+      { branch: handle },
+      { branch: handle, payment: context.payment, note, confirmNote },
+      handle === 'paid' ? 'success' : 'skipped');
+
+    // A branch with nothing wired to it is a legitimate design ("just chase
+    // them, the flow ends here"), so this closes cleanly rather than erroring.
+    const nextEdges = edges.filter(e => e.from === pausedNode.id && e.fromHandle === handle);
+    const startNodeId = nextEdges.length > 0 ? nextEdges[0].to : null;
+    if (!startNodeId) {
+      await client.query(
+        `UPDATE coexistence.automation_executions
+            SET status='success', awaiting_node_id=NULL, awaiting_kind='reply', completed_at=NOW()
+          WHERE id=$1`, [executionId]);
+      return execRow;
+    }
+
+    console.log(`[engine] Payment resume execution=${executionId} branch=${handle} from node=${startNodeId}`);
+    const result = await walkFrom(client, executionId, nodes, edges, startNodeId, context);
+    if (!result.paused) {
+      await client.query(
+        `UPDATE coexistence.automation_executions
+            SET status='success', awaiting_node_id=NULL, awaiting_kind='reply', completed_at=NOW()
+          WHERE id=$1`, [executionId]);
+    }
+    return execRow;
+  } catch (err) {
+    console.error(`[engine] Payment resume error for execution ${executionId}:`, err.message);
+    await pool.query(
+      `UPDATE coexistence.automation_executions
+          SET status='error', awaiting_node_id=NULL, awaiting_kind='reply', error_message=$2, completed_at=NOW()
+        WHERE id=$1`, [executionId, err.message]).catch(() => {});
+    return null;
+  } finally {
+    client.release();
+  }
 }
 
 async function executeConditionNode(client, executionId, node, context) {
@@ -1746,8 +2026,17 @@ async function executeAgentNode(client, executionId, node, context) {
           const localId = await insertPendingRow({
             account, toNumber: context.contact_number, messageType: 'text', messageBody: replyText,
           });
+          // The send worker destructures { kind, accountId, to, ... } — this
+          // used to pass { account, toNumber }, so accountId arrived undefined
+          // and every AI Agent node reply threw "Account id=undefined not
+          // found" inside the catch below, which only console.errors. The node
+          // looked like it worked and the customer got nothing.
           await enqueueSend({
-            account, toNumber: context.contact_number, kind: 'text', payload: { body: replyText }, localMessageId: localId,
+            kind: 'text',
+            accountId: account.id,
+            to: String(context.contact_number).replace(/\D/g, ''),
+            localMessageId: localId,
+            payload: { body: replyText },
           });
         }
       } catch (e) {
@@ -1762,6 +2051,7 @@ async function executeAgentNode(client, executionId, node, context) {
         `UPDATE coexistence.automation_executions
             SET status='paused',
                 awaiting_node_id=$1,
+                awaiting_kind='reply',
                 paused_at=NOW(),
                 expires_at=NOW() + ($2 || ' hours')::INTERVAL,
                 wa_number=$3
@@ -1839,6 +2129,7 @@ async function sendFallbackTemplate(client, node, context, templateId) {
   const localId = await insertPendingRow({
     account, toNumber: context.contact_number, messageType: 'template',
     messageBody: tpl.body || `Template: ${tpl.name}`,
+    templateId: tpl.id, sendOrigin: 'automation',
     templateMeta: { header_type: tpl.header_type || 'NONE', header_text: tpl.header_text || null, footer: tpl.footer || null, buttons: Array.isArray(tpl.buttons) ? tpl.buttons : (tpl.buttons || []) },
   });
   await enqueueSend({
@@ -1859,6 +2150,7 @@ const NODE_HANDLERS = {
   ai_agent: executeAgentNode,
   api: executeAPINode,
   subflow: executeSubflowNode,
+  payment: executePaymentNode,
 };
 
 // ─── Graph Walker ────────────────────────────────────────────────────
@@ -1889,6 +2181,9 @@ async function executeAutomation(client, automation, context) {
     ]
   );
   const execution = rows[0];
+  // Which automation this walk belongs to. The Payment node stamps it onto the
+  // payment_requests row so a link can be traced back to the flow that raised it.
+  context.__automationId = automation.id;
 
   try {
     // Find trigger node
@@ -1961,6 +2256,14 @@ async function walkFrom(client, executionId, nodes, edges, startNodeId, context,
     } else if (node.type === 'subflow' && node.waitMode === 'handoff') {
       // "Exit & run flow" — the sub-flow was fired detached; end this flow here.
       break;
+    } else if (node.type === 'payment') {
+      // A waiting Payment node never gets here — it pauses, and the payment
+      // sweeper resumes it down `paid`/`unpaid` via resumePaymentExecution.
+      // Reaching this line means "send the link and carry on", which is the
+      // default handle. If the operator only wired a `paid` branch (a common
+      // shape) honour that, so the flow isn't silently dead-ended.
+      fromHandle = edges.some(e => e.from === currentNodeId && (!e.fromHandle || e.fromHandle === 'default'))
+        ? 'default' : 'paid';
     }
 
     const candidateEdges = edges.filter(e =>
@@ -2445,6 +2748,7 @@ module.exports = {
   markOutboundHandled,
   executeAutomation,
   resumeAutomation,
+  resumePaymentExecution,
   matchesKeyword,
   resolveVariables,
   evaluateConditions,

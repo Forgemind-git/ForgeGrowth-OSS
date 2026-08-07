@@ -961,7 +961,7 @@ router.post('/messages/send', async (req, res) => {
     const ctxId = sanitizeContextId(contextMessageId);
     const localId = await insertPendingRow({
       account, toNumber, messageType: 'text', messageBody: String(text).trim(),
-      contextMessageId: ctxId,
+      contextMessageId: ctxId, sendOrigin: 'chat_reply',
     });
 
     const trimmedText = String(text).trim();

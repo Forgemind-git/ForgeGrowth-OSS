@@ -42,14 +42,15 @@ async function resolveAccount({ accountId, fromPhoneNumber }) {
  * Insert an optimistic chat_history row that the UI shows as "sending…".
  * Returns the local message_id used so caller can correlate later updates.
  */
-async function insertPendingRow({ account, toNumber, messageType, messageBody, mediaUrl = null, mediaMime = null, templateMeta = null, contextMessageId = null }) {
+async function insertPendingRow({ account, toNumber, messageType, messageBody, mediaUrl = null, mediaMime = null, templateMeta = null, contextMessageId = null, templateId = null, sendOrigin = null }) {
   const messageId = localMessageId();
   await pool.query(
     `INSERT INTO coexistence.chat_history
        (message_id, phone_number_id, wa_number, contact_number, to_number,
         direction, message_type, message_body, raw_payload,
-        media_url, media_mime_type, status, timestamp, template_meta, context_message_id)
-     VALUES ($1,$2,$3,$4,$5,'outgoing',$6,$7,$8,$9,$10,'sending',NOW(),$11,$12)`,
+        media_url, media_mime_type, status, timestamp, template_meta, context_message_id,
+        template_id, send_origin)
+     VALUES ($1,$2,$3,$4,$5,'outgoing',$6,$7,$8,$9,$10,'sending',NOW(),$11,$12,$13,$14)`,
     [
       messageId,
       account.phoneNumberId,
@@ -63,6 +64,11 @@ async function insertPendingRow({ account, toNumber, messageType, messageBody, m
       mediaMime,
       templateMeta ? JSON.stringify(templateMeta) : null,
       contextMessageId || null,
+      // Exact cost attribution, stamped at send. Reverse-engineering it later
+      // from template_meta does not work: seven call sites write that JSONB with
+      // inconsistent shapes, so a name lookup silently misses whole surfaces.
+      templateId ? Number(templateId) : null,
+      sendOrigin || null,
     ]
   );
   return messageId;

@@ -280,16 +280,27 @@ async function applyLinkStatus(plinkEntity) {
     [plinkEntity.id, status, paid]
   );
   if (rows[0]) bus.emit('payment-request-changed', { id: Number(rows[0].id), status: rows[0].status });
+
   return rows[0] || null;
 }
 
 // ── LIST + summary ───────────────────────────────────────────────────────────
+// Sort is a WHITELIST lookup — the user's string never reaches the SQL; an
+// unknown value silently falls back to newest-first.
+const REQUEST_SORTS = {
+  newest: 'pr.created_at DESC',
+  oldest: 'pr.created_at ASC',
+  amount_desc: 'pr.amount_paise DESC NULLS LAST, pr.created_at DESC',
+  amount_asc: 'pr.amount_paise ASC NULLS LAST, pr.created_at DESC',
+};
+
 router.get('/payment-requests', requirePermission('payments'), async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
     const offset = parseInt(req.query.offset, 10) || 0;
     const { status, leadId, courseId, from, to } = req.query;
     const q = (req.query.q || '').trim();
+    const orderBy = REQUEST_SORTS[req.query.sort] || REQUEST_SORTS.newest;
 
     const params = [];
     let where = 'WHERE 1=1';
@@ -313,7 +324,7 @@ router.get('/payment-requests', requirePermission('payments'), async (req, res) 
            LEFT JOIN coexistence.courses c ON c.id = pr.course_id
            LEFT JOIN coexistence.leads   l ON l.id = pr.lead_id
            ${where}
-          ORDER BY pr.created_at DESC
+          ORDER BY ${orderBy}
           LIMIT ${limit} OFFSET ${offset}`, params),
       pool.query(`SELECT COUNT(*)::int AS total FROM coexistence.payment_requests pr ${where}`, params),
     ]);

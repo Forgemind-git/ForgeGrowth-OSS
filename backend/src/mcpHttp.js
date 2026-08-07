@@ -23,10 +23,11 @@ function baseFromReq(req) {
 function ok(data) { return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }; }
 function fail(msg) { return { content: [{ type: 'text', text: `Error: ${msg}` }], isError: true }; }
 
-// Wrap a tool: enforce capability, run, format result/error.
-function gated(capabilities, name, fn) {
+// Run a tool and format its result/error. It does NOT gate: gating is applied
+// once at registration in buildServer(), derived from the tool's own name, so a
+// handler can never be wired to the wrong switch by hand.
+function run(fn) {
   return async (args) => {
-    if (capabilities[name] !== true) return fail(`The '${name}' capability is disabled for MCP access.`);
     try { return ok(await fn(args || {})); }
     catch (err) { return fail(err.message || 'Tool failed'); }
   };
@@ -71,34 +72,48 @@ Walk this flow:
 
 Notes: an ACTIVE agent needs both aiModelId and llmModel (otherwise save status:"draft"). Only one active agent per WhatsApp number. Always confirm destructive actions (delete) first.`;
 
-// Build a fresh server scoped to one request's capabilities.
-function buildServer(capabilities) {
+// Build a fresh server scoped to one request's settings.
+//   categories   -> gates the 44 named tools (services/mcpCatalog.js)
+//   capabilities -> still scopes which API paths forgechat_request may reach
+function buildServer({ capabilities, categories }) {
   const server = new McpServer({ name: 'forgechat-agents', version: '1.0.0' });
+
+  // Gate EVERY tool by its own category, derived from the tool NAME here at
+  // registration rather than hand-typed at each call site. That is what makes
+  // drift impossible: a tool with no entry in mcpCatalog.js resolves to no
+  // category and is refused, so it can never be silently wired to the wrong
+  // switch — or to none at all, which is how list_endpoints and
+  // forgechat_request previously ended up ungated.
+  const registerRaw = server.registerTool.bind(server);
+  server.registerTool = (name, meta, handler) => registerRaw(name, meta, async (...a) => {
+    if (!mcpService.isToolAllowed(name, categories)) return fail(mcpService.toolDeniedMessage(name));
+    return handler(...a);
+  });
 
   /* discovery */
   server.registerTool('list_wa_accounts', {
     title: 'List WhatsApp accounts',
     description: 'List the WhatsApp business numbers an agent can run on. Use to ask the user which number to use. Returns id, displayName, phoneNumber, isActive, isDefault.',
     inputSchema: {},
-  }, gated(capabilities, 'discovery', () => mcpService.listWaAccounts()));
+  }, run(() => mcpService.listWaAccounts()));
 
   server.registerTool('list_models', {
     title: 'List AI models',
     description: 'List connected AI model credentials and selectable model ids. Each entry has aiModelId, provider, providerLabel, label, and models[] of {value,label}. Pass aiModelId + a models[].value (as llmModel) to create_agent.',
     inputSchema: {},
-  }, gated(capabilities, 'discovery', () => mcpService.listModels()));
+  }, run(() => mcpService.listModels()));
 
   server.registerTool('search_spreadsheets', {
     title: 'Search Google spreadsheets',
     description: 'Search the connected Google account for spreadsheets by name. Use when configuring a Google Sheets tool so the user picks a real spreadsheet. Returns { spreadsheets: [{ id, name, modifiedTime, ownerEmail }] }.',
     inputSchema: { query: z.string().optional().describe('Optional search term.') },
-  }, gated(capabilities, 'discovery', ({ query }) => mcpService.searchSpreadsheets({ q: query || '' })));
+  }, run(({ query }) => mcpService.searchSpreadsheets({ q: query || '' })));
 
   server.registerTool('list_sheet_tabs', {
     title: 'List spreadsheet tabs',
     description: 'List the tabs in a spreadsheet so the user can choose one. Returns { id, title, tabs: [{ title, rowCount, columnCount }] }.',
     inputSchema: { spreadsheetId: z.string().describe('Spreadsheet id from search_spreadsheets.') },
-  }, gated(capabilities, 'discovery', ({ spreadsheetId }) => mcpService.listSheetTabs(spreadsheetId)));
+  }, run(({ spreadsheetId }) => mcpService.listSheetTabs(spreadsheetId)));
 
   server.registerTool('read_sheet_values', {
     title: 'Read spreadsheet cell values',
@@ -109,7 +124,7 @@ function buildServer(capabilities) {
       range: z.string().optional().describe('Optional A1 range (e.g. "A1:Z1" for just headers, or "A1:Z20"). Omit to read the header + maxRows rows.'),
       maxRows: z.number().int().min(1).max(500).optional().describe('Soft cap on returned rows (default 50).'),
     },
-  }, gated(capabilities, 'discovery', ({ spreadsheetId, tab, range, maxRows }) => mcpService.readSheetValues({ spreadsheetId, tab, range, maxRows })));
+  }, run(({ spreadsheetId, tab, range, maxRows }) => mcpService.readSheetValues({ spreadsheetId, tab, range, maxRows })));
 
   server.registerTool('list_media', {
     title: 'List media library items',
@@ -118,31 +133,31 @@ function buildServer(capabilities) {
       type: z.enum(['image', 'video', 'audio', 'document']).optional(),
       name: z.string().optional().describe('Partial name search (case-insensitive). Use when the user mentions a media file by name.'),
     },
-  }, gated(capabilities, 'discovery', ({ type, name }) => mcpService.listMedia(type, name)));
+  }, run(({ type, name }) => mcpService.listMedia(type, name)));
 
   server.registerTool('list_templates', {
     title: 'List message templates',
     description: 'List WhatsApp message templates (optionally by WhatsApp account). Returns [{ id, name, language, status, category, waAccountId }]. When the user mentions a template by name, call this to find it, then call get_template to read its full content before confirming with the user.',
     inputSchema: { waAccountId: z.union([z.string(), z.number()]).optional() },
-  }, gated(capabilities, 'discovery', ({ waAccountId }) => mcpService.listTemplates(waAccountId)));
+  }, run(({ waAccountId }) => mcpService.listTemplates(waAccountId)));
 
   server.registerTool('get_template', {
     title: 'Get template content',
     description: 'Fetch the full content of a template — body text, header, footer, buttons, and variable samples. Call this after finding a template by name via list_templates, then show the content to the user (name + body + buttons) so they can confirm it is the right one before using its id in a media group or agent config.',
     inputSchema: { id: z.union([z.string(), z.number()]).describe('Template id from list_templates.') },
-  }, gated(capabilities, 'discovery', ({ id }) => mcpService.getTemplate(id)));
+  }, run(({ id }) => mcpService.getTemplate(id)));
 
   server.registerTool('list_agents', {
     title: 'List agents',
     description: 'List all existing AI agents with tool counts and last-run time.',
     inputSchema: {},
-  }, gated(capabilities, 'discovery', () => agentService.listAgents()));
+  }, run(() => agentService.listAgents()));
 
   server.registerTool('get_agent', {
     title: 'Get agent',
     description: 'Get one agent in full, including its tools[].',
     inputSchema: { id: z.union([z.string(), z.number()]) },
-  }, gated(capabilities, 'discovery', ({ id }) => agentService.getAgent(id)));
+  }, run(({ id }) => agentService.getAgent(id)));
 
   /* conversations: read + reply */
   server.registerTool('list_conversations', {
@@ -157,7 +172,7 @@ function buildServer(capabilities) {
       search: z.string().optional().describe('Filter by customer name or number (partial).'),
       limit: z.number().int().min(1).max(200).optional(),
     },
-  }, gated(capabilities, 'read_messages', ({ waNumber, search, limit }) => mcpService.listConversations({ waNumber, search, limit })));
+  }, run(({ waNumber, search, limit }) => mcpService.listConversations({ waNumber, search, limit })));
 
   server.registerTool('read_messages', {
     title: 'Read a conversation',
@@ -170,7 +185,7 @@ function buildServer(capabilities) {
       limit: z.number().int().min(1).max(200).optional().describe('Most recent N messages (default 50).'),
       before: z.string().optional().describe('ISO timestamp — only messages before this (for paging back).'),
     },
-  }, gated(capabilities, 'read_messages', ({ waNumber, contactNumber, limit, before }) => mcpService.getChatHistory({ waNumber, contactNumber, limit, before })));
+  }, run(({ waNumber, contactNumber, limit, before }) => mcpService.getChatHistory({ waNumber, contactNumber, limit, before })));
 
   server.registerTool('send_message', {
     title: 'Send a text reply',
@@ -184,7 +199,7 @@ function buildServer(capabilities) {
       toNumber: z.string().describe('The customer number to send to.'),
       text: z.string().describe('The message text.'),
     },
-  }, gated(capabilities, 'send_messages', ({ fromNumber, toNumber, text }) => mcpService.sendTextMessage({ fromNumber, toNumber, text })));
+  }, run(({ fromNumber, toNumber, text }) => mcpService.sendTextMessage({ fromNumber, toNumber, text })));
 
   server.registerTool('send_template', {
     title: 'Send an approved template',
@@ -198,7 +213,7 @@ function buildServer(capabilities) {
       templateId: z.union([z.string(), z.number()]).describe('Template id from list_templates.'),
       variables: z.array(z.string()).optional().describe('Body variable values in order ({{1}}, {{2}}, …). Omit if the template has no variables.'),
     },
-  }, gated(capabilities, 'send_messages', ({ fromNumber, toNumber, templateId, variables }) => mcpService.sendTemplateMessage({ fromNumber, toNumber, templateId, variables })));
+  }, run(({ fromNumber, toNumber, templateId, variables }) => mcpService.sendTemplateMessage({ fromNumber, toNumber, templateId, variables })));
 
   server.registerTool('send_media', {
     title: 'Send a document / image / video / audio',
@@ -220,7 +235,7 @@ function buildServer(capabilities) {
       type: z.enum(['document', 'image', 'video', 'audio']).optional().describe('Override the auto-detected media type.'),
       caption: z.string().optional().describe('Optional caption (shown with image/video/document; ignored for audio).'),
     },
-  }, gated(capabilities, 'send_messages', (args) => mcpService.sendMediaMessage(args)));
+  }, run((args) => mcpService.sendMediaMessage(args)));
 
   server.registerTool('send_interactive', {
     title: 'Send an interactive message (buttons / list)',
@@ -233,7 +248,7 @@ function buildServer(capabilities) {
       toNumber: z.string().describe('The customer number to send to.'),
       interactive: z.record(z.any()).describe('A Meta interactive object (type button or list).'),
     },
-  }, gated(capabilities, 'send_messages', ({ fromNumber, toNumber, interactive }) => mcpService.sendInteractiveMessage({ fromNumber, toNumber, interactive })));
+  }, run(({ fromNumber, toNumber, interactive }) => mcpService.sendInteractiveMessage({ fromNumber, toNumber, interactive })));
 
   /* config: media / templates / automations / wa-links / lead forms */
   server.registerTool('upload_media', {
@@ -253,7 +268,7 @@ function buildServer(capabilities) {
       name: z.string().optional().describe('Display name in the Media Library.'),
       syncToNumber: z.string().optional().describe('Business WhatsApp number to immediately sync the media to Meta for.'),
     },
-  }, gated(capabilities, 'area_broadcasts', (a) => mcpService.uploadMediaFromSource(a)));
+  }, run((a) => mcpService.uploadMediaFromSource(a)));
 
   server.registerTool('create_template', {
     title: 'Create a WhatsApp message template',
@@ -276,19 +291,19 @@ function buildServer(capabilities) {
       buttons: z.array(z.record(z.any())).optional().describe('Meta button objects (QUICK_REPLY / URL / PHONE_NUMBER / COPY_CODE).'),
       samples: z.record(z.any()).optional().describe('Example values for {{n}} variables, required by Meta for approval.'),
     },
-  }, gated(capabilities, 'area_broadcasts', (a) => mcpService.createTemplate(a)));
+  }, run((a) => mcpService.createTemplate(a)));
 
   server.registerTool('submit_template', {
     title: 'Submit a template to Meta for approval',
     description: 'Submit a DRAFT template to Meta for approval. The template must have a WhatsApp account assigned. After submitting, use sync_template to poll the approval result.',
     inputSchema: { templateId: z.union([z.string(), z.number()]).describe('Template id from create_template / list_templates.') },
-  }, gated(capabilities, 'area_broadcasts', (a) => mcpService.submitTemplate(a)));
+  }, run((a) => mcpService.submitTemplate(a)));
 
   server.registerTool('sync_template', {
     title: 'Refresh a template approval status',
     description: 'Poll Meta for a template\'s current status (APPROVED / REJECTED / SUBMITTED) and refresh it locally. Meta does not push status, so call this to check on a submitted template.',
     inputSchema: { templateId: z.union([z.string(), z.number()]).describe('Template id.') },
-  }, gated(capabilities, 'area_broadcasts', (a) => mcpService.syncTemplate(a)));
+  }, run((a) => mcpService.syncTemplate(a)));
 
   server.registerTool('create_automation', {
     title: 'Create an automation flow',
@@ -306,7 +321,7 @@ function buildServer(capabilities) {
       config: z.record(z.any()).optional().describe('Full { nodes, edges } config (alternative to passing nodes/edges separately).'),
       folderId: z.union([z.string(), z.number()]).optional(),
     },
-  }, gated(capabilities, 'area_automations', (a) => mcpService.createAutomation(a)));
+  }, run((a) => mcpService.createAutomation(a)));
 
   server.registerTool('create_wa_link', {
     title: 'Create a click-to-chat link',
@@ -316,7 +331,7 @@ function buildServer(capabilities) {
       accountId: z.union([z.string(), z.number()]).describe('WhatsApp account id (from list_wa_accounts) — its phone number is used.'),
       message: z.string().optional().describe('Pre-filled message text the user starts the chat with.'),
     },
-  }, gated(capabilities, 'area_broadcasts', (a) => mcpService.createWaLink(a)));
+  }, run((a) => mcpService.createWaLink(a)));
 
   server.registerTool('create_lead_form', {
     title: 'Create a form',
@@ -335,13 +350,13 @@ function buildServer(capabilities) {
       defaultSource: z.string().optional().describe('Lead source to tag submissions with.'),
       publish: z.boolean().optional().describe('Publish immediately (default false = draft).'),
     },
-  }, gated(capabilities, 'area_leadforms', (a) => mcpService.createLeadForm(a)));
+  }, run((a) => mcpService.createLeadForm(a)));
 
   server.registerTool('list_lead_forms', {
     title: 'List lead forms',
     description: 'List all lead-capture forms with their status, slug and submission counts.',
     inputSchema: {},
-  }, gated(capabilities, 'area_leadforms', () => mcpService.listLeadForms()));
+  }, run(() => mcpService.listLeadForms()));
 
   server.registerTool('list_form_submissions', {
     title: 'List lead-form submissions',
@@ -351,7 +366,33 @@ function buildServer(capabilities) {
       page: z.number().int().min(1).optional(),
       pageSize: z.number().int().min(1).max(200).optional(),
     },
-  }, gated(capabilities, 'area_leadforms', (a) => mcpService.listFormSubmissions(a)));
+  }, run((a) => mcpService.listFormSubmissions(a)));
+
+  /* projects — the campaign folder something is filed under */
+  server.registerTool('list_projects', {
+    title: 'List projects',
+    description:
+      'List the campaign projects (folders) in this workspace, each with a count of the templates, automations, AI agents, follow-up sequences and forms filed under it. ' +
+      'Pass projectId to open one project and get the actual items inside it. Use this to resolve a project NAME the user said into the id move_to_project needs — never guess an id.',
+    inputSchema: {
+      projectId: z.union([z.string(), z.number()]).optional().describe('Open one project and list what it holds. Omit to list every project.'),
+    },
+  }, run((a) => mcpService.listProjects(a)));
+
+  server.registerTool('move_to_project', {
+    title: 'Move items into a project',
+    description:
+      'File one or more items into a campaign project, or take them out of one. ' +
+      "kind is 'template' | 'automation' | 'agent' | 'followup' | 'form' ('form' = a lead-capture form from list_lead_forms). " +
+      'ids[] are that kind\'s ids — resolve them first with list_lead_forms / list_templates / list_agents / forgechat_request, never guess. ' +
+      'Pass projectId to file them there (get it from list_projects), or projectId null to unfile them. ' +
+      'This ONLY changes which folder the items are listed under: nothing is created, edited, published, activated or sent, and no customer is contacted.',
+    inputSchema: {
+      kind: z.enum(['template', 'automation', 'agent', 'followup', 'form']).describe('What kind of item is being moved.'),
+      ids: z.array(z.union([z.string(), z.number()])).describe('Ids of the items to move.'),
+      projectId: z.union([z.string(), z.number()]).nullable().optional().describe('Target project id from list_projects. null (or omitted) removes them from their current project.'),
+    },
+  }, run((a) => mcpService.moveToProject(a)));
 
   /* AI Academy funnel: leads / marketing / BDA */
   server.registerTool('list_leads', {
@@ -363,7 +404,7 @@ function buildServer(capabilities) {
       search: z.string().optional().describe('Partial match on name, WhatsApp number, or email.'),
       limit: z.number().int().min(1).max(500).optional(),
     },
-  }, gated(capabilities, 'area_leads', ({ stage, search, limit, view }) => mcpService.listLeads({ stage, search, limit, view })));
+  }, run(({ stage, search, limit, view }) => mcpService.listLeads({ stage, search, limit, view })));
 
   server.registerTool('move_lead_stage', {
     title: 'Move a lead to a new funnel stage',
@@ -372,19 +413,19 @@ function buildServer(capabilities) {
       leadId: z.union([z.string(), z.number()]).describe('Lead id (from list_leads).'),
       stage: z.string().describe('Target funnel stage key (configurable — see GET /funnel/config).'),
     },
-  }, gated(capabilities, 'area_leads', ({ leadId, stage }) => mcpService.moveLeadStage(leadId, stage)));
+  }, run(({ leadId, stage }) => mcpService.moveLeadStage(leadId, stage)));
 
   server.registerTool('get_campaign_performance', {
     title: 'Get ad campaign performance',
     description: 'Get spend/leads/cost-per-lead for one campaign (by campaignId) or the most recent 100 campaigns if omitted. Covers both manually-entered and Meta-Ads-synced campaigns.',
     inputSchema: { campaignId: z.union([z.string(), z.number()]).optional().describe('Omit to list recent campaigns.') },
-  }, gated(capabilities, 'area_marketing', ({ campaignId }) => mcpService.getCampaignPerformance({ campaignId })));
+  }, run(({ campaignId }) => mcpService.getCampaignPerformance({ campaignId })));
 
   server.registerTool('list_webinars', {
     title: 'List webinar batches',
     description: 'List webinar/batch schedule with registrations, attendance %, and hot-lead counts.',
     inputSchema: {},
-  }, gated(capabilities, 'area_marketing', () => mcpService.listWebinars()));
+  }, run(() => mcpService.listWebinars()));
 
   server.registerTool('get_bda_activity', {
     title: 'Get BDA leaderboard + activity',
@@ -393,20 +434,20 @@ function buildServer(capabilities) {
       bdaId: z.union([z.string(), z.number()]).optional().describe('Team member id (from a leaderboard row) to scope activity to just that BDA.'),
       limit: z.number().int().min(1).max(500).optional(),
     },
-  }, gated(capabilities, 'area_bda', ({ bdaId, limit }) => mcpService.getBdaActivity({ bdaId, limit })));
+  }, run(({ bdaId, limit }) => mcpService.getBdaActivity({ bdaId, limit })));
 
   /* courses + payments */
   server.registerTool('list_products', {
     title: 'List products',
     description: 'List the product catalog — a product is anything sold: a course, a consulting engagement, a template pack, a webinar. Each carries its optional default (headline) price plus its payment links with price, paid count and revenue. Amounts are in rupees; defaultPriceRupees is null when no default price is set.',
     inputSchema: {},
-  }, gated(capabilities, 'area_courses', () => mcpService.listCourses()));
+  }, run(() => mcpService.listCourses()));
 
   server.registerTool('get_product_revenue', {
     title: 'Get product revenue',
     description: 'Revenue, paid count and failed count per product, plus payments that matched no product, plus the overall total. Amounts are in rupees. Use this for "how much has product X made" / "which product sells best".',
     inputSchema: {},
-  }, gated(capabilities, 'area_courses', () => mcpService.getCourseRevenue()));
+  }, run(() => mcpService.getCourseRevenue()));
 
   server.registerTool('list_payments', {
     title: 'List payments',
@@ -417,7 +458,7 @@ function buildServer(capabilities) {
       search: z.string().optional().describe('Partial match on payer email, phone, order id, or matched lead/contact name.'),
       limit: z.number().int().min(1).max(200).optional().describe('Default 50.'),
     },
-  }, gated(capabilities, 'area_payments', ({ state, courseId, search, limit }) => mcpService.listPayments({ state, courseId, search, limit })));
+  }, run(({ state, courseId, search, limit }) => mcpService.listPayments({ state, courseId, search, limit })));
 
   /* full access: generic proxy + catalog + bulk broadcast */
   server.registerTool('list_endpoints', {
@@ -466,7 +507,7 @@ function buildServer(capabilities) {
         }).passthrough(),
       ])).min(1).describe('The recipients from the uploaded sheet.'),
     },
-  }, gated(capabilities, 'area_broadcasts', (a) => mcpService.sendBulkMessage(a)));
+  }, run((a) => mcpService.sendBulkMessage(a)));
 
   /* mutations */
   server.registerTool('create_agent', {
@@ -492,7 +533,7 @@ function buildServer(capabilities) {
       triggerSessionMinutes: z.number().int().min(1).max(1440).optional(),
       mediaGroups: z.array(mediaGroupSchema).optional(),
     },
-  }, gated(capabilities, 'create_agent', (a) => agentService.createAgent(a)));
+  }, run((a) => agentService.createAgent(a)));
 
   server.registerTool('update_agent', {
     title: 'Update agent',
@@ -517,7 +558,7 @@ function buildServer(capabilities) {
       triggerSessionMinutes: z.number().int().min(1).max(1440).optional(),
       mediaGroups: z.array(mediaGroupSchema).optional(),
     },
-  }, gated(capabilities, 'update_agent', ({ id, ...patch }) => agentService.updateAgent(id, patch)));
+  }, run(({ id, ...patch }) => agentService.updateAgent(id, patch)));
 
   server.registerTool('add_google_sheets_tool', {
     title: 'Add Google Sheets tool',
@@ -529,7 +570,7 @@ function buildServer(capabilities) {
       sheetName: z.string(),
       ops: z.array(z.enum(['read', 'append', 'update', 'upsert'])).min(1),
     },
-  }, gated(capabilities, 'manage_tools', ({ agentId, spreadsheetId, spreadsheetName, sheetName, ops }) =>
+  }, run(({ agentId, spreadsheetId, spreadsheetName, sheetName, ops }) =>
     agentService.addTool(agentId, {
       toolType: 'google_sheets',
       config: { spreadsheet_id: spreadsheetId, spreadsheet_name: spreadsheetName || null, sheet_name: sheetName, ops },
@@ -558,7 +599,7 @@ function buildServer(capabilities) {
       })).optional().describe('Values the AI fills when calling the tool.'),
       timeoutMs: z.number().int().min(1000).max(30000).optional(),
     },
-  }, gated(capabilities, 'manage_tools', ({ agentId, label, description, method, url, headers, params, timeoutMs }) =>
+  }, run(({ agentId, label, description, method, url, headers, params, timeoutMs }) =>
     agentService.addTool(agentId, {
       toolType: 'http_request',
       config: { label, description, method, url, headers: headers || [], params: params || [], timeout_ms: timeoutMs || 10000 },
@@ -573,7 +614,7 @@ function buildServer(capabilities) {
       config: z.record(z.any()),
       isEnabled: z.boolean().optional(),
     },
-  }, gated(capabilities, 'manage_tools', ({ agentId, toolType, config, isEnabled }) =>
+  }, run(({ agentId, toolType, config, isEnabled }) =>
     agentService.addTool(agentId, { toolType, config, isEnabled })));
 
   server.registerTool('update_tool', {
@@ -585,20 +626,20 @@ function buildServer(capabilities) {
       config: z.record(z.any()).optional(),
       isEnabled: z.boolean().optional(),
     },
-  }, gated(capabilities, 'manage_tools', ({ agentId, toolId, config, isEnabled }) =>
+  }, run(({ agentId, toolId, config, isEnabled }) =>
     agentService.updateTool(agentId, toolId, { config, isEnabled })));
 
   server.registerTool('delete_tool', {
     title: 'Delete tool',
     description: 'Remove a tool from an agent. Confirm with the user first.',
     inputSchema: { agentId: z.union([z.string(), z.number()]), toolId: z.union([z.string(), z.number()]) },
-  }, gated(capabilities, 'delete', ({ agentId, toolId }) => agentService.deleteTool(agentId, toolId)));
+  }, run(({ agentId, toolId }) => agentService.deleteTool(agentId, toolId)));
 
   server.registerTool('delete_agent', {
     title: 'Delete agent',
     description: 'Delete an agent entirely. Destructive — confirm with the user first.',
     inputSchema: { id: z.union([z.string(), z.number()]) },
-  }, gated(capabilities, 'delete', ({ id }) => agentService.deleteAgent(id)));
+  }, run(({ id }) => agentService.deleteAgent(id)));
 
   /* prompt */
   server.registerPrompt('create-forgechat-agent', {
@@ -635,7 +676,7 @@ async function mcpHttpHandler(req, res) {
   const auth = req.headers.authorization || '';
   const bearer = auth.startsWith('Bearer ') ? auth.slice(7).trim() : null;
 
-  let capabilities;
+  let capabilities, categories;
 
   if (bearer) {
     const { verifyAccessToken, resourceUrl } = require('./routes/mcpOAuth');
@@ -669,10 +710,10 @@ async function mcpHttpHandler(req, res) {
         jsonrpc: '2.0', error: { code: -32001, message: 'MCP access is turned off.' }, id: null,
       });
     }
-    capabilities = settings.capabilities || {};
+    ({ capabilities, categories } = settings);
   } else {
     try {
-      ({ capabilities } = await mcpService.validateKey(req.params.key));
+      ({ capabilities, categories } = await mcpService.validateKey(req.params.key));
     } catch (err) {
       // No key in the path AND no bearer → this is a connector probing for
       // OAuth. Answer with the challenge so it can discover the AS, rather
@@ -690,7 +731,7 @@ async function mcpHttpHandler(req, res) {
     }
   }
 
-  const server = buildServer(capabilities);
+  const server = buildServer({ capabilities, categories });
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   res.on('close', () => {
     transport.close().catch(() => {});

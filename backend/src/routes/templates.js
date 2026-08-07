@@ -193,6 +193,8 @@ router.get('/templates', async (req, res) => {
             t.quality_score, t.rejection_reason, t.previous_category, t.last_synced_at,
             t.template_type, t.template_group_key,
             t.created_at, t.updated_at,
+            t.project_id AS "projectId",
+            p.name AS "projectName",
             t.whatsapp_account_id AS "whatsappAccountId",
             wa.display_name AS "whatsappAccountName",
             wa.display_phone_number AS "whatsappAccountPhone",
@@ -202,11 +204,16 @@ router.get('/templates', async (req, res) => {
              WHERE b.template_id = t.id AND bl.action = 'BROADCAST')::int AS "sendCount"
      FROM coexistence.message_templates t
      LEFT JOIN coexistence.whatsapp_accounts wa ON wa.id = t.whatsapp_account_id
+     LEFT JOIN coexistence.projects p ON p.id = t.project_id
      ${whereSql}
      ORDER BY t.updated_at DESC`,
     params
   );
-  res.json(rows);
+  // Whether the template carries a payment-link button is DERIVED from its
+  // stored buttons by the one function that owns that rule — never restated on
+  // a column, which would drift the moment someone edited the button.
+  const { templateHasPaymentButton } = require('../services/paymentFlow');
+  res.json(rows.map(r => ({ ...r, hasPaymentButton: templateHasPaymentButton(r) })));
 });
 
 // Self-imposed cap: max 2 edits in any rolling 24h window for APPROVED templates.
@@ -246,6 +253,8 @@ router.get('/templates/:id', async (req, res) => {
             t.quality_score, t.rejection_reason, t.previous_category, t.last_synced_at,
             t.template_type, t.template_group_key, t.carousel_cards,
             t.created_at, t.updated_at,
+            t.project_id AS "projectId",
+            p.name AS "projectName",
             t.whatsapp_account_id AS "whatsappAccountId",
             wa.display_name AS "whatsappAccountName",
             wa.display_phone_number AS "whatsappAccountPhone",
@@ -255,6 +264,7 @@ router.get('/templates/:id', async (req, res) => {
              WHERE b.template_id = t.id AND bl.action = 'BROADCAST')::int AS "sendCount"
      FROM coexistence.message_templates t
      LEFT JOIN coexistence.whatsapp_accounts wa ON wa.id = t.whatsapp_account_id
+     LEFT JOIN coexistence.projects p ON p.id = t.project_id
      WHERE t.id = $1`,
     [req.params.id]
   );
@@ -1157,6 +1167,7 @@ router.post('/templates/:id/test-send', async (req, res) => {
 
     const localId = await insertPendingRow({
       account, toNumber: to, messageType: 'template', messageBody: tpl.body || `Template: ${tpl.name}`,
+      templateId: tpl.id, sendOrigin: 'template_test',
     });
     await enqueueSend({
       kind: 'template',

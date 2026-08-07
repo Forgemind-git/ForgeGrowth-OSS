@@ -1,19 +1,35 @@
-import { Bot, MessageSquare, Edit3, Plus } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Bot, MessageSquare, Edit3, Plus, FolderKanban } from 'lucide-react';
 import { C, FONT, MONO } from '../../constants.js';
 import { PROVIDER_LABELS } from './modelCatalog.js';
+import SortControl from '../SortControl.jsx';
+import { sortList, DEFAULT_SORT } from '../../lib/listSort.js';
+
+// The agents endpoint returns camelCase, unlike the raw rows the Automations
+// and Templates lists get — hence explicit accessors rather than a shared key.
+const AGENT_FIELDS = { created: a => a.createdAt, updated: a => a.updatedAt, name: a => a.name };
 
 /**
  * Read-only agent list. Each row: name + description + provider/model + bound
  * WA account + active status. Edit jumps into AgentEditor.
+ *
+ * Sort state lives here rather than on the page because the control belongs to
+ * the list view only — the page also renders the editor.
  */
 export default function AgentList({ agents, waAccounts, onEdit, onCreate }) {
+  const [sort, setSort] = useState(DEFAULT_SORT);
+  const sorted = useMemo(() => sortList(agents, sort, AGENT_FIELDS), [agents, sort]);
+
   if (agents.length === 0) {
     return <EmptyState onCreate={onCreate} />;
   }
   return (
     <div style={{ padding: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+        <SortControl value={sort} onChange={setSort} />
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {agents.map(a => (
+        {sorted.map(a => (
           <Row key={a.id} agent={a} waAccounts={waAccounts} onEdit={() => onEdit(a.id)} />
         ))}
       </div>
@@ -71,7 +87,16 @@ function Row({ agent, waAccounts, onEdit }) {
           {wa && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <MessageSquare size={11} /> {wa.displayName}
           </span>}
+          {/* Which campaign this agent belongs to. Filing happens on the
+              Projects page — shown here so the grouping is visible where
+              people browse agents. */}
+          {agent.projectName && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <FolderKanban size={11} /> {agent.projectName}
+          </span>}
           {agent.lastRunAt && <span>· last run {formatRelative(agent.lastRunAt)}</span>}
+          {/* Shown because the list sorts by it — a sort key the reader cannot
+              see makes the ordering look arbitrary. */}
+          {agent.createdAt && <span>· created {formatDate(agent.createdAt)}</span>}
         </div>
       </div>
 
@@ -144,6 +169,13 @@ function EmptyState({ onCreate }) {
       </button>
     </div>
   );
+}
+
+function formatDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function formatRelative(iso) {

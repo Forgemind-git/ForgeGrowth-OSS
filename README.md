@@ -149,7 +149,7 @@ token.
     │ (spend, creatives)     │ (ctwa_clid, ad id) │ stages      │ cursor        │ (webhook + pull)
     ▼                        ▼                    ▼             ▼               ▼
  campaigns/          ctwa_referrals          leads +        funnel tags     razorpay_events
- campaign_ads                                funnel_stages  + CLO events    razorpay_payments
+ campaign_ads                                funnel_stages                  razorpay_payments
 ```
 
 Every arrow is real data rather than a diagram of intent. Because Meta puts the click id on the
@@ -167,9 +167,6 @@ no further calls to Meta.
   promoted out of the raw webhook payload into its own table, giving per-ad CPL and ROAS, a
   placement breakdown, and a drill-in showing the exact creative each person saw plus a link
   straight into their chat thread.
-- **Lead Optimisation (CLO)** — for Facebook/Instagram Lead Ads (Instant Forms), sends down-funnel
-  stage data back to Meta so delivery optimises toward leads that become customers rather than
-  leads that merely fill a form. Ships inert, with a readiness report explaining what is missing.
 - **Conversion API** — *not shipped in this release.* The tab is present and marked Coming Soon.
 
 ### Sales
@@ -288,7 +285,7 @@ Meta WhatsApp Cloud API
   running backend, so a schema slightly ahead is harmless; code ahead of its schema throws on the
   first request that touches the missing column.
 - **Stage changes are observed, not hooked.** Eight code paths write `leads.stage`, several in raw
-  SQL. Downstream consumers (funnel tags, CLO) walk the append-only `lead_events` log with a cursor
+  SQL. Downstream consumers (funnel tags, follow-up sequences) walk the append-only `lead_events` log with a cursor
   instead, so a new write path is covered automatically. Extend that pattern rather than adding a
   ninth hook.
 
@@ -302,7 +299,7 @@ backend/
     db.js                 pg Pool
     llm/                  provider adapters (anthropic, openai) behind one interface
     engine/               automation engine + agent engine (tool loop)
-    integrations/         Meta send/media/templates, Google, CLO client
+    integrations/         Meta send/media/templates, Google
     queue/                BullMQ workers
     routes/               the HTTP surface, one file per area
     services/             shared logic used by both the UI routes and MCP
