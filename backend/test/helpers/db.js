@@ -31,14 +31,26 @@ const SEED = `__itest_${entry}__`;
 let probed = false;
 let up = false;
 
+// ⚠ REQUIRE_DB=1 turns "no database" from a skip into a hard failure.
+//
+// Skipping is right on a laptop and wrong in CI: a workflow that runs `npm test`
+// without a Postgres service reports every DB-backed suite as skipped and the
+// job goes green, so the pipeline certifies a build that was never tested. The
+// switch is opt-in, so nothing changes for a contributor running tests locally.
 async function probe() {
   if (probed) return up;
   probed = true;
   try {
     await pool.query('SELECT 1');
     up = true;
-  } catch {
+  } catch (err) {
     up = false;
+    if (process.env.REQUIRE_DB === '1') {
+      throw new Error(
+        `REQUIRE_DB=1 but no database is reachable (${err.message}). ` +
+        'CI must not report skipped integration suites as a pass.'
+      );
+    }
   }
   return up;
 }

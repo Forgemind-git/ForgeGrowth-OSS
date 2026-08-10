@@ -971,11 +971,6 @@ router.post('/templates/bulk-submit', async (req, res) => {
     const results = [];
     for (const id of ids) {
       try {
-        const fakeReq = { params: { id }, body: {} };
-        const fakeRes = { _status: 200, _body: null,
-          status(c) { this._status = c; return this; },
-          json(b) { this._body = b; return this; },
-        };
         // Re-invoke the existing /:id/submit handler logic inline by calling it
         await new Promise((resolve) => {
           submitOneInline(id).then(out => {

@@ -11,7 +11,7 @@ const { uploadMedia } = require('../integrations/metaSend');
 const { markAccountHealth, classifyMetaError } = require('../services/accountHealth');
 const minio = require('../util/minioClient');
 const { syncMediaToAccount } = require('./mediaLibrary');
-const { userWaNumbers, assertWaAccess, assertContactAccess } = require('../middleware/access');
+const { assertWaAccess, assertContactAccess } = require('../middleware/access');
 const { isAdmin } = require('../permissions');
 const bus = require('../events');
 const XLSX = require('xlsx');
@@ -134,7 +134,6 @@ function classifyChatMediaKind(mime) {
 // no explicit timeRange is requested. Callers can still pass a narrower
 // timeRange (1h/6h/24h/7d/14d/30d) to scope a query; absence = show everything.
 const DEFAULT_DATA_WINDOW = "INTERVAL '100 years'";
-const ALERTABLE_TYPES = "('text', 'audio', 'video', 'image', 'document', 'sticker', 'location', 'contacts')";
 
 function timeRangeToInterval(range) {
   const map = {

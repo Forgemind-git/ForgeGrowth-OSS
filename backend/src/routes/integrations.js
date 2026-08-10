@@ -16,7 +16,6 @@ const pool = require('../db');
 const { encrypt, decrypt } = require('../util/crypto');
 const { adminOnly } = require('../middleware/access');
 const {
-  PROVIDER_SCOPES,
   PROVIDER_LABELS,
   getGoogleOAuthCredentials,
   buildAuthUrl,

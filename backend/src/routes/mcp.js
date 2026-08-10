@@ -183,7 +183,6 @@ adminRouter.get('/mcp/plugin.zip', adminOnly, (req, res) => {
         error: 'The plugin files are not available on this server. Mount the forge-growth-plugin directory at ' + PLUGIN_DIR + ' and try again.',
       });
     }
-    const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
     const host = req.headers['x-forwarded-host'] || req.headers.host || process.env.FORGEGROWTH_DOMAIN || '';
     const files = collectPluginFiles(PLUGIN_DIR);
     if (!files.length) return res.status(404).json({ error: 'No plugin files found to package.' });

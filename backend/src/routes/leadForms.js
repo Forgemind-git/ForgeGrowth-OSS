@@ -69,7 +69,6 @@ const FORM_TYPES = ['link', 'whatsapp'];
 // which owns the emptiness and display rules for both.
 const FIELD_TYPES = ['text', 'textarea', 'email', 'phone', 'number', 'date', 'dropdown', 'radio', 'checkbox', 'boolean', 'rating', 'section'];
 const MAPS_TO = ['name', 'email', 'phone', 'age', 'profession', 'pincode', 'city', 'source'];
-const LEAD_COL = { name: 'name', email: 'email', phone: 'whatsapp_number', age: 'age', profession: 'profession', pincode: 'pincode', city: 'city', source: 'source' };
 
 // ── self-healing table bootstrap (mirror of migration 066) ────────────────────
 async function ensureLeadFormTables() {

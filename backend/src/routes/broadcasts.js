@@ -422,8 +422,6 @@ async function getBroadcastWithLogs(id) {
 router.get('/broadcasts', async (req, res) => {
   try {
     const { status } = req.query;
-    const params = [];
-    const conditions = [];
 
     const { rows } = await pool.query(
       `WITH base AS (

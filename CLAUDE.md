@@ -82,8 +82,8 @@ downloads) goes on a queue rather than running inline.
 
 ### Phone numbers are digits-only
 
-Normalised on insert by `normalizePhone()` in `routes/webhook.js`. `+91…` and `91…` must not become
-two chat threads.
+Normalised on insert by `normalizePhone()` in `services/metaPayload.js`. `+91…` and `91…` must not
+become two chat threads.
 
 ### Capabilities are global, not per-token
 
@@ -114,9 +114,22 @@ receives".
 ```bash
 ./scripts/install.sh          # full stack from nothing; safe to re-run
 ./scripts/migrate.sh          # apply migrations
-cd backend && npm test        # node:test; DB-backed tests skip without a database
-docker compose logs -f backend
+cd backend  && npm test       # node:test; DB-backed tests skip without a database
+cd backend  && npm run lint   # eslint, zero-problem bar
+cd frontend && npm run test:unit
+cd frontend && npm run lint
+docker compose logs -f frontend
 ```
+
+**A green `npm test` without a database means less than it looks like.** 92 of the 255 backend tests
+are DB-backed and skip when Postgres is unreachable. CI sets `REQUIRE_DB=1`, which turns that skip
+into a failure — set it locally too when you want the real answer.
+
+Linting is scoped to the class of mistake that reaches production and only then throws: an
+identifier that does not exist, a duplicated object key, an unreachable branch. It is not a
+formatter, and adding formatting rules would produce a reformat-the-world diff that hides real
+changes. `frontend/eslint.config.mjs` documents the one rule that is deliberately off and what
+turning it on would involve.
 
 - **Scope changes tightly.** When fixing one thing, do not restyle adjacent components in the same
   diff.
@@ -148,6 +161,8 @@ backend/src/
   queue/           BullMQ workers: send · media · agent runs
   routes/          HTTP surface, one file per area
   services/        logic shared by UI routes and MCP — put it here, not in a route
+    metaPayload.js   raw Meta webhook payload → message records (pure; the
+                     ingestion contract, covered by test/metaPayload.unit.test.js)
 frontend/src/
   api.js           the only place fetch is called
   components/      chat UI, automation builder, agent editor

@@ -627,7 +627,7 @@ router.put('/deals/:id/move', async (req, res) => {
       order = ord[0].next;
     }
 
-    const { rows } = await pool.query(
+    await pool.query(
       `UPDATE coexistence.deals
           SET stage_id = $1,
               status = $2,

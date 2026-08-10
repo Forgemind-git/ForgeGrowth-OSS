@@ -2,7 +2,6 @@
 // object. We use minio's native node client to avoid pulling in aws-sdk.
 
 const { Client } = require('minio');
-const { Readable } = require('stream');
 
 const MINIO_ENDPOINT = process.env.MINIO_ENDPOINT || 'minio';
 const MINIO_PORT = parseInt(process.env.MINIO_PORT || '9000', 10);

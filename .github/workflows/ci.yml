@@ -8,7 +8,7 @@ on:
 
 jobs:
   backend:
-    name: Backend (install + syntax check)
+    name: Backend (lint + syntax check)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,8 +18,9 @@ jobs:
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
       - name: Install
+        # Not --omit=dev: eslint is a devDependency.
         working-directory: backend
-        run: npm ci --omit=dev
+        run: npm ci
       - name: Syntax-check every backend source file
         working-directory: backend
         run: |
@@ -28,9 +29,83 @@ jobs:
             node --check "$f" || { echo "::error file=$f::Syntax error"; fail=1; }
           done
           exit $fail
+      - name: Lint
+        # Catches what --check cannot: an identifier that does not exist, a
+        # duplicated object key, a branch after a return. See eslint.config.cjs.
+        working-directory: backend
+        run: npm run lint
+
+  backend-tests:
+    name: Backend (tests against a real Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      - name: Install
+        working-directory: backend
+        run: npm ci
+
+      # The suites talk to a real database on purpose — the thing worth testing
+      # in a route file is its SQL, and a mocked pool would only assert that we
+      # wrote the query we wrote. So the schema has to exist first.
+      - name: Prepare the schema
+        env:
+          PGPASSWORD: ci
+        run: |
+          psql -h localhost -U postgres -d ci <<'SQL'
+            DO $$ BEGIN
+              CREATE ROLE anon NOLOGIN;
+              EXCEPTION WHEN duplicate_object THEN NULL;
+            END $$;
+            DO $$ BEGIN
+              CREATE ROLE authenticated NOLOGIN;
+              EXCEPTION WHEN duplicate_object THEN NULL;
+            END $$;
+            DO $$ BEGIN
+              CREATE ROLE service_role NOLOGIN BYPASSRLS;
+              EXCEPTION WHEN duplicate_object THEN NULL;
+            END $$;
+            CREATE SCHEMA IF NOT EXISTS coexistence;
+          SQL
+          for f in $(ls supabase/migrations/*.sql | sort); do
+            psql -h localhost -U postgres -d ci -v ON_ERROR_STOP=1 -q -f "$f" \
+              || { echo "::error file=$f::Migration failed"; exit 1; }
+          done
+
+      - name: Test
+        working-directory: backend
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_DB: ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci
+          # ⚠ Without this the DB-backed suites SKIP when the database is
+          # unreachable and the job still goes green — CI would then certify a
+          # build whose integration tests never ran. See test/helpers/db.js.
+          REQUIRE_DB: '1'
+          # Required by util/crypto.js. A throwaway value: nothing in CI is
+          # decrypted afterwards, and a fixed key in a public repo is a finding.
+          FORGECRM_ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+        run: npm test
 
   frontend:
-    name: Frontend (build)
+    name: Frontend (lint + unit tests + build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -42,9 +117,27 @@ jobs:
       - name: Install
         working-directory: frontend
         run: npm ci
+
+      # Before the build, not after: `vite build` neither type-checks nor
+      # resolves identifiers, so an undefined variable inside a component
+      # compiles cleanly, ships, and throws only when a user opens that view.
+      # The build stays green while the page is blank.
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Unit tests
+        working-directory: frontend
+        run: npm run test:unit
+
       - name: Build
         working-directory: frontend
         run: npm run build
+
+      # Not run here: `npm run test:e2e`. Playwright needs the full stack —
+      # backend, Postgres, Redis, MinIO — plus browser binaries. It is a
+      # docker-compose job, not a step on this runner. Run it locally against a
+      # live stack with `npm run test:e2e`.
 
   migrations:
     name: Migrations (lint SQL against Postgres 15)
