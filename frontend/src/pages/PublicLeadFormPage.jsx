@@ -6,9 +6,10 @@
 // slug+token from the pathname (legacy #/f/... links still resolve too).
 // Renders whatever fields the admin configured in the builder — no preset forms.
 import { useState, useEffect } from 'react';
-import { Check, Loader2, AlertTriangle } from 'lucide-react';
+import { Check, Loader2, AlertTriangle, Star } from 'lucide-react';
 import { api } from '../api.js';
 import { C, FONT, maskPhone } from '../constants.js';
+import { isEmptyAnswer, emptyAnswerFor, isDisplayOnly, normalizeRating, DEFAULT_FEEDBACK_LABEL } from '../lib/formAnswers.js';
 
 const inputStyle = {
   width: '100%', padding: '11px 13px', borderRadius: 10, border: `1.5px solid ${C.border}`,
@@ -30,7 +31,12 @@ export default function PublicLeadFormPage({ slug, token }) {
         setForm(res.form);
         setPrefillPhone(res.prefillPhone || null);
         const init = {};
-        for (const f of res.form.fields) init[f.key] = f.type === 'checkbox' ? [] : '';
+        // Seeded per type — a rating needs its { rating, feedback } shape from
+        // the start, or the feedback box mounts uncontrolled and React warns
+        // (and moves the cursor) on the first keystroke.
+        for (const f of res.form.fields) {
+          if (!isDisplayOnly(f.type)) init[f.key] = emptyAnswerFor(f);
+        }
         setAnswers(init);
         setState('ready');
       })
@@ -50,9 +56,9 @@ export default function PublicLeadFormPage({ slug, token }) {
   async function submit() {
     const errs = {};
     for (const f of form.fields) {
-      const v = answers[f.key];
-      const empty = v == null || v === '' || (Array.isArray(v) && v.length === 0);
-      if (f.required && empty) errs[f.key] = 'Required';
+      // Same rule the server enforces (lib/formAnswers.js). If these two ever
+      // disagree the respondent gets a 400 for a field that looked filled in.
+      if (f.required && isEmptyAnswer(f, answers[f.key])) errs[f.key] = 'Required';
     }
     if (Object.keys(errs).length) { setFieldErrors(errs); return; }
 
@@ -124,9 +130,16 @@ export default function PublicLeadFormPage({ slug, token }) {
         )}
 
         {form.fields.map(f => (
-          <FieldWrap key={f.key} label={f.label} required={f.required} error={fieldErrors[f.key]}>
-            <FieldInput field={f} value={answers[f.key]} onChange={v => setAnswer(f.key, v)} />
-          </FieldWrap>
+          // A section is a heading, not a question — rendering it through
+          // FieldWrap would give it a question label and, if it were ever
+          // marked required, a red asterisk against a field nobody can answer.
+          isDisplayOnly(f.type) ? (
+            <SectionBlock key={f.key} field={f} />
+          ) : (
+            <FieldWrap key={f.key} label={f.label} required={f.required} error={fieldErrors[f.key]}>
+              <FieldInput field={f} value={answers[f.key]} onChange={v => setAnswer(f.key, v)} />
+            </FieldWrap>
+          )
         ))}
 
         {submitError && (
@@ -180,8 +193,79 @@ function FieldWrap({ label, required, error, children }) {
   );
 }
 
+// A heading between questions. Collects nothing, so it takes no key in
+// `answers` and is skipped by every validation loop.
+function SectionBlock({ field }) {
+  return (
+    <div style={{ margin: '22px 0 14px', paddingTop: 4, borderTop: `1px solid ${C.border}` }}>
+      <div style={{ fontFamily: FONT, fontSize: 15.5, fontWeight: 700, color: C.text, marginTop: 14 }}>{field.label}</div>
+      {field.description && (
+        <div style={{ fontFamily: FONT, fontSize: 13, color: C.textSecondary, lineHeight: 1.5, marginTop: 5, whiteSpace: 'pre-wrap' }}>
+          {field.description}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Star picker + an optional feedback box beneath it.
+//
+// Two behaviours worth keeping: the whole control is a radiogroup of real
+// <button>s so it is keyboard- and screen-reader-reachable (a row of <svg>s
+// with onClick is neither), and clicking the star you already picked CLEARS
+// the rating — otherwise a misclick on an optional question is permanent, with
+// no way back to "no answer".
+function RatingInput({ field, value, onChange }) {
+  const { rating, feedback, max } = normalizeRating(field, value);
+  const [hover, setHover] = useState(0);
+  const shown = hover || rating || 0;
+  const set = (n) => onChange({ rating: n === rating ? null : n, feedback });
+
+  return (
+    <div>
+      <div role="radiogroup" aria-label={field.label} onMouseLeave={() => setHover(0)}
+        style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        {Array.from({ length: max }, (_, i) => i + 1).map(n => {
+          const on = n <= shown;
+          return (
+            <button key={n} type="button" role="radio" aria-checked={rating === n}
+              aria-label={`${n} of ${max}`}
+              onClick={() => set(n)} onMouseEnter={() => setHover(n)} onFocus={() => setHover(n)} onBlur={() => setHover(0)}
+              style={{
+                background: 'none', border: 'none', padding: 2, cursor: 'pointer', lineHeight: 0,
+                borderRadius: 6, transition: 'transform .12s',
+                transform: on && hover === n ? 'scale(1.12)' : 'none',
+              }}>
+              <Star size={max > 5 ? 24 : 30} strokeWidth={1.75}
+                color={on ? '#F59E0B' : C.border} fill={on ? '#F59E0B' : 'none'} />
+            </button>
+          );
+        })}
+        <span style={{ fontFamily: FONT, fontSize: 13, color: C.textSecondary, alignSelf: 'center', marginLeft: 8 }}>
+          {rating ? `${rating} of ${max}` : ''}
+        </span>
+      </div>
+
+      {field.feedback && (
+        <div style={{ marginTop: 12 }}>
+          <label style={{ display: 'block', fontFamily: FONT, fontSize: 12.5, color: C.textSecondary, marginBottom: 5 }}>
+            {field.feedbackLabel || DEFAULT_FEEDBACK_LABEL}
+          </label>
+          {/* Always optional, even when the rating itself is required — the
+              star is the question, the comment is a bonus. */}
+          <textarea value={feedback} rows={3} maxLength={2000}
+            onChange={e => onChange({ rating, feedback: e.target.value })}
+            style={{ ...inputStyle, resize: 'vertical' }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FieldInput({ field, value, onChange }) {
   switch (field.type) {
+    case 'rating':
+      return <RatingInput field={field} value={value} onChange={onChange} />;
     case 'textarea':
       return <textarea value={value} onChange={e => onChange(e.target.value)} rows={4} placeholder={field.placeholder} style={{ ...inputStyle, resize: 'vertical' }} />;
     case 'number':

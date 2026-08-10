@@ -17,7 +17,7 @@ import {
   ExternalLink, ArrowUp, ArrowDown, ImagePlus, X, Download, ListChecks,
   BarChart3, Table as TableIcon, Settings, ChevronDown, Send, Link2,
   MessageCircle, Users, UserX, AlertTriangle, Megaphone, Bell, Info,
-  Circle, Square, FolderKanban,
+  Circle, Square, FolderKanban, Star,
 } from 'lucide-react';
 import { api } from '../api.js';
 import { C, FONT, MONO } from '../constants.js';
@@ -26,6 +26,10 @@ import SearchableSelect from '../components/SearchableSelect.jsx';
 import SortControl from '../components/SortControl.jsx';
 import { sortList, DEFAULT_SORT } from '../lib/listSort.js';
 import { useFieldRegistry } from '../hooks/useFieldRegistry.js';
+import {
+  RATING_SCALES, DEFAULT_RATING_SCALE, DEFAULT_FEEDBACK_LABEL,
+  isDisplayOnly, answerToText,
+} from '../lib/formAnswers.js';
 import AccountHealthBanner from '../components/AccountHealthBanner.jsx';
 import { KpiCard, Card, LineTrend, FunnelBars, Shimmer, EmptyChart } from '../components/charts.jsx';
 
@@ -60,7 +64,13 @@ const FIELD_TYPE_OPTS = [
   { value: 'radio', label: 'Multiple choice' },
   { value: 'checkbox', label: 'Checkboxes' },
   { value: 'boolean', label: 'Yes / No' },
+  { value: 'rating', label: 'Star rating' },
+  { value: 'section', label: 'Section heading' },
 ];
+// Types the respondent cannot answer, and types that carry no lead value —
+// both hide controls that would otherwise be dead: a section can't be required
+// or mapped, and a rating out of N can't fill Name or Phone.
+const NO_MAPPING = ['rating', 'section'];
 // The answer's destination column. `phone` is the mapping the spec calls out:
 // pick it on a field and that field's answer lands in the table's Phone column.
 const MAPS_TO_OPTS = [
@@ -83,6 +93,21 @@ const TEMPLATE_CATEGORIES = [
 
 function newField(n) {
   return { key: `field_${Date.now()}_${n}`, label: '', type: 'text', required: false, mapsTo: null, options: [] };
+}
+
+// Defaults applied when an existing field is switched TO a type, so the editor
+// opens on a working configuration instead of a blank one.
+function typeDefaults(type, field) {
+  if (type === 'rating') {
+    return {
+      scale: RATING_SCALES.includes(parseInt(field.scale, 10)) ? field.scale : DEFAULT_RATING_SCALE,
+      feedback: field.feedback ?? true,
+      feedbackLabel: field.feedbackLabel || DEFAULT_FEEDBACK_LABEL,
+    };
+  }
+  // Cleared on the way out, so a field switched away from rating doesn't carry
+  // an invisible scale that reappears if it's switched back later.
+  return { scale: undefined, feedback: undefined, feedbackLabel: undefined };
 }
 
 const btn = (variant = 'secondary') => ({
@@ -906,14 +931,23 @@ function FieldEditorRow({ field, index, count, onChange, onRemove, onMove }) {
           <button disabled={index === count - 1} onClick={() => onMove(1)} style={{ ...iconBtnStyle, opacity: index === count - 1 ? 0.35 : 1 }} title="Move down"><ArrowDown size={12} /></button>
         </div>
         <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 160px', gap: 8 }}>
-          <input value={field.label} onChange={e => onChange({ label: e.target.value })} placeholder="Question label" style={{ ...inputStyle, fontWeight: 600 }} />
+          <input value={field.label} onChange={e => onChange({ label: e.target.value })}
+            placeholder={isDisplayOnly(field.type) ? 'Section heading' : 'Question label'}
+            style={{ ...inputStyle, fontWeight: 600 }} />
           {/* Switching TO a choice type seeds one empty option so the editor
-              opens with a box to type in rather than an empty panel. */}
+              opens with a box to type in rather than an empty panel; switching
+              to a rating seeds its scale + feedback prompt for the same reason.
+              Switching to a section also clears `required` and `mapsTo`, which
+              the server would force off anyway — doing it here too means the
+              saved payload matches what the editor is showing. */}
           <SearchableSelect value={field.type} onChange={v => onChange({
             type: v,
+            ...typeDefaults(v, field),
             ...(NEEDS_OPTIONS.includes(v)
               ? ((field.options || []).length ? {} : { options: [''] })
               : { options: [] }),
+            ...(isDisplayOnly(v) ? { required: false } : {}),
+            ...(NO_MAPPING.includes(v) ? { mapsTo: null } : {}),
           })} options={FIELD_TYPE_OPTS} triggerStyle={{ padding: '8px 28px 8px 10px', fontSize: 13 }} />
         </div>
         <button onClick={onRemove} style={{ ...iconBtnStyle, color: '#991B1B', marginTop: 4 }} title="Remove field"><Trash2 size={14} /></button>
@@ -925,17 +959,93 @@ function FieldEditorRow({ field, index, count, onChange, onRemove, onMove }) {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginTop: 8, marginLeft: 24, flexWrap: 'wrap' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: B.t3, cursor: 'pointer' }}>
-          <input type="checkbox" checked={field.required} onChange={e => onChange({ required: e.target.checked })} /> Required
-        </label>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: '1 1 240px', minWidth: 200 }}>
-          <span style={{ fontSize: 12, color: B.t5, whiteSpace: 'nowrap' }}>Save to column</span>
-          <div style={{ flex: 1 }}>
-            <SearchableSelect value={field.mapsTo || ''} onChange={v => onChange({ mapsTo: v || null })} options={mapsToOpts} triggerStyle={{ padding: '6px 26px 6px 9px', fontSize: 12 }} />
-          </div>
+      {field.type === 'rating' && (
+        <div style={{ marginTop: 10, marginLeft: 24 }}>
+          <RatingConfig field={field} onChange={onChange} />
+        </div>
+      )}
+
+      {isDisplayOnly(field.type) && (
+        <div style={{ marginTop: 10, marginLeft: 24 }}>
+          <textarea value={field.description || ''} onChange={e => onChange({ description: e.target.value })}
+            rows={2} maxLength={1000} placeholder="Optional text shown under the heading"
+            style={{ ...inputStyle, resize: 'vertical', fontSize: 12.5 }} />
+        </div>
+      )}
+
+      {/* A section collects nothing, so Required and Save-to-column are hidden
+          rather than shown-and-ignored — a control that saves and then does
+          nothing is worse than no control. Rating hides only the mapping: it
+          is a real, answerable question that can be Required. */}
+      {!isDisplayOnly(field.type) && (
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginTop: 8, marginLeft: 24, flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: B.t3, cursor: 'pointer' }}>
+            <input type="checkbox" checked={field.required} onChange={e => onChange({ required: e.target.checked })} /> Required
+          </label>
+          {NO_MAPPING.includes(field.type) ? (
+            <span style={{ fontSize: 12, color: B.t5 }}>Answers are kept in this form's own column.</span>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: '1 1 240px', minWidth: 200 }}>
+              <span style={{ fontSize: 12, color: B.t5, whiteSpace: 'nowrap' }}>Save to column</span>
+              <div style={{ flex: 1 }}>
+                <SearchableSelect value={field.mapsTo || ''} onChange={v => onChange({ mapsTo: v || null })} options={mapsToOpts} triggerStyle={{ padding: '6px 26px 6px 9px', fontSize: 12 }} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Scale + optional feedback box, with a live preview of the stars the
+// respondent will see — the scale is the whole point of the field, and a
+// number in a dropdown does not show that a 4-star form looks different.
+function RatingConfig({ field, onChange }) {
+  const scale = RATING_SCALES.includes(parseInt(field.scale, 10)) ? parseInt(field.scale, 10) : DEFAULT_RATING_SCALE;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12, color: B.t5, whiteSpace: 'nowrap' }}>Scale</span>
+        <div style={{ display: 'flex', gap: 5 }}>
+          {RATING_SCALES.map(n => {
+            const on = n === scale;
+            return (
+              <button key={n} onClick={() => onChange({ scale: n })}
+                style={{
+                  fontFamily: FONT, fontSize: 12, fontWeight: on ? 700 : 500, cursor: 'pointer',
+                  padding: '5px 11px', borderRadius: 7,
+                  border: `1px solid ${on ? C.primary : B.cardBorder}`,
+                  background: on ? '#FEF2F2' : C.cardBg, color: on ? C.primary : B.t3,
+                }}>
+                {n}-star
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ display: 'flex', gap: 1, marginLeft: 2 }}>
+          {Array.from({ length: scale }, (_, i) => (
+            <Star key={i} size={13} strokeWidth={1.75} color="#F59E0B" fill="#F59E0B" />
+          ))}
         </div>
       </div>
+
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: B.t3, cursor: 'pointer' }}>
+        <input type="checkbox" checked={!!field.feedback} onChange={e => onChange({ feedback: e.target.checked })} />
+        Ask for feedback under the stars
+      </label>
+
+      {field.feedback && (
+        <input value={field.feedbackLabel ?? DEFAULT_FEEDBACK_LABEL}
+          onChange={e => onChange({ feedbackLabel: e.target.value })}
+          placeholder={DEFAULT_FEEDBACK_LABEL}
+          style={{ ...inputStyle, fontSize: 12.5 }} />
+      )}
+      {field.feedback && (
+        <span style={{ fontSize: 11.5, color: B.t5 }}>
+          The comment box is always optional, even when the rating is required.
+        </span>
+      )}
     </div>
   );
 }
@@ -1053,6 +1163,10 @@ function TableTab({ form }) {
   if (!data) return <Shimmer height={240} radius={12} />;
 
   const totalPages = Math.max(1, Math.ceil(data.total / pageSize));
+  // ONE list drives both the header cells and the body cells. Filtering the
+  // headers and the rows separately is how a table silently shifts every
+  // answer one column to the left.
+  const answerFields = form.fields.filter(f => !isDisplayOnly(f.type));
 
   return (
     <div style={{ background: B.card, border: `1px solid ${B.cardBorder}`, borderRadius: 12, overflow: 'hidden' }}>
@@ -1067,7 +1181,7 @@ function TableTab({ form }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT, minWidth: 600 }}>
             <thead>
               <tr style={{ background: B.innerBg, borderBottom: `1px solid ${B.cardBorder}` }}>
-                {['Submitted', 'Phone', ...form.fields.map(f => f.label), 'Lead'].map((h, i) => (
+                {['Submitted', 'Phone', ...answerFields.map(f => f.label), 'Lead'].map((h, i) => (
                   <th key={i} style={{ padding: '9px 12px', fontSize: 11, fontWeight: 700, color: B.t4, textAlign: 'left', textTransform: 'uppercase', letterSpacing: '.05em', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -1079,11 +1193,19 @@ function TableTab({ form }) {
                   <td style={{ padding: '9px 12px', color: s.phoneNumber ? B.t3 : B.t7, fontFamily: s.phoneNumber ? MONO : FONT, whiteSpace: 'nowrap' }}>
                     {s.phoneNumber || <span style={{ fontSize: 12 }}>Not given</span>}
                   </td>
-                  {form.fields.map(f => (
-                    <td key={f.key} style={{ padding: '9px 12px', color: B.t2, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {Array.isArray(s.answers[f.key]) ? s.answers[f.key].join(', ') : (s.answers[f.key] ?? '—')}
-                    </td>
-                  ))}
+                  {answerFields.map(f => {
+                    // Formatted, never rendered raw: a rating answer is an
+                    // object, and React throws "Objects are not valid as a
+                    // React child" on one — which blanks the whole page here,
+                    // since the app has no error boundary.
+                    const text = answerToText(f, s.answers[f.key]);
+                    return (
+                      <td key={f.key} title={text || undefined}
+                        style={{ padding: '9px 12px', color: B.t2, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {text || '—'}
+                      </td>
+                    );
+                  })}
                   <td style={{ padding: '9px 12px', color: s.leadId ? B.t3 : B.t7 }}>
                     {s.leadName || (s.leadId ? `#${s.leadId}` : <span style={{ fontSize: 12 }}>Not linked</span>)}
                   </td>
@@ -1110,12 +1232,13 @@ function DashboardTab({ form }) {
   useEffect(() => {
     api.leadForms.dashboard(form.id)
       .then(setData)
-      .catch(() => setData({ totalSubmissions: 0, leadsCreated: 0, peopleCompleted: 0, identifiedSubmissions: 0, anonymousSubmissions: 0, dailySubmissions: [], fieldBreakdown: {}, recentSubmissions: [] }));
+      .catch(() => setData({ totalSubmissions: 0, leadsCreated: 0, peopleCompleted: 0, identifiedSubmissions: 0, anonymousSubmissions: 0, dailySubmissions: [], fieldBreakdown: {}, ratingBreakdown: {}, recentSubmissions: [] }));
   }, [form.id]);
 
   if (!data) return <Shimmer height={240} radius={12} />;
 
   const breakdownEntries = Object.entries(data.fieldBreakdown || {});
+  const ratingEntries = Object.entries(data.ratingBreakdown || {});
   const recent = data.recentSubmissions || [];
 
   return (
@@ -1173,12 +1296,66 @@ function DashboardTab({ form }) {
         )}
       </Card>
 
+      {ratingEntries.map(([key, r]) => <RatingCard key={key} rating={r} />)}
+
       {breakdownEntries.map(([key, b]) => (
         <Card key={key} title={b.label}>
           <FunnelBars data={Object.entries(b.counts).map(([label, count]) => ({ label, count }))} />
         </Card>
       ))}
     </div>
+  );
+}
+
+// Average + distribution + the comments themselves.
+//
+// The comments are shown, not just counted: on a rating question the number is
+// the summary and the free text is the reason, and a dashboard that reports
+// "3.4 average, 12 comments" without showing any of them makes someone open the
+// CSV to learn anything actionable.
+function RatingCard({ rating }) {
+  const { label, max, counts, average, responses, withFeedback, feedback = [] } = rating;
+  return (
+    <Card title={label}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+        <span style={{ fontFamily: MONO, fontSize: 26, fontWeight: 700, color: B.t2 }}>
+          {average == null ? '—' : average.toFixed(2)}
+        </span>
+        <span style={{ fontSize: 12.5, color: B.t5 }}>
+          average out of {max} · {responses} rating{responses === 1 ? '' : 's'}
+          {withFeedback ? ` · ${withFeedback} with a comment` : ''}
+        </span>
+      </div>
+
+      {!responses ? <EmptyChart text="No ratings yet" /> : (
+        // Highest star first: people read a rating distribution top-down.
+        <FunnelBars data={Object.entries(counts)
+          .sort((a, b) => Number(b[0]) - Number(a[0]))
+          .map(([star, count]) => ({ label: `${star} star${star === '1' ? '' : 's'}`, count }))} />
+      )}
+
+      {feedback.length > 0 && (
+        <div style={{ marginTop: 14, borderTop: `1px solid ${B.cardBorder}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 9 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: B.t5, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+            Comments
+          </div>
+          {feedback.map((f, i) => (
+            <div key={i} style={{ display: 'flex', gap: 9, alignItems: 'flex-start' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0, fontFamily: MONO, fontSize: 11.5, color: B.t5, paddingTop: 1 }}>
+                <Star size={11} strokeWidth={2} color="#F59E0B" fill="#F59E0B" />
+                {f.rating ?? '—'}
+              </span>
+              <span style={{ fontSize: 12.5, color: B.t2, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{f.text}</span>
+            </div>
+          ))}
+          {withFeedback > feedback.length && (
+            <div style={{ fontSize: 11.5, color: B.t6 }}>
+              Showing {feedback.length} of {withFeedback} — export the responses for the rest.
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
 

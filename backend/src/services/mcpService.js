@@ -849,10 +849,13 @@ const ENDPOINT_CATALOG = {
     'POST /lead-forms {name,description,formType} — create a draft form; formType "link" (plain URL, phone optional) or "whatsapp" (sent via template, phone captured automatically). Also see create_lead_form tool',
     'GET /lead-forms/:id — full form incl. fields[]',
     'PUT /lead-forms/:id {fields,status,successMessage,defaultSource,formType,waAccountId,templateId} — set fields + publish (status="published")',
+    'Field types: text, textarea (paragraph), email, phone, number, date, dropdown, radio, checkbox, boolean, rating, section. ' +
+      'rating = a star row: {type:"rating", scale:3|4|5|10 (default 5), feedback:true to show an optional comment box, feedbackLabel:"…"}; its answer is stored as {rating,feedback} and it cannot map to a lead column. ' +
+      'section = a display-only heading between questions: {type:"section", label:"…", description:"…"}; it collects no answer, so it is never required and never mapped.',
     'POST /lead-forms/:id/template {category:"UTILITY"|"MARKETING",body,footer,buttonText,waAccountId,submit} — build the WhatsApp template carrying this form link (button attached automatically) and optionally submit it to Meta',
     'GET /lead-forms/:id/templates?accountId= — templates whose URL button points at this form, with approval status',
     'GET /lead-forms/:id/submissions — collected responses (also see list_form_submissions tool)',
-    'GET /lead-forms/:id/dashboard — completion counts (total / people / with-phone / anonymous / leads), 30-day trend, per-field breakdown, latest responses',
+    'GET /lead-forms/:id/dashboard — completion counts (total / people / with-phone / anonymous / leads), 30-day trend, per-field breakdown, latest responses, and ratingBreakdown per star-rating field (average over RATED responses only, max, per-star counts, comments)',
     'A form can be filed under a campaign Project: PUT /lead-forms/:id {projectId} or the move_to_project tool with kind:"form". Filing only — it changes nothing about the form, its link or its responses.',
     'The public form URL is /f/<slug>; use create_wa_link or a template URL button to share it. Logo/banner upload is multipart (UI only).',
   ],
@@ -1490,9 +1493,39 @@ async function createWaLink({ name, message, accountId } = {}) {
 // — a field with mapsTo:'phone' is the voluntary phone section, and without one
 // responses are stored with the phone column blank. 'whatsapp' is sent through
 // an approved Utility/Marketing template whose link captures the phone itself.
+// Lazy, for the same reason as projectKinds() below: routes/leadForms pulls in
+// the DB pool and MinIO, and a top-level require would drag both into every
+// consumer of this module.
+const formFieldTypes = () => require('../routes/leadForms').FIELD_TYPES;
+
+// Validate the field types an MCP caller sent, BEFORE handing them to the route.
+//
+// The route's sanitizeFields deliberately DOWNGRADES an unknown type to 'text'
+// (forgiving, so a half-built form from the web builder still saves). That is
+// exactly wrong at this boundary: an assistant that guesses 'star_rating' or
+// 'stars' would get a plain text box back and report "created your rating
+// field" — a silent, confident failure. Rejecting with the valid list instead
+// lets the model correct itself on the next call.
+function assertFieldTypes(fields) {
+  if (!Array.isArray(fields)) return;
+  const valid = formFieldTypes();
+  const { RATING_SCALES } = require('./formAnswers');
+  fields.forEach((f, i) => {
+    const t = f && f.type;
+    if (t == null || t === '') return;                 // route defaults it to text
+    if (!valid.includes(t)) {
+      throw svcErr(400, `Field ${i + 1} ("${f.label || f.key || t}") has unknown type "${t}". Valid types: ${valid.join(', ')}.`);
+    }
+    if (t === 'rating' && f.scale != null && !RATING_SCALES.includes(parseInt(f.scale, 10))) {
+      throw svcErr(400, `Field ${i + 1} ("${f.label || f.key}") has scale ${f.scale}. A star rating must be out of ${RATING_SCALES.join(', ')}.`);
+    }
+  });
+}
+
 async function createLeadForm({ name, description, fields, successMessage, defaultSource, publish, formType } = {}) {
   if (!String(name || '').trim()) throw svcErr(400, 'name is required.');
   if (formType && !['link', 'whatsapp'].includes(formType)) throw svcErr(400, "formType must be 'link' or 'whatsapp'.");
+  assertFieldTypes(fields);
   const created = await internalApiOrThrow({ method: 'POST', path: '/lead-forms', body: { name: String(name).trim(), description: description || null, formType: formType || 'link' }, failMsg: 'Failed to create the form.' });
   const formId = created.form?.id;
   let form = created.form;
@@ -1520,9 +1553,53 @@ async function listLeadForms() {
   return internalApiOrThrow({ method: 'GET', path: '/lead-forms', failMsg: 'Failed to list lead forms.' });
 }
 
+// ⚠ A rating answer is rendered to text HERE, at the tool boundary — the same
+// rule as converting paise to rupees before an LLM sees an amount.
+//
+// The stored answer is { rating: 4, feedback: "…" } and it does NOT carry the
+// scale; the scale lives on the field definition. So a model handed "rating: 4"
+// has no way to know whether that is 4 out of 4 or 4 out of 10, and will
+// confidently report "4 out of 5" — the single most likely number to be wrong.
+// Each rating answer therefore gains a `text` of "4/4" alongside the raw value,
+// and every rating field is described in `ratingFields` so a summary of the
+// responses can state the scale.
 async function listFormSubmissions({ formId, page, pageSize } = {}) {
   if (!formId) throw svcErr(400, 'formId is required (from list_lead_forms).');
-  return internalApiOrThrow({ method: 'GET', path: `/lead-forms/${parseInt(formId, 10)}/submissions`, query: { page, pageSize }, failMsg: 'Failed to load submissions.' });
+  const id = parseInt(formId, 10);
+  if (!Number.isFinite(id)) throw svcErr(400, 'formId must be a number (from list_lead_forms).');
+
+  const out = await internalApiOrThrow({ method: 'GET', path: `/lead-forms/${id}/submissions`, query: { page, pageSize }, failMsg: 'Failed to load submissions.' });
+
+  // Best-effort enrichment: if the form definition can't be read we still
+  // return the responses rather than failing the whole call over labelling.
+  let fields = [];
+  try {
+    const form = await internalApiOrThrow({ method: 'GET', path: `/lead-forms/${id}`, failMsg: 'x' });
+    fields = (form.form && form.form.fields) || [];
+  } catch { /* fall through with raw answers */ }
+
+  const ratingFields = fields.filter(f => f.type === 'rating');
+  if (!ratingFields.length || !Array.isArray(out.submissions)) return out;
+
+  const { answerToText, ratingScale } = require('./formAnswers');
+  return {
+    ...out,
+    ratingFields: ratingFields.map(f => ({ key: f.key, label: f.label, outOf: ratingScale(f), hasFeedbackBox: !!f.feedback })),
+    submissions: out.submissions.map(s => {
+      const answers = { ...(s.answers || {}) };
+      for (const f of ratingFields) {
+        const v = answers[f.key];
+        if (v == null) continue;
+        const text = answerToText(f, v);
+        answers[f.key] = {
+          ...(typeof v === 'object' && !Array.isArray(v) ? v : { rating: v }),
+          outOf: ratingScale(f),
+          text: text || null,   // "4/4 - loved it", or null when unrated
+        };
+      }
+      return { ...s, answers };
+    }),
+  };
 }
 
 /* ── Projects — the campaign folder a template / automation / agent /

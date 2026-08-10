@@ -339,6 +339,11 @@ router.put(P('/:id'), async (req, res) => {
 router.delete(P('/:id'), async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
+    // Guarded like its three sibling handlers: without this, parseInt('abc')
+    // hands NaN to Postgres, which raises "invalid input syntax for type
+    // bigint" and surfaces as a 500. A non-numeric id is a client mistake, not
+    // a server fault, so it must read as 404.
+    if (!Number.isFinite(id)) return res.status(404).json({ error: 'Message format not found' });
     const { rowCount } = await pool.query(`DELETE FROM coexistence.wa_links WHERE id = $1`, [id]);
     if (rowCount === 0) return res.status(404).json({ error: 'Message format not found' });
     await mf.refreshMessageFormats();

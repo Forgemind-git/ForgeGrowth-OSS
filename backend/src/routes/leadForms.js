@@ -53,6 +53,10 @@ const pool = require('../db');
 const minio = require('../util/minioClient');
 const { adminOnly } = require('../middleware/access');
 const cfg = require('../services/funnelConfig');
+const {
+  RATING_SCALES, DEFAULT_RATING_SCALE, DEFAULT_FEEDBACK_LABEL,
+  isDisplayOnly, ratingScale, normalizeRating, isEmptyAnswer, answerToText,
+} = require('../services/formAnswers');
 
 const router = Router();
 const publicRouter = Router();
@@ -60,7 +64,10 @@ const publicRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
 const FORM_TYPES = ['link', 'whatsapp'];
-const FIELD_TYPES = ['text', 'textarea', 'email', 'phone', 'number', 'date', 'dropdown', 'radio', 'checkbox', 'boolean'];
+// 'rating' collects { rating, feedback } rather than a scalar, and 'section' is
+// a display-only heading that collects nothing — see services/formAnswers.js,
+// which owns the emptiness and display rules for both.
+const FIELD_TYPES = ['text', 'textarea', 'email', 'phone', 'number', 'date', 'dropdown', 'radio', 'checkbox', 'boolean', 'rating', 'section'];
 const MAPS_TO = ['name', 'email', 'phone', 'age', 'profession', 'pincode', 'city', 'source'];
 const LEAD_COL = { name: 'name', email: 'email', phone: 'whatsapp_number', age: 'age', profession: 'profession', pincode: 'pincode', city: 'city', source: 'source' };
 
@@ -179,6 +186,33 @@ function sanitizeFields(fields) {
       const target = registry.fieldByKey('lead', cfKey);
       if (target && !target.isSystem) mapsTo = `cf:${cfKey}`;
     }
+    // Neither a star rating nor a section heading can fill a lead column: one
+    // is a number out of N, the other has no answer at all. Cleared here rather
+    // than only hidden in the builder, so an API/MCP caller cannot write a
+    // rating object into leads.name or a cf: bag key.
+    if (type === 'rating' || isDisplayOnly(type)) mapsTo = null;
+
+    // A section is a heading between questions. Forcing `required` off is what
+    // stops it blocking every submission: the required loop would otherwise ask
+    // for an answer the form never offers a way to give.
+    const required = isDisplayOnly(type) ? false : !!f.required;
+
+    // Per-type extras. Invalid values fall back to the default rather than
+    // throwing — an unknown scale is a caller mistake worth correcting, not a
+    // reason to reject an otherwise valid form.
+    const extras = {};
+    if (type === 'rating') {
+      const scale = parseInt(f.scale, 10);
+      extras.scale = RATING_SCALES.includes(scale) ? scale : DEFAULT_RATING_SCALE;
+      extras.feedback = !!f.feedback;
+      if (extras.feedback) {
+        extras.feedbackLabel = String(f.feedbackLabel || '').trim().slice(0, 200) || DEFAULT_FEEDBACK_LABEL;
+      }
+    }
+    if (isDisplayOnly(type) && f.description) {
+      extras.description = String(f.description).slice(0, 1000);
+    }
+
     const needsOptions = ['dropdown', 'radio', 'checkbox'].includes(type);
     // Trimmed, not just non-empty: the dashboard's per-field breakdown groups
     // answers by exact value, so a stray space would split " Red" and "Red"
@@ -188,7 +222,8 @@ function sanitizeFields(fields) {
     if (needsOptions && !options.length) throw { status: 400, message: `Field "${f.label || key}" needs at least one option` };
     return {
       key, label: String(f.label || key).trim() || key, type,
-      required: !!f.required, mapsTo,
+      required, mapsTo,
+      ...extras,
       ...(options ? { options } : {}),
       ...(f.placeholder ? { placeholder: String(f.placeholder).slice(0, 200) } : {}),
     };
@@ -231,7 +266,16 @@ function rowToPublicForm(r) {
   return {
     id: Number(r.id), name: r.name, slug: r.slug, description: r.description,
     formType: r.form_type || 'link',
-    fields: (r.fields || []).map(f => ({ key: f.key, label: f.label, type: f.type, required: f.required, options: f.options, placeholder: f.placeholder, mapsTo: f.mapsTo || null })),
+    // scale/feedback/feedbackLabel/description are part of what the respondent
+    // SEES, not admin metadata — a 4-star field renders five stars without the
+    // scale, and a section renders as a bare heading without its description.
+    fields: (r.fields || []).map(f => ({
+      key: f.key, label: f.label, type: f.type, required: f.required,
+      options: f.options, placeholder: f.placeholder, mapsTo: f.mapsTo || null,
+      ...(f.scale ? { scale: f.scale } : {}),
+      ...(f.feedback ? { feedback: true, feedbackLabel: f.feedbackLabel || DEFAULT_FEEDBACK_LABEL } : {}),
+      ...(f.description ? { description: f.description } : {}),
+    })),
     hasLogo: !!r.logo_key, hasBanner: !!r.banner_key,
     successMessage: r.success_message,
   };
@@ -669,15 +713,16 @@ router.get('/lead-forms/:id/submissions/export', async (req, res) => {
       `SELECT answers, phone_number, submitted_at FROM coexistence.lead_form_submissions WHERE form_id = $1 ORDER BY submitted_at DESC LIMIT 10000`,
       [id]
     );
-    const cols = ['Submitted At', 'Phone', ...fields.map(f => f.label)];
+    // Section headings are excluded: they collect no answer, so a column for
+    // one would be blank on every row of every export.
+    const answerFields = fields.filter(f => !isDisplayOnly(f.type));
+    const cols = ['Submitted At', 'Phone', ...answerFields.map(f => f.label)];
     const esc = (v) => { if (v == null) return ''; const s = String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
     const lines = [cols.join(',')];
     for (const r of rows) {
       const answers = r.answers || {};
-      const line = [new Date(r.submitted_at).toISOString(), r.phone_number || '', ...fields.map(f => {
-        const v = answers[f.key];
-        return Array.isArray(v) ? v.join('; ') : (v ?? '');
-      })];
+      const line = [new Date(r.submitted_at).toISOString(), r.phone_number || '',
+        ...answerFields.map(f => answerToText(f, answers[f.key], { separator: '; ' }))];
       lines.push(line.map(esc).join(','));
     }
     res.setHeader('Content-Type', 'text/csv');
@@ -720,10 +765,13 @@ router.get('/lead-forms/:id/dashboard', async (req, res) => {
       [id]
     );
 
-    // Value-count breakdown for choice-type fields (dropdown/radio/checkbox).
+    // Value-count breakdown for choice-type fields (dropdown/radio/checkbox)
+    // and rating fields.
     const choiceFields = fields.filter(f => ['dropdown', 'radio', 'checkbox'].includes(f.type));
+    const ratingFields = fields.filter(f => f.type === 'rating');
     const breakdown = {};
-    if (choiceFields.length) {
+    const ratings = {};
+    if (choiceFields.length || ratingFields.length) {
       const { rows: subs } = await pool.query(`SELECT answers FROM coexistence.lead_form_submissions WHERE form_id = $1`, [id]);
       for (const f of choiceFields) {
         const counts = {};
@@ -733,6 +781,31 @@ router.get('/lead-forms/:id/dashboard', async (req, res) => {
           for (const val of vals) counts[val] = (counts[val] || 0) + 1;
         }
         breakdown[f.key] = { label: f.label, counts };
+      }
+      for (const f of ratingFields) {
+        const max = ratingScale(f);
+        // Every star value is seeded at 0 so the chart shows the full scale —
+        // "nobody gave us a 1" is a result, and a breakdown that simply omits
+        // the value reads as though it were never offered.
+        const counts = {};
+        for (let n = 1; n <= max; n++) counts[n] = 0;
+        let sum = 0, rated = 0, withFeedback = 0;
+        const feedback = [];
+        for (const s of subs) {
+          const { rating, feedback: text } = normalizeRating(f, (s.answers || {})[f.key]);
+          if (rating != null) { counts[rating]++; sum += rating; rated++; }
+          if (text && text.trim()) {
+            withFeedback++;
+            if (feedback.length < 20) feedback.push({ rating, text: text.trim() });
+          }
+        }
+        ratings[f.key] = {
+          label: f.label, max, counts, responses: rated, withFeedback,
+          // Averaged over RATED responses only. Dividing by every submission
+          // would drag the score down every time someone skipped the question.
+          average: rated ? Math.round((sum / rated) * 100) / 100 : null,
+          feedback,
+        };
       }
     }
 
@@ -761,6 +834,7 @@ router.get('/lead-forms/:id/dashboard', async (req, res) => {
       peopleCompleted: c.people,
       dailySubmissions: daily.map(r => ({ day: r.day, count: r.n })),
       fieldBreakdown: breakdown,
+      ratingBreakdown: ratings,
       recentSubmissions: recent.map(r => ({
         id: Number(r.id),
         name: r.lead_name || (nameField ? (r.answers || {})[nameField.key] : null) || null,
@@ -828,11 +902,14 @@ publicRouter.post('/public/lead-forms/:slug/submit', async (req, res) => {
     const answers = req.body?.answers || {};
     const token = req.body?.token ? String(req.body.token) : null;
 
-    // Validate required fields.
+    // Validate required fields. The emptiness test is shared with the builder
+    // and the public page (services/formAnswers.js) because a rating answer is
+    // an OBJECT — under the old `v === ''` test, a rating field with nothing
+    // selected was truthy and sailed through a Required check.
     for (const f of fields) {
-      const v = answers[f.key];
-      const empty = v == null || v === '' || (Array.isArray(v) && v.length === 0);
-      if (f.required && empty) return res.status(400).json({ error: `"${f.label}" is required` });
+      if (f.required && isEmptyAnswer(f, answers[f.key])) {
+        return res.status(400).json({ error: `"${f.label}" is required` });
+      }
     }
 
     // Resolve the phone: a valid (non-expired) send token always wins (the
@@ -851,18 +928,24 @@ publicRouter.post('/public/lead-forms/:slug/submit', async (req, res) => {
     const customFields = {};
     for (const f of fields) {
       const v = answers[f.key];
-      if (v == null || v === '') continue;
+      if (isEmptyAnswer(f, v)) continue;
+      // A rating is flattened to "4/5 - loved it" for the lead bag only. The
+      // full structured answer is still stored verbatim on the submission row,
+      // so nothing is lost — but the bag is read back by the Leads table and by
+      // {{lead.<key>}} in follow-ups, and an object in either renders as
+      // "[object Object]" to a human.
+      const stored = f.type === 'rating' ? answerToText(f, v) : v;
       if (f.mapsTo && f.mapsTo.startsWith('cf:')) {
         // Mapped to a registered custom Leads field — store under the REGISTRY
         // key so the value shows on the Leads/Sales Log tables and resolves as
         // {{lead.<key>}} in follow-ups.
-        customFields[f.mapsTo.slice(3)] = v;
+        customFields[f.mapsTo.slice(3)] = stored;
       } else if (f.mapsTo) {
         if (f.mapsTo === 'phone') { if (!phone) phone = String(v); }
         else if (f.mapsTo === 'age') mapped.age = Number.isFinite(Number(v)) ? parseInt(v, 10) : null;
         else mapped[f.mapsTo] = String(v).trim();
       } else {
-        customFields[f.key] = v;
+        customFields[f.key] = stored;
       }
     }
     // The phone is OPTIONAL, by design. leads.whatsapp_number is NOT NULL and
@@ -895,4 +978,9 @@ publicRouter.post('/public/lead-forms/:slug/submit', async (req, res) => {
   }
 });
 
-module.exports = { router, publicRouter, ensureLeadFormTables, mintSendToken, mintTokenForButtonUrl };
+// FIELD_TYPES is exported so the MCP layer can validate against the SAME list
+// this route sanitizes with. It matters more than it looks: sanitizeFields
+// DOWNGRADES an unknown type to 'text' rather than erroring, so a second,
+// hand-maintained copy that fell behind would let an MCP caller "create" a
+// rating field and silently get a text box back, reported as success.
+module.exports = { router, publicRouter, ensureLeadFormTables, mintSendToken, mintTokenForButtonUrl, FIELD_TYPES };

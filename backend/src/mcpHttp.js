@@ -337,7 +337,10 @@ function buildServer({ capabilities, categories }) {
     title: 'Create a form',
     description:
       'Create a Google-Forms-style capture form and (optionally) attach its fields + publish in one call. ' +
-      'fields[] items: { key, label, type (text|textarea|email|phone|number|date|dropdown|radio|checkbox|boolean), required?, mapsTo? (name|email|phone|age|profession|pincode|city|source), options? (for dropdown/radio/checkbox), placeholder? }. ' +
+      'fields[] items: { key, label, type (text|textarea|email|phone|number|date|dropdown|radio|checkbox|boolean|rating|section), required?, mapsTo? (name|email|phone|age|profession|pincode|city|source), options? (for dropdown/radio/checkbox), placeholder? }. ' +
+      'type "rating" is a STAR RATING: add scale (3, 4, 5 or 10 — default 5), feedback:true to show an optional comment box under the stars, and feedbackLabel to word its prompt. Its answer is {rating,feedback}; required means a star must be picked (the comment stays optional), and it cannot use mapsTo. Use this instead of a dropdown of "5 Stars"/"4 Stars" — only a real rating gets an average and a star distribution on the dashboard. ' +
+      'type "section" is a display-only heading to break a long form into parts: give it a label and an optional description. It collects no answer, so it is never required and never mapped. ' +
+      'An unknown type is REJECTED (not silently turned into a text box), so use these names exactly. ' +
       'formType "link" (default) is shared as a plain URL and the phone number is OPTIONAL — give a field mapsTo:"phone" to let people volunteer one; without it responses are stored with the phone column blank and do not create a lead. ' +
       'formType "whatsapp" is sent through an approved Utility/Marketing template whose link captures each recipient\'s phone automatically; after publishing, call forgechat_request POST /lead-forms/<id>/template to build that template. ' +
       'A submission upserts a CRM lead by phone whenever a phone is present. Pass publish:true to make it live immediately. Returns the form with its public slug (URL /f/<slug>).',
@@ -360,7 +363,10 @@ function buildServer({ capabilities, categories }) {
 
   server.registerTool('list_form_submissions', {
     title: 'List lead-form submissions',
-    description: 'List the collected responses for one lead form (paginated), each with its answers + the matched lead.',
+    description:
+      'List the collected responses for one lead form (paginated), each with its answers + the matched lead. ' +
+      'A star-rating answer comes back as {rating, feedback, outOf, text} — ALWAYS quote the scale from outOf or text ("4/4"), never assume a rating is out of 5. ' +
+      'ratingFields[] describes each rating question and its scale. For averages and the star distribution use forgechat_request GET /lead-forms/<id>/dashboard rather than adding them up yourself.',
     inputSchema: {
       formId: z.union([z.string(), z.number()]).describe('Form id from list_lead_forms.'),
       page: z.number().int().min(1).optional(),

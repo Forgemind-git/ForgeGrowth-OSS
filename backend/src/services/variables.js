@@ -65,6 +65,21 @@ function stringifyVal(v) {
   if (v == null) return '';
   if (Array.isArray(v)) return v.map(x => String(x)).join(', ');
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  // A form answer can be an OBJECT — a rating field stores { rating, feedback }.
+  // Without this the final String(v) resolves the token to the literal text
+  // "[object Object]", and because a token that resolves to *something* is
+  // never flagged anywhere, that text goes out to the customer over WhatsApp.
+  // Rendered here rather than via services/formAnswers.js because this resolver
+  // only ever sees the answers bag, never the field definition that would say
+  // what scale the rating was out of.
+  if (typeof v === 'object') {
+    if (Number.isFinite(Number(v.rating))) {
+      const text = typeof v.feedback === 'string' ? v.feedback.trim() : '';
+      return text ? `${v.rating} - ${text}` : String(v.rating);
+    }
+    if (typeof v.feedback === 'string') return v.feedback.trim();
+    return '';
+  }
   return String(v);
 }
 
