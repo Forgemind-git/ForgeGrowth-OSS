@@ -156,7 +156,11 @@ describe('makeNode', () => {
     const n = makeNode('api', 0, 0, 'n1', []);
     expect(n.type).toBe('api');
     expect(n.method).toBe('POST');
-    expect(n.headers).toEqual({});
+    // An ARRAY of { k, v } rows, not an object — that is what the header editor
+    // renders and what automationEngine's API node reads back. This assertion
+    // said {} and had been failing since it was written, unnoticed because CI
+    // never ran the frontend tests.
+    expect(n.headers).toEqual([]);
   });
 
   it('creates handoff node with defaults', () => {

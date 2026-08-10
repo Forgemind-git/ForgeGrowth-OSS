@@ -35,7 +35,10 @@ const CODES = {
   382: 'ME', 383: 'XK', 385: 'HR', 386: 'SI', 387: 'BA', 389: 'MK',
   420: 'CZ', 421: 'SK', 423: 'LI',
   500: 'FK', 501: 'BZ', 502: 'GT', 503: 'SV', 504: 'HN', 505: 'NI', 506: 'CR',
-  507: 'PA', 509: 'HT', 51: 'PE', 591: 'BO', 592: 'GY', 593: 'EC', 595: 'PY',
+  // 51 (PE) is deliberately absent here — it is declared with the other
+  // two-digit codes above. It appeared in this 5xx block too, where the
+  // duplicate key silently overwrote the first with the same value.
+  507: 'PA', 509: 'HT', 591: 'BO', 592: 'GY', 593: 'EC', 595: 'PY',
   597: 'SR', 598: 'UY',
   670: 'TL', 673: 'BN', 674: 'NR', 675: 'PG', 676: 'TO', 677: 'SB', 678: 'VU',
   679: 'FJ', 680: 'PW', 682: 'CK', 685: 'WS', 686: 'KI', 689: 'PF',

@@ -52,7 +52,12 @@ describe('lead forms: rating + section field types', () => {
     await h.probe();
     if (!h.dbUp()) return;
     await ensureLeadFormTables().catch(() => {});
-    app = await makeApp(router);
+    // A REAL user row, not makeApp's default stub. `lead_forms.created_by` is a
+    // foreign key into forgecrm_users, so the stub's id = 1 only works on a
+    // database that happens to already have a user with that id — a developer's
+    // machine does, a fresh CI database does not. Every insert here failed with
+    // lead_forms_created_by_fkey until the suite created its own user.
+    app = await makeApp(router, await h.makeUser('admin'));
     pub = await makeApp(publicRouter);
   });
   after(async () => {
