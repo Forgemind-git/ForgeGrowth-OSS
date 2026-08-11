@@ -8,7 +8,7 @@ they said in the chat, which stage they're stuck at, and how much they've actual
 the click id Meta attaches to the inbound WhatsApp message is carried all the way through to the
 payment record.
 
-Source-available under **AGPL-3.0**. Self-hosted, single-tenant, no SaaS tier, no telemetry.
+Open source under the **MIT licence**. Self-hosted, single-tenant, no SaaS tier, no telemetry.
 
 ---
 
@@ -57,7 +57,7 @@ That one command:
 2. creates `.env` and generates every secret into it,
 3. builds the images and starts Postgres, Redis, MinIO, the backend and the frontend,
 4. waits for the database to be genuinely accepting connections (not merely started),
-5. applies all 81 migrations,
+5. applies all 88 migrations,
 6. prints the URL and the admin credentials to sign in with.
 
 It asks three questions — host port, public URL, admin email — each with a default you can accept by
@@ -171,21 +171,64 @@ no further calls to Meta.
 
 ### Sales
 
-- **Pipeline / Funnel / Leads** — a configurable funnel over one `leads` model. Stage labels,
-  colours, order and won-flag are all editable; the underlying `stage_key` is immutable, so renaming
-  a stage never rewrites existing rows or breaks conversion maths.
+- **Leads** — one tab over one `leads` model, with Pipeline, Funnel and All-Leads as views of it
+  rather than three separate pages. Stage labels, colours, order and won-flag are all editable; the
+  underlying `stage_key` is immutable, so renaming a stage never rewrites existing rows or breaks
+  conversion maths.
+- **Configurable columns** — a field registry makes the Leads table, the Sales Log and per-installment
+  transactions configurable the way Forms already were: rename "Profession", hide "Pincode", edit a
+  dropdown's options, or add a new custom field, with no schema change. Built-in columns are
+  relabelled rather than replaced — system fields can't be deleted or re-typed, and `field_key` is
+  immutable once minted. Deleting a custom field is a *soft* delete and the key stays reserved
+  forever, because a new field re-using an old key would silently inherit orphaned values still
+  sitting in existing JSONB blobs.
 - **Payments** — mint Razorpay payment links (fixed / part payment / open amount) stamped with the
   lead id, so a payment attributes itself instead of being guessed from its amount. A second tab
   shows the pulled ledger: every payment the gateway holds, including ones taken before the webhook
   existed.
+- **Payment templates** — reach a customer who has gone quiet. WhatsApp refuses free-form text more
+  than 24 hours after the customer's last message, so a link can only get through as an approved
+  template. The template's URL button points at a base *this app* owns (`/pay/{{1}}`), not at the
+  gateway's short-link domain — Meta bakes a button's base in at approval time, so pointing it at
+  Razorpay would mean every approved template breaks the day Razorpay changes its link format.
 - **Sales Log** — enrolled leads and their transactions: gateway payments deduped by `payment_id`,
   unioned with manually logged sales.
 - **Forms** — shareable lead-capture forms at `/f/<slug>`, optionally prefilled from a WhatsApp send
   token. Responses without a phone number are kept as anonymous submissions rather than dropped.
+  Field types include star **ratings** and **section** headings (a section is layout, so it is
+  skipped when answers are collected rather than stored as an empty answer).
 - **Products** — the sellable catalogue, with optional default prices.
 
 ### Chats
 
+- **Projects** — one folder for a campaign's whole toolkit. "Run the Applied AI launch" means a
+  broadcast template, an AI agent to answer the people who reply, an automation to follow up, a
+  follow-up sequence and a form — five things that otherwise live in five unrelated lists with no way
+  to see them as one campaign. A project can hold all five kinds; the link is a nullable
+  `project_id`, so nothing is forced into a project.
+- **Follow-up Sequences** — timed message chains for leads. A lead is enrolled automatically when it
+  *enters* a trigger funnel stage, or by hand from the UI. Each step waits its own delay from the
+  previous step, then sends an approved template or free text (the latter only while the 24-hour
+  window is open). Enrollment watches the append-only `lead_events` log with a cursor rather than
+  hooking the eight code paths that write `leads.stage`, so a new write path is covered for free.
+- **Message Formats** — a labelled, pre-filled WhatsApp opener you put on an Instagram reel or a web
+  page. Tapping it opens WhatsApp with that exact text, and the conversation that follows is
+  attributable to the label — a brand-new lead takes the format's label as its funnel Source. One
+  format can serve many numbers (each gets its own slug, since each is a different `wa.me`
+  destination), and an optional rotate mode hands the numbers out in turn to spread leads across
+  agents. The shared URL is now the tracked redirect, so taps are counted; previously the UI copied
+  the raw `wa.me` link and nothing was ever measured.
+- **Message Costs** — what the messaging above actually owes Meta, per template and per message type.
+  Meta puts a `pricing` object on every status webhook and this app used to discard it; it now has a
+  permanent home. The money amount is **derived** from the WABA's own pricing analytics
+  (cost ÷ volume) rather than a hand-maintained rate card, because rates differ enormously by
+  country — measured on a real account, India utility billed 0.1150 against Germany's 4.0322 for the
+  same category, so one hardcoded rate would have under-reported by ~97%. Every send is stamped with
+  its template and originating surface (broadcast / automation / follow-up / agent / manual / MCP /
+  payment) at send time, because working out "which template was this?" afterwards silently misses.
+- **Payments inside chat** — a Payment node in the Automation builder and payment tools for AI
+  agents: send a link, then wait on the actual outcome. The wait is typed, so a customer who types
+  "ok" while a link is outstanding no longer swallows the payment wait and gets no reply at all.
 - **Inbox** — 3-pane WhatsApp-style client with per-agent filtering, media rendering (image / video /
   audio / document, with an ffmpeg Ogg→MP3 fallback so voice notes play in Safari), 24-hour
   customer-service-window enforcement, optimistic-UI sends and mic recording in the composer.
@@ -219,7 +262,21 @@ no further calls to Meta.
 (spreadsheet picker with tab preview, calendar list, Gmail labels) and an automation action for each.
 
 **MCP** — the app is itself an MCP server, so an assistant like Claude can drive it as a custom
-connector. 44 tools, each behind a capability toggle that defaults to **off**.
+connector. **46 tools in 17 categories**, every category defaulting to **off**.
+
+A tool belongs to exactly one category, and the category is the gate. This replaced an earlier model
+where one capability gated ten unrelated tools — an admin who wanted Claude to build a WhatsApp
+template had no choice but to hand over Google Drive search as well. Categories are named after the
+job someone is doing ("Template Builder", "Send Messages") rather than the internal route they call,
+and each is tagged with what it can do, so the risk is legible before you switch it on:
+
+| Tier | Meaning |
+|---|---|
+| **Reads only** | Cannot change anything or reach a customer |
+| **Builds & configures** | Creates or edits setup — templates, agents, flows, forms, funnel stages |
+| **Reaches customers** | Sends real WhatsApp messages to real people. Meta charges apply |
+| **Cannot be undone** | Permanently removes something. There is no undo |
+| **Full API access** | Unrestricted internal API calls, scoped separately by area |
 
 - **OAuth 2.1** at `https://<your-domain>/api/mcp` — the recommended transport. Create a client in
   **Admin Settings → MCP Tools**, paste the Client ID and Secret into the connector's advanced
@@ -284,6 +341,9 @@ Meta WhatsApp Cloud API
 - **Apply a migration before deploying the code that needs it.** An extra column is ignored by the
   running backend, so a schema slightly ahead is harmless; code ahead of its schema throws on the
   first request that touches the missing column.
+  **A migration that renames or drops something inverts that rule** — it must ship *with* the backend
+  or after it, never ahead of it, because the running image is still reading the old name and the
+  whole page 500s rather than just the new feature failing.
 - **Stage changes are observed, not hooked.** Eight code paths write `leads.stage`, several in raw
   SQL. Downstream consumers (funnel tags, follow-up sequences) walk the append-only `lead_events` log with a cursor
   instead, so a new write path is covered automatically. Extend that pattern rather than adding a
@@ -320,8 +380,23 @@ scripts/                  install.sh · uninstall.sh · migrate.sh · generate-s
 ```bash
 cd backend  && npm install && npm run dev    # nodemon on :3001
 cd frontend && npm install && npm run dev    # Vite on :5173, proxies /api to the backend
-cd backend  && npm test                      # node:test
+cd backend  && npm test                      # node:test — 250 cases across 13 files
+cd backend  && npm run lint                  # eslint, zero-problem bar
 ```
+
+**A green `npm test` without a database means less than it looks like.** The DB-backed suites *skip*
+when Postgres is unreachable, so an empty schema reads as success. `REQUIRE_DB=1` turns that skip
+into a hard failure — CI sets it, and so should you when you want the real answer:
+
+```bash
+REQUIRE_DB=1 npm test
+```
+
+CI runs the tests, both lint suites, and a secret scan on every push and pull request.
+
+Linting is deliberately scoped to the class of mistake that reaches production and only then throws —
+an identifier that does not exist, a duplicated object key, an unreachable branch. It is not a
+formatter; adding formatting rules would produce a reformat-the-world diff that hides real changes.
 
 Migrations are plain numbered SQL files. Add the next number, keep it idempotent
 (`CREATE TABLE IF NOT EXISTS`, guarded `ALTER`s) so re-running is safe, and apply with
@@ -350,11 +425,10 @@ formatter config: the diff should be the change.
 
 ## License
 
-**GNU Affero General Public License v3.0** — see [`LICENSE`](./LICENSE).
+**MIT** — see [`LICENSE`](./LICENSE).
 
-You may use, modify and self-host this freely. The AGPL's network clause means that if you run a
-modified version as a service other people use over a network, you must offer those users the source
-of your modified version. Chosen deliberately, so improvements to a hosted fork flow back.
+Use it, modify it, self-host it, sell it, build a product on it. Keep the copyright notice; that is
+the only condition. No copyleft, no network clause, no obligation to publish your changes.
 
 "Forge Growth" and the Forgemind logo are the project's marks; the licence covers the code, not the
 branding. Rename a fork that you distribute.
