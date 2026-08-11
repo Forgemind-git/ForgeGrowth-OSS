@@ -161,6 +161,22 @@ const SELECT_PROJECT = `
          ${COUNT_SELECTS}
     FROM coexistence.projects p`;
 
+// Returns the id, or null when :id is not one.
+//
+// ⚠ parseInt IS THE TRAP HERE, NOT THE FIX. It stops at the first character that
+// is not a digit and returns what it has, so parseInt('1e999', 10) === 1 and
+// parseInt('1abc', 10) === 1 — meaning GET /api/projects/1e999 answered 200 with
+// project 1's contents instead of a 404. A Number.isFinite() guard does not catch
+// it either, because 1 is perfectly finite; the value was already corrupted by
+// the time it was checked. So validate the RAW STRING first and only then
+// convert. Number.isSafeInteger rejects the other direction — an id past 2^53
+// that would compare equal to a different row after the float round-trip.
+function projectId(raw) {
+  if (!/^\d+$/.test(String(raw ?? ''))) return null;
+  const n = Number(raw);
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
 // ── LIST ─────────────────────────────────────────────────────────────────────
 router.get('/projects', async (req, res) => {
   try {
@@ -175,8 +191,8 @@ router.get('/projects', async (req, res) => {
 // ── DETAIL — the project's whole toolkit in one fetch ────────────────────────
 router.get('/projects/:id', async (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isFinite(id)) return res.status(404).json({ error: 'Project not found' });
+    const id = projectId(req.params.id);
+    if (id === null) return res.status(404).json({ error: 'Project not found' });
     const { rows } = await pool.query(`${SELECT_PROJECT} WHERE p.id = $1`, [id]);
     if (!rows.length) return res.status(404).json({ error: 'Project not found' });
 
@@ -260,7 +276,8 @@ router.post('/projects', adminOnly, async (req, res) => {
 // ── UPDATE (rename / recolour / archive) ─────────────────────────────────────
 router.put('/projects/:id', adminOnly, async (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = projectId(req.params.id);
+    if (id === null) return res.status(404).json({ error: 'Project not found' });
     const b = req.body || {};
     const sets = [], vals = [];
     if (b.name !== undefined) {
@@ -295,7 +312,8 @@ router.put('/projects/:id', adminOnly, async (req, res) => {
 // together. The message names what is still inside so it is actionable.
 router.delete('/projects/:id', adminOnly, async (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = projectId(req.params.id);
+    if (id === null) return res.status(404).json({ error: 'Project not found' });
     // Derived from KINDS for the same reason as COUNT_SELECTS: a kind missing
     // here would let a project holding it be deleted, and the FK would then
     // refuse with a raw Postgres error instead of the actionable message below.
