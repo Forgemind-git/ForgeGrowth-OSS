@@ -1,0 +1,86 @@
+# Publish the backend and web images to GHCR, so Forge Growth can be installed
+# without cloning anything (see docker-compose.images.yml).
+#
+# Tags produced:
+#   latest          every push to main
+#   <version>       for a tag push like v1.2.3  ->  1.2.3, 1.2, 1
+#   sha-<short>     always, so a deploy can pin an exact build
+#
+# No secrets to configure: GITHUB_TOKEN can push to this repo's own GHCR
+# namespace given the `packages: write` permission below. The packages inherit
+# the repository's visibility, so on a public repo they are anonymously pullable
+# and `docker compose up` needs no login.
+
+name: Publish images
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  publish:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ⚠ The backend context is the REPO ROOT, not ./backend — its image
+          #   bakes in supabase/migrations and forge-growth-plugin, which live
+          #   outside ./backend. See backend/Dockerfile.
+          - name: backend
+            image: forgegrowth-backend
+            context: .
+            dockerfile: backend/Dockerfile
+          - name: web
+            image: forgegrowth-web
+            context: ./frontend
+            dockerfile: ./frontend/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # metadata-action lowercases the image reference for us, which matters
+          # here: the owner is mixed-case (Forgemind-git) and a registry path
+          # must be lowercase or the push is rejected. Hence the compose file
+          # refers to ghcr.io/forgemind-git/… in lower case.
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix=sha-
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Cache in the registry so a one-line change does not rebuild
+          # node_modules and (for web) the whole Vite bundle.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

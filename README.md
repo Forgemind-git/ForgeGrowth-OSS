@@ -18,7 +18,7 @@ Open source under the **MIT licence**. Self-hosted, single-tenant, no SaaS tier,
 |---|---|
 | **Docker** | with the **Compose v2** plugin — `docker compose version` must work (not `docker-compose`) |
 | **Shell** | anything POSIX-ish that can run bash: Linux, macOS, or Windows via WSL2 / Git Bash |
-| **RAM** | 2 GB to build. The frontend build is the peak; on 1 GB it gets OOM-killed with an error that reads like a code fault |
+| **RAM** | 2 GB **to build**. The frontend build is the peak; on 1 GB it gets OOM-killed with an error that reads like a code fault. Running the published images instead skips that peak entirely |
 | **Disk** | ~3 GB for the images |
 
 Nothing else — no Node, Postgres, Redis or MinIO on the host. Everything runs in containers.
@@ -39,11 +39,48 @@ ports with `lsof` rather than `ss`). Apple Silicon is fine; the images build nat
   Windows drive is dramatically slower and can confuse file-watching during development.
 - **Git Bash** also works for the install itself.
 
-There is no PowerShell or `.bat` installer. If you would rather not use a shell at all, the
-[manual path](#installing-without-the-script) below is four commands you can run from any terminal,
-PowerShell included.
+There is no PowerShell or `.bat` installer. If you would rather not use a shell at all, run the
+[published images](#run-it-from-published-images--no-source-code) instead — that path is two
+downloads and `docker compose up -d`, with nothing to build and no bash anywhere, so it works from
+PowerShell as-is.
 
 ## Quick start
+
+Two ways in. Pick the first if you only want to *run* it, the second if you want to change it.
+
+### Run it from published images — no source code
+
+Nothing is cloned and nothing is built. You need two files and Docker:
+
+```bash
+mkdir forge-growth && cd forge-growth
+curl -o docker-compose.yml https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/docker-compose.images.yml
+curl -o .env               https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/.env.example
+```
+
+Edit `.env` and set five values — `POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD`, `FORGECRM_JWT_SECRET`,
+`FORGECRM_ENCRYPTION_KEY` (32 bytes of hex) and `META_WEBHOOK_VERIFY_TOKEN`. Then:
+
+```bash
+docker compose up -d
+docker compose logs backend | grep -A5 "FIRST-RUN ADMIN"   # the generated admin password
+```
+
+Open `http://localhost:8080`. **There is no migrate step**: the migrations are baked into the backend
+image and applied at startup, which is the whole reason this path needs no repository. Upgrading is
+`docker compose pull && docker compose up -d`.
+
+| | |
+|---|---|
+| Pin a version | set `FORGEGROWTH_TAG=v1.2.3` in `.env` (default `latest`) |
+| Change the port | set `WEB_PORT` in `.env` |
+| Apply migrations yourself | set `AUTO_MIGRATE=0`; the container then only serves |
+
+Images are published to GHCR on every push to `main`, as
+`ghcr.io/forgemind-git/forgegrowth-backend` and `-web`, tagged `latest`, the release version, and
+`sha-<commit>` for pinning an exact build.
+
+### Build from source
 
 ```bash
 git clone <your-fork-url> forge-growth
@@ -371,16 +408,22 @@ frontend/
     components/           chat UI, automation builder, agent editor
     pages/                marketing/ · sales/ · admin · chats
 mcp-server/               stdio MCP server (development only — the hosted transport is the real one)
-supabase/migrations/      numbered SQL, applied in order by scripts/migrate.sh
+supabase/migrations/      numbered SQL, applied in order; baked into the backend image
 scripts/                  install.sh · uninstall.sh · migrate.sh · generate-secrets.sh
+docker-compose.yml        builds from this source tree
+docker-compose.images.yml runs published images, for an install with no source tree
 ```
+
+The backend image's build context is the **repository root**, not `./backend` — it has to reach
+`supabase/migrations/` and `forge-growth-plugin/`, and Docker cannot COPY from a parent of its
+context. The root `.dockerignore` is what keeps a real `.env` out of that context.
 
 ## Development
 
 ```bash
 cd backend  && npm install && npm run dev    # nodemon on :3001
 cd frontend && npm install && npm run dev    # Vite on :5173, proxies /api to the backend
-cd backend  && npm test                      # node:test — 250 cases across 13 files
+cd backend  && npm test                      # node:test — 255 tests, 92 of them DB-backed
 cd backend  && npm run lint                  # eslint, zero-problem bar
 ```
 

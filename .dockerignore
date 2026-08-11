@@ -1,0 +1,34 @@
+# Build context for the BACKEND image, whose context is this directory (the repo
+# root) rather than ./backend — it has to reach supabase/migrations and
+# forge-growth-plugin, and Docker cannot COPY from a parent of its context.
+#
+# ⚠ THE FIRST ENTRY IS THE LOAD-BEARING ONE. A real .env lives here on any
+# machine that has run ./scripts/install.sh, and a root build context would
+# otherwise upload every secret in it to the daemon. The COPY lines in
+# backend/Dockerfile are specific, so nothing lands in the published image
+# today — but one broad `COPY . .` added later would publish the lot. Excluding
+# it here means that mistake cannot become a leak.
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+
+# Never needed in an image, and the single biggest cause of a slow build: the
+# daemon tars the whole context before the first instruction runs.
+**/node_modules
+.git
+.github
+
+# Frontend sources — the backend image does not build the UI. Its own image has
+# its own context (./frontend) and therefore its own .dockerignore.
+frontend
+
+# Local artefacts
+**/dist
+**/.DS_Store
+**/*.log
+**/coverage
+uploads
+media

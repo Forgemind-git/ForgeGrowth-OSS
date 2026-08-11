@@ -1,17 +1,25 @@
-# Forge Growth — self-contained stack.
+# Forge Growth — run from published images, with NO source code on the machine.
 #
-#   cp .env.example .env
-#   ./scripts/generate-secrets.sh >> .env
+# This file is the whole install. You need it and a .env, nothing else:
+#
+#   curl -o docker-compose.yml https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/docker-compose.images.yml
+#   curl -o .env               https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/.env.example
+#   # edit .env — at minimum POSTGRES_PASSWORD, MINIO_ROOT_PASSWORD,
+#   #             FORGECRM_JWT_SECRET, FORGECRM_ENCRYPTION_KEY (32-byte hex),
+#   #             META_WEBHOOK_VERIFY_TOKEN
 #   docker compose up -d
-#   ./scripts/migrate.sh
 #
-# Then open http://localhost:8080 and sign in with the credentials printed in
-# `docker compose logs backend`.
+# Then read the generated admin password out of the log:
+#   docker compose logs backend | grep -A5 "FIRST-RUN ADMIN"
+#
+# The backend applies its own migrations at startup (they are baked into the
+# image), so there is no migrate step and no psql needed on the host.
 #
 # ⚠ Only the web frontend publishes a host port. Postgres, Redis and MinIO stay
 #   on the internal network — exposing a database to the internet is the single
-#   most common way a self-hosted deployment gets compromised. Uncomment a
-#   `ports:` block only for local debugging, and bind to 127.0.0.1 when you do.
+#   most common way a self-hosted deployment gets compromised.
+#
+# To pin a version instead of tracking latest, set FORGEGROWTH_TAG in .env.
 
 name: forgegrowth
 
@@ -26,14 +34,12 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      # Depends-on alone only waits for the container to START. Postgres accepts
-      # connections seconds later, so without this the backend's first query
-      # fails and it exits before Postgres is genuinely ready.
+      # depends_on alone only waits for the container to START; Postgres accepts
+      # connections seconds later.
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-forgegrowth} -d ${POSTGRES_DB:-forgegrowth}"]
       interval: 5s
       timeout: 5s
       retries: 20
-    # ports: ["127.0.0.1:5432:5432"]   # local debugging only
 
   redis:
     image: redis:7-alpine
@@ -62,14 +68,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
-    # ports: ["127.0.0.1:9001:9001"]   # MinIO console, local debugging only
 
   backend:
-    build:
-      # The repo root, not ./backend — the image bakes in supabase/migrations and
-      # forge-growth-plugin, which sit outside ./backend. See backend/Dockerfile.
-      context: .
-      dockerfile: backend/Dockerfile
+    # The service name is load-bearing: the web image's nginx config proxies to
+    # the literal host `backend:3013`. Renaming this service 502s the whole UI.
+    image: ghcr.io/forgemind-git/forgegrowth-backend:${FORGEGROWTH_TAG:-latest}
     restart: unless-stopped
     depends_on:
       postgres: { condition: service_healthy }
@@ -78,8 +81,8 @@ services:
     env_file: [.env]
     environment:
       # Pinned here rather than left to .env: these must match the service names
-      # on this network, and a stale value in a hand-edited .env is a confusing
-      # failure ("connection refused" against a host that does not exist).
+      # on this network, and a stale hand-edited value fails as "connection
+      # refused" against a host that does not exist.
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
@@ -87,19 +90,16 @@ services:
       MINIO_PORT: "9000"
       PORT: "3013"
       NODE_ENV: production
+      # Set to 0 if migrations are applied by something else.
+      AUTO_MIGRATE: ${AUTO_MIGRATE:-1}
     volumes:
       - uploads:/app/uploads   # team profile pictures
       - media:/app/media       # downloaded WhatsApp media
-      # The Claude plugin, served as a .zip from Admin Settings -> MCP Tools.
-      # Bind-mounted rather than COPYed because the build context is ./backend
-      # and this lives beside it. Read-only: the app only ever packages it.
-      # Without this the download returns a 404 explaining the mount is missing,
-      # which is a clear message rather than a broken button.
-      - ./forge-growth-plugin:/app/plugin:ro
+      # No plugin bind-mount here, unlike the build-from-source compose: the
+      # plugin is baked into the image precisely so this path needs no repo.
 
   web:
-    build:
-      context: ./frontend
+    image: ghcr.io/forgemind-git/forgegrowth-web:${FORGEGROWTH_TAG:-latest}
     restart: unless-stopped
     depends_on: [backend]
     ports:

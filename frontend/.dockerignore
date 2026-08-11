@@ -1,0 +1,13 @@
+# frontend/Dockerfile does `COPY . .`, so anything left here goes into the
+# builder stage. node_modules is the expensive one (the image runs `npm install`
+# itself, so a host copy is both useless and often the wrong architecture).
+node_modules
+dist
+.env
+.env.*
+!.env.example
+*.log
+coverage
+playwright-report
+test-results
+.DS_Store
