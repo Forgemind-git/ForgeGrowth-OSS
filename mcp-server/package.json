@@ -1,6 +1,7 @@
 {
   "name": "forgechat-mcp",
   "version": "1.0.0",
+  "license": "MIT",
   "description": "MCP server for building and managing ForgeChat WhatsApp AI agents from Claude Desktop.",
   "type": "module",
   "bin": {
