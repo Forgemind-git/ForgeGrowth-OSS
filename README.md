@@ -80,6 +80,11 @@ Images are published to GHCR on every push to `main`, as
 `ghcr.io/forgemind-git/forgegrowth-backend` and `-web`, tagged `latest`, the release version, and
 `sha-<commit>` for pinning an exact build.
 
+> **Forking this?** A GHCR package is created **private** even when the repository is public, and
+> the publish workflow cannot change that. Flip both packages to public once, under
+> Packages → *package* → Package settings → Change visibility, or `docker compose up -d` on this
+> path fails with a 403 for everyone but you — while the workflow still reports success.
+
 ### Build from source
 
 ```bash

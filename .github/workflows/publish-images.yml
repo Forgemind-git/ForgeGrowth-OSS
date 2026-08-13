@@ -7,9 +7,21 @@
 #   sha-<short>     always, so a deploy can pin an exact build
 #
 # No secrets to configure: GITHUB_TOKEN can push to this repo's own GHCR
-# namespace given the `packages: write` permission below. The packages inherit
-# the repository's visibility, so on a public repo they are anonymously pullable
-# and `docker compose up` needs no login.
+# namespace given the `packages: write` permission below.
+#
+# ⚠ ONE MANUAL STEP, ONCE PER PACKAGE. A GHCR package does NOT inherit the
+# repository's visibility — it is created PRIVATE even when the repo is public,
+# and nothing here can change that (`packages: write` cannot set visibility).
+# Until someone flips it, this workflow goes green, the images really are
+# pushed, and every anonymous `docker pull` gets a 403 — so the install path
+# that needs no source code fails for everyone except the owner, with no
+# failing build to point at it.
+#
+#   Packages -> forgegrowth-backend -> Package settings -> Change visibility
+#   Packages -> forgegrowth-web     -> Package settings -> Change visibility
+#
+# Verify from a logged-out shell:
+#   docker pull ghcr.io/forgemind-git/forgegrowth-web:latest
 
 name: Publish images
 
