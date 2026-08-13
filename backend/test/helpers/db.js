@@ -75,16 +75,6 @@ function skipNoDb(t) {
 async function cleanup() {
   if (!up) return;
   const q = (sql, params = []) => pool.query(sql, params).catch(() => {});
-  await q(`DELETE FROM coexistence.follow_up_log      WHERE enrollment_id IN (
-             SELECT e.id FROM coexistence.follow_up_enrollments e
-               JOIN coexistence.follow_up_sequences s ON s.id = e.sequence_id
-              WHERE s.name LIKE $1)`, [`%${SEED}%`]);
-  await q(`DELETE FROM coexistence.follow_up_enrollments WHERE sequence_id IN (
-             SELECT id FROM coexistence.follow_up_sequences WHERE name LIKE $1)`, [`%${SEED}%`]);
-  await q(`DELETE FROM coexistence.follow_up_steps     WHERE sequence_id IN (
-             SELECT id FROM coexistence.follow_up_sequences WHERE name LIKE $1)`, [`%${SEED}%`]);
-  await q(`DELETE FROM coexistence.follow_up_sequences WHERE name LIKE $1`, [`%${SEED}%`]);
-
   await q(`DELETE FROM coexistence.wa_link_hits    WHERE wa_link_id IN (
              SELECT id FROM coexistence.wa_links WHERE name LIKE $1)`, [`%${SEED}%`]);
   await q(`DELETE FROM coexistence.wa_link_clicks  WHERE target_id IN (

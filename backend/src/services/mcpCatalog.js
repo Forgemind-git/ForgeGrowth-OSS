@@ -132,7 +132,7 @@ const CATEGORIES = [
     key: 'projects',
     label: 'Projects',
     description:
-      'File a template, automation, AI agent, follow-up sequence or form into a campaign project — or take it out again. It only changes which folder something is listed under: nothing is created, edited, activated or sent.',
+      'File a template, automation, AI agent or form into a campaign project — or take it out again. It only changes which folder something is listed under: nothing is created, edited, activated or sent.',
     // Its own category rather than folded into Templates or Lead Forms: the one
     // tool moves FIVE different kinds, so hiding it under any one of them would
     // make "is this on?" unanswerable from the Settings screen.
@@ -190,9 +190,9 @@ const CATEGORIES = [
     key: 'marketing',
     label: 'Marketing Analytics',
     description:
-      'Read campaign performance (including Meta Ads spend), webinars, and BDA activity. Read-only reporting.',
+      'Read campaign performance (including Meta Ads spend) and webinars. Read-only reporting.',
     tier: 'read',
-    legacyCaps: ['area_marketing', 'area_bda'],
+    legacyCaps: ['area_marketing'],
   },
   {
     key: 'sales',
@@ -221,7 +221,7 @@ const CATEGORIES = [
     legacyCaps: [
       'area_contacts', 'area_messaging', 'area_broadcasts', 'area_automations',
       'area_admin', 'area_insights', 'area_leads', 'area_marketing',
-      'area_resources', 'area_bda', 'area_courses', 'area_payments',
+      'area_resources', 'area_courses', 'area_payments',
       'area_leadforms',
     ],
     legacyAny: true,
@@ -274,7 +274,7 @@ const TOOLS = {
 
   /* --- Projects --- */
   list_projects:           { category: 'projects', summary: 'List campaign projects and what each one holds.' },
-  move_to_project:         { category: 'projects', summary: 'File a template, automation, agent, follow-up or form into a project.' },
+  move_to_project:         { category: 'projects', summary: 'File a template, automation, agent or form into a project.' },
 
   /* --- Leads & Funnel --- */
   list_leads:              { category: 'leads', summary: 'List leads, filtered by stage, source or saved view.' },
@@ -299,7 +299,6 @@ const TOOLS = {
   /* --- Marketing Analytics --- */
   get_campaign_performance: { category: 'marketing', summary: 'Read campaign spend, leads and results.' },
   list_webinars:           { category: 'marketing', summary: 'List webinars and their registrations.' },
-  get_bda_activity:        { category: 'marketing', summary: 'Read the BDA leaderboard and activity log.' },
 
   /* --- Products & Payments --- */
   list_products:           { category: 'sales', summary: 'List the product catalogue and prices.' },

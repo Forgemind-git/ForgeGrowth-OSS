@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Megaphone, Kanban, Radio } from 'lucide-react';
 import { api } from './api.js';
 import { C, FONT } from './constants.js';
@@ -14,7 +14,6 @@ import ChatsPage from './components/ChatsPage.jsx';
 import HomePage from './pages/HomePage.jsx';
 import ChatbotBuilderPage from './pages/ChatbotBuilderPage.jsx';
 import TemplateBuilderPage from './pages/TemplateBuilderPage.jsx';
-import ContactsPage from './pages/ContactsPage.jsx';
 import BulkMessagePage from './pages/BulkMessagePage.jsx';
 import AdminSettingsPage from './pages/AdminSettingsPage.jsx';
 import MediaLibraryPage from './pages/MediaLibraryPage.jsx';
@@ -23,7 +22,6 @@ import ProjectsPage from './pages/ProjectsPage.jsx';
 import MessageCostsPage from './pages/MessageCostsPage.jsx';
 import PipelinesPage from './pages/PipelinesPage.jsx';
 import AiAgentBuilderPage from './pages/AiAgentBuilderPage.jsx';
-import FollowUpSequencePage from './pages/FollowUpSequencePage.jsx';
 // AI Academy — Marketing
 import MarketingOverviewPage from './pages/marketing/OverviewPage.jsx';
 import CampaignsPage from './pages/marketing/CampaignsPage.jsx';
@@ -31,39 +29,44 @@ import CtwaPage from './pages/marketing/CtwaPage.jsx';
 import PlaceholderPage from './components/PlaceholderPage.jsx';
 // AI Academy — Sales
 import LeadsHubPage from './pages/sales/LeadsHubPage.jsx';
-import BdaPerformancePage from './pages/sales/BdaPerformancePage.jsx';
-import ProductsPage from './pages/sales/ProductsPage.jsx';
 import PaymentsPage from './pages/sales/PaymentsPage.jsx';
 import OnboardingPage from './pages/sales/OnboardingPage.jsx';
 // AI Academy — Chats additive
-import TeamMembersPage from './pages/TeamMembersPage.jsx';
 import LeadFormsPage from './pages/LeadFormsPage.jsx';
 import PublicLeadFormPage from './pages/PublicLeadFormPage.jsx';
 
 const VALID_PAGES = new Set([
   'home', 'chatbot-builder', 'template-builder', 'chats',
-  'contacts', 'bulk-message', 'admin-settings', 'media-library', 'wa-links',
-  'pipelines', 'ai-agent-builder', 'team-members', 'lead-forms', 'projects',
-  'follow-up-sequence', 'message-costs',
+  'bulk-message', 'admin-settings', 'media-library', 'wa-links',
+  'pipelines', 'ai-agent-builder', 'lead-forms', 'projects',
   // Marketing
   'mkt-overview', 'campaigns', 'ctwa-ads', 'conversion-api',
-  // Sales
-  'sales-pipeline', 'leads', 'bda-performance', 'products', 'payments', 'onboarding',
+  // Sales — 'sales-pipeline' and 'sales-funnel' are legacy keys kept so old
+  // links and any stored permission override keep resolving; both land on the
+  // Leads hub. 'bda-performance' and 'contacts' were removed with their pages.
+  'sales-pipeline', 'leads', 'payments', 'onboarding',
   'sales-funnel',
+  // Message costs — a full-width dashboard; its configuration lives in
+  // Admin Settings -> Message Costs.
+  'message-costs',
 ]);
 
-// Which header section (Marketing / Sales / Chats) owns each page. The hash is
-// the single source of truth — section is derived, so a refresh keeps you in the
-// right workspace. Anything not listed belongs to Chats.
-const PAGE_SECTION = {
-  'mkt-overview': 'marketing', 'campaigns': 'marketing',
-  'ctwa-ads': 'marketing', 'conversion-api': 'marketing',
-  'sales-pipeline': 'sales', 'leads': 'sales',
-  'bda-performance': 'sales', 'onboarding': 'sales', 'products': 'sales', 'payments': 'sales',
-  'sales-funnel': 'sales',
-};
-// The landing page when a section tab is clicked.
-const SECTION_FIRST_PAGE = { marketing: 'mkt-overview', sales: 'leads', chats: 'home' };
+// Which header section (Marketing / Sales) owns each page. The hash is the
+// single source of truth — section is DERIVED, so a refresh keeps you in the
+// right workspace.
+//
+// Only the Marketing pages need listing now that Chats has been folded into
+// Sales: everything else IS Sales, so the fallback below does the work and a new
+// Sales page cannot be forgotten here and land in the wrong workspace.
+const MARKETING_PAGES = new Set([
+  'mkt-overview', 'campaigns', 'ctwa-ads', 'conversion-api',
+]);
+const sectionOf = (page) => (MARKETING_PAGES.has(page) ? 'marketing' : 'sales');
+
+// The landing page when a section tab is clicked. Sales opens on the Leads hub,
+// which itself opens on the Funnel; Home stays the login landing page and is
+// reachable from the pinned item above the groups.
+const SECTION_FIRST_PAGE = { marketing: 'mkt-overview', sales: 'leads' };
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -78,7 +81,7 @@ export default function App() {
   // single source of truth (a refresh keeps you in the right workspace).
   // admin-settings keeps whatever section it was reached from — but the tabs are
   // hidden there anyway, so 'chats' is a harmless default.
-  const section = PAGE_SECTION[page] || 'chats';
+  const section = sectionOf(page);
   const changeSection = (s) => navigate(SECTION_FIRST_PAGE[s] || 'home');
 
   // Path-based public lead-form route (no '#'): WhatsApp/Meta template URL
@@ -116,12 +119,24 @@ export default function App() {
     }
   }, [user, page, replaceRoute]);
 
+  // The automation builder wants the room, so the sidebar collapses on the way
+  // in — and RESTORES on the way out.
+  //
+  // ⚠ It used to only collapse. That left you in the 68px rail for the rest of
+  // the session after one visit to Automations, with no automatic way back, and
+  // now that every destination lives in the Sales section's groups it hid the
+  // whole structure rather than just the Chats nav. A manual collapse is still
+  // respected: `pinned` remembers what the operator chose BEFORE the builder took
+  // over, so leaving restores their preference rather than forcing it open.
+  const pinnedCollapse = useRef(false);
+  const inBuilder = page === 'chatbot-builder';
   useEffect(() => {
-    // Collapse main sidebar by default on automation builder page
-    if (page === 'chatbot-builder') {
-      setSidebarCollapsed(true);
+    if (inBuilder) {
+      setSidebarCollapsed(prev => { pinnedCollapse.current = prev; return true; });
+    } else {
+      setSidebarCollapsed(pinnedCollapse.current);
     }
-  }, [page]);
+  }, [inBuilder]);
 
   useEffect(() => {
     api.auth.me()
@@ -156,7 +171,7 @@ export default function App() {
         fontFamily: FONT,
         background: C.pageBg,
       }}>
-        <div style={{ fontSize: 13, color: C.textMuted, fontWeight: 500 }}>Loading…</div>
+        <div style={{ fontSize: 15, color: C.textMuted, fontWeight: 500 }}>Loading…</div>
       </div>
     );
   }
@@ -180,10 +195,10 @@ export default function App() {
         gap: 14,
       }}>
         <Icon size={44} strokeWidth={1.5} color={C.textMuted} style={{ opacity: 0.45 }} />
-        <div style={{ fontSize: 17, fontWeight: 700, color: C.text, fontFamily: FONT }}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: FONT }}>
           {title}
         </div>
-        <div style={{ fontSize: 13, color: C.textMuted, fontFamily: FONT }}>
+        <div style={{ fontSize: 15, color: C.textMuted, fontFamily: FONT }}>
           This workspace is empty for now — its pages are coming soon.
         </div>
       </div>
@@ -194,19 +209,16 @@ export default function App() {
     switch (page) {
       case 'home': return <HomePage user={user} onPageChange={setPage} />;
       case 'chats': return <ChatsPage subParts={subParts} navigate={navigate} user={user} />;
-      case 'contacts': return <ContactsPage user={user} onNavigate={navigate} />;
       case 'template-builder': return <TemplateBuilderPage subParts={subParts} navigate={navigate} />;
       case 'media-library': return <MediaLibraryPage />;
-      case 'bulk-message': return <BulkMessagePage onNavigate={navigate} />;
+      case 'bulk-message': return <BulkMessagePage onNavigate={navigate} user={user} />;
       case 'chatbot-builder': return <ChatbotBuilderPage subParts={subParts} navigate={navigate} />;
       case 'ai-agent-builder': return <AiAgentBuilderPage user={user} />;
-      case 'follow-up-sequence': return <FollowUpSequencePage user={user} navigate={navigate} subParts={subParts} />;
       case 'admin-settings': return <AdminSettingsPage onLogout={handleLogout} onNavigate={setPage} subParts={subParts} navigate={navigate} user={user} />;
       case 'wa-links': return <MessageFormatsPage subParts={subParts} navigate={navigate} />;
       case 'projects': return <ProjectsPage subParts={subParts} navigate={navigate} user={user} />;
       case 'message-costs': return <MessageCostsPage user={user} navigate={navigate} subParts={subParts} />;
       case 'pipelines': return <PipelinesPage user={user} />;
-      case 'team-members': return <TeamMembersPage user={user} />;
       case 'lead-forms': return <LeadFormsPage user={user} subParts={subParts} navigate={navigate} />;
       // Marketing
       case 'mkt-overview': return <MarketingOverviewPage user={user} navigate={navigate} />;
@@ -218,12 +230,12 @@ export default function App() {
         subtitle="Send down-funnel conversions back to Meta — Coming Soon" />;
       // Sales — one unified Leads tab. `sales-pipeline` / `sales-funnel` are
       // legacy hashes kept so old links and permission grants keep resolving;
-      // they open the hub on the matching view.
-      case 'sales-pipeline': return <LeadsHubPage user={user} navigate={navigate} subParts={[]} />;
-      case 'sales-funnel': return <LeadsHubPage user={user} navigate={navigate} subParts={['funnel']} />;
+      // they open the hub on the matching view. Pipeline is no longer a tab of
+      // its own — it is the BOARD view of All Leads — so the old pipeline hash
+      // now lands there rather than on a tab that does not exist.
+      case 'sales-pipeline': return <LeadsHubPage user={user} navigate={navigate} subParts={['list', 'board']} />;
+      case 'sales-funnel': return <LeadsHubPage user={user} navigate={navigate} subParts={[]} />;
       case 'leads': return <LeadsHubPage user={user} navigate={navigate} subParts={subParts} />;
-      case 'bda-performance': return <BdaPerformancePage user={user} navigate={navigate} />;
-      case 'products': return <ProductsPage user={user} />;
       case 'payments': return <PaymentsPage user={user} navigate={navigate} subParts={subParts} />;
       case 'onboarding': return <OnboardingPage user={user} navigate={navigate} subParts={subParts} />;
       default: return <HomePage user={user} onPageChange={setPage} />;

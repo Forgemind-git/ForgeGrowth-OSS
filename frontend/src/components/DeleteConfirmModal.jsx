@@ -27,31 +27,31 @@ export default function DeleteConfirmModal({
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
           <div style={{
             width: 36, height: 36, borderRadius: '50%',
-            background: danger ? '#fef2f2' : '#f0f2f5',
+            background: danger ? 'var(--c-dangerBgSoft, #fef2f2)' : 'var(--c-chatPanel, #f0f2f5)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: danger ? C.primary : C.textSecondary,
             flexShrink: 0,
           }}>
             <AlertTriangle size={18} />
           </div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{title}</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>{title}</div>
         </div>
 
-        <div style={{ fontSize: 13, color: C.textSecondary, lineHeight: 1.6, marginBottom: 20 }}>
+        <div style={{ fontSize: 15, color: C.textSecondary, lineHeight: 1.6, marginBottom: 20 }}>
           {message}
         </div>
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onCancel} style={{
             padding: '8px 16px', borderRadius: 8, border: `1px solid ${C.border}`,
-            background: 'transparent', cursor: 'pointer', fontSize: 13,
+            background: 'transparent', cursor: 'pointer', fontSize: 15,
             fontWeight: 600, color: C.textSecondary, fontFamily: FONT,
           }}>{cancelText}</button>
           <button onClick={onConfirm} style={{
             padding: '8px 16px', borderRadius: 8, border: 'none',
             background: danger ? C.primary : C.purple,
             color: '#fff', cursor: 'pointer',
-            fontSize: 13, fontWeight: 600, fontFamily: FONT,
+            fontSize: 15, fontWeight: 600, fontFamily: FONT,
           }}>{confirmText}</button>
         </div>
       </div>

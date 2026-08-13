@@ -78,7 +78,7 @@ export default function FunnelViewerPage({ user, tabs }) {
     >
       {tabs}
       {range === 'custom' && (
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16, fontFamily: FONT, fontSize: 13, color: C.textSecondary }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16, fontFamily: FONT, fontSize: 15, color: C.textSecondary }}>
           <span>From</span>
           <input type="date" value={custom.from} onChange={e => setCustom(c => ({ ...c, from: e.target.value }))}
             style={{ padding: '7px 10px', border: `1.5px solid ${C.border}`, borderRadius: 8, fontFamily: FONT }} />
@@ -91,7 +91,7 @@ export default function FunnelViewerPage({ user, tabs }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginBottom: 18 }}>
         <KpiCard label="Leads in view" value={loading ? '—' : totalIn} icon={Users}
           info="Total leads matching the current source + date filter (all stages)." />
-        <KpiCard label="Top of funnel" value={loading ? '—' : (funnel[0]?.count ?? 0)} accent="#2563eb"
+        <KpiCard label="Top of funnel" value={loading ? '—' : (funnel[0]?.count ?? 0)} accent="var(--c-infoBright, #2563eb)"
           info={`Leads at the first stage (${funnel[0]?.label || '—'}).`} />
         <KpiCard label="Reached won stage" value={loading ? '—' : wonCount} accent={C.green}
           info={`Leads at the final funnel stage (${funnel[funnel.length - 1]?.label || '—'}).`} />
@@ -115,7 +115,7 @@ export default function FunnelViewerPage({ user, tabs }) {
               return (
                 <div key={s.stageKey}>
                   {stepPct != null && (
-                    <div style={{ textAlign: 'center', fontFamily: MONO, fontSize: 11, color: C.textMuted, margin: '1px 0 3px' }}>
+                    <div style={{ textAlign: 'center', fontFamily: MONO, fontSize: 13, color: C.textMuted, margin: '1px 0 3px' }}>
                       ↓ {stepPct}%
                     </div>
                   )}
@@ -128,8 +128,8 @@ export default function FunnelViewerPage({ user, tabs }) {
                     }}
                       onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.01)'; }}
                       onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}>
-                      <span style={{ fontWeight: 700, fontSize: 14 }}>{s.label}</span>
-                      <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 600 }}>{s.count}</span>
+                      <span style={{ fontWeight: 700, fontSize: 15 }}>{s.label}</span>
+                      <span style={{ fontFamily: MONO, fontSize: 16, fontWeight: 600 }}>{s.count}</span>
                     </div>
                   </div>
                 </div>
@@ -139,11 +139,11 @@ export default function FunnelViewerPage({ user, tabs }) {
         )}
         {!loading && branches.length > 0 && (
           <div style={{ marginTop: 18, paddingTop: 14, borderTop: `1px dashed ${C.border}` }}>
-            <div style={{ fontFamily: FONT, fontSize: 12, color: C.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.04em' }}>Branches off funnel</div>
+            <div style={{ fontFamily: FONT, fontSize: 14, color: C.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.04em' }}>Branches off funnel</div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               {branches.map(s => (
                 <div key={s.stageKey} onClick={() => openDrill(s.stageKey, s.label)}
-                  style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, border: `1.5px solid ${C.border}`, fontFamily: FONT, fontSize: 13 }}>
+                  style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 8, border: `1.5px solid ${C.border}`, fontFamily: FONT, fontSize: 15 }}>
                   <span style={{ width: 9, height: 9, borderRadius: 99, background: s.color }} />
                   <span style={{ color: C.text, fontWeight: 600 }}>{s.label}</span>
                   <span style={{ fontFamily: MONO, color: C.textMuted }}>{s.count}</span>
@@ -159,8 +159,8 @@ export default function FunnelViewerPage({ user, tabs }) {
           <div onClick={e => e.stopPropagation()} style={{ width: 'min(460px, 92vw)', height: '100%', background: C.cardBg, boxShadow: C.shadowLg, display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: `1px solid ${C.border}` }}>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{drill.label}</div>
-                <div style={{ fontSize: 12, color: C.textSecondary }}>{drill.leads == null ? 'Loading…' : `${drill.leads.length} lead(s) in this stage`}</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{drill.label}</div>
+                <div style={{ fontSize: 14, color: C.textSecondary }}>{drill.leads == null ? 'Loading…' : `${drill.leads.length} lead(s) in this stage`}</div>
               </div>
               <button onClick={() => setDrill(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textSecondary }}><X size={18} /></button>
             </div>
@@ -172,8 +172,8 @@ export default function FunnelViewerPage({ user, tabs }) {
               ) : drill.leads.map(l => (
                 <div key={l.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 20px', borderBottom: `1px solid ${C.border}` }}>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name || 'Unnamed'}</div>
-                    <div style={{ fontSize: 11.5, color: C.textMuted, fontFamily: MONO }}>{l.source || '—'} · {fmtDate(l.lastActivityAt || l.createdAt)}</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name || 'Unnamed'}</div>
+                    <div style={{ fontSize: 13, color: C.textMuted, fontFamily: MONO }}>{l.source || '—'} · {fmtDate(l.lastActivityAt || l.createdAt)}</div>
                   </div>
                 </div>
               ))}

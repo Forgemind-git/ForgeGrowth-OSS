@@ -74,7 +74,33 @@ function persistOutboundMedia({ accountPhoneDigits, messageId, buffer, ext }) {
   return { absPath, size: buffer.length };
 }
 
+// Categories whose tags the BACKEND owns. They are hidden from every manual
+// picker and preserved through a manual save; see POST /contacts/save.
+const MANAGED_TAG_CATEGORIES = ['cat-funnel-stage', 'cat-product'];
+
 const router = Router();
+
+/**
+ * When this person last wrote to US.
+ *
+ * ⚠ NOT `contacts.updated_at`. That column is bumped by any write to the row —
+ * a tag change, an assignment, and in particular the funnel stage-tag mirror,
+ * which rewrites hundreds of contacts whenever a lead moves. Using it as
+ * "last active" would make someone look freshly engaged because a background
+ * sweep touched their row, which is exactly backwards for a re-engagement
+ * broadcast ("everyone quiet for 30 days").
+ *
+ * INBOUND only, for the same reason: a message WE sent is not evidence they
+ * are still there. This is the same signal the 24h window is computed from.
+ */
+const LAST_INBOUND_LATERAL = `
+      LEFT JOIN LATERAL (
+        SELECT MAX(ch.timestamp) AS last_inbound_at
+          FROM coexistence.chat_history ch
+         WHERE ch.wa_number = c.wa_number
+           AND ch.contact_number = c.contact_number
+           AND ch.direction = 'incoming'
+      ) li ON TRUE`;
 const SERVICE_WINDOW_SECONDS = 24 * 3600;
 
 // Multipart parser for chat media (up to 16MB — WhatsApp's per-message cap)
@@ -218,36 +244,31 @@ router.get('/numbers', async (req, res) => {
     const unreadMap = {};
     for (const r of unreadRes.rows) unreadMap[r.wa_number] = Number(r.unread_chats) || 0;
 
-    // Enrich with team member data and display name
+    // Enrich with the account's own name.
+    //
+    // ⚠ A business number's label comes from whatsapp_accounts.display_name —
+    // the field you edit in Admin Settings → WhatsApp Accounts. It used to come
+    // from a matching team_members row, with the account name only as a
+    // last-resort fallback, which meant the visible name of a number was
+    // whatever some other table happened to say. Team members are gone
+    // (2026-08-12) and the account IS the thing being named.
     const enriched = await Promise.all(rows.map(async (row) => {
-      const [nameRes, teamRes, acctRes] = await Promise.all([
+      const [nameRes, acctRes] = await Promise.all([
         pool.query(
           'SELECT COALESCE(name, profile_name) AS name FROM coexistence.contacts WHERE wa_number = $1 AND contact_number = $1 LIMIT 1',
           [row.wa_number]
         ),
-        pool.query(
-          `SELECT name, profile_picture_url
-           FROM coexistence.team_members
-           WHERE phone_number = $1
-              OR phone_number = $2
-              OR REPLACE(REPLACE(REPLACE(phone_number, '+', ''), '-', ''), ' ', '') = $3
-           LIMIT 1`,
-          [row.wa_number, `+${row.wa_number}`, row.wa_number.replace(/\D/g, '')]
-        ),
-        // Last-resort label: the registered account's own name. Kept LAST so an
-        // existing number's displayed label never changes — this only fills in
-        // numbers that previously rendered as a bare masked phone number.
+        // The account's own name — now the PRIMARY label for a business number.
         pool.query(
           `SELECT display_name FROM coexistence.whatsapp_accounts
             WHERE display_phone_number = $1 AND is_active = TRUE LIMIT 1`,
           [row.wa_number]
         ),
       ]);
-      const teamMember = teamRes.rows[0];
       return {
         ...row,
-        display_name: teamMember?.name || nameRes.rows[0]?.name || acctRes.rows[0]?.display_name || null,
-        profile_picture_url: teamMember?.profile_picture_url || null,
+        display_name: acctRes.rows[0]?.display_name || nameRes.rows[0]?.name || null,
+        profile_picture_url: null,
         unread_chats: unreadMap[row.wa_number] || 0,
       };
     }));
@@ -333,7 +354,7 @@ router.get('/contacts', async (req, res) => {
 // POST /api/contacts/save
 router.post('/contacts/save', async (req, res) => {
   try {
-    const { waNumber, contactNumber, name, tags, customFields, assignedUserId } = req.body;
+    const { waNumber, contactNumber, name, tags, assignedUserId } = req.body;
     if (!waNumber || !contactNumber) {
       return res.status(400).json({ error: 'waNumber and contactNumber required' });
     }
@@ -344,8 +365,28 @@ router.post('/contacts/save', async (req, res) => {
     // COALESCE(EXCLUDED.name, …) preserves the stored name on partial saves,
     // protecting the name-vs-profile_name distinction the engine relies on.
     const cleanName = (typeof name === 'string' && name.trim()) ? name.trim() : null;
-    const tagsJson = JSON.stringify(tags || []);
-    const cfJson = JSON.stringify(customFields || {});
+    // ⚠ MANAGED TAGS ARE NOT THE CLIENT'S TO SEND, OR TO DROP.
+    //
+    // Funnel Stage and Product tags are mirrored onto a contact by the backend
+    // and are deliberately absent from the manual tag picker. `tags` used to be
+    // written as `EXCLUDED.tags` — a straight replace — so the moment the UI
+    // stopped listing them, the very next manual save on that contact would
+    // have silently WIPED their stage and purchase tags. Exactly the shape of
+    // the custom_fields bug noted below.
+    //
+    // So the incoming array is stripped of managed categories, and whatever
+    // managed tags the row already holds are re-appended IN SQL (never
+    // read-modify-write, which two concurrent savers would clobber).
+    const manualTags = (Array.isArray(tags) ? tags : [])
+      .filter(t => !MANAGED_TAG_CATEGORIES.includes(String(t?.category_id || '')));
+    const tagsJson = JSON.stringify(manualTags);
+    // ⚠ `custom_fields` is deliberately NOT written here any more. Contact
+    // custom fields were removed — the lead is where a person's data lives —
+    // and this handler used to write `EXCLUDED.custom_fields` unconditionally,
+    // so once the UI stopped sending them EVERY save would have silently reset
+    // the column to {}. Not touching it keeps whatever is stored, and nothing
+    // in the app writes it now. A `customFields` key in the body is ignored
+    // rather than honoured.
 
     // BDA: can only edit a contact already assigned to them. Cannot reassign.
     // Admin: can edit any contact and may optionally set/clear assigned_user_id.
@@ -353,28 +394,31 @@ router.post('/contacts/save', async (req, res) => {
       if (!(await assertContactAccess(req, res, waNumber, contactNumber))) return;
       // Silently ignore assignedUserId for non-admins
       await pool.query(`
-        INSERT INTO coexistence.contacts (wa_number, contact_number, name, tags, custom_fields, assigned_user_id, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, NOW())
+        INSERT INTO coexistence.contacts (wa_number, contact_number, name, tags, assigned_user_id, updated_at)
+        VALUES ($1, $2, $3, $4, $5, NOW())
         ON CONFLICT (wa_number, contact_number)
-        DO UPDATE SET name = COALESCE(EXCLUDED.name, coexistence.contacts.name), tags = EXCLUDED.tags, custom_fields = EXCLUDED.custom_fields, updated_at = NOW()
-      `, [waNumber, contactNumber, cleanName, tagsJson, cfJson, req.user.id]);
+        DO UPDATE SET name = COALESCE(EXCLUDED.name, coexistence.contacts.name), tags = COALESCE((SELECT jsonb_agg(t) FROM jsonb_array_elements(COALESCE(coexistence.contacts.tags,'[]'::jsonb)) t
+                        WHERE t->>'category_id' = ANY($6::text[])), '[]'::jsonb) || EXCLUDED.tags, updated_at = NOW()
+      `, [waNumber, contactNumber, cleanName, tagsJson, req.user.id, MANAGED_TAG_CATEGORIES]);
     } else {
       // Admin: assignedUserId may be present (set/clear) or omitted (preserve)
       const cleanAssigned = assignedUserId === null ? null : (assignedUserId ? parseInt(assignedUserId, 10) : undefined);
       if (cleanAssigned !== undefined) {
         await pool.query(`
-          INSERT INTO coexistence.contacts (wa_number, contact_number, name, tags, custom_fields, assigned_user_id, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, NOW())
-          ON CONFLICT (wa_number, contact_number)
-          DO UPDATE SET name = COALESCE(EXCLUDED.name, coexistence.contacts.name), tags = EXCLUDED.tags, custom_fields = EXCLUDED.custom_fields, assigned_user_id = EXCLUDED.assigned_user_id, updated_at = NOW()
-        `, [waNumber, contactNumber, cleanName, tagsJson, cfJson, cleanAssigned]);
-      } else {
-        await pool.query(`
-          INSERT INTO coexistence.contacts (wa_number, contact_number, name, tags, custom_fields, updated_at)
+          INSERT INTO coexistence.contacts (wa_number, contact_number, name, tags, assigned_user_id, updated_at)
           VALUES ($1, $2, $3, $4, $5, NOW())
           ON CONFLICT (wa_number, contact_number)
-          DO UPDATE SET name = COALESCE(EXCLUDED.name, coexistence.contacts.name), tags = EXCLUDED.tags, custom_fields = EXCLUDED.custom_fields, updated_at = NOW()
-        `, [waNumber, contactNumber, cleanName, tagsJson, cfJson]);
+          DO UPDATE SET name = COALESCE(EXCLUDED.name, coexistence.contacts.name), tags = COALESCE((SELECT jsonb_agg(t) FROM jsonb_array_elements(COALESCE(coexistence.contacts.tags,'[]'::jsonb)) t
+                        WHERE t->>'category_id' = ANY($6::text[])), '[]'::jsonb) || EXCLUDED.tags, assigned_user_id = EXCLUDED.assigned_user_id, updated_at = NOW()
+        `, [waNumber, contactNumber, cleanName, tagsJson, cleanAssigned, MANAGED_TAG_CATEGORIES]);
+      } else {
+        await pool.query(`
+          INSERT INTO coexistence.contacts (wa_number, contact_number, name, tags, updated_at)
+          VALUES ($1, $2, $3, $4, NOW())
+          ON CONFLICT (wa_number, contact_number)
+          DO UPDATE SET name = COALESCE(EXCLUDED.name, coexistence.contacts.name), tags = COALESCE((SELECT jsonb_agg(t) FROM jsonb_array_elements(COALESCE(coexistence.contacts.tags,'[]'::jsonb)) t
+                        WHERE t->>'category_id' = ANY($5::text[])), '[]'::jsonb) || EXCLUDED.tags, updated_at = NOW()
+        `, [waNumber, contactNumber, cleanName, tagsJson, MANAGED_TAG_CATEGORIES]);
       }
     }
 
@@ -613,10 +657,11 @@ router.get('/saved-contacts', async (req, res) => {
       const { rows } = await pool.query(`
         SELECT DISTINCT ON (c.contact_number)
                c.contact_number, COALESCE(c.name, c.profile_name) AS name, c.tags, c.custom_fields,
-               c.created_at, c.updated_at, c.wa_number,
+               c.created_at, c.updated_at, c.wa_number, li.last_inbound_at,
                c.assigned_user_id, u.display_name AS assigned_user_name, u.role AS assigned_user_role
           FROM coexistence.contacts c
           LEFT JOIN coexistence.forgecrm_users u ON u.id = c.assigned_user_id
+          ${LAST_INBOUND_LATERAL}
          WHERE COALESCE(c.name, c.profile_name) IS NOT NULL AND COALESCE(c.name, c.profile_name) <> '' ${assignFilter}
          ORDER BY c.contact_number, c.updated_at DESC NULLS LAST
       `, params);
@@ -636,9 +681,11 @@ router.get('/saved-contacts', async (req, res) => {
     }
     const { rows } = await pool.query(`
       SELECT c.contact_number, COALESCE(c.name, c.profile_name) AS name, c.tags, c.custom_fields, c.created_at, c.updated_at,
+             li.last_inbound_at,
              c.assigned_user_id, u.display_name AS assigned_user_name, u.role AS assigned_user_role
       FROM coexistence.contacts c
       LEFT JOIN coexistence.forgecrm_users u ON u.id = c.assigned_user_id
+      ${LAST_INBOUND_LATERAL}
       WHERE c.wa_number = $1 AND COALESCE(c.name, c.profile_name) IS NOT NULL AND COALESCE(c.name, c.profile_name) <> '' ${assignFilter.replace(/assigned_user_id/g, 'c.assigned_user_id')}
       ORDER BY COALESCE(c.name, c.profile_name) ASC
     `, params);

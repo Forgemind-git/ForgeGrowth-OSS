@@ -28,9 +28,14 @@ const pool = require('../db');
 const bus = require('../events');
 const cfg = require('../services/funnelConfig');
 const funnelTags = require('../services/funnelTags');
+const productTags = require('../services/productTags');
 const registry = require('../services/fieldRegistry');
 
+const multer = require('multer');
 const router = Router();
+
+// Memory storage: a sheet is parsed and discarded, never written to disk.
+const leadSheetUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 // Stage lists are now user-configurable (funnel_stages, migration 064). They are
 // read from the cached funnel config instead of hardcoded arrays, but each stage
@@ -78,6 +83,10 @@ function leadRow(r) {
     assignedBda: r.assigned_bda,
     assignedUserId: r.assigned_user_id == null ? null : Number(r.assigned_user_id),
     assignedUserName: r.assigned_user_name || null,
+    // The consecutive-chase streak. RESETS to 1 the moment the customer replies,
+    // and crossing cold_after_follow_ups trips the cold-drop — so it answers
+    // "how many unanswered chases in a row", never "how many follow-ups were
+    // sent". Kept because the cold-drop engine reads it.
     followUpCount: Number(r.follow_up_count || 0),
     lastInboundAt: r.last_inbound_at,
     lastOutboundAt: r.last_outbound_at,
@@ -242,8 +251,9 @@ router.get('/leads/onboarding', async (req, res) => {
   try {
     const scope = leadScopeClause(req, 1);
     const params = isAdmin(req) ? [] : [meId(req)];
+    params.push(SALE_STAGE_KEYS());
     const { rows } = await pool.query(
-      `${SELECT_LEAD} WHERE l.stage = 'enrolled' ${scope}
+      `${SELECT_LEAD} WHERE l.stage = ANY($${params.length}) ${scope}
         ORDER BY l.payment_date DESC NULLS LAST, l.id DESC`,
       params
     );
@@ -257,11 +267,18 @@ router.get('/leads/onboarding', async (req, res) => {
 });
 
 // ── Students (paid / enrolled leads) + installments ───────────────────────────
-// A "student" is a lead at the won stage ('enrolled'). Installments are that
+// A "student" is a lead at a won stage (SALE_STAGE_KEYS). Installments are that
 // student's payments toward their course: Razorpay captured payments matched to
 // the lead (razorpay_events.matched_lead_id) + any manually-added sales_log rows.
 // Amounts convert paise↔₹ at this boundary.
 const paise2r = (p) => Math.round(Number(p || 0)) / 100;
+
+// A "sale" in the Sales Log is a lead at a won stage. Exported because
+// services/productSales.js counts a product's sales from the SAME set of
+// leads — a second copy of this predicate is precisely how the Products page
+// and the Sales Log came to report different totals. Falls back to the seeded
+// 'enrolled' key so a misconfigured funnel can never empty the Sales Log.
+const SALE_STAGE_KEYS = () => { const won = cfg.wonStageKeys(); return won.length ? won : ['enrolled']; };
 
 // Razorpay writes multiple 'captured' event rows per payment (payment.captured +
 // order.paid), so we DEDUPE by payment_id (preferring the payment.captured row)
@@ -295,6 +312,7 @@ router.get('/students', async (req, res) => {
   try {
     const scope = leadScopeClause(req, 1);
     const params = isAdmin(req) ? [] : [meId(req)];
+    params.push(SALE_STAGE_KEYS());
     const { rows } = await pool.query(
       `WITH ${PAYMENTS_CTE}
        SELECT l.*, u.display_name AS assigned_user_name,
@@ -310,7 +328,7 @@ router.get('/students', async (req, res) => {
             ORDER BY c.updated_at DESC NULLS LAST LIMIT 1
          ) ch ON TRUE
          LEFT JOIN coexistence.forgecrm_users u ON u.id = l.assigned_user_id
-        WHERE l.stage='enrolled' ${scope}
+        WHERE l.stage = ANY($${params.length}) ${scope}
         ORDER BY last_payment_at DESC NULLS LAST, l.id DESC`,
       params
     );
@@ -335,12 +353,13 @@ router.get('/students/export', async (req, res) => {
   try {
     const scope = leadScopeClause(req, 1);
     const params = isAdmin(req) ? [] : [meId(req)];
+    params.push(SALE_STAGE_KEYS());
     const { rows } = await pool.query(
       `WITH ${PAYMENTS_CTE}
        SELECT l.*,
               (SELECT COALESCE(SUM(amount_paise),0) FROM payments p WHERE p.lead_id=l.id)::bigint AS total_paid_paise
          FROM coexistence.leads l
-        WHERE l.stage='enrolled' ${scope}
+        WHERE l.stage = ANY($${params.length}) ${scope}
         ORDER BY l.id DESC LIMIT 5000`,
       params
     );
@@ -524,6 +543,12 @@ router.post('/students', async (req, res) => {
     // sweeper also covers this, but only when the stage actually CHANGED — a
     // second sale for an already-enrolled customer logs no event. Best-effort:
     // a tagging failure must never fail the sale.
+    // The product they bought becomes a tag too, on the same principle: the
+    // Chats filter reads contacts.tags, so a purchase has to be mirrored there
+    // to be filterable. Applied HERE — from the Sales Log write — because that
+    // is the only place a sale records a product.
+    await productTags.syncLeadProductTag(leadId)
+      .catch(err => console.error('[product-tags] sale sync:', err.message));
     await funnelTags.syncLeadStageTag(leadId)
       .catch(err => console.error('[funnel-tags] add-sale sync failed:', err.message));
     emitLeadChanged({ leadId });
@@ -641,6 +666,152 @@ router.get('/leads/export', async (req, res) => {
 });
 
 // ── single lead ───────────────────────────────────────────────────────────────
+// ── sheet import ──────────────────────────────────────────────────────────────
+//
+// Moved here from the Contacts page, which was removed: leads are the model, so
+// a bulk upload should create LEADS, not a parallel people-table that only
+// becomes leads if those people happen to message first.
+//
+// ⚠ The row write goes through services/formSubmission.upsertLeadFromSubmission
+// — the SAME function the public form and the agent form-fill use. That is what
+// keeps last-10-digit matching, blank-only COALESCE writes (an import can fill an
+// empty field but never overwrite something a human set) and the first-stage
+// default identical across every way a lead can be created. A private INSERT here
+// would be a fourth definition of "a lead".
+
+const IMPORT_LEAD_NAME = new Set(['name', 'fullname', 'leadname', 'customername', 'contactname']);
+const IMPORT_LEAD_PHONE = new Set([
+  'phone', 'phonenumber', 'phoneno', 'mobile', 'mobilenumber', 'mobileno',
+  'whatsapp', 'whatsappnumber', 'whatsappno', 'contactnumber', 'number', 'msisdn',
+]);
+const IMPORT_LEAD_EMAIL = new Set(['email', 'emailaddress', 'mail']);
+const IMPORT_LEAD_CITY = new Set(['city', 'town', 'location']);
+const IMPORT_LEAD_SOURCE = new Set(['source', 'leadsource', 'channel']);
+
+// Header matching is alias-based and punctuation/case-insensitive, so "WhatsApp
+// Number", "whatsapp_number" and "Mobile No." all land on the phone.
+function pickLeadColumn(row, aliases) {
+  for (const key of Object.keys(row)) {
+    const norm = String(key).toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (aliases.has(norm)) return row[key];
+  }
+  return undefined;
+}
+
+router.get('/leads/import/template', (req, res) => {
+  try {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Name', 'WhatsApp Number', 'Email', 'City', 'Source'],
+      ['John Doe', '919876543210', 'john@example.com', 'Chennai', 'Referral'],
+    ]);
+    ws['!cols'] = [{ wch: 24 }, { wch: 20 }, { wch: 26 }, { wch: 16 }, { wch: 18 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Leads');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="leads-import-template.xlsx"');
+    res.send(buf);
+  } catch (err) {
+    console.error('[leads] import template error:', err.message);
+    res.status(500).json({ error: 'Failed to build the template' });
+  }
+});
+
+router.post('/leads/import', leadSheetUpload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    let rows;
+    try {
+      const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      if (!sheet) throw new Error('empty workbook');
+      // raw:false → cells arrive as their displayed text, so a phone number does
+      // not come back as a float or in scientific notation.
+      rows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+    } catch {
+      return res.status(400).json({ error: 'Could not read the file. Upload a valid .csv or .xlsx sheet.' });
+    }
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: 'The sheet has no data rows.' });
+    }
+    const MAX_ROWS = 5000;
+    if (rows.length > MAX_ROWS) {
+      return res.status(400).json({ error: `Too many rows (${rows.length}). The limit is ${MAX_ROWS} per import.` });
+    }
+
+    const { upsertLeadFromSubmission } = require('../services/formSubmission');
+    // A source typed in the modal applies to every row that has none of its own,
+    // so an import is attributable instead of arriving as a nameless batch.
+    const fallbackSource = String(req.body.source || '').trim() || 'Imported';
+
+    let imported = 0, updated = 0;
+    const skipped = [];
+    const seen = new Set();
+
+    for (let i = 0; i < rows.length; i++) {
+      const rowNum = i + 2;  // +1 header, +1 for 1-based display
+      const row = rows[i];
+      const name = String(pickLeadColumn(row, IMPORT_LEAD_NAME) ?? '').trim();
+      const phone = String(pickLeadColumn(row, IMPORT_LEAD_PHONE) ?? '').replace(/\D/g, '');
+
+      if (!phone) { skipped.push({ row: rowNum, reason: 'Missing WhatsApp number' }); continue; }
+      if (phone.length < 7) { skipped.push({ row: rowNum, reason: `"${phone}" is too short to be a number` }); continue; }
+      // Two rows for the same person in one sheet: the first wins, so the count
+      // reported back matches the number of people actually touched.
+      const key = phone.slice(-10);
+      if (seen.has(key)) { skipped.push({ row: rowNum, reason: 'Duplicate of an earlier row in this sheet' }); continue; }
+      seen.add(key);
+
+      // Existing-or-new is resolved BEFORE the upsert purely so the summary can
+      // say "added" vs "updated" honestly — the upsert itself is the same call
+      // either way.
+      const { rows: found } = await pool.query(
+        `SELECT id FROM coexistence.leads
+          WHERE right(regexp_replace(whatsapp_number,'\\D','','g'),10) = $1 LIMIT 1`,
+        [key]
+      );
+      const existed = found.length > 0;
+
+      try {
+        const mapped = {};
+        if (name) mapped.name = name;
+        const email = String(pickLeadColumn(row, IMPORT_LEAD_EMAIL) ?? '').trim();
+        const city = String(pickLeadColumn(row, IMPORT_LEAD_CITY) ?? '').trim();
+        const src = String(pickLeadColumn(row, IMPORT_LEAD_SOURCE) ?? '').trim();
+        if (email) mapped.email = email;
+        if (city) mapped.city = city;
+        if (src) mapped.source = src;
+
+        const leadId = await upsertLeadFromSubmission({
+          phone, mapped, customFields: {}, defaultSource: fallbackSource,
+        });
+        if (!leadId) { skipped.push({ row: rowNum, reason: 'Could not be saved' }); continue; }
+
+        // A BDA importing their own list gets those leads assigned to them, so
+        // the rows appear in their scoped view. Never reassigns a lead that
+        // already belongs to someone (COALESCE), the same rule the contacts
+        // importer followed.
+        if (!isAdmin(req)) {
+          await pool.query(
+            `UPDATE coexistence.leads SET assigned_user_id = COALESCE(assigned_user_id, $2) WHERE id = $1`,
+            [leadId, meId(req)]
+          );
+        }
+        if (existed) updated += 1; else imported += 1;
+      } catch (e) {
+        skipped.push({ row: rowNum, reason: e.message.slice(0, 120) });
+      }
+    }
+
+    if (imported || updated) emitLeadChanged({});
+    res.json({ imported, updated, skipped, total: rows.length });
+  } catch (err) {
+    console.error('[leads] import error:', err.message);
+    res.status(500).json({ error: 'Failed to import the sheet' });
+  }
+});
+
 router.get('/leads/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -984,4 +1155,4 @@ async function chatLinkFor(number) {
 // RZP_CAPTURED is exported so any other module aggregating razorpay_events uses
 // the SAME payment_id dedupe (Razorpay writes several 'captured' rows per
 // payment — summing them raw double-counts). See routes/ctwa.js.
-module.exports = { router, recordOutbound, recordInbound, ensureLeadForContact, deriveLeadSource, RZP_CAPTURED };
+module.exports = { router, recordOutbound, recordInbound, ensureLeadForContact, deriveLeadSource, RZP_CAPTURED, SALE_STAGE_KEYS };

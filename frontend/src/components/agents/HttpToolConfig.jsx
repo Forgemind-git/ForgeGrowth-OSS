@@ -98,7 +98,7 @@ export default function HttpToolConfig({ agentId, ensureAgentId, existingTool, o
       border: `1px solid ${C.border}`, fontFamily: FONT,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>
           {isEdit ? 'Edit HTTP tool' : 'Add HTTP tool'}
         </div>
         <button onClick={onCancel} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textMuted, display: 'flex', padding: 6 }}>
@@ -108,7 +108,7 @@ export default function HttpToolConfig({ agentId, ensureAgentId, existingTool, o
 
       {error && (
         <div style={{ padding: '8px 12px', borderRadius: 8, marginBottom: 12,
-          background: '#FCEBEB', color: '#A32D2D', border: '1px solid #FBC8C8', fontSize: 12 }}>
+          background: 'var(--c-dangerBg, #FCEBEB)', color: 'var(--c-dangerText, #A32D2D)', border: '1px solid var(--c-dangerBorder, #FBC8C8)', fontSize: 14 }}>
           {error}
         </div>
       )}
@@ -130,14 +130,14 @@ export default function HttpToolConfig({ agentId, ensureAgentId, existingTool, o
               onChange={v => setMethod(v)}
               options={METHODS.map(m => ({ value: m, label: m }))}
               searchThreshold={99}
-              triggerStyle={{ padding: '9px 32px 9px 12px', fontSize: 13 }}
+              triggerStyle={{ padding: '9px 32px 9px 12px', fontSize: 15 }}
             />
           </Field>
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <Field label="URL" hint="Use {name} to insert a path parameter, e.g. https://api.io/devices/{device_id}/state">
             <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://api.example.com/endpoint"
-              style={{ ...input, fontFamily: MONO, fontSize: 12 }} />
+              style={{ ...input, fontFamily: MONO, fontSize: 14 }} />
           </Field>
         </div>
       </div>
@@ -147,9 +147,9 @@ export default function HttpToolConfig({ agentId, ensureAgentId, existingTool, o
           {headers.map((h, i) => (
             <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               <input value={h.k} onChange={e => setHeader(i, 'k', e.target.value)} placeholder="Authorization"
-                style={{ ...input, flex: 1, fontFamily: MONO, fontSize: 12 }} />
+                style={{ ...input, flex: 1, fontFamily: MONO, fontSize: 14 }} />
               <input value={h.v} onChange={e => setHeader(i, 'v', e.target.value)} placeholder="Bearer xxx"
-                style={{ ...input, flex: 1, fontFamily: MONO, fontSize: 12 }} />
+                style={{ ...input, flex: 1, fontFamily: MONO, fontSize: 14 }} />
               <button onClick={() => removeHeader(i)} style={iconBtn}><Trash2 size={13} color={C.primary} /></button>
             </div>
           ))}
@@ -163,20 +163,20 @@ export default function HttpToolConfig({ agentId, ensureAgentId, existingTool, o
             <div key={i} style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, background: C.cardBg }}>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
                 <input value={p.name} onChange={e => setParam(i, 'name', e.target.value)} placeholder="param_name"
-                  style={{ ...input, flex: 1, fontFamily: MONO, fontSize: 12 }} />
+                  style={{ ...input, flex: 1, fontFamily: MONO, fontSize: 14 }} />
                 <div style={{ width: 110, flexShrink: 0 }}>
                   <SearchableSelect value={p.in} onChange={v => setParam(i, 'in', v)} options={LOCATIONS}
-                    searchThreshold={99} triggerStyle={{ padding: '8px 28px 8px 10px', fontSize: 12 }} menuStyle={{ minWidth: 180 }} />
+                    searchThreshold={99} triggerStyle={{ padding: '8px 28px 8px 10px', fontSize: 14 }} menuStyle={{ minWidth: 180 }} />
                 </div>
                 <div style={{ width: 110, flexShrink: 0 }}>
                   <SearchableSelect value={p.type} onChange={v => setParam(i, 'type', v)} options={TYPES}
-                    searchThreshold={99} triggerStyle={{ padding: '8px 28px 8px 10px', fontSize: 12 }} />
+                    searchThreshold={99} triggerStyle={{ padding: '8px 28px 8px 10px', fontSize: 14 }} />
                 </div>
                 <button onClick={() => removeParam(i)} style={iconBtn}><Trash2 size={13} color={C.primary} /></button>
               </div>
               <input value={p.description} onChange={e => setParam(i, 'description', e.target.value)}
-                placeholder="What this value means (the AI reads this)" style={{ ...input, fontSize: 12, marginBottom: 6 }} />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.textSecondary, cursor: 'pointer' }}>
+                placeholder="What this value means (the AI reads this)" style={{ ...input, fontSize: 14, marginBottom: 6 }} />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: C.textSecondary, cursor: 'pointer' }}>
                 <input type="checkbox" checked={!!p.required} onChange={e => setParam(i, 'required', e.target.checked)} />
                 Required
               </label>
@@ -188,7 +188,7 @@ export default function HttpToolConfig({ agentId, ensureAgentId, existingTool, o
 
       <Field label="Timeout (ms)" hint="1000–30000. The call is aborted if the external system doesn't respond in time.">
         <input type="number" value={timeoutMs} min={1000} max={30000} step={500}
-          onChange={e => setTimeoutMs(e.target.value)} style={{ ...input, width: 140, fontFamily: MONO, fontSize: 12 }} />
+          onChange={e => setTimeoutMs(e.target.value)} style={{ ...input, width: 140, fontFamily: MONO, fontSize: 14 }} />
       </Field>
 
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
@@ -204,7 +204,7 @@ export default function HttpToolConfig({ agentId, ensureAgentId, existingTool, o
 
 const input = {
   width: '100%', padding: '9px 12px', borderRadius: 8,
-  border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT,
+  border: `1px solid ${C.border}`, fontSize: 15, fontFamily: FONT,
   color: C.text, background: C.cardBg, outline: 'none',
   boxSizing: 'border-box',
 };
@@ -216,29 +216,29 @@ const iconBtn = {
 const addBtn = {
   display: 'inline-flex', alignItems: 'center', gap: 5, alignSelf: 'flex-start',
   padding: '7px 12px', borderRadius: 8, border: `1px dashed ${C.border}`,
-  background: C.cardBg, color: C.text, fontSize: 12, fontFamily: FONT, fontWeight: 600, cursor: 'pointer',
+  background: C.cardBg, color: C.text, fontSize: 14, fontFamily: FONT, fontWeight: 600, cursor: 'pointer',
 };
 const cancelBtn = {
   padding: '8px 14px', borderRadius: 8,
   border: `1px solid ${C.border}`, background: C.cardBg,
-  color: C.text, fontSize: 12, fontFamily: FONT, fontWeight: 600,
+  color: C.text, fontSize: 14, fontFamily: FONT, fontWeight: 600,
   cursor: 'pointer',
 };
 const saveBtn = (busy) => ({
   display: 'flex', alignItems: 'center', gap: 6,
   padding: '8px 16px', borderRadius: 8,
   border: 'none', background: C.primary, color: '#fff',
-  fontSize: 12, fontFamily: FONT, fontWeight: 700,
+  fontSize: 14, fontFamily: FONT, fontWeight: 700,
   cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.7 : 1,
 });
 
 function Field({ label, hint, children }) {
   return (
     <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: C.textSecondary,
+      <div style={{ fontSize: 13, fontWeight: 700, color: C.textSecondary,
         textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>{label}</div>
       {children}
-      {hint && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6, lineHeight: 1.45 }}>{hint}</div>}
+      {hint && <div style={{ fontSize: 13, color: C.textMuted, marginTop: 6, lineHeight: 1.45 }}>{hint}</div>}
     </div>
   );
 }

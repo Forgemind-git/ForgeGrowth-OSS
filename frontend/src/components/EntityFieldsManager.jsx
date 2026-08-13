@@ -33,19 +33,35 @@ const FIELD_TYPE_OPTS = [
 const NEEDS_OPTIONS = ['dropdown', 'radio', 'checkbox'];
 
 const typeBadge = {
-  text: { c: '#1D4ED8', bg: '#E8EFFF' }, textarea: { c: '#1D4ED8', bg: '#E8EFFF' },
-  email: { c: '#7A5500', bg: '#FFF8E1' }, phone: { c: '#7A5500', bg: '#FFF8E1' },
-  number: { c: '#0F6E56', bg: '#E3F5EF' }, date: { c: '#0F6E56', bg: '#E3F5EF' },
-  dropdown: { c: '#6D28D9', bg: '#F1EBFF' }, radio: { c: '#6D28D9', bg: '#F1EBFF' },
-  checkbox: { c: '#6D28D9', bg: '#F1EBFF' }, boolean: { c: '#6B7280', bg: '#F1F1EE' },
+  text: { c: 'var(--c-s1d4ed8, #1D4ED8)', bg: 'var(--c-infoBg, #E8EFFF)' }, textarea: { c: 'var(--c-s1d4ed8, #1D4ED8)', bg: 'var(--c-infoBg, #E8EFFF)' },
+  email: { c: 'var(--c-s7a5500, #7A5500)', bg: 'var(--c-warnBgSoft, #FFF8E1)' }, phone: { c: 'var(--c-s7a5500, #7A5500)', bg: 'var(--c-warnBgSoft, #FFF8E1)' },
+  number: { c: 'var(--c-successText, #0F6E56)', bg: 'var(--c-successBg, #E3F5EF)' }, date: { c: 'var(--c-successText, #0F6E56)', bg: 'var(--c-successBg, #E3F5EF)' },
+  dropdown: { c: 'var(--c-s6d28d9, #6D28D9)', bg: 'var(--c-purpleBg, #F1EBFF)' }, radio: { c: 'var(--c-s6d28d9, #6D28D9)', bg: 'var(--c-purpleBg, #F1EBFF)' },
+  checkbox: { c: 'var(--c-s6d28d9, #6D28D9)', bg: 'var(--c-purpleBg, #F1EBFF)' }, boolean: { c: 'var(--c-textSecondary, #6B7280)', bg: 'var(--c-surfaceMuted, #F1F1EE)' },
 };
 
-const th = { textAlign: 'left', fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.04em', padding: '8px 8px', whiteSpace: 'nowrap' };
-const td = { padding: '9px 8px', fontSize: 13, fontFamily: FONT, verticalAlign: 'middle' };
+const th = { textAlign: 'left', fontSize: 13, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.04em', padding: '8px 8px', whiteSpace: 'nowrap' };
+const td = { padding: '9px 8px', fontSize: 15, fontFamily: FONT, verticalAlign: 'middle' };
 const iconBtn = { background: 'none', border: `1.5px solid ${C.border}`, borderRadius: 7, padding: '4px 6px', cursor: 'pointer', color: C.textSecondary, display: 'inline-flex' };
 
-export default function EntityFieldsManager({ entity }) {
+/**
+ * `surface` splits the lead registry into the two TABLES it drives.
+ *
+ * A sale IS an enrolled lead, so both tables read the same `entity='lead'`
+ * rows — but which columns each one shows is two independent flags
+ * (`show_in_leads` / `show_in_sales`). They used to share one section with two
+ * toggle columns, which made "add a column to the Sales Log" a job of finding
+ * the right one of two switches on the right row. Now each table is its own
+ * section with ONE switch, and adding a field from inside a section turns that
+ * section's flag on by default.
+ *
+ * The list is deliberately NOT filtered to the fields already shown — you
+ * cannot switch on a column you cannot see.
+ */
+export default function EntityFieldsManager({ entity, surface = null }) {
   const isLead = entity === 'lead';
+  // Which flag this section owns. Transactions have only ever had one.
+  const flagKey = surface === 'leads' ? 'showInLeads' : 'showInSales';
   const reg = useFieldRegistry();
   const fields = isLead ? reg.lead : reg.transaction;
   const [modal, setModal] = useState(null); // { field? } — null closed, {} = add
@@ -84,10 +100,12 @@ export default function EntityFieldsManager({ entity }) {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div style={{ fontSize: 12.5, color: C.textSecondary, fontFamily: FONT, maxWidth: 560 }}>
-          {isLead
-            ? 'One list drives both tables: the toggles pick which columns the Leads table and the Sales Log show. Built-in fields can be renamed and hidden, never deleted.'
-            : 'Fields of one transaction (installment) — shown in the sale detail’s transactions table and the Add Transaction form.'}
+        <div style={{ fontSize: 14, color: C.textSecondary, fontFamily: FONT, maxWidth: 560 }}>
+          {!isLead
+            ? 'Fields of one transaction (installment) — shown in the sale detail’s transactions table and the Add Transaction form.'
+            : surface === 'leads'
+              ? 'Columns of the Leads list. A sale is an enrolled lead, so these are the same underlying fields the Sales Log uses — the switch here only controls what the Leads list shows. Built-in fields can be renamed and hidden, never deleted.'
+              : 'Columns of the Sales Log. Same underlying fields as the Leads list; the switch here only controls what the Sales Log shows. Built-in fields can be renamed and hidden, never deleted.'}
         </div>
         <Button variant="primary" icon={Plus} onClick={() => setModal({})}>Add field</Button>
       </div>
@@ -101,14 +119,7 @@ export default function EntityFieldsManager({ entity }) {
                 <th style={th}>Field</th>
                 <th style={th}>Type</th>
                 <th style={th}>Options</th>
-                {isLead ? (
-                  <>
-                    <th style={{ ...th, textAlign: 'center' }}>Leads table</th>
-                    <th style={{ ...th, textAlign: 'center' }}>Sales Log</th>
-                  </>
-                ) : (
-                  <th style={{ ...th, textAlign: 'center' }}>Shown</th>
-                )}
+                <th style={{ ...th, textAlign: 'center' }}>Shown</th>
                 <th style={{ ...th, width: 90, textAlign: 'right' }} />
               </tr>
             </thead>
@@ -126,26 +137,24 @@ export default function EntityFieldsManager({ entity }) {
                       <span style={{ fontWeight: 600 }}>{f.label}</span>
                       {f.isSystem && <Lock size={12} color={C.textMuted} title="Built-in field — rename/hide only" />}
                     </span>
-                    <div style={{ fontSize: 10.5, color: C.textMuted, fontFamily: MONO }}>{f.fieldKey}</div>
+                    <div style={{ fontSize: 12, color: C.textMuted, fontFamily: MONO }}>{f.fieldKey}</div>
                   </td>
                   <td style={td}>
                     <Badge label={FIELD_TYPE_OPTS.find(o => o.value === f.fieldType)?.label || f.fieldType}
                       color={(typeBadge[f.fieldType] || typeBadge.text).c}
                       bg={(typeBadge[f.fieldType] || typeBadge.text).bg} />
                   </td>
-                  <td style={{ ...td, color: C.textSecondary, fontSize: 12, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <td style={{ ...td, color: C.textSecondary, fontSize: 14, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {NEEDS_OPTIONS.includes(f.fieldType)
                       ? (f.options?.length ? f.options.join(' · ') : <span style={{ color: C.textMuted }}>from app config</span>)
                       : '—'}
                   </td>
-                  {isLead ? (
-                    <>
-                      <td style={{ ...td, textAlign: 'center' }}><span style={{ display: 'inline-flex' }}><Toggle checked={f.showInLeads} onChange={v => setShow(f, 'showInLeads', v)} /></span></td>
-                      <td style={{ ...td, textAlign: 'center' }}><span style={{ display: 'inline-flex' }}><Toggle checked={f.showInSales} onChange={v => setShow(f, 'showInSales', v)} /></span></td>
-                    </>
-                  ) : (
-                    <td style={{ ...td, textAlign: 'center' }}><span style={{ display: 'inline-flex' }}><Toggle checked={f.showInSales} onChange={v => setShow(f, 'showInSales', v)} /></span></td>
-                  )}
+                  {/* One switch, owning only this section's flag. */}
+                  <td style={{ ...td, textAlign: 'center' }}>
+                    <span style={{ display: 'inline-flex' }}>
+                      <Toggle checked={!!f[flagKey]} onChange={v => setShow(f, flagKey, v)} />
+                    </span>
+                  </td>
                   <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button title="Edit field" style={iconBtn} onClick={() => setModal({ field: f })}><Pencil size={13} /></button>{' '}
                     {!f.isSystem && (
@@ -160,7 +169,7 @@ export default function EntityFieldsManager({ entity }) {
       )}
 
       {modal && (
-        <FieldModal entity={entity} field={modal.field} isLead={isLead}
+        <FieldModal entity={entity} field={modal.field} isLead={isLead} surface={surface}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); refreshFieldRegistry(); }} />
       )}
@@ -169,15 +178,18 @@ export default function EntityFieldsManager({ entity }) {
   );
 }
 
-function FieldModal({ entity, field, isLead, onClose, onSaved }) {
+function FieldModal({ entity, field, isLead, surface, onClose, onSaved }) {
   const editing = !!field;
   const system = field?.isSystem === true;
   const [label, setLabel] = useState(field?.label || '');
   const [fieldType, setFieldType] = useState(field?.fieldType || 'text');
   const [optionsText, setOptionsText] = useState((field?.options || []).join('\n'));
   const [required, setRequired] = useState(field?.required === true);
-  const [showInLeads, setShowInLeads] = useState(field ? field.showInLeads : false);
-  const [showInSales, setShowInSales] = useState(field ? field.showInSales : true);
+  // A NEW field defaults to being shown on the table you added it from — a
+  // field that appears nowhere after you create it reads as a failed save.
+  // Both switches stay available so one field can serve both tables.
+  const [showInLeads, setShowInLeads] = useState(field ? field.showInLeads : (isLead && surface === 'leads'));
+  const [showInSales, setShowInSales] = useState(field ? field.showInSales : (!isLead || surface === 'sales'));
   const [saving, setSaving] = useState(false);
   const [confirmEl, confirm] = useConfirm();
 
@@ -245,21 +257,21 @@ function FieldModal({ entity, field, isLead, onClose, onSaved }) {
         </Field>
       )}
       {optionsFromAppConfig && (
-        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: FONT, margin: '2px 0 12px' }}>
+        <div style={{ fontSize: 14, color: C.textMuted, fontFamily: FONT, margin: '2px 0 12px' }}>
           This field&rsquo;s options are managed in Admin Settings → Funnel.
         </div>
       )}
       <div style={{ display: 'flex', gap: 22, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
         {isLead && (
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontFamily: FONT, color: C.text }}>
-            <Toggle checked={showInLeads} onChange={setShowInLeads} /> Show on Leads table
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, fontFamily: FONT, color: C.text }}>
+            <Toggle checked={showInLeads} onChange={setShowInLeads} /> Show on Leads
           </label>
         )}
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontFamily: FONT, color: C.text }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, fontFamily: FONT, color: C.text }}>
           <Toggle checked={showInSales} onChange={setShowInSales} /> {isLead ? 'Show on Sales Log' : 'Show in transactions table'}
         </label>
         {!system && (
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontFamily: FONT, color: C.text }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, fontFamily: FONT, color: C.text }}>
             <Toggle checked={required} onChange={setRequired} /> Required
           </label>
         )}

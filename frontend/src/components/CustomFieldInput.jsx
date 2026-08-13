@@ -28,7 +28,7 @@ export default function CustomFieldInput({ field, value, onChange }) {
     return (
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', padding: '4px 0' }}>
         {(field.options || []).map(opt => (
-          <label key={opt} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontFamily: FONT, color: C.text, cursor: 'pointer' }}>
+          <label key={opt} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 15, fontFamily: FONT, color: C.text, cursor: 'pointer' }}>
             <input type="checkbox" checked={arr.includes(opt)} onChange={() => toggle(opt)} />
             {opt}
           </label>

@@ -82,10 +82,10 @@ export default function ContactList({ waNumber, width = 380, selectedContact, on
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-          <span style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: FONT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <span style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: FONT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {waName || maskPhone(waNumber) || 'Contacts'}
           </span>
-          <span style={{ fontSize: 12, color: C.textMuted, fontFamily: FONT }}>
+          <span style={{ fontSize: 14, color: C.textMuted, fontFamily: FONT }}>
             {contacts.length} contacts
           </span>
         </div>
@@ -105,7 +105,7 @@ export default function ContactList({ waNumber, width = 380, selectedContact, on
             placeholder="Search by phone..."
             style={{
               flex: 1, border: 'none', background: 'transparent',
-              fontSize: 14, fontFamily: FONT, outline: 'none', color: C.text,
+              fontSize: 15, fontFamily: FONT, outline: 'none', color: C.text,
             }}
           />
         </div>
@@ -122,7 +122,7 @@ export default function ContactList({ waNumber, width = 380, selectedContact, on
       {/* Contact list */}
       <div style={{ flex: 1, overflowY: 'auto', background: 'var(--c-cardBg)' }}>
         {loading && !data && (
-          <div style={{ padding: 30, textAlign: 'center', color: C.textMuted, fontSize: 13 }}>
+          <div style={{ padding: 30, textAlign: 'center', color: C.textMuted, fontSize: 15 }}>
             Loading chats...
           </div>
         )}
@@ -142,18 +142,21 @@ export default function ContactList({ waNumber, width = 380, selectedContact, on
                 display: 'flex',
                 alignItems: 'center',
                 gap: 12,
-                padding: '10px 16px',
+                padding: '13px 16px',
                 border: 'none',
                 borderBottom: `1px solid ${C.border}`,
                 cursor: 'pointer',
-                background: isActive ? '#f0f2f5' : 'var(--c-cardBg)',
+                background: isActive ? 'var(--c-rowActive)' : 'var(--c-cardBg)',
                 fontFamily: FONT,
                 textAlign: 'left',
                 transition: 'background .1s',
                 position: 'relative',
               }}
-              onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#f5f6f6'; }}
-              onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = '#ffffff'; }}
+              // Restore the TOKEN on leave, never a literal. The old handler
+              // reset to '#ffffff', so in dark mode a row went permanently
+              // white the first time it was hovered.
+              onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--c-rowHover)'; }}
+              onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'var(--c-cardBg)'; }}
             >
               {/* Active indicator */}
               {isActive && (
@@ -166,10 +169,10 @@ export default function ContactList({ waNumber, width = 380, selectedContact, on
               {/* Avatar */}
               <div style={{
                 width: 48, height: 48, borderRadius: '50%',
-                background: isActive ? C.primary : '#dfe5e7',
-                color: isActive ? '#fff' : '#54656f',
+                background: isActive ? C.primary : C.avatarBg,
+                color: isActive ? '#fff' : C.avatarText,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 14, fontWeight: 700, flexShrink: 0,
+                fontSize: 15, fontWeight: 700, flexShrink: 0,
               }}>
                 {c.name ? getInitials(c.name) : <User size={20} />}
               </div>
@@ -178,13 +181,13 @@ export default function ContactList({ waNumber, width = 380, selectedContact, on
               <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{
-                    fontSize: 15, fontWeight: 600, color: C.text,
+                    fontSize: 16, fontWeight: 600, color: C.text,
                     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                   }}>
                     {displayName}
                   </span>
                   <span style={{
-                    fontSize: 11, color: c.message_count > 0 ? C.primary : C.textMuted,
+                    fontSize: 13, fontWeight: 600, color: c.message_count > 0 ? C.primary : C.t5,
                     flexShrink: 0, marginLeft: 8,
                   }}>
                     {relativeTime(c.last_message_time)}
@@ -192,8 +195,8 @@ export default function ContactList({ waNumber, width = 380, selectedContact, on
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                   <span style={{
-                    fontSize: 13, color: unread > 0 && !isActive ? C.text : C.textSecondary,
-                    fontWeight: unread > 0 && !isActive ? 600 : 400,
+                    fontSize: 14, color: unread > 0 && !isActive ? C.text : C.t4,
+                    fontWeight: unread > 0 && !isActive ? 600 : 500,
                     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0,
                   }}>
                     {c.last_message || 'No messages'}
@@ -201,9 +204,9 @@ export default function ContactList({ waNumber, width = 380, selectedContact, on
                   {unread > 0 && !isActive && (
                     <span style={{
                       flexShrink: 0,
-                      background: '#25D366', color: '#fff',
-                      borderRadius: 11, minWidth: 20, height: 20, padding: '0 6px',
-                      fontSize: 12, fontWeight: 700,
+                      background: C.waGreen, color: '#fff',
+                      borderRadius: 12, minWidth: 22, height: 22, padding: '0 7px',
+                      fontSize: 13, fontWeight: 700,
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                     }}>
                       {unread > 99 ? '99+' : unread}
@@ -216,9 +219,9 @@ export default function ContactList({ waNumber, width = 380, selectedContact, on
                       <span title={`Assigned to ${c.assigned_user_name || 'user #' + c.assigned_user_id}`} style={{
                         display: 'inline-flex', alignItems: 'center', gap: 3,
                         padding: '2px 6px', borderRadius: 4,
-                        background: '#E5F2EE', color: '#0F6E56',
-                        border: '1px solid #B8DCCF',
-                        fontSize: 9, fontWeight: 700,
+                        background: C.successBgSoft, color: C.successText,
+                        border: `1px solid ${C.successBorder}`,
+                        fontSize: 11, fontWeight: 700,
                         letterSpacing: '0.04em', textTransform: 'uppercase',
                       }}>
                         ▸ {c.assigned_user_name || `user ${c.assigned_user_id}`}
@@ -230,10 +233,10 @@ export default function ContactList({ waNumber, width = 380, selectedContact, on
                         alignSelf: 'flex-start',
                         padding: '2px 6px',
                         borderRadius: 4,
-                        background: t.color || '#54656f',
+                        background: t.color || C.avatarText,
                         color: '#fff',
-                        border: `1px solid ${t.color || '#54656f'}`,
-                        fontSize: 9,
+                        border: `1px solid ${t.color || C.avatarText}`,
+                        fontSize: 11,
                         fontWeight: 700,
                         letterSpacing: '0.04em',
                         textTransform: 'uppercase',
@@ -249,7 +252,7 @@ export default function ContactList({ waNumber, width = 380, selectedContact, on
         })},
 
         {contacts.length === 0 && !loading && (
-          <div style={{ padding: 40, textAlign: 'center', color: C.textMuted, fontSize: 13 }}>
+          <div style={{ padding: 40, textAlign: 'center', color: C.textMuted, fontSize: 15 }}>
             No chats found
           </div>
         )}

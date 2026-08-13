@@ -13,7 +13,7 @@ import { isEmptyAnswer, emptyAnswerFor, isDisplayOnly, normalizeRating, DEFAULT_
 
 const inputStyle = {
   width: '100%', padding: '11px 13px', borderRadius: 10, border: `1.5px solid ${C.border}`,
-  fontFamily: FONT, fontSize: 14.5, boxSizing: 'border-box', outline: 'none', background: C.cardBg, color: C.text,
+  fontFamily: FONT, fontSize: 15, boxSizing: 'border-box', outline: 'none', background: C.cardBg, color: C.text,
 };
 
 export default function PublicLeadFormPage({ slug, token }) {
@@ -79,7 +79,7 @@ export default function PublicLeadFormPage({ slug, token }) {
       <Shell>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '60px 0', color: C.textMuted }}>
           <Loader2 size={22} className="spin" />
-          <span style={{ fontFamily: FONT, fontSize: 13 }}>Loading form…</span>
+          <span style={{ fontFamily: FONT, fontSize: 15 }}>Loading form…</span>
         </div>
         <style>{`@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } } .spin { animation: spin 1s linear infinite; }`}</style>
       </Shell>
@@ -91,8 +91,8 @@ export default function PublicLeadFormPage({ slug, token }) {
       <Shell>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '60px 20px', textAlign: 'center' }}>
           <AlertTriangle size={30} color={C.textMuted} />
-          <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: C.text }}>This form isn't available</div>
-          <div style={{ fontFamily: FONT, fontSize: 13, color: C.textMuted }}>It may have been closed, or the link is incorrect.</div>
+          <div style={{ fontFamily: FONT, fontSize: 16, fontWeight: 700, color: C.text }}>This form isn't available</div>
+          <div style={{ fontFamily: FONT, fontSize: 15, color: C.textMuted }}>It may have been closed, or the link is incorrect.</div>
         </div>
       </Shell>
     );
@@ -102,10 +102,10 @@ export default function PublicLeadFormPage({ slug, token }) {
     return (
       <Shell form={form}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '50px 20px', textAlign: 'center' }}>
-          <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#E1F5EE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Check size={24} color="#0F6E56" />
+          <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--c-successBg, #E1F5EE)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Check size={24} color="var(--c-successText, #0F6E56)" />
           </div>
-          <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: C.text }}>{successMessage}</div>
+          <div style={{ fontFamily: FONT, fontSize: 16, fontWeight: 700, color: C.text }}>{successMessage}</div>
         </div>
       </Shell>
     );
@@ -114,8 +114,8 @@ export default function PublicLeadFormPage({ slug, token }) {
   return (
     <Shell form={form}>
       <div style={{ padding: '22px 22px 26px' }}>
-        <div style={{ fontFamily: FONT, fontSize: 20, fontWeight: 800, color: C.text, marginBottom: form.description ? 6 : 18 }}>{form.name}</div>
-        {form.description && <div style={{ fontFamily: FONT, fontSize: 13.5, color: C.textSecondary, marginBottom: 20, lineHeight: 1.5 }}>{form.description}</div>}
+        <div style={{ fontFamily: FONT, fontSize: 22, fontWeight: 800, color: C.text, marginBottom: form.description ? 6 : 18 }}>{form.name}</div>
+        {form.description && <div style={{ fontFamily: FONT, fontSize: 15, color: C.textSecondary, marginBottom: 20, lineHeight: 1.5 }}>{form.description}</div>}
 
         {/* The old build warned the RESPONDENT that the form "isn't set up to
             know who's responding" — an admin-facing complaint shown to the
@@ -124,7 +124,7 @@ export default function PublicLeadFormPage({ slug, token }) {
             What a respondent does deserve is confirmation of what a WhatsApp
             link already knows about them. */}
         {prefillPhone && (
-          <div style={{ background: '#E1F5EE', color: '#0F6E56', borderRadius: 8, padding: '9px 12px', fontFamily: FONT, fontSize: 12.5, marginBottom: 16 }}>
+          <div style={{ background: 'var(--c-successBg, #E1F5EE)', color: 'var(--c-successText, #0F6E56)', borderRadius: 8, padding: '9px 12px', fontFamily: FONT, fontSize: 14, marginBottom: 16 }}>
             Responding as {maskPhone(prefillPhone)}
           </div>
         )}
@@ -143,12 +143,12 @@ export default function PublicLeadFormPage({ slug, token }) {
         ))}
 
         {submitError && (
-          <div style={{ background: '#FEF2F2', color: '#991B1B', borderRadius: 8, padding: '9px 12px', fontFamily: FONT, fontSize: 13, marginBottom: 14 }}>{submitError}</div>
+          <div style={{ background: 'var(--c-dangerBgSoft, #FEF2F2)', color: 'var(--c-dangerStrong, #991B1B)', borderRadius: 8, padding: '9px 12px', fontFamily: FONT, fontSize: 15, marginBottom: 14 }}>{submitError}</div>
         )}
 
         <button onClick={submit} disabled={state === 'submitting'} style={{
           width: '100%', padding: '13px 16px', borderRadius: 10, border: 'none',
-          background: C.primary, color: '#fff', fontFamily: FONT, fontSize: 15, fontWeight: 700,
+          background: C.primary, color: '#fff', fontFamily: FONT, fontSize: 16, fontWeight: 700,
           cursor: state === 'submitting' ? 'not-allowed' : 'pointer', opacity: state === 'submitting' ? 0.7 : 1,
         }}>
           {state === 'submitting' ? 'Submitting…' : 'Submit'}
@@ -159,15 +159,32 @@ export default function PublicLeadFormPage({ slug, token }) {
 }
 
 function Shell({ form, children }) {
+  const hasBanner = !!form?.hasBanner;
   return (
     <div style={{ minHeight: '100vh', background: C.pageBg, display: 'flex', justifyContent: 'center', padding: '0 0 40px' }}>
-      <div style={{ width: '100%', maxWidth: 560 }}>
-        {form?.hasBanner && (
-          <img src={api.publicLeadForms.assetUrl(form.slug, 'banner')} alt=""
-            style={{ width: '100%', height: 180, objectFit: 'cover', display: 'block' }} />
+      {/* The 14px side inset lives HERE, once. It used to be a margin on the
+          card only, while the banner was width:100% of this wrapper — so the
+          banner rendered 28px WIDER than the form and hung over both edges. */}
+      <div style={{ width: '100%', maxWidth: 560, padding: '0 14px' }}>
+        {hasBanner && (
+          <img
+            src={api.publicLeadForms.assetUrl(form.slug, 'banner')} alt=""
+            style={{
+              width: '100%',
+              // height:auto keeps the banner's own aspect ratio, so a wide
+              // wordmark is never centre-cropped. maxHeight+contain only
+              // engage for a pathologically tall upload, and letterbox it
+              // rather than cutting the ends off.
+              height: 'auto', maxHeight: 240, objectFit: 'contain',
+              display: 'block', borderRadius: '14px 14px 0 0',
+              background: C.cardBg,
+            }} />
         )}
-        <div style={{ background: C.cardBg, margin: form?.hasBanner ? '0 14px' : '24px 14px 0', borderRadius: 14,
-          boxShadow: C.shadowMd, position: 'relative', top: form?.hasBanner ? -28 : 0 }}>
+        {/* Banner and card are one continuous surface: the banner rounds its
+            top, the card rounds its bottom. The card no longer overlaps the
+            banner, which was hiding the bottom 28px of it. */}
+        <div style={{ background: C.cardBg, marginTop: hasBanner ? 0 : 24,
+          borderRadius: hasBanner ? '0 0 14px 14px' : 14, boxShadow: C.shadowMd }}>
           {form?.hasLogo && (
             <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 18 }}>
               <img src={api.publicLeadForms.assetUrl(form.slug, 'logo')} alt=""
@@ -184,11 +201,11 @@ function Shell({ form, children }) {
 function FieldWrap({ label, required, error, children }) {
   return (
     <div style={{ marginBottom: 16 }}>
-      <label style={{ display: 'block', fontFamily: FONT, fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 6 }}>
+      <label style={{ display: 'block', fontFamily: FONT, fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 6 }}>
         {label}{required && <span style={{ color: C.primary }}> *</span>}
       </label>
       {children}
-      {error && <div style={{ fontFamily: FONT, fontSize: 12, color: C.primary, marginTop: 4 }}>{error}</div>}
+      {error && <div style={{ fontFamily: FONT, fontSize: 14, color: C.primary, marginTop: 4 }}>{error}</div>}
     </div>
   );
 }
@@ -198,9 +215,9 @@ function FieldWrap({ label, required, error, children }) {
 function SectionBlock({ field }) {
   return (
     <div style={{ margin: '22px 0 14px', paddingTop: 4, borderTop: `1px solid ${C.border}` }}>
-      <div style={{ fontFamily: FONT, fontSize: 15.5, fontWeight: 700, color: C.text, marginTop: 14 }}>{field.label}</div>
+      <div style={{ fontFamily: FONT, fontSize: 16, fontWeight: 700, color: C.text, marginTop: 14 }}>{field.label}</div>
       {field.description && (
-        <div style={{ fontFamily: FONT, fontSize: 13, color: C.textSecondary, lineHeight: 1.5, marginTop: 5, whiteSpace: 'pre-wrap' }}>
+        <div style={{ fontFamily: FONT, fontSize: 15, color: C.textSecondary, lineHeight: 1.5, marginTop: 5, whiteSpace: 'pre-wrap' }}>
           {field.description}
         </div>
       )}
@@ -241,14 +258,14 @@ function RatingInput({ field, value, onChange }) {
             </button>
           );
         })}
-        <span style={{ fontFamily: FONT, fontSize: 13, color: C.textSecondary, alignSelf: 'center', marginLeft: 8 }}>
+        <span style={{ fontFamily: FONT, fontSize: 15, color: C.textSecondary, alignSelf: 'center', marginLeft: 8 }}>
           {rating ? `${rating} of ${max}` : ''}
         </span>
       </div>
 
       {field.feedback && (
         <div style={{ marginTop: 12 }}>
-          <label style={{ display: 'block', fontFamily: FONT, fontSize: 12.5, color: C.textSecondary, marginBottom: 5 }}>
+          <label style={{ display: 'block', fontFamily: FONT, fontSize: 14, color: C.textSecondary, marginBottom: 5 }}>
             {field.feedbackLabel || DEFAULT_FEEDBACK_LABEL}
           </label>
           {/* Always optional, even when the rating itself is required — the
@@ -287,7 +304,7 @@ function FieldInput({ field, value, onChange }) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {(field.options || []).map(o => (
-            <label key={o} style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: FONT, fontSize: 14, color: C.text, cursor: 'pointer' }}>
+            <label key={o} style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: FONT, fontSize: 15, color: C.text, cursor: 'pointer' }}>
               <input type="radio" name={field.key} checked={value === o} onChange={() => onChange(o)} /> {o}
             </label>
           ))}
@@ -299,7 +316,7 @@ function FieldInput({ field, value, onChange }) {
           {(field.options || []).map(o => {
             const checked = Array.isArray(value) && value.includes(o);
             return (
-              <label key={o} style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: FONT, fontSize: 14, color: C.text, cursor: 'pointer' }}>
+              <label key={o} style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: FONT, fontSize: 15, color: C.text, cursor: 'pointer' }}>
                 <input type="checkbox" checked={checked} onChange={() => {
                   const arr = Array.isArray(value) ? value : [];
                   onChange(checked ? arr.filter(v => v !== o) : [...arr, o]);
@@ -311,7 +328,7 @@ function FieldInput({ field, value, onChange }) {
       );
     case 'boolean':
       return (
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: FONT, fontSize: 14, color: C.text, cursor: 'pointer' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: FONT, fontSize: 15, color: C.text, cursor: 'pointer' }}>
           <input type="checkbox" checked={!!value} onChange={e => onChange(e.target.checked)} /> {field.placeholder || 'Yes'}
         </label>
       );

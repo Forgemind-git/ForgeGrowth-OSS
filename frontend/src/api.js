@@ -85,11 +85,14 @@ export const api = {
     req(`/contact-names?waNumber=${encodeURIComponent(waNumber)}`),
   contact: (waNumber, contactNumber) =>
     req(`/contact?waNumber=${encodeURIComponent(waNumber)}&contactNumber=${encodeURIComponent(contactNumber)}`),
-  saveContact: (waNumber, contactNumber, name, tags = [], customFields = {}, assignedUserId = undefined) =>
+  // Contact custom fields were removed — a person's data lives on their LEAD —
+  // so this takes name + tags + assignment only. The backend ignores a
+  // customFields key if one is ever sent.
+  saveContact: (waNumber, contactNumber, name, tags = [], assignedUserId = undefined) =>
     req('/contacts/save', {
       method: 'POST',
       body: JSON.stringify({
-        waNumber, contactNumber, name, tags, customFields,
+        waNumber, contactNumber, name, tags,
         ...(assignedUserId !== undefined ? { assignedUserId } : {}),
       }),
     }),
@@ -104,9 +107,10 @@ export const api = {
     req(`/saved-contacts?waNumber=${encodeURIComponent(waNumber)}`),
   // Every contact across all business numbers (deduped) — for bulk messaging.
   allSavedContacts: () => req('/saved-contacts?all=true'),
-  // Download URL for the sample import sheet (.xlsx). Same-origin so the auth
-  // cookie rides along on a plain anchor/window navigation.
-  importContactsTemplateUrl: () => '/api/contacts/import/template',
+  // Bulk contact import. No longer reachable from the UI — the Contacts page was
+  // removed and bulk loading people now creates LEADS (api.leads.import). Kept
+  // because the backend route is still reachable over MCP (area_contacts) and the
+  // contacts table remains the chat's own substrate.
   importContacts: (waNumber, file) => {
     const form = new FormData();
     form.append('waNumber', waNumber);
@@ -139,18 +143,6 @@ export const api = {
     update: (id, data) => req(`/tags/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id) => req(`/tags/${id}`, { method: 'DELETE' }),
   },
-  teamMembers: {
-    list: () => req('/team-members'),
-    create: (data) => req('/team-members', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id, data) => req(`/team-members/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    delete: (id) => req(`/team-members/${id}`, { method: 'DELETE' }),
-  },
-  contactFields: {
-    list: () => req('/contact-fields'),
-    create: (data) => req('/contact-fields', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id, data) => req(`/contact-fields/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    delete: (id) => req(`/contact-fields/${id}`, { method: 'DELETE' }),
-  },
   templates: {
     list: ({ accountId, status, q } = {}) => {
       const qs = new URLSearchParams();
@@ -176,6 +168,20 @@ export const api = {
     refreshAnalytics: (id, days = 30) =>
       req(`/templates/${id}/analytics/refresh`, { method: 'POST', body: JSON.stringify({ days }) }),
   },
+  // Repeating broadcasts. A series never sends directly — each run creates a
+  // real broadcast, so its delivery stats live in api.broadcasts like any other.
+  broadcastSeries: {
+    list: () => req('/broadcast-series'),
+    get: (id) => req(`/broadcast-series/${id}`),
+    create: (data) => req('/broadcast-series', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => req(`/broadcast-series/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    setActive: (id, active) => req(`/broadcast-series/${id}/active`, { method: 'POST', body: JSON.stringify({ active }) }),
+    runNow: (id) => req(`/broadcast-series/${id}/run`, { method: 'POST' }),
+    preview: (id) => req(`/broadcast-series/${id}/preview`),
+    previewRule: (data) => req('/broadcast-series/preview', { method: 'POST', body: JSON.stringify(data) }),
+    delete: (id) => req(`/broadcast-series/${id}`, { method: 'DELETE' }),
+  },
+
   broadcasts: {
     list: (status) => req(`/broadcasts${status && status !== 'all' ? `?status=${status}` : ''}`),
     get: (id) => req(`/broadcasts/${id}`),
@@ -190,14 +196,17 @@ export const api = {
     get: (id) => req(`/chatbots/${id}`),
     create: (data) => req('/chatbots', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => req(`/chatbots/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    validate: (config) => req('/chatbots/validate', { method: 'POST', body: JSON.stringify({ config }) }),
     move: (id, folderId) => req(`/chatbots/${id}`, { method: 'PUT', body: JSON.stringify({ folder_id: folderId }) }),
     duplicate: (id) => req(`/chatbots/${id}/duplicate`, { method: 'POST' }),
     delete: (id) => req(`/chatbots/${id}`, { method: 'DELETE' }),
     exportOne: (id) => req(`/chatbots/${id}/export`),
     import: (payload) => req('/chatbots/import', { method: 'POST', body: JSON.stringify(payload) }),
+    // Lead fields a "Set Lead Field" action may write. Served by the same
+    // function the engine validates against, so the picker cannot offer a
+    // target the write would refuse.
+    leadFields: () => req('/automation-lead-fields'),
     // Webhook-trigger URL + signing secret (mints on first read)
-    webhook: (id) => req(`/chatbots/${id}/webhook`),
-    rotateWebhook: (id) => req(`/chatbots/${id}/webhook/rotate`, { method: 'POST' }),
     executions: (id, { page = 1, limit = 20, status = 'all', startDate = '', endDate = '', messageStatus = 'all' } = {}) => {
       const qs = new URLSearchParams({ page: String(page), limit: String(limit) });
       if (status && status !== 'all') qs.set('status', status);
@@ -231,6 +240,13 @@ export const api = {
       if (phone) qs.set('phone', phone);
       return req(`/whatsapp-accounts/health${qs.toString() ? `?${qs}` : ''}`);
     },
+  },
+  // Roles are managed alongside the users who hold them — see routes/users.js.
+  roles: {
+    list: () => req('/roles'),
+    create: (data) => req('/roles', { method: 'POST', body: JSON.stringify(data) }),
+    update: (key, data) => req(`/roles/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (key) => req(`/roles/${encodeURIComponent(key)}`, { method: 'DELETE' }),
   },
   users: {
     list: () => req('/users'),
@@ -270,6 +286,9 @@ export const api = {
     exportOne: (id) => req(`/agents/${id}/export`),
     import: (payload) => req('/agents/import', { method: 'POST', body: JSON.stringify(payload) }),
     runs: (id, limit = 50) => req(`/agents/${id}/runs?limit=${limit}`),
+    // Is a test number's chat paused (and by whom)? A paused chat is why an
+    // agent can look configured and still say nothing.
+    testNumberStatus: (id) => req(`/agents/${id}/test-numbers/status`),
     run: (id, runId) => req(`/agents/${id}/runs/${runId}`),
     addTool: (id, data) => req(`/agents/${id}/tools`, { method: 'POST', body: JSON.stringify(data) }),
     updateTool: (id, toolId, data) =>
@@ -545,24 +564,6 @@ export const api = {
     updateOauthClient: (id, data) => req(`/mcp/oauth/clients/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteOauthClient: (id) => req(`/mcp/oauth/clients/${id}`, { method: 'DELETE' }),
   },
-  // Follow-up Sequences — timed follow-up chains for leads (Chats → Follow-ups).
-  // Auto-enrollment on funnel-stage entry + manual enrollment; the engine runs
-  // server-side (services/followUpEngine.js).
-  followUps: {
-    list: () => req('/follow-up-sequences'),
-    get: (id) => req(`/follow-up-sequences/${id}`),
-    create: (data) => req('/follow-up-sequences', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id, data) => req(`/follow-up-sequences/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    delete: (id) => req(`/follow-up-sequences/${id}`, { method: 'DELETE' }),
-    addStep: (id, data) => req(`/follow-up-sequences/${id}/steps`, { method: 'POST', body: JSON.stringify(data) }),
-    updateStep: (stepId, data) => req(`/follow-up-steps/${stepId}`, { method: 'PUT', body: JSON.stringify(data) }),
-    deleteStep: (stepId) => req(`/follow-up-steps/${stepId}`, { method: 'DELETE' }),
-    reorderSteps: (id, ids) => req(`/follow-up-sequences/${id}/steps/reorder`, { method: 'PUT', body: JSON.stringify({ ids }) }),
-    enrollments: (id, status) => req(`/follow-up-sequences/${id}/enrollments${status ? `?status=${status}` : ''}`),
-    enroll: (id, leadIds) => req(`/follow-up-sequences/${id}/enroll`, { method: 'POST', body: JSON.stringify({ leadIds }) }),
-    stopEnrollment: (enrollmentId) => req(`/follow-up-enrollments/${enrollmentId}/stop`, { method: 'POST' }),
-    log: (id, limit = 100) => req(`/follow-up-sequences/${id}/log?limit=${limit}`),
-  },
   // Message Formats — labelled pre-filled WhatsApp openers + their tracking.
   // The backend answers on /wa-links too; this group uses the canonical path.
   messageFormats: {
@@ -612,6 +613,20 @@ export const api = {
     exportUrl: (params = {}) => {
       const qs = new URLSearchParams(params);
       return `/api/leads/export${qs.toString() ? `?${qs}` : ''}`;
+    },
+    // Bulk import from a sheet. A plain <a download> for the sample so the auth
+    // cookie rides along; the upload is FormData, so it must NOT go through
+    // req() (which sets a JSON Content-Type and would break the multipart
+    // boundary).
+    importTemplateUrl: () => '/api/leads/import/template',
+    import: async (file, source) => {
+      const form = new FormData();
+      form.append('file', file);
+      if (source) form.append('source', source);
+      const res = await fetch('/api/leads/import', { method: 'POST', credentials: 'include', body: form });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || 'Failed to import the sheet');
+      return json;
     },
   },
   marketing: {

@@ -2,33 +2,37 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { ZoomIn, ZoomOut, Maximize, Move } from 'lucide-react';
 import { FONT, MONO } from '../constants.js';
 
-/* ── Design Tokens ──────────────────────────────────────────────────────────── */
+/* ── Design Tokens ──────────────────────────────────────────────────────────
+   These were hardcoded light values, which made the whole execution canvas a
+   white island inside dark mode. Each token below carries the exact literal it
+   replaces as its var() fallback, and each light palette entry equals that
+   literal, so light mode renders identically to before. */
 const C = {
-  pageBg: '#F7F7F3',
-  dot: '#E5E5E0',
-  nodeBorder: '#E5E5E0',
-  nodeBorderExecuted: '#0F6E56',
-  nodeBorderError: '#A32D2D',
-  nodeBg: '#FFFFFF',
-  text1: '#111111',
-  text2: '#222222',
-  text3: '#444444',
-  text4: '#666666',
-  text5: '#777777',
-  muted: '#888888',
-  edgeDefault: '#D5D5D0',
-  edgeExecuted: '#0F6E56',
-  edgeError: '#A32D2D',
-  green: '#0F6E56',
-  greenBg: '#E1F5EE',
-  red: '#A32D2D',
-  redBg: '#FCEBEB',
-  blue: '#1565C0',
-  blueBg: '#E3F2FD',
-  orange: '#E65100',
-  orangeBg: '#FFF3E0',
-  purple: '#534AB7',
-  purpleBg: '#EEEDFE',
+  pageBg: 'var(--c-pageBg, #F7F7F3)',
+  dot: 'var(--c-border, #E5E5E0)',
+  nodeBorder: 'var(--c-nodeBorder, #B4B3AA)',
+  nodeBorderExecuted: 'var(--c-successText, #0F6E56)',
+  nodeBorderError: 'var(--c-xa32d2d, #A32D2D)',
+  nodeBg: 'var(--c-cardBg, #FFFFFF)',
+  text1: 'var(--c-t1, #111111)',
+  text2: 'var(--c-t2, #222222)',
+  text3: 'var(--c-t3, #444444)',
+  text4: 'var(--c-t4, #666666)',
+  text5: 'var(--c-t5, #737373)',
+  muted: 'var(--c-t6, #7B7B7B)',
+  edgeDefault: 'var(--c-borderStrong, #D5D5D0)',
+  edgeExecuted: 'var(--c-successText, #0F6E56)',
+  edgeError: 'var(--c-xa32d2d, #A32D2D)',
+  green: 'var(--c-successText, #0F6E56)',
+  greenBg: 'var(--c-successBg, #E1F5EE)',
+  red: 'var(--c-xa32d2d, #A32D2D)',
+  redBg: 'var(--c-dangerBg, #FCEBEB)',
+  blue: 'var(--c-infoText, #1565C0)',
+  blueBg: 'var(--c-infoBg, #E3F2FD)',
+  orange: 'var(--c-orangeText, #E65100)',
+  orangeBg: 'var(--c-orangeBg, #FFF3E0)',
+  purple: 'var(--c-purple, #534AB7)',
+  purpleBg: 'var(--c-purpleBg, #EEEDFE)',
 };
 
 const NODE_W = 240;
@@ -40,16 +44,19 @@ const nodeH = (n) => {
   return 96;
 };
 
+// Per-node-type tint. bg and color are a PAIR — converting the text while
+// leaving the background a light literal would give light-on-light, which is
+// worse than leaving both alone.
 const NT = {
-  trigger:  { bg:'#FCEBEB', border:'#E8A0A0', color:'#A32D2D', accent:'#791F1F', label:'TRIGGER' },
-  message:  { bg:'#FDF2F2', border:'#E8B0B0', color:'#B53D3D', accent:'#A32D2D', label:'MESSAGE' },
-  condition:{ bg:'#FFF5F5', border:'#F0C0C0', color:'#C44A4A', accent:'#A32D2D', label:'CONDITION' },
-  action:   { bg:'#FAF0F0', border:'#D8B0B0', color:'#8B3A3A', accent:'#A32D2D', label:'ACTION' },
-  delay:    { bg:'#FDF8F5', border:'#E0C8B8', color:'#A05040', accent:'#A32D2D', label:'DELAY' },
-  api:      { bg:'#F5ECEC', border:'#C8A0A0', color:'#7A2A2A', accent:'#791F1F', label:'API' },
-  handoff:  { bg:'#FDF0F0', border:'#E0B8B8', color:'#B04040', accent:'#A32D2D', label:'HANDOFF' },
-  ai:       { bg:'#F8F0F0', border:'#D0B0B0', color:'#8B3A3A', accent:'#A32D2D', label:'AI' },
-  subflow:  { bg:'#F0E8E8', border:'#C0A0A0', color:'#6A2A2A', accent:'#791F1F', label:'SUB-FLOW' },
+  trigger:  { bg:'var(--c-xfcebeb, #FCEBEB)', border:'var(--c-se8a0a0, #E8A0A0)', color:'var(--c-xa32d2d, #A32D2D)', accent:'var(--c-s791f1f, #791F1F)', label:'TRIGGER' },
+  message:  { bg:'var(--c-xfdf2f2, #FDF2F2)', border:'var(--c-se8b0b0, #E8B0B0)', color:'var(--c-xb53d3d, #B53D3D)', accent:'var(--c-xa32d2d, #A32D2D)', label:'MESSAGE' },
+  condition:{ bg:'var(--c-xfff5f5, #FFF5F5)', border:'var(--c-sf0c0c0, #F0C0C0)', color:'var(--c-xc44a4a, #C44A4A)', accent:'var(--c-xa32d2d, #A32D2D)', label:'CONDITION' },
+  action:   { bg:'var(--c-xfaf0f0, #FAF0F0)', border:'var(--c-sd8b0b0, #D8B0B0)', color:'var(--c-s8b3a3a, #8B3A3A)', accent:'var(--c-xa32d2d, #A32D2D)', label:'ACTION' },
+  delay:    { bg:'var(--c-xfdf8f5, #FDF8F5)', border:'var(--c-se0c8b8, #E0C8B8)', color:'var(--c-xa05040, #A05040)', accent:'var(--c-xa32d2d, #A32D2D)', label:'DELAY' },
+  api:      { bg:'var(--c-xf5ecec, #F5ECEC)', border:'var(--c-sc8a0a0, #C8A0A0)', color:'var(--c-x7a2a2a, #7A2A2A)', accent:'var(--c-s791f1f, #791F1F)', label:'API' },
+  handoff:  { bg:'var(--c-xfdf0f0, #FDF0F0)', border:'var(--c-se0b8b8, #E0B8B8)', color:'var(--c-xb04040, #B04040)', accent:'var(--c-xa32d2d, #A32D2D)', label:'HANDOFF' },
+  ai:       { bg:'var(--c-xf8f0f0, #F8F0F0)', border:'var(--c-sd0b0b0, #D0B0B0)', color:'var(--c-s8b3a3a, #8B3A3A)', accent:'var(--c-xa32d2d, #A32D2D)', label:'AI' },
+  subflow:  { bg:'var(--c-xf0e8e8, #F0E8E8)', border:'var(--c-sc0a0a0, #C0A0A0)', color:'var(--c-x6a2a2a, #6A2A2A)', accent:'var(--c-s791f1f, #791F1F)', label:'SUB-FLOW' },
 };
 
 const TYPE_ICONS = {
@@ -88,7 +95,7 @@ function ExecutionNode({ node, step, isSelected, onClick }) {
 
   const borderColor = hasError ? C.nodeBorderError : executed ? C.nodeBorderExecuted : C.nodeBorder;
   const bgOpacity = executed ? 1 : 0.55;
-  const topStripColor = hasError ? C.red : executed ? C.green : '#E5E5E0';
+  const topStripColor = hasError ? C.red : executed ? C.green : 'var(--c-border, #E5E5E0)';
 
   return (
     <div
@@ -122,8 +129,8 @@ function ExecutionNode({ node, step, isSelected, onClick }) {
           padding: '2px 8px', borderRadius: 99,
           background: hasError ? C.redBg : C.greenBg,
           color: hasError ? C.red : C.green,
-          fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em',
-          border: `1px solid ${hasError ? '#F4C9C9' : '#BBDFD1'}`,
+          fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em',
+          border: `1px solid ${hasError ? 'var(--c-sf4c9c9, #F4C9C9)' : 'var(--c-sbbdfd1, #BBDFD1)'}`,
         }}>
           {hasError ? 'Error' : 'Success'}
         </div>
@@ -136,19 +143,19 @@ function ExecutionNode({ node, step, isSelected, onClick }) {
             width: 30, height: 30, borderRadius: 8,
             background: t.bg, border: `1px solid ${t.border}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 14, flexShrink: 0,
+            fontSize: 15, flexShrink: 0,
           }}>
             {TYPE_ICONS[node.type] || '●'}
           </div>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>
               {t.label}
             </div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: C.text1, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.text1, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {node.title || node.name || `${node.type} node`}
             </div>
             {node.sub && (
-              <div style={{ fontSize: 10, color: C.text5, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: 12, color: C.text5, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {node.sub}
               </div>
             )}
@@ -158,11 +165,11 @@ function ExecutionNode({ node, step, isSelected, onClick }) {
         {/* Execution timing */}
         {step && (
           <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.dot}`, display: 'flex', gap: 10 }}>
-            <div style={{ fontSize: 10, color: C.text5 }}>
+            <div style={{ fontSize: 12, color: C.text5 }}>
               <span style={{ color: C.muted }}>Started:</span> {new Date(step.started_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
             </div>
             {step.completed_at && (
-              <div style={{ fontSize: 10, color: C.text5 }}>
+              <div style={{ fontSize: 12, color: C.text5 }}>
                 <span style={{ color: C.muted }}>Duration:</span> {Math.round((new Date(step.completed_at) - new Date(step.started_at)))}ms
               </div>
             )}
@@ -275,7 +282,7 @@ export default function ExecutionFlowCanvas({ nodes, edges, steps, onNodeClick, 
       const fromStep = stepMap[e.from];
       const fromHasError = fromStep?.status === 'error';
       const stroke = fromHasError ? C.edgeError : isExecuted ? C.edgeExecuted : C.edgeDefault;
-      const strokeWidth = isExecuted ? 2.5 : 1.5;
+      const strokeWidth = isExecuted ? 3.5 : 2.5;
       const opacity = isExecuted ? 1 : 0.35;
 
       return (
@@ -292,8 +299,8 @@ export default function ExecutionFlowCanvas({ nodes, edges, steps, onNodeClick, 
       {/* Toolbar */}
       <div style={{
         position: 'absolute', top: 12, right: 12, zIndex: 20,
-        display: 'flex', gap: 6, background: 'rgba(255,255,255,0.95)',
-        borderRadius: 10, padding: '6px 8px', border: `1px solid ${C.nodeBorder}`,
+        display: 'flex', gap: 6, background: 'var(--c-cardBg)',
+        borderRadius: 10, padding: '6px 8px', border: `2px solid ${C.nodeBorder}`,
         boxShadow: '0 2px 8px rgba(0,0,0,.06)',
       }}>
         <button onClick={fitToScreen} title="Fit to screen" style={iconBtnStyle}>
@@ -310,20 +317,20 @@ export default function ExecutionFlowCanvas({ nodes, edges, steps, onNodeClick, 
       {/* Legend */}
       <div style={{
         position: 'absolute', bottom: 12, left: 12, zIndex: 20,
-        display: 'flex', gap: 12, background: 'rgba(255,255,255,0.95)',
-        borderRadius: 10, padding: '8px 12px', border: `1px solid ${C.nodeBorder}`,
-        boxShadow: '0 2px 8px rgba(0,0,0,.06)', fontSize: 11, fontFamily: FONT, color: C.text4,
+        display: 'flex', gap: 12, background: 'var(--c-cardBg)',
+        borderRadius: 10, padding: '8px 12px', border: `2px solid ${C.nodeBorder}`,
+        boxShadow: '0 2px 8px rgba(0,0,0,.06)', fontSize: 13, fontFamily: FONT, color: C.text4,
       }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ width: 12, height: 12, borderRadius: 3, border: `2px solid ${C.nodeBorderExecuted}`, background: '#fff' }} />
+          <span style={{ width: 12, height: 12, borderRadius: 3, border: `2px solid ${C.nodeBorderExecuted}`, background: 'var(--c-cardBg)' }} />
           Executed
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ width: 12, height: 12, borderRadius: 3, border: `2px solid ${C.nodeBorderError}`, background: '#fff' }} />
+          <span style={{ width: 12, height: 12, borderRadius: 3, border: `2px solid ${C.nodeBorderError}`, background: 'var(--c-cardBg)' }} />
           Error
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span style={{ width: 12, height: 12, borderRadius: 3, border: `2px solid ${C.nodeBorder}`, background: '#fff', opacity: 0.5 }} />
+          <span style={{ width: 12, height: 12, borderRadius: 3, border: `2px solid ${C.nodeBorder}`, background: 'var(--c-cardBg)', opacity: 0.5 }} />
           Not executed
         </span>
       </div>
@@ -377,7 +384,7 @@ export default function ExecutionFlowCanvas({ nodes, edges, steps, onNodeClick, 
 
 const iconBtnStyle = {
   width: 28, height: 28, borderRadius: 6,
-  border: '1px solid #E5E5E0', background: '#fff',
+  border: '1px solid var(--c-border)', background: 'var(--c-cardBg)',
   display: 'flex', alignItems: 'center', justifyContent: 'center',
   cursor: 'pointer', color: C.text4,
 };

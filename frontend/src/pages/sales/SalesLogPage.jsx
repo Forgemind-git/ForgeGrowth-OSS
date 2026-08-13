@@ -108,8 +108,8 @@ export default function SalesLogPage({ user, navigate }) {
         title="Sales"
         right={
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <SearchableSelect value={filters.courseId} onChange={v => setFilters(f => ({ ...f, courseId: v }))} options={courseOpts} placeholder="All products" triggerStyle={{ padding: '7px 28px 7px 10px', fontSize: 12.5 }} />
-            <SearchableSelect value={filters.source} onChange={v => setFilters(f => ({ ...f, source: v }))} options={sourceOpts} placeholder="All sources" triggerStyle={{ padding: '7px 28px 7px 10px', fontSize: 12.5 }} />
+            <SearchableSelect value={filters.courseId} onChange={v => setFilters(f => ({ ...f, courseId: v }))} options={courseOpts} placeholder="All products" triggerStyle={{ padding: '7px 28px 7px 10px', fontSize: 14 }} />
+            <SearchableSelect value={filters.source} onChange={v => setFilters(f => ({ ...f, source: v }))} options={sourceOpts} placeholder="All sources" triggerStyle={{ padding: '7px 28px 7px 10px', fontSize: 14 }} />
             <Segmented value={filters.range} onChange={v => setFilters(f => ({ ...f, range: v }))}
               options={[{ value: 'week', label: 'Week' }, { value: 'month', label: 'Month' }, { value: 'all', label: 'All' }]} />
           </div>

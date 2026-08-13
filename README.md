@@ -239,15 +239,10 @@ no further calls to Meta.
 ### Chats
 
 - **Projects** — one folder for a campaign's whole toolkit. "Run the Applied AI launch" means a
-  broadcast template, an AI agent to answer the people who reply, an automation to follow up, a
-  follow-up sequence and a form — five things that otherwise live in five unrelated lists with no way
-  to see them as one campaign. A project can hold all five kinds; the link is a nullable
-  `project_id`, so nothing is forced into a project.
-- **Follow-up Sequences** — timed message chains for leads. A lead is enrolled automatically when it
-  *enters* a trigger funnel stage, or by hand from the UI. Each step waits its own delay from the
-  previous step, then sends an approved template or free text (the latter only while the 24-hour
-  window is open). Enrollment watches the append-only `lead_events` log with a cursor rather than
-  hooking the eight code paths that write `leads.stage`, so a new write path is covered for free.
+  broadcast template, an AI agent to answer the people who reply, an automation behind it and a
+  form — four things that otherwise live in four unrelated lists with no way to see them as one
+  campaign. A project can hold all four kinds; the link is a nullable `project_id`, so nothing is
+  forced into a project.
 - **Message Formats** — a labelled, pre-filled WhatsApp opener you put on an Instagram reel or a web
   page. Tapping it opens WhatsApp with that exact text, and the conversation that follows is
   attributable to the label — a brand-new lead takes the format's label as its funnel Source. One
@@ -261,37 +256,50 @@ no further calls to Meta.
   (cost ÷ volume) rather than a hand-maintained rate card, because rates differ enormously by
   country — measured on a real account, India utility billed 0.1150 against Germany's 4.0322 for the
   same category, so one hardcoded rate would have under-reported by ~97%. Every send is stamped with
-  its template and originating surface (broadcast / automation / follow-up / agent / manual / MCP /
-  payment) at send time, because working out "which template was this?" afterwards silently misses.
-- **Payments inside chat** — a Payment node in the Automation builder and payment tools for AI
-  agents: send a link, then wait on the actual outcome. The wait is typed, so a customer who types
-  "ok" while a link is outstanding no longer swallows the payment wait and gets no reply at all.
+  its template and originating surface (broadcast / automation / agent / manual / MCP / payment)
+  at send time, because working out "which template was this?" afterwards silently misses.
+- **Payments** — raise a Razorpay link for a lead from Sales → Payments and track it to settlement.
+  Reconciliation runs off the Razorpay webhook, which resolves a payment back to the exact lead
+  through the ids carried in the link's `notes` — a fact rather than an amount-matching guess.
 - **Inbox** — 3-pane WhatsApp-style client with per-agent filtering, media rendering (image / video /
   audio / document, with an ffmpeg Ogg→MP3 fallback so voice notes play in Safari), 24-hour
   customer-service-window enforcement, optimistic-UI sends and mic recording in the composer.
-- **Contacts** — tags and per-account custom fields; CSV/XLSX import with alias-matched headers,
-  drag-drop and Ctrl+V paste, idempotent upsert.
+- **Leads** — one hub for the whole leads model: a funnel board and a list view over the same
+  records, with tags, a configurable field registry and CSV/XLSX import (alias-matched headers,
+  drag-drop and Ctrl+V paste, idempotent upsert). A contact is the conversation; the lead is the
+  record, and there is no longer a separate Contacts CRM page holding a second copy of the person.
 - **Message Templates** — the full Meta lifecycle: submit, sync, edit, delete, with PAUSED /
   DISABLED / REJECTED handling, quality score, COPY_CODE buttons, carousels and library clone.
   Editing an approved template snapshots the previous version, enforces Meta's 2-edits-per-24h
   limit, and offers restore from a history drawer.
 - **Template Analytics** — cached daily Meta analytics with a per-button click breakdown.
 - **Bulk Broadcasts** — 7 message types, per-recipient queue, live SENDING / SENT / PARTIAL / FAILED
-  rollup, per-broadcast variable mapping.
-- **Automation Builder** — visual flow editor with 33 block types and drag-to-connect wiring. The
-  engine evaluates keyword / any-message / new-contact / read / delivered / sent triggers
-  synchronously on each webhook.
+  rollup, per-broadcast variable mapping. A two-step composer asks for the send mode first — send
+  now, schedule once, or repeat on a schedule — because every later choice depends on it. Recipients
+  can be filtered by funnel stage, tag and date range, and a scheduled broadcast stays editable
+  until it fires.
+- **Automation Builder** — a left-to-right visual flow editor with 20 block types and
+  drag-to-connect wiring. Every branch a step can take is a labelled row on the card with its own
+  connector, so a reply button, a list option and a timeout are each visibly wired rather than
+  sharing one anonymous handle. The engine evaluates keyword / any-message / new-contact / read /
+  delivered / sent triggers synchronously on each webhook.
 - **AI Agents** — a no-code LLM agent per WhatsApp number: system prompt, model choice, triggers,
   multi-turn memory, a tool-use loop and a full run trace. Tools cover Google Sheets, HTTP requests,
   media sends and CRM write-back. Includes keyword or agent-driven **human handoff** with
   round-robin assignment, idle-conversation summaries, optional audio transcription and vision.
   Agent runs execute on a queue outside the webhook path, so Meta's 20-second timeout is never hit.
+  **Usage limits** cap what an agent may spend on one person — a rolling per-person allowance that
+  refills on a clock rather than a lifetime cap — and **test numbers** are exempt from the pause so
+  a limit can never lock the operator out of their own rehearsal.
+  Agents can also **fill a form by asking**: the form's fields become the tool schema, so the same
+  answers a public form collects can be collected conversationally and land in the same table.
 - **Media Library** — upload once to MinIO, sync per-account to Meta on demand (each account gets its
   own 28-day media id), with an optional daily cron that refreshes ids before they expire.
 - **Webhook History** — every inbound payload audited with its parser outcome, a synthetic payload
   generator for testing, and a replay button that re-runs any historical payload through the handler.
-- **Users & RBAC** — `admin` / `bda_sales` / `viewer` roles, per-user number assignments, per-contact
-  assignment overrides, and an append-only audit log.
+- **Users & RBAC** — roles are rows, not an enum: `admin` is fixed and the rest are managed from
+  Admin Settings, each owning its own page list, so adding a role never needs a migration. Plus
+  per-user number assignments, per-contact assignment overrides, and an append-only audit log.
 
 ### Integrations
 
@@ -342,7 +350,7 @@ Meta WhatsApp Cloud API
         │
         ▼ webhook
    Backend (Express + pg)  ──►  PostgreSQL  (schema `coexistence`)
-        │                       chats · contacts · leads · funnel · campaigns
+        │                       chats · leads · funnel · campaigns
         │                       templates · automations · agents · payments
         │
         ├──►  BullMQ on Redis  ──►  outbound sends (60/sec) · media downloads · agent runs
@@ -382,9 +390,9 @@ Meta WhatsApp Cloud API
   or after it, never ahead of it, because the running image is still reading the old name and the
   whole page 500s rather than just the new feature failing.
 - **Stage changes are observed, not hooked.** Eight code paths write `leads.stage`, several in raw
-  SQL. Downstream consumers (funnel tags, follow-up sequences) walk the append-only `lead_events` log with a cursor
-  instead, so a new write path is covered automatically. Extend that pattern rather than adding a
-  ninth hook.
+  SQL. Downstream consumers (the funnel-stage tag mirror today) walk the append-only `lead_events`
+  log with a cursor instead, so a new write path is covered automatically. Extend that pattern
+  rather than adding a ninth hook.
 
 ## Repository layout
 

@@ -23,7 +23,7 @@ export default function InfoDot({ text, size = 13, width = 230 }) {
           role="tooltip"
           style={{
             position: 'absolute', bottom: 'calc(100% + 7px)', left: '50%', transform: 'translateX(-50%)',
-            background: '#1F1F23', color: '#fff', fontFamily: FONT, fontSize: 11.5, lineHeight: 1.45,
+            background: '#1F1F23', color: '#fff', fontFamily: FONT, fontSize: 13, lineHeight: 1.45,
             fontWeight: 500, padding: '8px 11px', borderRadius: 8, width, maxWidth: '72vw',
             boxShadow: '0 8px 24px rgba(0,0,0,.20)', zIndex: 90,
             textTransform: 'none', letterSpacing: 0, whiteSpace: 'normal', textAlign: 'left', pointerEvents: 'none',

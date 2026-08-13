@@ -9,7 +9,7 @@ import { useFunnelConfig } from '../../hooks/useFunnelConfig.js';
 import { PageShell, Button, Table, Td, Badge, EmptyState, Modal, Field, inputStyle, fmtINR, fmtDate } from '../academy/shared.jsx';
 import { Card, BarChart, Shimmer } from '../../components/charts.jsx';
 
-const STATUS_META = { active: { c: '#0F6E56', b: '#E1F5EE' }, paused: { c: '#854F0B', b: '#FAEEDA' }, ended: { c: '#6B7280', b: '#F1F1EE' } };
+const STATUS_META = { active: { c: 'var(--c-successText, #0F6E56)', b: 'var(--c-successBg, #E1F5EE)' }, paused: { c: 'var(--c-warnText, #854F0B)', b: 'var(--c-warnBg, #FAEEDA)' }, ended: { c: 'var(--c-textSecondary, #6B7280)', b: 'var(--c-surfaceMuted, #F1F1EE)' } };
 
 export default function CampaignsPage({ user }) {
   const isAdmin = user?.role === 'admin';
@@ -61,7 +61,7 @@ export default function CampaignsPage({ user }) {
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
                     {c.name}
                     {isMeta && <span title={`Synced from Meta Ads${c.accountName ? ` · ${c.accountName}` : ''}`}
-                      style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.04em', color: '#1877F2', background: '#E7F0FE', padding: '2px 6px', borderRadius: 5, fontFamily: MONO }}>META</span>}
+                      style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.04em', color: '#1877F2', background: 'var(--c-infoBg, #E7F0FE)', padding: '2px 6px', borderRadius: 5, fontFamily: MONO }}>META</span>}
                   </span>
                 </Td>
                 <Td color={C.textSecondary}>{c.platform || '—'}</Td>
@@ -70,10 +70,10 @@ export default function CampaignsPage({ user }) {
                 <Td align="right" mono>{c.leadsGenerated}</Td>
                 <Td align="right" mono>{c.costPerLead != null ? fmtINR(c.costPerLead) : '—'}</Td>
                 <Td align="right" mono>{c.costPerEnrollment != null ? fmtINR(c.costPerEnrollment) : '—'}</Td>
-                <Td color={C.textMuted} style={{ fontSize: 11.5 }}>{fmtDate(c.startDate)} – {fmtDate(c.endDate)}</Td>
+                <Td color={C.textMuted} style={{ fontSize: 13 }}>{fmtDate(c.startDate)} – {fmtDate(c.endDate)}</Td>
                 <Td align="right">
                   {isMeta ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: C.primary, fontFamily: FONT, fontWeight: 600 }} title="Break this campaign down into its ad sets and ads">
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, color: C.primary, fontFamily: FONT, fontWeight: 600 }} title="Break this campaign down into its ad sets and ads">
                       Ad sets &amp; ads <ChevronRight size={14} />
                     </span>
                   ) : (
@@ -149,8 +149,8 @@ function CampaignAdsPopup({ campaign, onClose }) {
         <div style={{ position: 'sticky', top: 0, background: C.headerBg, color: C.headerText,
           padding: '15px 20px', display: 'flex', alignItems: 'center', gap: 12, zIndex: 2, borderRadius: '16px 16px 0 0' }}>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 15, fontWeight: 700 }}>{campaign.name}</div>
-            <div style={{ fontSize: 11.5, color: C.headerMuted, fontFamily: MONO, marginTop: 2 }}>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>{campaign.name}</div>
+            <div style={{ fontSize: 13, color: C.headerMuted, fontFamily: MONO, marginTop: 2 }}>
               {campaign.accountName || 'Meta Ads'} · {fmtINR(campaign.spend)} spend · {campaign.leadsGenerated} leads
               {campaign.objective ? ` · ${campaign.objective.replace(/^OUTCOME_/, '')}` : ''}
             </div>
@@ -167,7 +167,7 @@ function CampaignAdsPopup({ campaign, onClose }) {
           ) : (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap',
-                fontSize: 12, color: C.textSecondary, fontFamily: MONO }}>
+                fontSize: 14, color: C.textSecondary, fontFamily: MONO }}>
                 <Layers size={14} color={C.textMuted} />
                 {adsets.length} ad set{adsets.length !== 1 ? 's' : ''} · {adCount} ad{adCount !== 1 ? 's' : ''}
                 <button onClick={() => {
@@ -176,7 +176,7 @@ function CampaignAdsPopup({ campaign, onClose }) {
                   setOpen(next);
                 }}
                   style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer',
-                    color: C.primary, fontFamily: FONT, fontSize: 12, fontWeight: 600 }}>
+                    color: C.primary, fontFamily: FONT, fontSize: 14, fontWeight: 600 }}>
                   {allOpen ? 'Collapse all' : 'Expand all'}
                 </button>
               </div>
@@ -220,13 +220,13 @@ function AdSetGroup({ adset: s, expanded, onToggle }) {
         <Layers size={15} color={C.textSecondary} style={{ flexShrink: 0 }} />
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13.5, fontWeight: 600, color: C.text }}>{s.name}</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{s.name}</span>
             {sm && <Badge label={s.status} color={sm.c} bg={sm.b} style={{ textTransform: 'capitalize' }} />}
-            <span style={{ fontSize: 11, color: C.textMuted, fontFamily: MONO }}>
+            <span style={{ fontSize: 13, color: C.textMuted, fontFamily: MONO }}>
               {s.ads.length} ad{s.ads.length !== 1 ? 's' : ''}
             </span>
           </div>
-          <div style={{ fontSize: 11, color: C.textMuted, fontFamily: MONO, marginTop: 2 }}>
+          <div style={{ fontSize: 13, color: C.textMuted, fontFamily: MONO, marginTop: 2 }}>
             {s.optimizationGoal ? `Optimising for ${prettyGoal(s.optimizationGoal)}` : 'Optimisation goal not synced'}
             {s.dailyBudget != null && ` · ${fmtINR(s.dailyBudget)}/day`}
             {s.dailyBudget == null && s.lifetimeBudget != null && ` · ${fmtINR(s.lifetimeBudget)} lifetime`}
@@ -244,7 +244,7 @@ function AdSetGroup({ adset: s, expanded, onToggle }) {
       {expanded && (
         <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12, background: C.pageBg }}>
           {s.ads.length === 0
-            ? <div style={{ fontSize: 12.5, color: C.textMuted }}>No ads in this ad set.</div>
+            ? <div style={{ fontSize: 14, color: C.textMuted }}>No ads in this ad set.</div>
             : s.ads.map(a => <AdCard key={a.id} ad={a} />)}
         </div>
       )}
@@ -272,12 +272,12 @@ function AdCard({ ad }) {
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.04em', color: C.textSecondary, background: C.hover, padding: '2px 6px', borderRadius: 4, fontFamily: MONO }}>{ad.objectType || 'AD'}</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ad.name}</span>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.04em', color: C.textSecondary, background: C.hover, padding: '2px 6px', borderRadius: 4, fontFamily: MONO }}>{ad.objectType || 'AD'}</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ad.name}</span>
             {sm && <Badge label={ad.status} color={sm.c} bg={sm.b} style={{ textTransform: 'capitalize' }} />}
           </div>
           {(ad.title || ad.body) && (
-            <div style={{ fontSize: 12, color: C.textSecondary, lineHeight: 1.45, maxHeight: 52, overflow: 'hidden' }}>{ad.title || ad.body}</div>
+            <div style={{ fontSize: 14, color: C.textSecondary, lineHeight: 1.45, maxHeight: 52, overflow: 'hidden' }}>{ad.title || ad.body}</div>
           )}
           <div style={{ display: 'flex', gap: 14, marginTop: 8, flexWrap: 'wrap' }}>
             <Metric label="Spend" value={fmtINR(ad.spend)} />
@@ -291,7 +291,7 @@ function AdCard({ ad }) {
       {ad.igPermalink && (
         <div style={{ borderTop: `1px solid ${C.border}`, padding: '8px 13px' }}>
           <a href={ad.igPermalink} target="_blank" rel="noreferrer"
-            style={{ color: C.primary, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 600, textDecoration: 'none' }}>
+            style={{ color: C.primary, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
             View this ad on Instagram <ExternalLink size={11} />
           </a>
         </div>
@@ -303,8 +303,8 @@ function AdCard({ ad }) {
 function Metric({ label, value }) {
   return (
     <div>
-      <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.06em', color: C.textMuted, textTransform: 'uppercase' }}>{label}</div>
-      <div style={{ fontSize: 13.5, fontWeight: 700, fontFamily: MONO, color: C.text, marginTop: 1 }}>{value ?? '—'}</div>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', color: C.textMuted, textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ fontSize: 15, fontWeight: 700, fontFamily: MONO, color: C.text, marginTop: 1 }}>{value ?? '—'}</div>
     </div>
   );
 }

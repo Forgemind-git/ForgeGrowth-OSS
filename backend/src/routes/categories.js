@@ -14,12 +14,18 @@ function genId(prefix) {
 /* ------------------------------------------------------------------ */
 
 // GET /api/categories
+// Categories the BACKEND owns. Their tags are mirrored from the funnel and the
+// product list, so they are marked `managed` and every manual picker hides
+// them: a tag meaning "bought X" is worthless once anyone can set it by hand.
+const MANAGED_CATEGORIES = ['cat-funnel-stage', 'cat-product'];
+const isManaged = (id) => MANAGED_CATEGORIES.includes(String(id || ''));
+
 router.get('/categories', async (req, res) => {
   try {
     const { rows } = await pool.query(
       'SELECT id, name, description, created_at, updated_at FROM coexistence.categories ORDER BY name ASC'
     );
-    res.json(rows);
+    res.json(rows.map(r => ({ ...r, managed: isManaged(r.id) })));
   } catch (err) {
     console.error('[categories] GET /categories error:', err.message);
     res.status(500).json({ error: 'Failed to fetch categories' });
@@ -100,7 +106,7 @@ router.get('/tags', async (req, res) => {
        LEFT JOIN coexistence.categories c ON c.id = t.category_id
        ORDER BY t.name ASC`
     );
-    res.json(rows);
+    res.json(rows.map(r => ({ ...r, managed: isManaged(r.category_id) })));
   } catch (err) {
     console.error('[categories] GET /tags error:', err.message);
     res.status(500).json({ error: 'Failed to fetch tags' });

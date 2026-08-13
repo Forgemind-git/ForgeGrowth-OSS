@@ -24,11 +24,10 @@ const KINDS = {
   template:   { table: 'message_templates', noun: 'template',   plural: 'templates',  countKey: 'templates' },
   automation: { table: 'chatbots',          noun: 'automation', plural: 'automations', countKey: 'automations' },
   agent:      { table: 'agents',            noun: 'AI agent',   plural: 'AI agents',  countKey: 'agents' },
-  // Follow-up sequences have no `status` column — `active` boolean instead;
-  // statusExpr adapts the generic picker query (code-owned string, never input).
-  followup:   { table: 'follow_up_sequences', noun: 'follow-up sequence', plural: 'follow-up sequences',
-                countKey: 'followups',
-                statusExpr: `(CASE WHEN x.active THEN 'ACTIVE' ELSE 'PAUSED' END)` },
+  // NOTE: `followup` was a fifth kind until 2026-08-12, when the Follow-ups
+  // feature was removed. Its `statusExpr` is the reason that hook exists on a
+  // KIND at all — keep it for the next kind whose status is not a `status`
+  // column.
   form:       { table: 'lead_forms',        noun: 'form',       plural: 'forms',      countKey: 'forms' },
 };
 
@@ -196,7 +195,7 @@ router.get('/projects/:id', async (req, res) => {
     const { rows } = await pool.query(`${SELECT_PROJECT} WHERE p.id = $1`, [id]);
     if (!rows.length) return res.status(404).json({ error: 'Project not found' });
 
-    const [templates, automations, agents, followups, forms] = await Promise.all([
+    const [templates, automations, agents, forms] = await Promise.all([
       pool.query(
         `SELECT id, name, category, language, status, template_type
            FROM coexistence.message_templates WHERE project_id = $1
@@ -208,12 +207,6 @@ router.get('/projects/:id', async (req, res) => {
       pool.query(
         `SELECT id, name, description, status, is_active
            FROM coexistence.agents WHERE project_id = $1
-          ORDER BY LOWER(name)`, [id]),
-      pool.query(
-        `SELECT id, name, description, active, trigger_stage_key,
-                (SELECT COUNT(*)::int FROM coexistence.follow_up_steps st
-                  WHERE st.sequence_id = f.id) AS step_count
-           FROM coexistence.follow_up_sequences f WHERE project_id = $1
           ORDER BY LOWER(name)`, [id]),
       pool.query(
         `SELECT id, name, description, status, slug, form_type,
@@ -236,11 +229,6 @@ router.get('/projects/:id', async (req, res) => {
       agents: agents.rows.map(r => ({
         id: Number(r.id), name: r.name, description: r.description,
         status: r.status, isActive: r.is_active === true,
-      })),
-      followups: followups.rows.map(r => ({
-        id: Number(r.id), name: r.name, description: r.description,
-        status: r.active ? 'ACTIVE' : 'PAUSED',
-        triggerStageKey: r.trigger_stage_key, stepCount: Number(r.step_count || 0),
       })),
       forms: forms.rows.map(r => ({
         id: Number(r.id), name: r.name, description: r.description,

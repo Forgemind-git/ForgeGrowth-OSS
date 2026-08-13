@@ -365,8 +365,6 @@ apiRouter.get('/campaign-performance', requireTool('get_campaign_performance'), 
   discovery(res, () => mcpService.getCampaignPerformance({ campaignId: req.query.campaignId }), 'Failed to load campaign performance'));
 apiRouter.get('/webinars-list', requireTool('list_webinars'), (req, res) =>
   discovery(res, () => mcpService.listWebinars(), 'Failed to list webinars'));
-apiRouter.get('/bda-activity-summary', requireTool('get_bda_activity'), (req, res) =>
-  discovery(res, () => mcpService.getBdaActivity({ bdaId: req.query.bdaId, limit: req.query.limit }), 'Failed to load BDA activity'));
 
 /* --------- courses + payments dedicated tools --------- */
 // Named *-list / *-summary so they can't collide with the real /courses and

@@ -1,31 +1,24 @@
 // ─── Payment flow: collect money inside a WhatsApp conversation ──────────────
 //
-// The shared core behind BOTH the automation Payment node and the AI agent
-// payment tools. One implementation, because a second copy of "mint a live
+// The shared core behind minting a Razorpay link and delivering it on a
+// WhatsApp thread. One implementation, because a second copy of "mint a live
 // payment link" would drift, and the drifted half spends real money.
 //
 // WHAT THIS FILE OWNS
-//   createPaymentForChat()  mint a Razorpay link for a chat contact and deliver
-//                           it on their thread
-//   openWatch()             record that someone is waiting on that payment
-//   sweepPaymentWatches()   the single dispatcher: paid → confirm/resume,
-//                           overdue → chase, expired → give up
+//   createPaymentForChat()  mint a Razorpay link for a chat contact
+//   deliverPaymentLink()    send it on their thread, window-aware (free-form
+//                           text inside 24h, an approved template outside it)
 //
-// WHY A SWEEPER AND NOT A HOOK IN THE WEBHOOK
-// routes/razorpay.js is public, internet-reachable, and retried by Razorpay on
-// a slow response. Running a WhatsApp send (or worse, an LLM turn) inside it
-// would put customer messaging on the critical path of recording a payment —
-// so a Meta blip could cost us the payment record. Same reasoning, and the same
-// shape, as the CAPI / CLO / funnel-tag dispatchers: the write path stays
-// untouched, a cursor picks the change up afterwards. A debounced
-// `payment-request-changed` kick makes it feel instant; the interval is the net.
+// ⚠ THE BUTTON URL IS OURS, NEVER RAZORPAY'S
+// Meta bakes a URL button's base in at approval, so a template points at
+// https://<host>/pay/{{1}} — a base we own — and the token resolves to whatever
+// the gateway issues today. See paymentButtonIndex().
 //
-// ⚠ THE RULE THAT MATTERS MOST HERE
-// Never chase someone who has already paid. A webhook Razorpay failed to
-// deliver would otherwise turn into "you haven't paid yet" sent to a customer
-// holding a receipt. So every follow-up and every timeout re-reads the link
-// from Razorpay FIRST (verifyBeforeChasing) and only acts on what the gateway
-// actually says. It costs one API call per due watch, which is nothing.
+// HISTORY: this file also carried a payment-WATCH dispatcher (chase an unpaid
+// link, confirm a paid one) for the automation Payment node and the agent
+// payment tools. Both were removed (migrations 104 and 2026-08-12), so the
+// watch machinery and its table went with them. Callers left: Sales → Payments,
+// the payment-template broadcast, and the Razorpay webhook.
 
 const crypto = require('crypto');
 const pool = require('../db');
@@ -67,34 +60,9 @@ async function ensurePaymentFlowTables() {
       ON coexistence.automation_executions(wa_number, contact_number, awaiting_kind)
       WHERE status = 'paused';`);
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS coexistence.payment_watches (
-      id                  BIGSERIAL PRIMARY KEY,
-      payment_request_id  BIGINT NOT NULL REFERENCES coexistence.payment_requests(id) ON DELETE CASCADE,
-      watcher_kind        TEXT   NOT NULL,
-      execution_id        BIGINT,
-      node_id             TEXT,
-      agent_id            BIGINT,
-      wa_number           TEXT   NOT NULL,
-      contact_number      TEXT   NOT NULL,
-      status              TEXT   NOT NULL DEFAULT 'watching',
-      follow_up_at        TIMESTAMPTZ,
-      follow_up_every_min INT,
-      follow_up_count     INT    NOT NULL DEFAULT 0,
-      follow_up_max       INT    NOT NULL DEFAULT 1,
-      follow_up_text      TEXT,
-      last_follow_up_at   TIMESTAMPTZ,
-      confirm_text        TEXT,
-      expires_at          TIMESTAMPTZ NOT NULL,
-      resolved_at         TIMESTAMPTZ,
-      last_error          TEXT,
-      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );`);
-  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_payment_watches_exec  ON coexistence.payment_watches(payment_request_id, execution_id, node_id) WHERE execution_id IS NOT NULL;`);
-  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_payment_watches_agent ON coexistence.payment_watches(payment_request_id, agent_id) WHERE agent_id IS NOT NULL AND execution_id IS NULL;`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_payment_watches_open ON coexistence.payment_watches(status, follow_up_at, expires_at) WHERE status = 'watching';`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_payment_watches_request ON coexistence.payment_watches(payment_request_id);`);
+  // NOTE: payment_watches is deliberately NOT recreated here. It was dropped
+  // with the automation Payment node (migration 106); an ensure that recreated
+  // it would silently undo that migration on the next boot.
 
   await pool.query(`
     ALTER TABLE coexistence.agents
@@ -111,10 +79,6 @@ async function ensurePaymentFlowTables() {
   await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS uq_payment_requests_public_token
       ON coexistence.payment_requests(public_token) WHERE public_token IS NOT NULL;`);
-  await pool.query(`
-    ALTER TABLE coexistence.payment_watches
-      ADD COLUMN IF NOT EXISTS template_id BIGINT
-        REFERENCES coexistence.message_templates(id) ON DELETE SET NULL;`);
   await pool.query(`
     ALTER TABLE coexistence.broadcasts
       ADD COLUMN IF NOT EXISTS payment_course_id    BIGINT REFERENCES coexistence.courses(id) ON DELETE SET NULL,
@@ -443,11 +407,6 @@ async function createPaymentForChat({
   kind = 'fixed', minAmountPaise = null,
   expiryHours = null,
   source = 'automation', automationId = null, executionId = null, nodeId = null, agentId = null,
-  // A WhatsApp cart this link is settling. Stamped INSIDE the INSERT so the
-  // partial unique index uq_payment_requests_order is what enforces "one order,
-  // at most one payable link" — a webhook redelivery or a double click cannot
-  // get past it, whereas a pre-check could.
-  orderId = null,
   createdBy = null,
 }) {
   const phone = digits(contactNumber);
@@ -455,14 +414,6 @@ async function createPaymentForChat({
   if (!Number.isFinite(amountPaise) || amountPaise < 100) return { error: 'The amount must be at least ₹1.' };
 
   // ── Reuse an open link rather than minting a duplicate ────────────────────
-  // An order is checked FIRST and by id alone: the same cart must never produce
-  // a second link even if its total were somehow recomputed differently.
-  if (orderId) {
-    const { rows: prior } = await pool.query(
-      `SELECT * FROM coexistence.payment_requests WHERE order_id = $1 LIMIT 1`, [orderId]
-    );
-    if (prior[0]) return { request: prior[0], reused: true };
-  }
   const reuse = await findReusableRequest({ executionId, nodeId, agentId, contactNumber: phone, amountPaise });
   if (reuse) return { request: reuse, reused: true };
 
@@ -510,28 +461,19 @@ async function createPaymentForChat({
          (lead_id, customer_name, customer_phone, customer_email, course_id, product_label,
           purpose, kind, amount_paise, min_amount_paise, description, expire_by,
           wa_number, contact_number, source, automation_id, execution_id, node_id, agent_id, created_by,
-          public_token, order_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+          public_token)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
        RETURNING id`,
       [lead?.id || null, contactName || null, phone, null, product?.id || null,
        product?.name || productLabel || null, purpose || null, kind, amountPaise, minPaise,
        description || null, expireBy, waNumber, contactNumber, source,
-       automationId, executionId, nodeId, agentId, createdBy, newPublicToken(), orderId]
+       automationId, executionId, nodeId, agentId, createdBy, newPublicToken()]
     );
     draft = rows[0];
   } catch (err) {
     // The unique index fired — another concurrent run of the same node won the
     // race. Hand back whatever it created rather than erroring.
     if (err.code === '23505') {
-      // uq_payment_requests_order fired: another delivery of the same order
-      // webhook won the race. Hand back its link rather than erroring — the
-      // customer already has exactly one, which is the desired end state.
-      if (orderId) {
-        const { rows: won } = await pool.query(
-          `SELECT * FROM coexistence.payment_requests WHERE order_id = $1 LIMIT 1`, [orderId]
-        );
-        if (won[0]) return { request: won[0], reused: true };
-      }
       const existing = await findReusableRequest({ executionId, nodeId, agentId, contactNumber: phone, amountPaise, anyAmount: true });
       if (existing) return { request: existing, reused: true };
     }
@@ -623,246 +565,15 @@ async function findReusableRequest({ executionId, nodeId, agentId, contactNumber
   return null;
 }
 
-// ── Watches ──────────────────────────────────────────────────────────────────
-
-async function openWatch({
-  requestId, watcherKind, executionId = null, nodeId = null, agentId = null,
-  waNumber, contactNumber,
-  followUpMinutes = null, followUpMax = 1, followUpText = null,
-  confirmText = null, expiryMinutes = 60 * 24, templateId = null,
-}) {
-  const followUp = followUpMinutes && Number(followUpMinutes) > 0 ? Number(followUpMinutes) : null;
-  // The wait must outlive the last planned chase, or the flow would time out
-  // holding a reminder it never sent.
-  const minLifeMin = followUp ? followUp * Math.max(1, Number(followUpMax || 1)) + 5 : 0;
-  const lifeMin = Math.max(Number(expiryMinutes) || 1, minLifeMin);
-
-  const { rows } = await pool.query(
-    `INSERT INTO coexistence.payment_watches
-       (payment_request_id, watcher_kind, execution_id, node_id, agent_id,
-        wa_number, contact_number, follow_up_at, follow_up_every_min,
-        follow_up_max, follow_up_text, confirm_text, expires_at, template_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,
-             CASE WHEN $8::int IS NULL THEN NULL ELSE NOW() + ($8 || ' minutes')::INTERVAL END,
-             $8,$9,$10,$11, NOW() + ($12 || ' minutes')::INTERVAL, $13)
-     ON CONFLICT DO NOTHING
-     RETURNING *`,
-    [requestId, watcherKind, executionId, nodeId, agentId, waNumber, contactNumber,
-     followUp, Math.max(0, parseInt(followUpMax, 10) || 0), followUpText, confirmText, lifeMin,
-     templateId || null]
-  );
-  return rows[0] || null;
-}
-
-async function cancelWatchesForRequest(requestId, reason = 'cancelled') {
-  await pool.query(
-    `UPDATE coexistence.payment_watches
-        SET status = 'cancelled', resolved_at = NOW(), last_error = $2, updated_at = NOW()
-      WHERE payment_request_id = $1 AND status = 'watching'`,
-    [requestId, reason]
-  ).catch(() => {});
-}
-
-// A part-payment link is "paid enough" the moment the first instalment lands —
-// that IS the outcome the flow was waiting for. A fixed link is not.
-function isSettled(request) {
-  if (!request) return false;
-  if (request.status === 'paid') return true;
-  return request.status === 'partially_paid' && (request.kind === 'partial' || request.kind === 'open');
-}
-
-/**
- * Re-read one link from Razorpay and fold the answer into our row.
- *
- * ⚠ This is what stops us chasing a customer who has already paid. A webhook
- * Razorpay never delivered (our outage, a bad minute at the proxy) leaves our
- * status stale at 'created' forever — and the only visible consequence would be
- * a reminder sent to someone holding a receipt. One read before each chase
- * removes the entire failure mode.
- */
-async function verifyBeforeChasing(request) {
-  if (!request?.razorpay_link_id) return request;
-  try {
-    const live = await rzp.fetchPaymentLink(request.razorpay_link_id);
-    const { applyLinkStatus } = require('../routes/paymentRequests');
-    await applyLinkStatus(live);
-    const { rows } = await pool.query(
-      `SELECT pr.*, c.name AS product_name FROM coexistence.payment_requests pr
-         LEFT JOIN coexistence.courses c ON c.id = pr.course_id
-        WHERE pr.id = $1`, [request.id]);
-    return rows[0] || request;
-  } catch (err) {
-    // A gateway read failure must not silently become "unpaid". We keep the
-    // stored view and record why, so the operator sees a reason instead of a
-    // wrong outcome.
-    console.error(`[paymentFlow] verify link ${request.razorpay_link_id}:`, err.message);
-    return { ...request, __verifyError: err.message };
-  }
-}
-
-// ── The dispatcher ───────────────────────────────────────────────────────────
-
-let sweeping = false;
-let kickTimer = null;
-
-/**
- * One pass over every open watch. Ordered deliberately:
- *   1. settled  → confirm + resume (never chase someone who paid)
- *   2. overdue  → verify with Razorpay, then chase
- *   3. expired  → verify with Razorpay, then give up
- */
-async function sweepPaymentWatches() {
-  if (sweeping) return { skipped: true };
-  sweeping = true;
-  const result = { paid: 0, followedUp: 0, timedOut: 0, errors: 0 };
-  try {
-    const { rows: watches } = await pool.query(
-      `SELECT w.*, pr.status AS req_status, pr.kind AS req_kind
-         FROM coexistence.payment_watches w
-         JOIN coexistence.payment_requests pr ON pr.id = w.payment_request_id
-        WHERE w.status = 'watching'
-          AND ( pr.status IN ('paid','partially_paid')
-                OR (w.follow_up_at IS NOT NULL AND w.follow_up_at <= NOW() AND w.follow_up_count < w.follow_up_max)
-                OR w.expires_at <= NOW() )
-        ORDER BY w.id
-        LIMIT 200`
-    );
-
-    for (const w of watches) {
-      try {
-        const request = await loadRequest(w.payment_request_id);
-        if (!request) { await failWatch(w.id, 'The payment request no longer exists.'); result.errors++; continue; }
-
-        if (isSettled(request)) { await handlePaid(w, request); result.paid++; continue; }
-
-        const due = w.follow_up_at && new Date(w.follow_up_at) <= new Date() && w.follow_up_count < w.follow_up_max;
-        const expired = new Date(w.expires_at) <= new Date();
-        if (!due && !expired) continue;
-
-        // Only now do we spend a Razorpay call — and only for a watch that is
-        // about to message or abandon someone.
-        const fresh = await verifyBeforeChasing(request);
-        if (isSettled(fresh)) { await handlePaid(w, fresh); result.paid++; continue; }
-
-        if (expired) { await handleTimeout(w, fresh); result.timedOut++; continue; }
-        await handleFollowUp(w, fresh); result.followedUp++;
-      } catch (err) {
-        console.error(`[paymentFlow] watch ${w.id}:`, err.message);
-        await pool.query(
-          `UPDATE coexistence.payment_watches SET last_error = $2, updated_at = NOW() WHERE id = $1`,
-          [w.id, err.message]
-        ).catch(() => {});
-        result.errors++;
-      }
-    }
-  } finally {
-    sweeping = false;
-  }
-  return result;
-}
-
-async function loadRequest(id) {
-  const { rows } = await pool.query(
-    `SELECT pr.*, c.name AS product_name FROM coexistence.payment_requests pr
-       LEFT JOIN coexistence.courses c ON c.id = pr.course_id
-      WHERE pr.id = $1`, [id]);
-  return rows[0] || null;
-}
-
-async function failWatch(id, message) {
-  await pool.query(
-    `UPDATE coexistence.payment_watches
-        SET status = 'error', last_error = $2, resolved_at = NOW(), updated_at = NOW()
-      WHERE id = $1 AND status = 'watching'`, [id, message]);
-}
-
-// ── Outcomes ─────────────────────────────────────────────────────────────────
-
-async function handlePaid(w, request) {
-  // Claim first. Two overlapping sweeps (or a bus kick racing the interval)
-  // must not both confirm the payment to the customer.
-  const { rowCount } = await pool.query(
-    `UPDATE coexistence.payment_watches
-        SET status = 'paid', resolved_at = NOW(), updated_at = NOW()
-      WHERE id = $1 AND status = 'watching'`, [w.id]);
-  if (rowCount === 0) return;
-
-  let note = null;
-  if (w.confirm_text) {
-    const body = fillPaymentVars(w.confirm_text, { request });
-    const sent = await sendOnThread({ waNumber: w.wa_number, contactNumber: w.contact_number, body });
-    if (!sent.sent) {
-      note = sent.detail || sent.reason;
-      await pool.query(
-        `UPDATE coexistence.payment_watches SET last_error = $2, updated_at = NOW() WHERE id = $1`,
-        [w.id, `Payment confirmed but the message was not delivered: ${note}`]);
-    }
-  }
-
-  if (w.watcher_kind === 'automation' && w.execution_id) {
-    const { resumePaymentExecution } = require('../engine/automationEngine');
-    await resumePaymentExecution(w.execution_id, {
-      handle: 'paid', request, confirmNote: note,
-    }).catch(err => console.error(`[paymentFlow] resume ${w.execution_id}:`, err.message));
-  }
-
-  bus.emit('payment-request-changed', { id: Number(request.id), status: request.status });
-}
-
-async function handleFollowUp(w, request) {
-  const text = w.follow_up_text
-    || 'Just checking in — have you completed the payment? If you had any trouble with the link, tell me and I will help.';
-  const sent = await deliverPaymentLink({
-    waNumber: w.wa_number, contactNumber: w.contact_number, request,
-    mode: 'auto', text, templateId: w.template_id || null,
-    templateVariables: [request.product_label || request.purpose || 'your payment',
-                        toRupees(request.amount_paise).toLocaleString('en-IN')],
-  });
-
-  // The counter advances whether or not the message went out. A closed 24h
-  // window will still be closed in 15 minutes, so retrying the same reminder
-  // every tick would just log the same failure forever.
-  const nextIn = w.follow_up_every_min;
-  await pool.query(
-    `UPDATE coexistence.payment_watches
-        SET follow_up_count   = follow_up_count + 1,
-            last_follow_up_at = NOW(),
-            follow_up_at      = CASE WHEN follow_up_count + 1 < follow_up_max AND $2::int IS NOT NULL
-                                     THEN NOW() + ($2 || ' minutes')::INTERVAL ELSE NULL END,
-            last_error        = $3,
-            updated_at        = NOW()
-      WHERE id = $1`,
-    [w.id, nextIn, sent.sent ? null : `Reminder not delivered: ${sent.detail || sent.reason}`]);
-}
-
-async function handleTimeout(w, request) {
-  const { rowCount } = await pool.query(
-    `UPDATE coexistence.payment_watches
-        SET status = 'timeout', resolved_at = NOW(), updated_at = NOW()
-      WHERE id = $1 AND status = 'watching'`, [w.id]);
-  if (rowCount === 0) return;
-
-  if (w.watcher_kind === 'automation' && w.execution_id) {
-    const { resumePaymentExecution } = require('../engine/automationEngine');
-    await resumePaymentExecution(w.execution_id, {
-      handle: 'unpaid', request,
-      note: request.__verifyError
-        ? `Gave up waiting; Razorpay could not be re-checked (${request.__verifyError}).`
-        : 'Gave up waiting — the payment link was still unpaid.',
-    }).catch(err => console.error(`[paymentFlow] timeout resume ${w.execution_id}:`, err.message));
-  }
-}
-
-// Debounced kick so a payment feels instant without letting a burst of webhook
-// events start a sweep per event. Mirrors the funnel-tag / CAPI dispatchers.
-function kickSweep(delayMs = 4000) {
-  if (kickTimer) return;
-  kickTimer = setTimeout(() => {
-    kickTimer = null;
-    sweepPaymentWatches().catch(err => console.error('[paymentFlow] kick sweep:', err.message));
-  }, delayMs);
-  if (kickTimer.unref) kickTimer.unref();
-}
+// NOTE (2026-08-12): the payment WATCH machinery — openWatch,
+// sweepPaymentWatches, the chase/timeout handlers and the debounced kick —
+// was removed with the automation Payment node. Its only two callers were
+// that node and the agent payment tools (removed with migration 104), so it
+// had nothing left to watch and the payment_watches table was dropped.
+//
+// Everything ABOVE this line is still live: Sales → Payments mints links
+// through createPaymentForChat/deliverPaymentLink, and the Razorpay webhook
+// keeps their status current. That path never used a watch.
 
 module.exports = {
   ensurePaymentFlowTables,
@@ -875,15 +586,9 @@ module.exports = {
   newPublicToken,
   PAY_PATH,
   resolveAmount,
-  openWatch,
-  cancelWatchesForRequest,
-  sweepPaymentWatches,
-  kickSweep,
   sendOnThread,
   fillPaymentVars,
   withLink,
-  isSettled,
-  verifyBeforeChasing,
   toPaise,
   toRupees,
 };

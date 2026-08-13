@@ -26,13 +26,13 @@ export function KpiCard({ label, value, sub, info, accent = C.text, onClick, ico
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 8 }}>
         {Icon && <Icon size={14} color={C.textMuted} style={{ marginRight: 2 }} />}
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.textMuted, fontFamily: FONT }}>
+        <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.textMuted, fontFamily: FONT }}>
           {label}
         </span>
         {info && <InfoDot text={info} />}
       </div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: accent, fontFamily: MONO, lineHeight: 1 }}>{value}</div>
-      {sub != null && <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 6, fontFamily: FONT }}>{sub}</div>}
+      <div style={{ fontSize: 30, fontWeight: 700, color: accent, fontFamily: MONO, lineHeight: 1 }}>{value}</div>
+      {sub != null && <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 6, fontFamily: FONT }}>{sub}</div>}
     </div>
   );
 }
@@ -43,7 +43,7 @@ export function Card({ title, right, children, style }) {
     <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: C.shadowSm, padding: 18, ...style }}>
       {(title || right) && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, gap: 10 }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: C.text, fontFamily: FONT }}>{title}</span>
+          <span style={{ fontSize: 16, fontWeight: 600, color: C.text, fontFamily: FONT }}>{title}</span>
           {right}
         </div>
       )}
@@ -81,13 +81,13 @@ export function Donut({ data = [], size = 168, thickness = 26 }) {
             <title>{`${s.label}: ${s.value} (${s.pct}%)`}</title>
           </circle>
         ))}
-        <text x={cx} y={cy - 4} textAnchor="middle" style={{ fontFamily: MONO, fontSize: 22, fontWeight: 700, fill: C.text }}>{total}</text>
-        <text x={cx} y={cy + 15} textAnchor="middle" style={{ fontFamily: FONT, fontSize: 10, fill: C.textMuted }}>total</text>
+        <text x={cx} y={cy - 4} textAnchor="middle" style={{ fontFamily: MONO, fontSize: 24, fontWeight: 700, fill: C.text }}>{total}</text>
+        <text x={cx} y={cy + 15} textAnchor="middle" style={{ fontFamily: FONT, fontSize: 12, fill: C.textMuted }}>total</text>
       </svg>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 7, minWidth: 0 }}>
         {segs.map((s, i) => (
           <div key={i} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: FONT, fontSize: 12.5, opacity: hover == null || hover === i ? 1 : 0.5, cursor: 'default' }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: FONT, fontSize: 14, opacity: hover == null || hover === i ? 1 : 0.5, cursor: 'default' }}>
             <span style={{ width: 10, height: 10, borderRadius: 3, background: s.color, flexShrink: 0 }} />
             <span style={{ color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150 }}>{s.label}</span>
             <span style={{ color: C.textMuted, fontFamily: MONO, marginLeft: 'auto' }}>{s.value}</span>
@@ -109,7 +109,7 @@ export function FunnelBars({ data = [], colorFor, onClick }) {
         return (
           <div key={i} onClick={onClick ? () => onClick(d) : undefined}
             style={{ cursor: onClick ? 'pointer' : 'default' }} title={`${d.label || d.stage || d.step}: ${d.count}`}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, fontFamily: FONT, fontSize: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, fontFamily: FONT, fontSize: 14 }}>
               <span style={{ color: C.text, textTransform: 'capitalize' }}>{d.label || d.stage || d.step}</span>
               <span style={{ color: C.textMuted, fontFamily: MONO }}>{d.count}</span>
             </div>
@@ -146,7 +146,7 @@ export function BarChart({ data = [], height = 160, valueKey = 'value', labelKey
       </svg>
       <div style={{ display: 'flex', marginTop: 4 }}>
         {data.map((d, i) => (
-          <div key={i} style={{ flex: 1, textAlign: 'center', fontFamily: FONT, fontSize: 9.5, color: C.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div key={i} style={{ flex: 1, textAlign: 'center', fontFamily: FONT, fontSize: 11, color: C.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {d[labelKey]}
           </div>
         ))}
@@ -186,7 +186,7 @@ export function LineTrend({ data = [], height = 150, valueKey = 'count', labelKe
       </svg>
       {hover != null && (
         <div style={{ position: 'absolute', top: 0, left: `${(pts[hover].x / W) * 100}%`, transform: 'translateX(-50%)',
-          background: '#1F1F23', color: '#fff', fontFamily: FONT, fontSize: 11, padding: '3px 7px', borderRadius: 6, whiteSpace: 'nowrap', pointerEvents: 'none' }}>
+          background: '#1F1F23', color: '#fff', fontFamily: FONT, fontSize: 13, padding: '3px 7px', borderRadius: 6, whiteSpace: 'nowrap', pointerEvents: 'none' }}>
           {data[hover][valueKey]}
         </div>
       )}
@@ -196,7 +196,7 @@ export function LineTrend({ data = [], height = 150, valueKey = 'count', labelKe
 
 // ── Sparkline (inline, for table rows) ────────────────────────────────────────
 export function Sparkline({ data = [], width = 90, height = 26, color = C.primary }) {
-  if (!data.length) return <span style={{ color: C.textMuted, fontSize: 11 }}>—</span>;
+  if (!data.length) return <span style={{ color: C.textMuted, fontSize: 13 }}>—</span>;
   const max = Math.max(1, ...data);
   const step = data.length > 1 ? width / (data.length - 1) : width;
   const pts = data.map((v, i) => `${i * step},${height - 3 - (v / max) * (height - 6)}`).join(' ');
@@ -209,7 +209,7 @@ export function Sparkline({ data = [], width = 90, height = 26, color = C.primar
 
 export function EmptyChart({ text = 'No data yet' }) {
   return (
-    <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textMuted, fontFamily: FONT, fontSize: 13 }}>
+    <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textMuted, fontFamily: FONT, fontSize: 15 }}>
       {text}
     </div>
   );

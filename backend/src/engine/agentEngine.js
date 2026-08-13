@@ -11,6 +11,10 @@ const googleSheets = require('../services/sheetsAgentOps'); // FORGECHAT's Sheet
 const { enqueueSend } = require('../queue/sendQueue');
 const { insertPendingRow } = require('../services/messageSender');
 const { getAccountWithToken } = require('../routes/whatsappAccounts');
+// `asLimit` is imported rather than re-implemented so "NULL/0/negative = no
+// limit" means the same thing for the media caps as it does for the usage caps.
+const { asLimit, imagesInSession } = require('../services/agentLimits');
+const { probeDurationSeconds, formatDuration } = require('../services/mediaDuration');
 
 /**
  * Build the JSON-schema tool definitions surfaced to the LLM for one agent.
@@ -36,8 +40,15 @@ async function buildToolsForAgent(agent, sendCtx = null) {
 
   const tools = [];
   const executors = {};
+  // Collected in the loop, built in one pass afterwards: each one needs a DB read
+  // for its form, and building them together keeps that out of this loop body.
+  const formToolRows = [];
 
   for (const row of rows) {
+    if (row.tool_type === 'lead_form') {
+      formToolRows.push(row);
+    }
+
     if (row.tool_type === 'google_sheets') {
       const cfg = row.config || {};
       const ops = Array.isArray(cfg.ops) ? cfg.ops : [];
@@ -200,237 +211,52 @@ async function buildToolsForAgent(agent, sendCtx = null) {
       const group = mediaGroups[idx];
       if (!sendCtx || !sendCtx.live) {
         // Test panel: never send to a real number — just report what would happen.
-        return { sent: false, simulated: true, group: group.description, file_count: (group.mediaIds || []).length, link_count: (group.links || []).length, template: group.templateName || (group.templateId ? `#${group.templateId}` : null), note: 'Test mode — not actually delivered.' };
+        //
+        // The concrete ids/links/template ride along under `__preview` so the
+        // simulator can render what was "sent" as real bubbles. Prefixed and
+        // stripped before the model sees the result: an LLM handed a list of
+        // media ids starts quoting them at the customer.
+        return {
+          sent: false, simulated: true,
+          group: group.description,
+          file_count: (group.mediaIds || []).length,
+          link_count: (group.links || []).length,
+          template: group.templateName || (group.templateId ? `#${group.templateId}` : null),
+          note: 'Test mode — not actually delivered.',
+          __preview: {
+            mediaIds: Array.isArray(group.mediaIds) ? group.mediaIds : [],
+            links: Array.isArray(group.links) ? group.links : [],
+            templateId: group.templateId || null,
+          },
+        };
       }
       return await sendMediaGroup({ group, waAccountId: sendCtx.waAccountId, contactNumber: sendCtx.contactNumber });
     };
   }
 
-  // CRM write-back tools — only when the agent opts in AND there's a real live
-  // contact (skip in the test preview, where contactNumber is 'test').
-  const liveContact = sendCtx && sendCtx.live && sendCtx.contactNumber && sendCtx.contactNumber !== 'test';
-  if (agent.crm_tools_enabled && liveContact) {
-    const { buildCrmTools, resolveWaNumber } = require('../services/agentCrmTools');
-    const waNumber = sendCtx.waNumber || await resolveWaNumber(sendCtx.waAccountId);
-    if (waNumber) {
-      const crm = buildCrmTools({ waNumber, contactNumber: sendCtx.contactNumber });
-      tools.push(...crm.tools);
-      Object.assign(executors, crm.executors);
-    }
+  // Fill-a-form tools. Built in test mode too — the operator needs to rehearse
+  // the questions in the Live test chat — but each executor refuses to WRITE
+  // unless the run is live, so a rehearsal never creates a lead or a submission.
+  if (formToolRows.length > 0) {
+    const { buildFormTools } = require('../services/agentFormTools');
+    const forms = await buildFormTools({
+      toolRows: formToolRows,
+      contactNumber: sendCtx && sendCtx.contactNumber,
+      live: !!(sendCtx && sendCtx.live),
+      // Stamped onto every row the agent files, which is what makes "you may
+      // correct a row YOU added" enforceable rather than advisory.
+      agentId: agent.id,
+    });
+    tools.push(...forms.tools);
+    Object.assign(executors, forms.executors);
   }
 
-  // Payments — let the agent take money mid-conversation.
-  //
-  // ⚠ THE AMOUNT IS NOT THE LLM'S TO INVENT. `allowCustomAmount` is off by
-  // default, which means the only figure the agent can charge is a Product's
-  // own price. When it IS on, min/max are enforced in resolveAmount() — never
-  // in the prompt, because a prompt is a suggestion and a customer who argues
-  // long enough will get past it. Live keys make this the difference between a
-  // guard rail and a refund.
-  if (agent.payments_enabled && liveContact) {
-    const paymentFlow = require('../services/paymentFlow');
-    const { resolveWaNumber } = require('../services/agentCrmTools');
-    const waNumber = sendCtx.waNumber || await resolveWaNumber(sendCtx.waAccountId);
-    const cfg = (agent.payment_config && typeof agent.payment_config === 'object') ? agent.payment_config : {};
-    const allowCustom = cfg.allowCustomAmount === true;
-    const allowedIds = Array.isArray(cfg.productIds) ? cfg.productIds.map(Number).filter(Boolean) : [];
-
-    if (waNumber) {
-      // The catalogue goes into the tool DESCRIPTION, not into a lookup the LLM
-      // has to make first: a model that has to guess a product id will guess.
-      // The column is `active`, not `is_active`. Logged rather than swallowed:
-      // a silent empty catalogue would leave the agent unable to sell anything
-      // while looking perfectly configured.
-      const { rows: products } = await pool.query(
-        `SELECT id, name, default_price_paise FROM coexistence.courses
-          WHERE active IS DISTINCT FROM FALSE ORDER BY id`
-      ).catch((err) => { console.error('[agent] product catalogue load failed:', err.message); return { rows: [] }; });
-      const sellable = allowedIds.length ? products.filter(p => allowedIds.includes(Number(p.id))) : products;
-      const catalogue = sellable.length
-        ? sellable.map(p => `  id ${p.id} = "${p.name}"${p.default_price_paise ? ` (₹${paymentFlow.toRupees(p.default_price_paise).toLocaleString('en-IN')})` : ' (no price set)'}`).join('\n')
-        : '  (no products configured — ask the team to add one in Sales → Products)';
-
-      const amountRule = allowCustom
-        ? `You may instead pass \`amount\` in rupees for a custom figure, but ONLY between ₹${paymentFlow.toRupees(cfg.minAmountPaise || 100).toLocaleString('en-IN')} and ₹${paymentFlow.toRupees(cfg.maxAmountPaise || 0).toLocaleString('en-IN')}. Anything outside that is refused.`
-        : 'You CANNOT set your own amount. Every link is for a product at its listed price. If the customer asks for a different price, tell them you will check with the team — do not improvise a figure.';
-
-      const properties = {
-        product_id: { type: 'integer', description: `Which product to charge for. Available:\n${catalogue}` },
-        purpose: { type: 'string', description: 'Short note on what this payment is for, e.g. "Full course fee" or "Registration". Shown to the team, not the customer.' },
-        message: { type: 'string', description: 'The message to send with the link, in your own words and the customer\'s language. The payment URL is appended automatically — do not write it yourself.' },
-      };
-      if (allowCustom) {
-        properties.amount = { type: 'number', description: 'Custom amount in rupees. Only use when no product fits; a product id is always preferred.' };
-      }
-
-      tools.push({
-        name: 'create_payment_link',
-        description:
-          'Raise a real Razorpay payment link for this customer and send it to them on WhatsApp. '
-          + 'This CHARGES REAL MONEY — only call it once the customer has clearly agreed to pay for something specific.\n'
-          + amountRule
-          + '\nThe link is delivered by this tool. Do NOT paste the URL in your reply — just tell them it has been sent. '
-          + 'Calling this twice for the same thing returns the SAME link rather than making a second one.',
-        input_schema: { type: 'object', properties, required: [] },
-      });
-
-      executors['create_payment_link'] = async (args = {}) => {
-        const resolved = await paymentFlow.resolveAmount({
-          courseId: args.product_id || null,
-          amount: allowCustom ? (args.amount ?? null) : null,
-          allowCustom,
-          minPaise: cfg.minAmountPaise != null ? Number(cfg.minAmountPaise) : null,
-          maxPaise: cfg.maxAmountPaise != null ? Number(cfg.maxAmountPaise) : null,
-          allowedProductIds: allowedIds.length ? allowedIds : null,
-        });
-        // Returned as data, not thrown: the model should apologise and carry on,
-        // not see the turn fail.
-        if (resolved.error) return { ok: false, error: resolved.error };
-
-        const created = await paymentFlow.createPaymentForChat({
-          waNumber,
-          contactNumber: sendCtx.contactNumber,
-          contactName: sendCtx.contactName || null,
-          amountPaise: resolved.amountPaise,
-          courseId: resolved.product?.id || null,
-          purpose: args.purpose || null,
-          kind: 'fixed',
-          expiryHours: cfg.expiryHours ? Number(cfg.expiryHours) : null,
-          source: 'agent',
-          agentId: agent.id,
-          createdBy: `agent:${agent.id}`,
-        });
-        if (created.error) return { ok: false, error: created.error };
-
-        const request = created.request;
-        // `auto`: free-form text while the 24-hour window is open, the approved
-        // payment template once it has shut. Without the template fallback an
-        // agent physically cannot reach a customer who went quiet overnight —
-        // which is exactly when a payment reminder matters most.
-        const sent = await paymentFlow.deliverPaymentLink({
-          waNumber, contactNumber: sendCtx.contactNumber, request, mode: 'auto',
-          text: args.message || 'Here is your payment link.',
-          templateId: agent.payment_template_id || null,
-          templateVariables: [
-            request.product_label || request.purpose || 'your payment',
-            paymentFlow.toRupees(request.amount_paise).toLocaleString('en-IN'),
-          ],
-          contactName: sendCtx.contactName,
-        });
-
-        if (cfg.followUpEnabled) {
-          await paymentFlow.openWatch({
-            requestId: request.id,
-            watcherKind: 'agent',
-            agentId: agent.id,
-            waNumber,
-            contactNumber: sendCtx.contactNumber,
-            followUpMinutes: Math.max(1, parseInt(cfg.followUpMinutes || 15, 10)),
-            followUpMax: Math.max(1, parseInt(cfg.followUpMax || 1, 10)),
-            followUpText: cfg.followUpText || null,
-            confirmText: cfg.confirmText || null,
-            expiryMinutes: Math.max(1, parseInt(cfg.expiryHours || 24, 10) * 60),
-            templateId: agent.payment_template_id || null,
-          }).catch(err => console.error('[agent] openWatch:', err.message));
-        }
-
-        return {
-          ok: true,
-          sent: sent.sent,
-          reused: !!created.reused,
-          delivered_via: sent.via || null,
-          amount_rupees: paymentFlow.toRupees(request.amount_paise),
-          product: request.product_label || null,
-          note: sent.sent
-            ? (sent.via === 'template'
-                // The model must know the customer did NOT see its own wording,
-                // or its next turn will refer back to a message it never sent.
-                ? 'The chat had gone quiet, so the link was sent as an approved WhatsApp template instead of your message text. The customer has the link. Do not repeat the URL.'
-                : 'The payment link has been delivered to the customer. Do not repeat the URL — just confirm you have sent it.')
-            : `The link was created but WhatsApp would not deliver it: ${sent.detail || sent.reason}. Tell the customer you will have someone send it across.`,
-        };
-      };
-
-      tools.push({
-        name: 'check_payment_status',
-        description:
-          'Check whether this customer has actually paid a link you raised. Call this whenever they say they have paid, '
-          + 'or ask you to confirm — it reads the live status from the payment gateway, so it is the real answer, '
-          + 'not a guess. Never tell a customer their payment is confirmed without calling this first.',
-        input_schema: { type: 'object', properties: {}, required: [] },
-      });
-
-      executors['check_payment_status'] = async () => {
-        const { rows } = await pool.query(
-          `SELECT pr.*, c.name AS product_name FROM coexistence.payment_requests pr
-             LEFT JOIN coexistence.courses c ON c.id = pr.course_id
-            WHERE right(regexp_replace(pr.customer_phone, '\\D', '', 'g'), 10) = right($1, 10)
-              AND pr.razorpay_link_id IS NOT NULL
-            ORDER BY pr.id DESC LIMIT 1`,
-          [String(sendCtx.contactNumber).replace(/\D/g, '')]
-        );
-        if (!rows[0]) return { ok: true, found: false, note: 'No payment link has been raised for this customer yet.' };
-
-        // Read from the gateway, not from our mirror. A webhook we never
-        // received would otherwise make us tell a paying customer they still
-        // owe money — the single worst thing this tool could do.
-        const fresh = await paymentFlow.verifyBeforeChasing(rows[0]);
-        const settled = paymentFlow.isSettled(fresh);
-        return {
-          ok: true,
-          found: true,
-          paid: settled,
-          status: fresh.status,
-          amount_rupees: paymentFlow.toRupees(fresh.amount_paise),
-          amount_paid_rupees: paymentFlow.toRupees(fresh.amount_paid_paise),
-          product: fresh.product_label || null,
-          checked_live: !fresh.__verifyError,
-          note: settled
-            ? 'Payment confirmed by the gateway. You can thank them and move on to what happens next.'
-            : fresh.__verifyError
-              ? 'Could not reach the payment gateway just now, so this may be out of date. Do not tell the customer their payment failed — say you are checking and someone will confirm shortly.'
-              : 'The gateway shows this as unpaid. Ask politely whether they ran into any trouble with the link.',
-        };
-      };
-    }
-  }
-
-  // Human handoff — let the agent hand the conversation to a person.
-  if (agent.handoff_enabled && liveContact) {
-    const { performHandoff } = require('../services/agentHandoff');
-    const { resolveWaNumber } = require('../services/agentCrmTools');
-    const waNumber = sendCtx.waNumber || await resolveWaNumber(sendCtx.waAccountId);
-    if (waNumber) {
-      tools.push({
-        name: 'escalate_to_human',
-        description: "Hand this conversation to a human team member. Call this when the customer asks to talk to a person, is upset/complaining, asks something you genuinely can't answer, or it's a high-value or sensitive case. AFTER calling it: tell the customer a team member will take over shortly, then STOP — you won't reply again on this chat until a human returns control.",
-        input_schema: {
-          type: 'object',
-          properties: {
-            reason: { type: 'string', description: 'Short reason for escalating (for the team).' },
-            summary: { type: 'string', description: 'A 1–2 line summary of the conversation so the human has context.' },
-          },
-          required: ['reason'],
-        },
-      });
-      executors['escalate_to_human'] = async ({ reason, summary }) => {
-        const r = await performHandoff({
-          agentId: agent.id,
-          handoffUserIds: agent.handoff_user_ids,
-          waNumber,
-          contactNumber: sendCtx.contactNumber,
-          reason: [reason, summary].filter(Boolean).join(' — '),
-          by: 'agent',
-        });
-        return {
-          ok: true,
-          handed_off: true,
-          assigned_to: r.assignedUserName || 'the team',
-          note: 'Tell the customer a team member will take over shortly, then stop replying.',
-        };
-      };
-    }
-  }
+  // Removed from this list on purpose: the CRM write-back tools, the payment
+  // tools and escalate_to_human. An agent here collects data into a form's
+  // table; it does not edit the contact, take money, or reassign a human's
+  // conversation. The Chats-side takeover (contacts.agent_paused) is
+  // untouched — a person can still silence the bot from the inbox, and the
+  // usage-limit pause still uses it.
 
   return { tools, executors };
 }
@@ -759,8 +585,19 @@ async function resolveOpenAiKey(agent, agentApiKey) {
 
 // If the inbound message is a voice note, download + transcribe it (OpenAI
 // Whisper). Writes the transcript back into chat_history so it shows in the
-// conversation + future context, and returns the text ('' if not audio / no
-// OpenAI key / transcription failed).
+// conversation + future context.
+//
+// Returns { text, tooLong }:
+//   text    — the transcript, or the plain body for a non-audio message ('' if
+//             there is nothing usable).
+//   tooLong — { seconds, cap } when the note was longer than the agent's
+//             `max_voice_seconds` and was therefore NOT transcribed.
+//
+// ⚠ The length check happens AFTER the download but BEFORE Whisper, which is the
+// only place it can save anything: Whisper bills per minute of audio, so a cap
+// applied to the transcript would have already paid for the ten-minute note it
+// was meant to refuse. Meta's webhook carries no duration, so the file itself is
+// the only source (services/mediaDuration.js).
 //
 // Note: audio/voice inbounds are stored with a placeholder body ("Audio
 // message" / "Voice message") by the webhook — never a real caption — so for
@@ -773,27 +610,40 @@ async function transcribeInboundIfAudio({ agent, inboundMessageId, agentApiKey }
       [inboundMessageId],
     );
     const msg = rows[0];
-    if (!msg) return '';
+    if (!msg) return { text: '', tooLong: null };
     const isAudio = msg.message_type === 'audio' || msg.message_type === 'voice';
     // Non-audio: any real text body IS the message; nothing to transcribe.
     if (!isAudio) {
-      return (msg.message_body && msg.message_body.trim()) ? msg.message_body.trim() : '';
+      return { text: (msg.message_body && msg.message_body.trim()) ? msg.message_body.trim() : '', tooLong: null };
     }
 
     const openaiKey = await resolveOpenAiKey(agent, agentApiKey);
     if (!openaiKey) {
       console.warn('[agentEngine] voice note received but no OpenAI key connected for transcription.');
-      return '';
+      return { text: '', tooLong: null };
     }
     const { downloadOne } = require('../services/mediaDownloader');
     const { transcribeAudioFile } = require('../services/transcription');
     const dl = await downloadOne(inboundMessageId);
     if (!dl || !dl.ok || !dl.path) {
       console.warn('[agentEngine] could not fetch audio for transcription:', dl && dl.error);
-      return '';
+      return { text: '', tooLong: null };
     }
+
+    // Length cap. An UNKNOWN duration (no ffprobe, unreadable container) is
+    // treated as acceptable and transcribed — failing open loses a cost guard,
+    // failing closed loses the customer's message.
+    const voiceCap = asLimit(agent.max_voice_seconds);
+    if (voiceCap) {
+      const secs = await probeDurationSeconds(dl.path);
+      if (secs != null && secs > voiceCap) {
+        console.warn(`[agentEngine] agent ${agent.id}: voice note ${inboundMessageId} is ${formatDuration(secs)}, over the ${formatDuration(voiceCap)} cap — not transcribed.`);
+        return { text: '', tooLong: { seconds: Math.round(secs), cap: voiceCap } };
+      }
+    }
+
     const text = await transcribeAudioFile({ filePath: dl.path, apiKey: openaiKey });
-    if (!text) return '';
+    if (!text) return { text: '', tooLong: null };
     // Surface the transcript in the chat (and future agent context), replacing
     // the placeholder body the webhook stored for the voice note.
     await pool.query(
@@ -803,10 +653,10 @@ async function transcribeInboundIfAudio({ agent, inboundMessageId, agentApiKey }
                OR message_body IN ('Audio message', 'Voice message'))`,
       [text, inboundMessageId],
     );
-    return text;
+    return { text, tooLong: null };
   } catch (e) {
     console.error('[agentEngine] transcription failed:', e.message);
-    return '';
+    return { text: '', tooLong: null };
   }
 }
 
@@ -898,7 +748,7 @@ function withContactContext(systemPrompt, contactNumber) {
  * Main entry. Loads the agent, builds tools + context, runs the LLM loop,
  * persists everything, and enqueues the final reply on the existing sendQueue.
  */
-async function runAgent({ agentId, contactNumber, inboundMessageId, inboundText }) {
+async function runAgent({ agentId, contactNumber, inboundMessageId, inboundText, isTest = false }) {
   const { rows: agentRows } = await pool.query(
     `SELECT a.*, am.provider AS ai_provider, am.api_key_encrypted AS ai_api_key_encrypted
        FROM coexistence.agents a
@@ -908,7 +758,11 @@ async function runAgent({ agentId, contactNumber, inboundMessageId, inboundText 
   );
   const agent = agentRows[0];
   if (!agent) throw new Error(`Agent id=${agentId} not found`);
-  if (!agent.is_active) throw new Error(`Agent id=${agentId} is inactive`);
+  // A DRAFT agent still runs for one of its own test numbers — that is the
+  // whole point of a test number, and the router only routes one here after
+  // matching the list on the agent itself. Every other inbound still needs the
+  // agent to be live.
+  if (!agent.is_active && !isTest) throw new Error(`Agent id=${agentId} is inactive`);
   if (!agent.wa_account_id) throw new Error(`Agent id=${agentId} has no WhatsApp account bound`);
   if (!agent.ai_provider) throw new Error(`Agent id=${agentId} has no AI model connected. Connect one under Admin Settings → Integrations → AI Models.`);
 
@@ -924,14 +778,68 @@ async function runAgent({ agentId, contactNumber, inboundMessageId, inboundText 
   let messageText = inboundText;
   if (!messageText && inboundMessageId && agent.transcribe_audio) {
     // May be empty (no transcript) — don't bail yet; it could still be an image.
-    messageText = await transcribeInboundIfAudio({ agent, inboundMessageId, agentApiKey: apiKey });
+    const heard = await transcribeInboundIfAudio({ agent, inboundMessageId, agentApiKey: apiKey });
+    messageText = heard.text;
+    // A note over the length cap is NOT silence. The customer has just spoken
+    // for several minutes; going quiet reads exactly like being ignored, and
+    // they have no way to know a limit exists. Hand the model the fact so it can
+    // ask for a shorter note or for text — and tell it plainly not to pretend it
+    // heard the contents, because a model given an empty transcript will
+    // otherwise happily invent a reply to it.
+    if (!messageText && heard.tooLong) {
+      messageText =
+        `[System note: the customer sent a voice note ${formatDuration(heard.tooLong.seconds)} long, `
+        + `which is over this agent's ${formatDuration(heard.tooLong.cap)} limit, so it was not transcribed `
+        + `and you cannot know what they said. Apologise briefly and ask them to send a shorter voice note `
+        + `or type their message instead. Do not guess what the note contained.]`;
+    }
   }
 
   // Vision: when the agent accepts images and the inbound is a picture, load its
   // bytes so the (vision-capable) model can actually see it.
+  //
+  // The per-conversation image cap is checked BEFORE the bytes are loaded, since
+  // the point of the cap is to not pay for the image at all. It is compared with
+  // `>` because imagesInSession() counts the photo that just arrived: a cap of 3
+  // allows the 3rd and refuses the 4th.
   let inboundImage = null;
+  let imageOverCap = null;
   if (inboundMessageId && agent.accept_images) {
-    inboundImage = await loadInboundImageBase64({ inboundMessageId });
+    const imageCap = asLimit(agent.max_images_per_conversation);
+    if (imageCap) {
+      const { rows: mt } = await pool.query(
+        `SELECT message_type FROM coexistence.chat_history WHERE message_id = $1`,
+        [inboundMessageId],
+      );
+      // Only meaningful for an actual image — a text message must never be
+      // refused because earlier photos used the budget up.
+      if (mt[0]?.message_type === 'image') {
+        // chat_history is keyed on the business number, not the account id.
+        const { resolveWaNumber } = require('../services/agentCrmTools');
+        const waNumber = await resolveWaNumber(agent.wa_account_id);
+        const seen = await imagesInSession({
+          waNumber, contactNumber,
+          sessionMinutes: agent.trigger_session_minutes || 30,
+        });
+        if (seen > imageCap) {
+          imageOverCap = { seen, cap: imageCap };
+          console.warn(`[agentEngine] agent ${agent.id}: image ${inboundMessageId} is number ${seen} this conversation, over the cap of ${imageCap} — not shown to the model.`);
+        }
+      }
+    }
+    if (!imageOverCap) inboundImage = await loadInboundImageBase64({ inboundMessageId });
+  }
+
+  // Same reasoning as the voice cap: say so rather than going quiet. A caption
+  // still stands on its own as the customer's message, so the note is appended
+  // to it instead of replacing it.
+  if (imageOverCap) {
+    const note =
+      `[System note: the customer sent an image, but this agent has already looked at `
+      + `${imageOverCap.cap} image(s) in this conversation, so this one was not viewed and you cannot `
+      + `see it. Tell them you cannot look at more pictures right now and ask them to describe it. `
+      + `Do not guess what the image shows.]`;
+    messageText = messageText ? `${messageText}\n\n${note}` : note;
   }
 
   if (!messageText && !inboundImage) {
@@ -940,14 +848,32 @@ async function runAgent({ agentId, contactNumber, inboundMessageId, inboundText 
   }
 
   // Open the run row immediately so a crash mid-loop is still visible in the UI.
-  const { rows: runRows } = await pool.query(
-    `INSERT INTO coexistence.agent_runs
-       (agent_id, wa_account_id, contact_number, inbound_message_id, status)
-     VALUES ($1,$2,$3,$4,'running')
-     RETURNING id`,
-    [agent.id, agent.wa_account_id, contactNumber, inboundMessageId || null],
-  );
-  const runId = runRows[0].id;
+  //
+  // ⚠ This INSERT is also the duplicate guard. webhook.js builds its record
+  // list from the PARSED payload rather than from rows that were newly
+  // inserted, so a Meta re-delivery — or the Webhook History replay button —
+  // reaches routeIfActive again for a message the agent already answered.
+  // uq_agent_runs_inbound (migration 102) makes the second one a 23505, which
+  // is caught here and skipped instead of sending the customer a second reply.
+  // The guard is the index and not a SELECT-then-INSERT check because two
+  // concurrent deliveries would both pass the check.
+  let runId;
+  try {
+    const { rows: runRows } = await pool.query(
+      `INSERT INTO coexistence.agent_runs
+         (agent_id, wa_account_id, contact_number, inbound_message_id, status, is_test)
+       VALUES ($1,$2,$3,$4,'running',$5)
+       RETURNING id`,
+      [agent.id, agent.wa_account_id, contactNumber, inboundMessageId || null, !!isTest],
+    );
+    runId = runRows[0].id;
+  } catch (e) {
+    if (e.code === '23505') {
+      console.warn(`[agentEngine] agent ${agent.id}: inbound ${inboundMessageId} already handled; skipping duplicate run.`);
+      return { skipped: true, reason: 'duplicate_inbound' };
+    }
+    throw e;
+  }
 
   let stepCounter = 0;
   const onStep = async (step) => {
@@ -1020,20 +946,6 @@ async function runAgent({ agentId, contactNumber, inboundMessageId, inboundText 
       [finalStatus, result.totalInputTokens, result.totalOutputTokens,
        result.finalText || null, runId],
     );
-
-    // Idle-close bookkeeping: stamp the last run time + mark a summary pending,
-    // so the close-summary sweeper picks the conversation up once it goes quiet.
-    if (agent.close_summary_enabled) {
-      await pool.query(
-        `UPDATE coexistence.contacts c
-            SET agent_close_pending = TRUE, agent_last_run_at = NOW()
-           FROM coexistence.whatsapp_accounts w
-          WHERE w.id = $1
-            AND regexp_replace(c.wa_number, '\\D', '', 'g') = regexp_replace(w.display_phone_number, '\\D', '', 'g')
-            AND c.contact_number = $2`,
-        [agent.wa_account_id, contactNumber],
-      ).catch(e => console.error('[agentEngine] close-pending stamp failed:', e.message));
-    }
 
     if (result.finalText) {
       // Insert an optimistic chat_history row FIRST so the agent's reply shows
@@ -1130,6 +1042,16 @@ async function runAgentTest({ agentId, messages }) {
     throw new Error('At least one message is required (role=user|assistant, non-empty content).');
   }
 
+  // What the agent "sent" during this turn, so the simulator can show it as
+  // real bubbles instead of the customer-facing text alone. Without this the
+  // preview renders nothing for a send_media call — the frontend has always
+  // read `res.media` / `res.links`, and nothing ever put them there, so files,
+  // links and templates were invisible in the test chat while working fine on
+  // WhatsApp.
+  const sentMediaIds = [];
+  const sentLinks = [];
+  const sentTemplateIds = [];
+
   const provider = getProvider(agent.ai_provider);
   const result = await provider.runWithTools({
     systemPrompt: withContactContext(agent.system_prompt, 'test'),
@@ -1138,7 +1060,17 @@ async function runAgentTest({ agentId, messages }) {
     onToolCall: async ({ name, args }) => {
       const exec = executors[name];
       if (!exec) throw new Error(`Unknown tool '${name}'`);
-      return await exec(args);
+      const out = await exec(args);
+      // Lift the preview payload off the result and DELETE it, so neither the
+      // model nor the step trace sees internal ids it might repeat back.
+      if (out && typeof out === 'object' && out.__preview) {
+        const p = out.__preview;
+        delete out.__preview;
+        for (const id of (p.mediaIds || [])) if (!sentMediaIds.includes(id)) sentMediaIds.push(id);
+        for (const l of (p.links || [])) if (!sentLinks.includes(l)) sentLinks.push(l);
+        if (p.templateId && !sentTemplateIds.includes(p.templateId)) sentTemplateIds.push(p.templateId);
+      }
+      return out;
     },
     onStep,
     model: agent.llm_model,
@@ -1158,62 +1090,83 @@ async function runAgentTest({ agentId, messages }) {
     totalOutputTokens: result.totalOutputTokens,
     iterations: result.iterations,
     steps,
+    // Whatever the agent sent alongside its text. `media` carries {id,type,name}
+    // because that is the shape the preview's MediaItem renders — a bare id
+    // would give it no way to choose between an <img>, a <video> and a file
+    // card. `templates` carries the real approved content so the simulator
+    // draws the same bubble WhatsApp will, rather than a placeholder.
+    media: await loadMediaForPreview(sentMediaIds),
+    links: sentLinks,
+    templates: await loadTemplatesForPreview(sentTemplateIds),
   };
 }
 
-// Idle-close summary: when a conversation has gone quiet, re-run the agent ONCE
-// with a directive to write its final complete summary using its own logging
-// tools (Sheets upsert / CRM) — and send NOTHING to the customer. Driven by the
-// close-summary sweeper (services/agentCloseSummary.js).
-async function runCloseSummary({ agentId, waNumber, contactNumber }) {
-  const { rows } = await pool.query(
-    `SELECT a.*, am.provider AS ai_provider, am.api_key_encrypted AS ai_api_key_encrypted
-       FROM coexistence.agents a
-       LEFT JOIN coexistence.ai_models am ON am.id = a.ai_model_id
-      WHERE a.id = $1`,
-    [agentId],
-  );
-  const agent = rows[0];
-  if (!agent || !agent.is_active || !agent.close_summary_enabled || !agent.ai_provider) return { skipped: true };
-  const apiKey = pickApiKey(agent);
-  if (!apiKey) return { skipped: 'no_api_key' };
-
-  const { tools, executors } = await buildToolsForAgent(agent, {
-    live: true, waAccountId: agent.wa_account_id, waNumber, contactNumber,
-  });
-  // Only worth a model call if the agent can actually log somewhere.
-  const canLog = tools.some(t => /google_sheets_(upsert|append|update)|set_contact_field|add_contact_tag/.test(t.name));
-  const history = await buildMessageHistory({
-    waAccountId: agent.wa_account_id, contactNumber, limit: agent.context_window_messages,
-  });
-  if (!canLog || history.length === 0) return { skipped: 'nothing_to_do' };
-
-  const directive = '\n\n## Conversation ended — final logging\n- The customer has gone quiet and this conversation is over. Write the FINAL, COMPLETE record now using your logging tool(s): a full conversation summary and the correct final status. Prefer your sheet "upsert" tool (match the existing row by the customer\'s phone number) and/or your CRM tools. Do NOT write any reply to the customer — only call the tools. If everything is already logged and up to date, do nothing.';
+/**
+ * Media Library rows for the test simulator, in the order they were sent.
+ * A row deleted since the group was configured is skipped — showing a broken
+ * thumbnail would suggest the live send is broken too, when what is actually
+ * wrong is the group.
+ */
+async function loadMediaForPreview(ids) {
+  if (!Array.isArray(ids) || ids.length === 0) return [];
   try {
-    const provider = getProvider(agent.ai_provider);
-    const result = await provider.runWithTools({
-      systemPrompt: withContactContext(agent.system_prompt, contactNumber) + directive,
-      messages: [...history, { role: 'user', content: '(end of conversation — log the final summary now, do not reply)' }],
-      tools,
-      onToolCall: async ({ name, args }) => {
-        const exec = executors[name];
-        if (!exec) throw new Error(`Unknown tool '${name}'`);
-        return await exec(args);
-      },
-      onStep: async () => {},
-      model: agent.llm_model,
-      apiKey,
-      maxIterations: Math.max(1, Math.min(20, agent.max_tool_iterations || 6)),
-      conversationKey: `${agent.id}:${contactNumber}:close`,
-      contactNumber,
-      agentId: agent.id,
-    });
-    // We intentionally do NOT send result.finalText to the customer.
-    return { ok: true, outputTokens: result?.totalOutputTokens || 0 };
+    const { rows } = await pool.query(
+      `SELECT id, name, original_name, media_type FROM coexistence.media_library WHERE id = ANY($1::bigint[])`,
+      [ids],
+    );
+    const byId = new Map(rows.map(r => [String(r.id), r]));
+    return ids
+      .map(id => byId.get(String(id)))
+      .filter(Boolean)
+      .map(r => ({ id: Number(r.id), name: r.name || r.original_name || `File ${r.id}`, type: r.media_type }));
   } catch (e) {
-    console.error('[closeSummary] provider error:', e.message);
-    return { error: e.message };
+    console.error('[agentEngine] media preview load failed:', e.message);
+    return [];
   }
 }
 
-module.exports = { runAgent, runAgentTest, buildToolsForAgent, buildMessageHistory, runCloseSummary };
+/**
+ * Approved-template content for the test simulator.
+ *
+ * Read fresh from `message_templates` rather than from the media group, which
+ * only stores the id + a name snapshot — a preview built from the snapshot
+ * would keep showing a template's OLD wording after it was edited and
+ * re-approved, which is exactly the case someone opens the simulator to check.
+ *
+ * A template that has since been deleted is skipped rather than faked: the
+ * honest outcome is that the operator sees it is missing.
+ */
+async function loadTemplatesForPreview(ids) {
+  if (!Array.isArray(ids) || ids.length === 0) return [];
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, name, language, category, header_type, header_text, body, footer, buttons,
+              header_media_library_id
+         FROM coexistence.message_templates
+        WHERE id = ANY($1::bigint[])`,
+      [ids],
+    );
+    // Ordered by the sequence the agent sent them in, not by id.
+    const byId = new Map(rows.map(r => [String(r.id), r]));
+    return ids
+      .map(id => byId.get(String(id)))
+      .filter(Boolean)
+      .map(r => ({
+        id: Number(r.id),
+        name: r.name,
+        language: r.language,
+        headerType: r.header_type || 'NONE',
+        headerText: r.header_text || '',
+        body: r.body || '',
+        footer: r.footer || '',
+        buttons: Array.isArray(r.buttons) ? r.buttons : [],
+        headerMediaLibraryId: r.header_media_library_id == null ? null : Number(r.header_media_library_id),
+      }));
+  } catch (e) {
+    // A preview is not worth failing the whole test turn over.
+    console.error('[agentEngine] template preview load failed:', e.message);
+    return [];
+  }
+}
+
+module.exports = { runAgent, runAgentTest, buildToolsForAgent, buildMessageHistory };

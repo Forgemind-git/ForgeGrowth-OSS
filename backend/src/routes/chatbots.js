@@ -1,9 +1,8 @@
 const express = require('express');
-const crypto = require('crypto');
 const router = express.Router();
-const publicRouter = express.Router();
 const pool = require('../db');
-const { fireWebhookTrigger } = require('../engine/automationEngine');
+const { validateFlow } = require('../services/flowValidator');
+const { writableLeadFields } = require('../services/leadFields');
 
 // ─── Automation folders = PROJECTS ─────────────────────────────────────────
 // Migration 094 generalised automation_folders into `projects`, which now also
@@ -82,6 +81,22 @@ router.delete('/automation-folders/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+// GET /automation-lead-fields — the lead fields a "Set Lead Field" action may
+// write, with their live labels, types and dropdown options.
+//
+// Served from `leadFields.writableLeadFields()` — the SAME function the engine
+// validates against — so the builder cannot offer a field the write would then
+// refuse. A list rebuilt in the frontend would be a mirror, and the drifted
+// half would only ever be visible as an action that silently stores nothing.
+router.get('/automation-lead-fields', async (req, res) => {
+  try {
+    res.json({ fields: writableLeadFields() });
+  } catch (err) {
+    console.error('[chatbots] lead-fields error:', err.message);
+    res.status(500).json({ error: 'Could not load the lead fields.' });
+  }
+});
+
 // GET /chatbots — list all
 router.get('/chatbots', async (req, res) => {
   const { rows } = await pool.query(
@@ -123,12 +138,65 @@ router.post('/chatbots', async (req, res) => {
   }
 });
 
+/**
+ * Check a flow without saving it. The builder debounces this so the canvas can
+ * show findings live, and it is the SAME function the activation gate runs, so
+ * "the builder said it was fine" and "Go Live refused it" can never disagree.
+ */
+router.post('/chatbots/validate', async (req, res) => {
+  try {
+    const config = (req.body && req.body.config) || {};
+    const { rows } = await pool.query(
+      `SELECT id, name, status FROM coexistence.message_templates`
+    ).catch(() => ({ rows: [] }));
+    const templatesById = Object.fromEntries(rows.map(t => [String(t.id), t]));
+    res.json(validateFlow(config, { templatesById }));
+  } catch (err) {
+    console.error('[chatbots] validate error:', err.message);
+    res.status(500).json({ error: 'Could not check this flow.' });
+  }
+});
+
 // PUT /chatbots/:id — update. Only the fields present in the body are touched, so
 // a folder move (`{ folder_id: <id|null> }`) won't clobber name/description/config.
 router.put('/chatbots/:id', async (req, res) => {
   const body = req.body || {};
   if (body.name !== undefined && !String(body.name).trim()) {
     return res.status(400).json({ error: 'Name is required' });
+  }
+
+  // ── Activation gate ────────────────────────────────────────────────────
+  // Only activation is gated. Saving must never lose work, so a draft is
+  // allowed to be broken; going live is where a broken flow starts costing
+  // real customers a reply they never receive.
+  if (String(body.status) === 'active') {
+    try {
+      const { rows: cur } = await pool.query(
+        `SELECT config FROM coexistence.chatbots WHERE id = $1`, [req.params.id]
+      );
+      if (cur.length === 0) return res.status(404).json({ error: 'Automation not found' });
+      // Validate the config being SAVED in this same request when there is one
+      // — otherwise a save-and-activate would check the previous version.
+      const config = body.config !== undefined ? body.config : (cur[0].config || {});
+      const { rows: tRows } = await pool.query(
+        `SELECT id, name, status FROM coexistence.message_templates`
+      ).catch(() => ({ rows: [] }));
+      const result = validateFlow(config, {
+        templatesById: Object.fromEntries(tRows.map(t => [String(t.id), t])),
+      });
+      if (!result.ok) {
+        return res.status(409).json({
+          error: result.blocking.length === 1
+            ? 'This flow cannot go live yet — one thing needs fixing first.'
+            : `This flow cannot go live yet — ${result.blocking.length} things need fixing first.`,
+          blocking: result.blocking,
+          warnings: result.warnings,
+        });
+      }
+    } catch (err) {
+      console.error('[chatbots] activation validation error:', err.message);
+      return res.status(500).json({ error: 'Could not check this flow before activating it.' });
+    }
   }
 
   const sets = [];
@@ -361,64 +429,11 @@ router.post('/executions/:id/cancel', async (req, res) => {
   }
 });
 
-// ─── Webhook trigger: per-automation URL + secret ──────────────────────────
+// NOTE (2026-08-12): the per-automation webhook URL + secret, and the public
+// POST /automations/:id/webhook that fired it, were removed with the Webhook
+// Received / API Event triggers. Nothing could fire them any more — a flow has
+// no trigger kind that listens on that URL. The chatbots.webhook_secret column
+// is left in place (unused) rather than dropped, so an automation exported from
+// an instance that still has the feature imports without error.
 
-// GET /chatbots/:id/webhook — return the public webhook URL + secret for a
-// Webhook / API-Event trigger. Lazily mints a secret on first read.
-router.get('/chatbots/:id/webhook', async (req, res) => {
-  try {
-    const { rows } = await pool.query(`SELECT id, webhook_secret FROM coexistence.chatbots WHERE id=$1`, [req.params.id]);
-    if (rows.length === 0) return res.status(404).json({ error: 'Automation not found' });
-    let secret = rows[0].webhook_secret;
-    if (!secret) {
-      secret = 'whsec_' + crypto.randomBytes(18).toString('hex');
-      await pool.query(`UPDATE coexistence.chatbots SET webhook_secret=$1 WHERE id=$2`, [secret, req.params.id]);
-    }
-    res.json({ path: `/api/automations/${req.params.id}/webhook`, secret });
-  } catch (err) {
-    console.error('[chatbots] webhook info error:', err.message);
-    res.status(500).json({ error: 'Failed to load webhook info' });
-  }
-});
-
-// POST /chatbots/:id/webhook/rotate — issue a fresh signing secret
-router.post('/chatbots/:id/webhook/rotate', async (req, res) => {
-  try {
-    const secret = 'whsec_' + crypto.randomBytes(18).toString('hex');
-    const { rowCount } = await pool.query(`UPDATE coexistence.chatbots SET webhook_secret=$1 WHERE id=$2`, [secret, req.params.id]);
-    if (rowCount === 0) return res.status(404).json({ error: 'Automation not found' });
-    res.json({ path: `/api/automations/${req.params.id}/webhook`, secret });
-  } catch (err) {
-    console.error('[chatbots] rotate secret error:', err.message);
-    res.status(500).json({ error: 'Failed to rotate secret' });
-  }
-});
-
-// POST /automations/:id/webhook — PUBLIC. External services POST a JSON body
-// here to fire a Webhook / API-Event-triggered automation. If the automation
-// has a secret, callers must present it via the X-Whatsflow-Signature header
-// (or ?secret=). Returns 202 on accept.
-publicRouter.post('/automations/:id/webhook', express.json({ limit: '256kb' }), async (req, res) => {
-  try {
-    const { rows } = await pool.query(`SELECT webhook_secret, status FROM coexistence.chatbots WHERE id=$1`, [req.params.id]);
-    if (rows.length === 0) return res.status(404).json({ error: 'Automation not found' });
-    if (rows[0].status !== 'active') return res.status(409).json({ error: 'Automation is not active' });
-    const secret = rows[0].webhook_secret;
-    if (secret) {
-      const presented = req.get('X-Whatsflow-Signature') || req.query.secret || '';
-      const a = Buffer.from(String(presented));
-      const b = Buffer.from(String(secret));
-      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
-        return res.status(401).json({ error: 'Invalid or missing signature' });
-      }
-    }
-    const result = await fireWebhookTrigger(req.params.id, req.body || {});
-    if (!result.ok) return res.status(400).json(result);
-    res.status(202).json(result);
-  } catch (err) {
-    console.error('[chatbots] public webhook error:', err.message);
-    res.status(500).json({ error: 'Webhook processing failed' });
-  }
-});
-
-module.exports = { router, publicRouter };
+module.exports = { router };

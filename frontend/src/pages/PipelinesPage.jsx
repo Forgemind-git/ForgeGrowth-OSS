@@ -242,7 +242,7 @@ export default function PipelinesPage({ user }) {
         display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
         padding: '18px 24px', borderBottom: `1px solid ${C.border}`, background: C.cardBg,
       }}>
-        <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-.02em', marginRight: 4 }}>Pipelines</div>
+        <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-.02em', marginRight: 4 }}>Pipelines</div>
 
         {hasPipelines && (
           <PipelinePicker
@@ -287,7 +287,7 @@ export default function PipelinesPage({ user }) {
         ) : loading ? (
           <BoardSkeleton />
         ) : error ? (
-          <div style={{ padding: 40, textAlign: 'center', color: C.primary, fontSize: 13 }}>{error}</div>
+          <div style={{ padding: 40, textAlign: 'center', color: C.primary, fontSize: 15 }}>{error}</div>
         ) : board ? (
           <>
             <KpiRow kpis={board.kpis} />
@@ -367,7 +367,7 @@ function PipelinePicker({ pipelines, selectedId, open, setOpen, onSelect }) {
       <button onClick={() => setOpen(o => !o)} style={{
         display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
         borderRadius: 10, border: `1px solid ${C.border}`, background: C.pageBg,
-        cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 700, color: C.text,
+        cursor: 'pointer', fontFamily: FONT, fontSize: 15, fontWeight: 700, color: C.text,
       }}>
         <Kanban size={15} color={C.primary} />
         {current?.name || 'Select pipeline'}
@@ -384,13 +384,13 @@ function PipelinePicker({ pipelines, selectedId, open, setOpen, onSelect }) {
             return (
               <div key={p.id} onClick={() => onSelect(p.id)} style={{
                 display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px',
-                borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: active ? 700 : 500,
+                borderRadius: 8, cursor: 'pointer', fontSize: 15, fontWeight: active ? 700 : 500,
                 color: active ? C.primary : C.text, background: active ? C.primaryLight : 'transparent',
               }}
                 onMouseEnter={e => { if (!active) e.currentTarget.style.background = C.hover; }}
                 onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}>
                 <Kanban size={14} /> {p.name}
-                {p.isDefault && <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.05em' }}>Default</span>}
+                {p.isDefault && <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.05em' }}>Default</span>}
               </div>
             );
           })}
@@ -431,7 +431,7 @@ function MenuItem({ icon, label, onClick, danger }) {
   return (
     <div onClick={onClick} style={{
       display: 'flex', alignItems: 'center', gap: 9, padding: '9px 10px', borderRadius: 8,
-      cursor: 'pointer', fontSize: 13, fontWeight: 600, color: danger ? C.primary : C.text,
+      cursor: 'pointer', fontSize: 15, fontWeight: 600, color: danger ? C.primary : C.text,
     }}
       onMouseEnter={e => e.currentTarget.style.background = danger ? C.primaryLight : C.hover}
       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -455,10 +455,10 @@ function KpiRow({ kpis }) {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
               <def.Icon size={14} color={C.textMuted} />
-              <span style={{ fontSize: 10.5, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '.05em' }}>{def.label}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '.05em' }}>{def.label}</span>
               <Info size={12} color={C.textMuted} style={{ marginLeft: 'auto', opacity: .6 }} />
             </div>
-            <div style={{ fontSize: 22, fontWeight: 700, fontFamily: MONO, letterSpacing: '-.02em', color: C.text }}>{display}</div>
+            <div style={{ fontSize: 24, fontWeight: 700, fontFamily: MONO, letterSpacing: '-.02em', color: C.text }}>{display}</div>
           </div>
         );
       })}
@@ -488,28 +488,28 @@ function Board({
                 borderRadius: '12px 12px 0 0', padding: '12px 14px 10px',
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: C.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {stage.name}
                   </span>
                   <span style={{
-                    fontSize: 11, fontWeight: 700, color: C.textSecondary, background: C.pageBg,
+                    fontSize: 13, fontWeight: 700, color: C.textSecondary, background: C.pageBg,
                     borderRadius: 20, padding: '2px 8px', minWidth: 22, textAlign: 'center',
                   }}>{deals.length}</span>
                   {isAdmin && <StageMenu stage={stage} onEdit={() => onEditStage(stage)} onDelete={() => onDeleteStage(stage)} />}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: C.textMuted, fontFamily: MONO }} title={fullMoney(total)}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: C.textMuted, fontFamily: MONO }} title={fullMoney(total)}>
                     {fmtMoney(total)}
                   </span>
                   {(stage.isWon || stage.isLost) && (
                     <span style={{
-                      fontSize: 8.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em',
+                      fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em',
                       color: stage.isWon ? C.green : C.primary,
                       background: stage.isWon ? 'rgba(34,197,94,.12)' : C.primaryLight,
                       borderRadius: 4, padding: '1px 5px',
                     }}>{stage.isWon ? 'Won' : 'Lost'}</span>
                   )}
-                  <span style={{ marginLeft: 'auto', fontSize: 9.5, color: C.textMuted, fontWeight: 600 }}>{stage.probability}%</span>
+                  <span style={{ marginLeft: 'auto', fontSize: 11, color: C.textMuted, fontWeight: 600 }}>{stage.probability}%</span>
                 </div>
               </div>
 
@@ -529,7 +529,7 @@ function Board({
                   <div style={{
                     flex: 1, minHeight: 90, border: `1.5px dashed ${over ? C.primary : C.border}`,
                     borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 12, color: C.textMuted, fontWeight: 500,
+                    fontSize: 14, color: C.textMuted, fontWeight: 500,
                   }}>Drop a deal here</div>
                 ) : (
                   deals.map(deal => (
@@ -547,7 +547,7 @@ function Board({
                 <button onClick={() => onAddDeal(stage.id)} style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                   padding: '8px', borderRadius: 8, border: `1px solid transparent`, background: 'transparent',
-                  cursor: 'pointer', fontFamily: FONT, fontSize: 12, fontWeight: 600, color: C.textSecondary,
+                  cursor: 'pointer', fontFamily: FONT, fontSize: 14, fontWeight: 600, color: C.textSecondary,
                 }}
                   onMouseEnter={e => { e.currentTarget.style.background = C.cardBg; e.currentTarget.style.borderColor = C.border; }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }}>
@@ -562,7 +562,7 @@ function Board({
         {isAdmin && <button onClick={onAddStage} style={{
           width: 160, flexShrink: 0, marginTop: 0, padding: '14px', borderRadius: 12,
           border: `1.5px dashed ${C.border}`, background: 'transparent', cursor: 'pointer',
-          color: C.textSecondary, fontFamily: FONT, fontSize: 12.5, fontWeight: 700,
+          color: C.textSecondary, fontFamily: FONT, fontSize: 14, fontWeight: 700,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
         }}
           onMouseEnter={e => { e.currentTarget.style.borderColor = C.primary; e.currentTarget.style.color = C.primary; }}
@@ -616,14 +616,14 @@ function DealCard({ deal, dragging, onDragStart, onDragEnd, onClick }) {
       }}
       onMouseEnter={e => e.currentTarget.style.boxShadow = C.shadowMd}
       onMouseLeave={e => e.currentTarget.style.boxShadow = C.shadowSm}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1.3 }}>{deal.title}</div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: C.text, lineHeight: 1.3 }}>{deal.title}</div>
       {Number(deal.value) > 0 && (
-        <div style={{ fontSize: 13, fontWeight: 700, fontFamily: MONO, color: C.green }} title={fullMoney(deal.value)}>
+        <div style={{ fontSize: 15, fontWeight: 700, fontFamily: MONO, color: C.green }} title={fullMoney(deal.value)}>
           {fmtMoney(deal.value)}
         </div>
       )}
       {(deal.contactName || deal.contactNumber) && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: C.textSecondary, fontWeight: 500 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, color: C.textSecondary, fontWeight: 500 }}>
           <Phone size={11} color={C.textMuted} />
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {deal.contactName || maskPhone(deal.contactNumber)}
@@ -632,12 +632,12 @@ function DealCard({ deal, dragging, onDragStart, onDragEnd, onClick }) {
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 1 }}>
         {deal.expectedCloseDate && (
-          <span style={{ fontSize: 10.5, color: C.textMuted, fontWeight: 600 }}>{fmtDate(deal.expectedCloseDate)}</span>
+          <span style={{ fontSize: 12, color: C.textMuted, fontWeight: 600 }}>{fmtDate(deal.expectedCloseDate)}</span>
         )}
         {deal.assignedUserName && (
           <span title={deal.assignedUserName} style={{
             marginLeft: 'auto', width: 22, height: 22, borderRadius: '50%', background: C.purple,
-            color: '#fff', fontSize: 9.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>{initials(deal.assignedUserName)}</span>
         )}
       </div>
@@ -699,7 +699,7 @@ function DealModal({ mode, isAdmin, stages, stageId, deal, onClose, onSave, onDe
             onChange={v => setStage(Number(v))}
             options={stages.map(s => ({ value: s.id, label: s.name }))}
             placeholder="Select stage…"
-            triggerStyle={{ padding: '9px 32px 9px 11px', borderRadius: 9, fontSize: 13 }}
+            triggerStyle={{ padding: '9px 32px 9px 11px', borderRadius: 9, fontSize: 15 }}
           />
         </Field>
       </div>
@@ -716,7 +716,7 @@ function DealModal({ mode, isAdmin, stages, stageId, deal, onClose, onSave, onDe
               onChange={v => setAssigneeId(v)}
               options={[{ value: '', label: 'Unassigned' }, ...assignees.map(u => ({ value: String(u.id), label: u.name }))]}
               placeholder="Unassigned"
-              triggerStyle={{ padding: '9px 32px 9px 11px', borderRadius: 9, fontSize: 13 }}
+              triggerStyle={{ padding: '9px 32px 9px 11px', borderRadius: 9, fontSize: 15 }}
             />
           </Field>
         )}
@@ -783,12 +783,12 @@ function ContactPicker({ contact, onChange }) {
   if (contact && (contact.name || contact.contactNumber)) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 11px', border: `1px solid ${C.border}`, borderRadius: 9, background: C.surfaceAlt }}>
-        <span style={{ width: 26, height: 26, borderRadius: '50%', background: C.primary, color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ width: 26, height: 26, borderRadius: '50%', background: C.primary, color: '#fff', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {initials(contact.name || contact.contactNumber)}
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contact.name || 'Unnamed'}</div>
-          {contact.contactNumber && <div style={{ fontSize: 11, color: C.textMuted, fontFamily: MONO }}>{maskPhone(contact.contactNumber)}</div>}
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contact.name || 'Unnamed'}</div>
+          {contact.contactNumber && <div style={{ fontSize: 13, color: C.textMuted, fontFamily: MONO }}>{maskPhone(contact.contactNumber)}</div>}
         </div>
         <button onClick={() => onChange(null)} style={{ ...iconBtn, width: 28, height: 28 }} title="Remove contact"><X size={14} /></button>
       </div>
@@ -816,7 +816,7 @@ function ContactPicker({ contact, onChange }) {
             title="Filter by tags"
             style={{
               display: 'flex', alignItems: 'center', gap: 5, padding: '5px 9px', borderRadius: 7, cursor: 'pointer',
-              fontFamily: FONT, fontSize: 12, fontWeight: 700,
+              fontFamily: FONT, fontSize: 14, fontWeight: 700,
               border: `1px solid ${selectedTagIds.length ? C.primary : C.border}`,
               background: selectedTagIds.length ? C.primaryLight : C.cardBg,
               color: selectedTagIds.length ? C.primary : C.textSecondary,
@@ -830,7 +830,7 @@ function ContactPicker({ contact, onChange }) {
               padding: 6, maxHeight: 240, overflowY: 'auto',
             }}>
               {allTags.length === 0 ? (
-                <div style={{ padding: '10px', fontSize: 12, color: C.textMuted }}>No tags defined</div>
+                <div style={{ padding: '10px', fontSize: 14, color: C.textMuted }}>No tags defined</div>
               ) : (
                 <>
                   {allTags.map(t => {
@@ -848,14 +848,14 @@ function ContactPicker({ contact, onChange }) {
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}>{on && <Check size={11} color="#fff" />}</span>
                         <span style={{ width: 9, height: 9, borderRadius: '50%', background: t.color || C.textMuted, flexShrink: 0 }} />
-                        <span style={{ fontSize: 12.5, fontWeight: 500, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
+                        <span style={{ fontSize: 14, fontWeight: 500, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
                       </div>
                     );
                   })}
                   {selectedTagIds.length > 0 && (
                     <div onClick={() => setSelectedTagIds([])} style={{
                       marginTop: 4, padding: '7px 8px', borderTop: `1px solid ${C.border}`,
-                      fontSize: 11.5, fontWeight: 700, color: C.primary, cursor: 'pointer', textAlign: 'center',
+                      fontSize: 13, fontWeight: 700, color: C.primary, cursor: 'pointer', textAlign: 'center',
                     }}>Clear tags</div>
                   )}
                 </>
@@ -871,7 +871,7 @@ function ContactPicker({ contact, onChange }) {
           {selectedTags.map(t => (
             <span key={t.id} style={{
               display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 7px', borderRadius: 20,
-              background: C.surfaceAlt, border: `1px solid ${C.border}`, fontSize: 11, fontWeight: 600, color: C.text,
+              background: C.surfaceAlt, border: `1px solid ${C.border}`, fontSize: 13, fontWeight: 600, color: C.text,
             }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: t.color || C.textMuted }} />
               {t.name}
@@ -888,7 +888,7 @@ function ContactPicker({ contact, onChange }) {
           maxHeight: 240, overflowY: 'auto', padding: 5,
         }}>
           {results.length === 0 ? (
-            <div style={{ padding: '12px 10px', fontSize: 12, color: C.textMuted }}>
+            <div style={{ padding: '12px 10px', fontSize: 14, color: C.textMuted }}>
               {selectedTagIds.length ? 'No contacts match these tags' : 'No matching contacts'}
             </div>
           ) : results.map((c, i) => (
@@ -897,12 +897,12 @@ function ContactPicker({ contact, onChange }) {
             }}
               onMouseEnter={e => e.currentTarget.style.background = C.hover}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-              <span style={{ width: 24, height: 24, borderRadius: '50%', background: C.purple, color: '#fff', fontSize: 9.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <span style={{ width: 24, height: 24, borderRadius: '50%', background: C.purple, color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 {initials(c.name || c.contactNumber)}
               </span>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name || 'Unnamed'}</div>
-                <div style={{ fontSize: 11, color: C.textMuted, fontFamily: MONO }}>{maskPhone(c.contactNumber)}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name || 'Unnamed'}</div>
+                <div style={{ fontSize: 13, color: C.textMuted, fontFamily: MONO }}>{maskPhone(c.contactNumber)}</div>
               </div>
               {Array.isArray(c.tags) && c.tags.length > 0 && (
                 <div style={{ display: 'flex', gap: 3, flexShrink: 0, maxWidth: 110, overflow: 'hidden' }}>
@@ -933,7 +933,7 @@ function PipelineModal({ mode, initialName, onClose, onSave }) {
           placeholder="e.g. Sales Pipeline" style={inp} />
       </Field>
       {mode === 'create' && (
-        <div style={{ fontSize: 11.5, color: C.textMuted, marginTop: -4, marginBottom: 4 }}>
+        <div style={{ fontSize: 13, color: C.textMuted, marginTop: -4, marginBottom: 4 }}>
           Starts with default stages: New Lead, Qualified, Proposal Sent, Negotiation, Won, Lost. You can edit them anytime.
         </div>
       )}
@@ -985,7 +985,7 @@ function StageModal({ mode, stage, onClose, onSave }) {
       <Field label={`Win probability — ${probability}%`}>
         <input type="range" min={0} max={100} step={5} value={probability}
           onChange={e => setProbability(e.target.value)} style={{ width: '100%', accentColor: C.primary }} />
-        <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>Used to compute the Weighted Value KPI.</div>
+        <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2 }}>Used to compute the Weighted Value KPI.</div>
       </Field>
       <Field label="Outcome">
         <div style={{ display: 'flex', gap: 8 }}>
@@ -995,14 +995,14 @@ function StageModal({ mode, stage, onClose, onSave }) {
             { k: 'lost', label: 'Lost' },
           ].map(o => (
             <button key={o.k} onClick={() => setOutcome(o.k)} style={{
-              flex: 1, padding: '8px', borderRadius: 8, cursor: 'pointer', fontFamily: FONT, fontSize: 12, fontWeight: 700,
+              flex: 1, padding: '8px', borderRadius: 8, cursor: 'pointer', fontFamily: FONT, fontSize: 14, fontWeight: 700,
               border: `1px solid ${outcome === o.k ? C.primary : C.border}`,
               background: outcome === o.k ? C.primaryLight : C.cardBg,
               color: outcome === o.k ? C.primary : C.textSecondary,
             }}>{o.label}</button>
           ))}
         </div>
-        <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>
+        <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
           Deals landing in a Won/Lost stage are marked accordingly and feed the monthly KPIs.
         </div>
       </Field>
@@ -1024,7 +1024,7 @@ function ModalShell({ title, onClose, width = 420, children }) {
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{ background: C.cardBg, borderRadius: 16, width, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: C.shadowLg }}>
         <div style={{ display: 'flex', alignItems: 'center', padding: '16px 20px', borderBottom: `1px solid ${C.border}` }}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{title}</div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: C.text }}>{title}</div>
           <button onClick={onClose} style={{ ...iconBtn, marginLeft: 'auto', width: 32, height: 32 }}><X size={16} /></button>
         </div>
         <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>{children}</div>
@@ -1036,7 +1036,7 @@ function ModalShell({ title, onClose, width = 420, children }) {
 function Field({ label, children, style }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, ...style }}>
-      <label style={{ fontSize: 10.5, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</label>
+      <label style={{ fontSize: 12, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</label>
       {children}
     </div>
   );
@@ -1046,8 +1046,8 @@ function EmptyPipelines({ isAdmin, onCreate }) {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, color: C.textMuted }}>
       <Kanban size={52} color={C.border} strokeWidth={1.5} />
-      <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>No pipelines yet</div>
-      <div style={{ fontSize: 13, maxWidth: 320, textAlign: 'center', lineHeight: 1.5 }}>
+      <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>No pipelines yet</div>
+      <div style={{ fontSize: 15, maxWidth: 320, textAlign: 'center', lineHeight: 1.5 }}>
         {isAdmin
           ? 'Create your first pipeline to start tracking deals across stages.'
           : 'No pipelines have been set up yet. Ask an admin to create one.'}
@@ -1058,7 +1058,7 @@ function EmptyPipelines({ isAdmin, onCreate }) {
 }
 
 function BoardSkeleton() {
-  const shimmer = { background: 'linear-gradient(90deg,#f0f0ea 25%,#e8e8e2 50%,#f0f0ea 75%)', backgroundSize: '200% 100%', animation: 'pl-shimmer 1.3s linear infinite', borderRadius: 8 };
+  const shimmer = { background: 'linear-gradient(90deg,var(--c-divider, #f0f0ea) 25%,var(--c-xe8e8e2, #e8e8e2) 50%,var(--c-divider, #f0f0ea) 75%)', backgroundSize: '200% 100%', animation: 'pl-shimmer 1.3s linear infinite', borderRadius: 8 };
   return (
     <div style={{ padding: 24 }}>
       <style>{`@keyframes pl-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
@@ -1082,7 +1082,7 @@ function Toast({ toast }) {
   return (
     <div style={{
       position: 'fixed', bottom: 22, right: 22, zIndex: 400, background: bg, color: '#fff',
-      padding: '11px 16px', borderRadius: 10, fontFamily: FONT, fontSize: 13, fontWeight: 600,
+      padding: '11px 16px', borderRadius: 10, fontFamily: FONT, fontSize: 15, fontWeight: 600,
       boxShadow: C.shadowLg, maxWidth: 320,
     }}>{toast.msg}</div>
   );
@@ -1092,17 +1092,17 @@ function Toast({ toast }) {
 
 const inp = {
   width: '100%', padding: '9px 11px', borderRadius: 9, border: `1px solid ${C.border}`,
-  fontFamily: FONT, fontSize: 13, color: C.text, background: C.cardBg, outline: 'none',
+  fontFamily: FONT, fontSize: 15, color: C.text, background: C.cardBg, outline: 'none',
 };
 const btnPrimary = {
   display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 10,
   border: 'none', background: C.primary, color: '#fff', cursor: 'pointer',
-  fontFamily: FONT, fontSize: 13, fontWeight: 700,
+  fontFamily: FONT, fontSize: 15, fontWeight: 700,
 };
 const btnGhost = {
   display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 10,
   border: `1px solid ${C.border}`, background: C.cardBg, color: C.text, cursor: 'pointer',
-  fontFamily: FONT, fontSize: 13, fontWeight: 600,
+  fontFamily: FONT, fontSize: 15, fontWeight: 600,
 };
 const iconBtn = {
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9,

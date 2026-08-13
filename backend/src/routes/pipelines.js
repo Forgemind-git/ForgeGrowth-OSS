@@ -732,7 +732,7 @@ router.get('/deal-assignees', async (req, res) => {
     // Admins can assign to anyone; a non-admin can only assign to themselves.
     const sql = isAdmin(req)
       ? `SELECT id, display_name, role FROM coexistence.forgecrm_users
-          WHERE is_active = TRUE AND role IN ('admin','bda_sales')
+          WHERE is_active = TRUE
           ORDER BY display_name NULLS LAST, id`
       : `SELECT id, display_name, role FROM coexistence.forgecrm_users WHERE id = $1`;
     const { rows } = await pool.query(sql, isAdmin(req) ? [] : [meId(req)]);

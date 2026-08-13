@@ -50,10 +50,10 @@ export default class PageErrorBoundary extends Component {
         padding: '70px 24px', textAlign: 'center', fontFamily: FONT, flex: 1,
       }}>
         <AlertTriangle size={38} color={C.textMuted} strokeWidth={1.5} style={{ opacity: 0.7 }} />
-        <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginTop: 14 }}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginTop: 14 }}>
           This page ran into a problem
         </div>
-        <div style={{ fontSize: 13, color: C.textSecondary, marginTop: 6, maxWidth: 420, lineHeight: 1.6 }}>
+        <div style={{ fontSize: 15, color: C.textSecondary, marginTop: 6, maxWidth: 420, lineHeight: 1.6 }}>
           Nothing was lost. You can try again, or pick another page from the menu on the left.
         </div>
         <button
@@ -61,7 +61,7 @@ export default class PageErrorBoundary extends Component {
           style={{
             marginTop: 18, display: 'inline-flex', alignItems: 'center', gap: 7,
             padding: '9px 16px', borderRadius: 8, border: 'none', background: C.primary,
-            color: '#fff', fontSize: 13, fontWeight: 600, fontFamily: FONT, cursor: 'pointer',
+            color: '#fff', fontSize: 15, fontWeight: 600, fontFamily: FONT, cursor: 'pointer',
           }}>
           <RotateCw size={14} /> Try again
         </button>

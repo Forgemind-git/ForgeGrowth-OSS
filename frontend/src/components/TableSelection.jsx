@@ -120,6 +120,9 @@ export function BulkDeleteButton({ sel, label, onConfirm, confirmMessage, style 
   const title = `Delete ${n} ${label}${plural}`;
   const message = confirmMessage || `Are you sure you want to delete ${n} ${label}${plural}? This cannot be undone.`;
 
+  // Hover restores the SAME tokens the resting style uses. They used to be
+  // different tokens that merely happen to be equal in LIGHT, so hovering left
+  // the button a shade off in dark and it never came back.
   return (
     <>
       <button
@@ -127,14 +130,14 @@ export function BulkDeleteButton({ sel, label, onConfirm, confirmMessage, style 
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: '8px 14px',
-          background: 'var(--c-primaryLight)', color: '#A32D2D',
-          border: '1.5px solid #A32D2D', borderRadius: 8,
-          fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
+          background: 'var(--c-primaryLight)', color: 'var(--c-dangerText, #A32D2D)',
+          border: '1.5px solid var(--c-dangerSolid, #A32D2D)', borderRadius: 8,
+          fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
           transition: 'background .15s, color .15s',
           ...style,
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = '#A32D2D'; e.currentTarget.style.color = '#fff'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = '#FCEBEB'; e.currentTarget.style.color = '#A32D2D'; }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--c-dangerSolid)'; e.currentTarget.style.color = '#fff'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--c-primaryLight)'; e.currentTarget.style.color = 'var(--c-dangerText)'; }}
       >
         <Trash2 size={14} />
         Delete {n} selected
@@ -169,18 +172,18 @@ function BulkDeleteModal({ title, message, onConfirm, onCancel }) {
         style={{ background: 'var(--c-cardBg)', borderRadius: 14, padding: '24px 26px', width: 420, maxWidth: '90vw',
                  boxShadow: '0 24px 60px rgba(0,0,0,.22)' }}
       >
-        <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--c-text)', marginBottom: 10 }}>{title}</div>
-        <div style={{ fontSize: 13, color: '#555', lineHeight: 1.55, marginBottom: 22 }}>{message}</div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--c-text)', marginBottom: 10 }}>{title}</div>
+        <div style={{ fontSize: 15, color: 'var(--c-s555555, #555)', lineHeight: 1.55, marginBottom: 22 }}>{message}</div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
           <button
             onClick={onCancel}
-            style={{ padding: '9px 18px', border: '1.5px solid #D5D5D0', background: 'var(--c-cardBg)', color: '#444',
-                     borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}
+            style={{ padding: '9px 18px', border: '1.5px solid var(--c-borderStrong, #D5D5D0)', background: 'var(--c-cardBg)', color: 'var(--c-t3, #444)',
+                     borderRadius: 9, fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}
           >Cancel</button>
           <button
             onClick={onConfirm}
             style={{ padding: '9px 18px', border: 'none', background: '#A32D2D', color: '#fff',
-                     borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}
+                     borderRadius: 9, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}
           >Delete</button>
         </div>
       </div>

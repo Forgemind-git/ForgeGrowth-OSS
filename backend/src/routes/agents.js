@@ -46,7 +46,7 @@ router.get('/agents/:id', async (req, res) => {
 
 router.post('/agents', adminOnly, async (req, res) => {
   try {
-    res.status(201).json(await agentService.createAgent(req.body || {}));
+    res.status(201).json(await agentService.createAgent(req.body || {}, { actor: req.user }));
   } catch (err) {
     sendErr(res, err, 'Failed to create agent');
   }
@@ -54,7 +54,7 @@ router.post('/agents', adminOnly, async (req, res) => {
 
 router.put('/agents/:id', adminOnly, async (req, res) => {
   try {
-    res.json(await agentService.updateAgent(req.params.id, req.body || {}));
+    res.json(await agentService.updateAgent(req.params.id, req.body || {}, { actor: req.user }));
   } catch (err) {
     sendErr(res, err, 'Failed to update agent');
   }
@@ -115,6 +115,66 @@ router.delete('/agents/:id/tools/:toolId', adminOnly, async (req, res) => {
   }
 });
 
+/* ----------------------- Test-number chat status ---------------------- */
+
+/**
+ * GET /agents/:id/runs is not enough to explain a silent agent: when a chat is
+ * paused for a human the router returns BEFORE logging anything, so the run
+ * history shows nothing at all. This answers "is this test number's chat
+ * paused, and by whom?" so the panel where the number was added can say so.
+ *
+ * The number is resolved to a real contact row on the agent's OWN WhatsApp
+ * account, matched on the last 10 digits — the same rule the router uses.
+ */
+router.get('/agents/:id/test-numbers/status', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `WITH tn AS (
+         SELECT COALESCE(t->>'number', t#>>'{}') AS number, t->>'label' AS label
+           FROM coexistence.agents a,
+                LATERAL jsonb_array_elements(
+                  CASE WHEN jsonb_typeof(a.test_numbers) = 'array'
+                       THEN a.test_numbers ELSE '[]'::jsonb END
+                ) AS t
+          WHERE a.id = $1
+       )
+       SELECT tn.number, tn.label,
+              c.wa_number, c.contact_number, c.agent_paused, c.agent_paused_by, c.agent_paused_at
+         FROM tn
+         LEFT JOIN LATERAL (
+           SELECT ct.*
+             FROM coexistence.contacts ct
+             JOIN coexistence.agents ag ON ag.id = $1
+             JOIN coexistence.whatsapp_accounts w ON w.id = ag.wa_account_id
+            WHERE ct.wa_number = regexp_replace(w.display_phone_number, '\\D', '', 'g')
+              AND RIGHT(regexp_replace(ct.contact_number, '\\D', '', 'g'), 10)
+                = RIGHT(regexp_replace(tn.number, '\\D', '', 'g'), 10)
+            -- A paused row is the one worth reporting if somehow there are two.
+            ORDER BY ct.agent_paused DESC NULLS LAST, ct.updated_at DESC
+            LIMIT 1
+         ) c ON TRUE`,
+      [req.params.id],
+    );
+    res.json(rows.map(r => ({
+      number: r.number,
+      label: r.label || null,
+      waNumber: r.wa_number || null,
+      contactNumber: r.contact_number || null,
+      // No contact row = this number has never messaged the agent's number.
+      hasChat: !!r.contact_number,
+      paused: r.agent_paused === true,
+      pausedBy: r.agent_paused_by || null,
+      pausedAt: r.agent_paused_at || null,
+      // A limit pause clears itself on the next message from a test number;
+      // a human takeover does not, and needs someone to hand it back.
+      needsResume: r.agent_paused === true && r.agent_paused_by !== 'limit',
+    })));
+  } catch (err) {
+    console.error('[agents] test-number status error:', err.message);
+    res.status(500).json({ error: 'Failed to check the test numbers' });
+  }
+});
+
 /* --------------------------- Runs (viewer) ---------------------------- */
 
 router.get('/agents/:id/runs', async (req, res) => {
@@ -123,7 +183,7 @@ router.get('/agents/:id/runs', async (req, res) => {
     const { rows } = await pool.query(
       `SELECT id, agent_id, contact_number, inbound_message_id, status,
               total_input_tokens, total_output_tokens, final_reply, error_message,
-              started_at, ended_at
+              started_at, ended_at, is_test
          FROM coexistence.agent_runs
         WHERE agent_id = $1
         ORDER BY started_at DESC
@@ -142,6 +202,8 @@ router.get('/agents/:id/runs', async (req, res) => {
       errorMessage: r.error_message,
       startedAt: r.started_at,
       endedAt: r.ended_at,
+      // Marked so a morning of testing does not read as customer activity.
+      isTest: r.is_test === true,
     })));
   } catch (err) {
     console.error('[agents] runs error:', err.message);

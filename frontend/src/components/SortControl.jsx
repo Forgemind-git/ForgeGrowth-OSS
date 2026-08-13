@@ -28,7 +28,7 @@ export default function SortControl({ value, onChange, options = LIST_SORT_OPTIO
           onChange={onChange}
           options={options}
           placeholder="Sort"
-          triggerStyle={{ padding: '8px 28px 8px 11px', fontSize: 12.5, fontFamily: FONT }}
+          triggerStyle={{ padding: '8px 28px 8px 11px', fontSize: 14, fontFamily: FONT }}
         />
       </div>
     </div>

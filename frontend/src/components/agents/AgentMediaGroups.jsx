@@ -108,7 +108,7 @@ export default function AgentMediaGroups({ waAccountId, value = [], onChange }) 
 
   if (!waAccountId) {
     return (
-      <div style={{ padding: 16, background: 'var(--c-surfaceAlt)', borderRadius: 8, border: `1px dashed ${C.border}`, fontSize: 12.5, color: C.textSecondary, lineHeight: 1.55, fontFamily: FONT }}>
+      <div style={{ padding: 16, background: 'var(--c-surfaceAlt)', borderRadius: 8, border: `1px dashed ${C.border}`, fontSize: 14, color: C.textSecondary, lineHeight: 1.55, fontFamily: FONT }}>
         Bind a <strong>WhatsApp account</strong> in the Identity section first — media is tied to a number, so the agent can only send files from that number’s Media Library.
       </div>
     );
@@ -117,14 +117,14 @@ export default function AgentMediaGroups({ waAccountId, value = [], onChange }) 
   return (
     <div style={{ fontFamily: FONT }}>
       {error && (
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 12px', borderRadius: 8, background: '#FCEBEB', color: '#A32D2D', border: '1px solid #FBC8C8', fontSize: 12, marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 12px', borderRadius: 8, background: 'var(--c-dangerBg, #FCEBEB)', color: 'var(--c-dangerText, #A32D2D)', border: '1px solid var(--c-dangerBorder, #FBC8C8)', fontSize: 14, marginBottom: 12 }}>
           <AlertCircle size={13} /> {error}
         </div>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {value.length === 0 && (
-          <div style={{ padding: 16, background: 'var(--c-surfaceAlt)', borderRadius: 8, border: `1px dashed ${C.border}`, textAlign: 'center', fontSize: 12.5, color: C.textSecondary }}>
+          <div style={{ padding: 16, background: 'var(--c-surfaceAlt)', borderRadius: 8, border: `1px dashed ${C.border}`, textAlign: 'center', fontSize: 14, color: C.textSecondary }}>
             No media yet. Add a group to let the agent send files (e.g. a price list, a brochure) at the right moment.
           </div>
         )}
@@ -135,7 +135,7 @@ export default function AgentMediaGroups({ waAccountId, value = [], onChange }) 
           return (
             <div key={gi} style={{ padding: 14, borderRadius: 10, border: `1px solid ${C.border}`, background: C.cardBg }} onPaste={handlePaste(gi)}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '.04em' }}>
                   Media group {gi + 1}
                 </div>
                 <button type="button" onClick={() => removeGroup(gi)} title="Remove group"
@@ -158,7 +158,7 @@ export default function AgentMediaGroups({ waAccountId, value = [], onChange }) 
                   {selected.map(id => {
                     const m = byId(id);
                     return (
-                      <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 9px', borderRadius: 99, background: 'var(--c-surfaceAlt)', border: `1px solid ${C.border}`, fontSize: 12, color: C.text, maxWidth: 240 }}>
+                      <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 9px', borderRadius: 99, background: 'var(--c-surfaceAlt)', border: `1px solid ${C.border}`, fontSize: 14, color: C.text, maxWidth: 240 }}>
                         <MediaTypeIcon type={m?.mediaType} />
                         <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {m ? (m.name || m.originalName || m.filename) : `media #${id} (not in this number’s library)`}
@@ -177,7 +177,7 @@ export default function AgentMediaGroups({ waAccountId, value = [], onChange }) 
               {(group.links || []).length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
                   {(group.links || []).map((url, li) => (
-                    <span key={li} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 9px', borderRadius: 99, background: 'var(--c-surfaceAlt)', border: `1px solid ${C.border}`, fontSize: 12, color: C.text, maxWidth: 280 }}>
+                    <span key={li} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 8px 5px 9px', borderRadius: 99, background: 'var(--c-surfaceAlt)', border: `1px solid ${C.border}`, fontSize: 14, color: C.text, maxWidth: 280 }}>
                       <Link2 size={13} color={C.textMuted} style={{ flexShrink: 0 }} />
                       <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{url}</span>
                       <button type="button" onClick={() => removeLink(gi, url)} title="Remove"
@@ -200,7 +200,7 @@ export default function AgentMediaGroups({ waAccountId, value = [], onChange }) 
                     searchPlaceholder="Search media…"
                   />
                 </div>
-                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 14px', borderRadius: 8, border: `1px dashed ${C.border}`, background: C.cardBg, color: C.text, fontSize: 12.5, fontWeight: 600, cursor: uploading === gi ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 14px', borderRadius: 8, border: `1px dashed ${C.border}`, background: C.cardBg, color: C.text, fontSize: 14, fontWeight: 600, cursor: uploading === gi ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}>
                   {uploading === gi ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Upload size={13} />}
                   Upload
                   <input
@@ -222,17 +222,17 @@ export default function AgentMediaGroups({ waAccountId, value = [], onChange }) 
                   style={{ ...inputStyle, flex: 1 }}
                 />
                 <button type="button" onClick={() => addLink(gi, linkDraft[gi])} disabled={!String(linkDraft[gi] || '').trim()}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 14px', borderRadius: 8, border: `1px dashed ${C.border}`, background: C.cardBg, color: C.text, fontSize: 12.5, fontWeight: 600, cursor: String(linkDraft[gi] || '').trim() ? 'pointer' : 'not-allowed', opacity: String(linkDraft[gi] || '').trim() ? 1 : 0.55, whiteSpace: 'nowrap' }}>
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 14px', borderRadius: 8, border: `1px dashed ${C.border}`, background: C.cardBg, color: C.text, fontSize: 14, fontWeight: 600, cursor: String(linkDraft[gi] || '').trim() ? 'pointer' : 'not-allowed', opacity: String(linkDraft[gi] || '').trim() ? 1 : 0.55, whiteSpace: 'nowrap' }}>
                   <Link2 size={13} /> Add link
                 </button>
               </div>
-              <div style={{ fontSize: 10.5, color: C.textMuted, marginTop: 6 }}>
+              <div style={{ fontSize: 12, color: C.textMuted, marginTop: 6 }}>
                 Tip: paste (Ctrl+V) a copied image here to upload it. Links are sent as a message with a preview.
               </div>
 
               {/* Send an approved WhatsApp template as part of this group */}
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
                   Template to send (optional)
                 </div>
                 <SearchableSelect
@@ -245,7 +245,7 @@ export default function AgentMediaGroups({ waAccountId, value = [], onChange }) 
                   placeholder={templates.length ? 'Pick an approved template…' : 'No approved templates on this number'}
                   searchPlaceholder="Search templates…"
                 />
-                <div style={{ fontSize: 10.5, color: C.textMuted, marginTop: 6 }}>
+                <div style={{ fontSize: 12, color: C.textMuted, marginTop: 6 }}>
                   Sent along with this group's files/links. Use a static template (no <code>{'{{1}}'}</code> variables) — it's sent without parameters.
                 </div>
               </div>
@@ -261,7 +261,7 @@ export default function AgentMediaGroups({ waAccountId, value = [], onChange }) 
           marginTop: 14, display: 'flex', alignItems: 'center', gap: 8,
           padding: '9px 14px', borderRadius: 8,
           border: `1px dashed ${C.border}`, background: C.cardBg,
-          color: C.text, fontSize: 13, fontFamily: FONT, fontWeight: 600, cursor: 'pointer',
+          color: C.text, fontSize: 15, fontFamily: FONT, fontWeight: 600, cursor: 'pointer',
         }}>
         <Plus size={14} /> Add media group
       </button>
@@ -280,7 +280,7 @@ function MediaTypeIcon({ type }) {
 
 const inputStyle = {
   width: '100%', padding: '9px 12px', borderRadius: 8,
-  border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT,
+  border: `1px solid ${C.border}`, fontSize: 15, fontFamily: FONT,
   color: C.text, background: C.cardBg, outline: 'none', boxSizing: 'border-box',
 };
 

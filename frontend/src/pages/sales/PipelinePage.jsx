@@ -10,13 +10,13 @@ import { useFunnelConfig } from '../../hooks/useFunnelConfig.js';
 import { useFieldRegistry, formatFieldValue } from '../../hooks/useFieldRegistry.js';
 import {
   PageShell, Button, StageBadge, STAGE_META, STAGE_ORDER,
-  Field, inputStyle, Modal, Segmented, daysSince,
+  Field, inputStyle, Modal, Segmented, LeadsViewToggle, daysSince,
 } from '../academy/shared.jsx';
 import { Shimmer } from '../../components/charts.jsx';
 
 const FUNNEL = ['new', 'contacted', 'engaged', 'hot', 'enrolled'];
 
-export default function PipelinePage({ user, navigate, tabs, onOpenLeads }) {
+export default function PipelinePage({ user, navigate, tabs, view = 'board', onChangeView }) {
   const { sources } = useFunnelConfig();
   const [board, setBoard] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -69,10 +69,11 @@ export default function PipelinePage({ user, navigate, tabs, onOpenLeads }) {
 
   return (
     <PageShell
-      title="Pipeline"
+      title="Leads"
       subtitle="Every active lead by stage. Drag a card to move it — Cold / Lost branches off any stage."
       actions={
         <>
+          <LeadsViewToggle view={view} onChange={onChangeView} />
           <div style={{ width: 150 }}>
             <SearchableSelect value={filterBda} onChange={setFilterBda} options={bdaOptions} placeholder="All BDAs" triggerStyle={{ padding: '8px 30px 8px 11px' }} />
           </div>
@@ -118,7 +119,7 @@ export default function PipelinePage({ user, navigate, tabs, onOpenLeads }) {
         </div>
       )}
 
-      {detail && <LeadDrawer lead={detail} onClose={() => setDetail(null)} navigate={navigate} onOpenLeads={onOpenLeads} onChanged={() => load(true)} isAdmin={user?.role === 'admin'} />}
+      {detail && <LeadDrawer lead={detail} onClose={() => setDetail(null)} navigate={navigate} onOpenLeads={() => onChangeView && onChangeView('list')} onChanged={() => load(true)} isAdmin={user?.role === 'admin'} />}
       {showAdd && <AddLeadModal onClose={() => setShowAdd(false)} onCreated={() => { setShowAdd(false); load(true); }} />}
       {confirmEl}
     </PageShell>
@@ -132,11 +133,11 @@ function Column({ stage, meta, items, convPct, coldAfter, onDrop, drag, setDrag,
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, padding: '0 2px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <span style={{ width: 9, height: 9, borderRadius: 99, background: meta.color }} />
-          <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: C.text }}>{meta.label}</span>
-          <span style={{ fontFamily: MONO, fontSize: 12, color: C.textMuted }}>{items.length}</span>
+          <span style={{ fontFamily: FONT, fontSize: 15, fontWeight: 700, color: C.text }}>{meta.label}</span>
+          <span style={{ fontFamily: MONO, fontSize: 14, color: C.textMuted }}>{items.length}</span>
         </div>
         {convPct != null && (
-          <span title="Conversion from previous stage" style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, color: meta.color, background: meta.bg, padding: '2px 7px', borderRadius: 99 }}>
+          <span title="Conversion from previous stage" style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: meta.color, background: meta.bg, padding: '2px 7px', borderRadius: 99 }}>
             {convPct}%
           </span>
         )}
@@ -152,7 +153,7 @@ function Column({ stage, meta, items, convPct, coldAfter, onDrop, drag, setDrag,
           boxShadow: over ? `inset 0 0 0 2px ${meta.color}` : 'none', transition: 'background .12s',
         }}
       >
-        {items.length === 0 && <div style={{ textAlign: 'center', color: C.textMuted, fontSize: 12, fontFamily: FONT, padding: '24px 0' }}>No leads</div>}
+        {items.length === 0 && <div style={{ textAlign: 'center', color: C.textMuted, fontSize: 14, fontFamily: FONT, padding: '24px 0' }}>No leads</div>}
         {items.map(l => (
           <LeadCard key={l.id} lead={l} coldAfter={coldAfter}
             onDragStart={() => setDrag(l)} onDragEnd={() => setDrag(null)} onClick={() => onCard(l)} />
@@ -168,20 +169,20 @@ function LeadCard({ lead, coldAfter, onDragStart, onDragEnd, onClick }) {
   return (
     <div draggable onDragStart={onDragStart} onDragEnd={onDragEnd} onClick={onClick}
       style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 10, padding: 11, cursor: 'grab', boxShadow: C.shadowSm }}>
-      <div style={{ fontFamily: FONT, fontSize: 13.5, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <div style={{ fontFamily: FONT, fontSize: 15, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {lead.name || lead.whatsappNumber}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 7, flexWrap: 'wrap' }}>
-        {lead.source && <span style={{ fontSize: 10.5, fontWeight: 600, color: C.textSecondary, background: C.hover, padding: '2px 7px', borderRadius: 99 }}>{lead.source}</span>}
-        {days != null && <span style={{ fontSize: 10.5, color: C.textMuted, fontFamily: MONO }}>{days}d in stage</span>}
+        {lead.source && <span style={{ fontSize: 12, fontWeight: 600, color: C.textSecondary, background: C.hover, padding: '2px 7px', borderRadius: 99 }}>{lead.source}</span>}
+        {days != null && <span style={{ fontSize: 12, color: C.textMuted, fontFamily: MONO }}>{days}d in stage</span>}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: C.textSecondary }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13, color: C.textSecondary }}>
           <Avatar name={lead.assignedUserName || lead.assignedBda} />
           {lead.assignedUserName || lead.assignedBda || 'Unassigned'}
         </span>
         <span title={`${lead.followUpCount} consecutive follow-ups`}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontFamily: MONO, fontWeight: 600, color: flagged ? C.primary : C.textMuted }}>
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 13, fontFamily: MONO, fontWeight: 600, color: flagged ? C.primary : C.textMuted }}>
           <Flame size={12} />{lead.followUpCount}
         </span>
       </div>
@@ -192,7 +193,7 @@ function LeadCard({ lead, coldAfter, onDragStart, onDragEnd, onClick }) {
 function Avatar({ name }) {
   const initials = (name || '?').split(' ').map(s => s[0]).slice(0, 2).join('').toUpperCase();
   return (
-    <span style={{ width: 18, height: 18, borderRadius: 99, background: 'linear-gradient(135deg,#534AB7,#7B72E0)', color: '#fff', fontSize: 9, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>
+    <span style={{ width: 18, height: 18, borderRadius: 99, background: 'linear-gradient(135deg,#534AB7,#7B72E0)', color: '#fff', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>
       {initials}
     </span>
   );
@@ -203,7 +204,7 @@ function LeadDrawer({ lead, onClose, navigate, onOpenLeads, onChanged, isAdmin }
   const [timeline, setTimeline] = useState(null);
   useEffect(() => { api.leads.timeline(lead.id).then(setTimeline).catch(() => setTimeline({ events: [], activity: [] })); }, [lead.id]);
   const row = (k, v) => (
-    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: `1px solid ${C.border}`, fontSize: 13 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: `1px solid ${C.border}`, fontSize: 15 }}>
       <span style={{ color: C.textMuted }}>{k}</span>
       <span style={{ color: C.text, fontWeight: 500, textAlign: 'right' }}>{v || '—'}</span>
     </div>
@@ -213,7 +214,7 @@ function LeadDrawer({ lead, onClose, navigate, onOpenLeads, onChanged, isAdmin }
       <div onClick={e => e.stopPropagation()} style={{ width: 420, maxWidth: '100%', background: C.cardBg, height: '100%', overflowY: 'auto', boxShadow: C.shadowLg }}>
         <div style={{ padding: '18px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div style={{ fontSize: 17, fontWeight: 700, color: C.text }}>{lead.name || lead.whatsappNumber}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>{lead.name || lead.whatsappNumber}</div>
             <div style={{ marginTop: 5 }}><StageBadge stage={lead.stage} /></div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textMuted }}><X size={20} /></button>
@@ -231,22 +232,22 @@ function LeadDrawer({ lead, onClose, navigate, onOpenLeads, onChanged, isAdmin }
             <Fragment key={f.fieldKey}>{row(f.label, formatFieldValue(lead.customFields?.[f.fieldKey]))}</Fragment>
           ))}
           <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
-            <Button variant="secondary" onClick={() => (onOpenLeads ? onOpenLeads() : navigate && navigate('leads', 'list'))}>Open in Leads</Button>
+            <Button variant="secondary" onClick={() => (onOpenLeads ? onOpenLeads() : navigate && navigate('leads', 'list'))}>Open in the table</Button>
             {lead.hasWhatsappThread && <Button variant="secondary" onClick={() => navigate && navigate('chats')}>Open chat</Button>}
           </div>
-          <div style={{ marginTop: 22, fontSize: 12, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.textMuted, marginBottom: 8 }}>Activity timeline</div>
+          <div style={{ marginTop: 22, fontSize: 14, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.textMuted, marginBottom: 8 }}>Activity timeline</div>
           {!timeline ? <Shimmer height={80} /> : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {[...(timeline.events || [])].slice(0, 20).map((e, i) => (
-                <div key={i} style={{ display: 'flex', gap: 9, fontSize: 12.5 }}>
+                <div key={i} style={{ display: 'flex', gap: 9, fontSize: 14 }}>
                   <span style={{ width: 7, height: 7, borderRadius: 99, background: C.primary, marginTop: 5, flexShrink: 0 }} />
                   <div>
                     <span style={{ color: C.text }}>{labelEvent(e)}</span>
-                    <span style={{ color: C.textMuted, marginLeft: 6, fontFamily: MONO, fontSize: 11 }}>{new Date(e.ts).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                    <span style={{ color: C.textMuted, marginLeft: 6, fontFamily: MONO, fontSize: 13 }}>{new Date(e.ts).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
                   </div>
                 </div>
               ))}
-              {(!timeline.events || !timeline.events.length) && <div style={{ color: C.textMuted, fontSize: 12.5 }}>No events yet.</div>}
+              {(!timeline.events || !timeline.events.length) && <div style={{ color: C.textMuted, fontSize: 14 }}>No events yet.</div>}
             </div>
           )}
         </div>

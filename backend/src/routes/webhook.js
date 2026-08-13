@@ -8,30 +8,20 @@ const { markPending, MEDIA_TYPES } = require('../services/mediaDownloader');
 const { enqueueMediaDownload } = require('../queue/mediaQueue');
 const bus = require('../events');
 const { ensureLeadForContact, deriveLeadSource } = require('./leads');
+const messageFormats = require('../services/messageFormats');
 const { recordCtwaReferral, linkReferralsToLead } = require('./ctwa');
 const { matchByHash } = require('../util/wamid');
 const { forgeCommandNotify } = require('../forgeCommandNotify');
-const { parseMetaPayload } = require('../services/metaPayload');
 
-// ── External agent bridge (optional) ─────────────────────────────────────────
-// Traffic on ONE phone number id can be forwarded to an external agent webhook
-// instead of running through the normal inbox pipeline. Inbound is still stored
-// for visibility; the agent's reply is sent back out through the CRM's own
-// sender, so it is logged as an outgoing message and appears in the chat.
-//
-// Every other number keeps using the built-in automations/agents untouched.
-// Unset by default — configure FORGETASK_* to enable.
-const FORGETASK_PNID = process.env.FORGETASK_PHONE_NUMBER_ID || '';
-const FORGETASK_FROM_NUMBER = process.env.FORGETASK_FROM_NUMBER || '';
-
-// ⚠ Always test membership through this helper, never `pnid === FORGETASK_PNID`.
-// With the bridge unconfigured, FORGETASK_PNID is '' — and a record that
-// carries no phone_number_id also reads as '', so a bare equality check matches
-// and silently DROPS that record from the inbox. Requiring a configured id
-// first makes "no bridge" mean "excludes nothing".
-function isBridgedNumber(phoneNumberId) {
-  return !!FORGETASK_PNID && String(phoneNumberId || '') === FORGETASK_PNID;
-}
+// ── ForgeTask WhatsApp bridge ────────────────────────────────────────────────
+// FORGECHAT is the WhatsApp hub for the shared ForgeTask number: it receives
+// inbound from Meta (stored above for visibility), forwards each message to
+// ForgeTask's agent, and sends ForgeTask's reply back out on the number (logged
+// as an outgoing message). This replaces the retired n8n ForgeTask workflow.
+// ONLY messages on the ForgeTask phone_number_id are bridged; every other number
+// keeps using CRM automations/agents untouched.
+const FORGETASK_PNID = process.env.FORGETASK_PHONE_NUMBER_ID || '565738016632106';
+const FORGETASK_FROM_NUMBER = process.env.FORGETASK_FROM_NUMBER || '916380781053';
 const FORGETASK_AGENT_WEBHOOK_URL = process.env.FORGETASK_AGENT_WEBHOOK_URL || null;
 const FORGETASK_AGENT_API_KEY = process.env.FORGETASK_AGENT_API_KEY || null;
 
@@ -95,7 +85,7 @@ function bridgeForgeTaskMessages(payloads) {
     for (const entry of p?.entry || []) {
       for (const change of entry?.changes || []) {
         const value = change?.value || {};
-        if (!isBridgedNumber(value.metadata?.phone_number_id)) continue;
+        if ((value.metadata?.phone_number_id || '') !== FORGETASK_PNID) continue;
         const nameByWaId = {};
         for (const c of value.contacts || []) if (c.wa_id) nameByWaId[c.wa_id] = c.profile?.name || null;
         for (const msg of value.messages || []) {
@@ -226,6 +216,226 @@ async function logWebhookProcessed(id, { status, recordsExtracted, error, proces
   }
 }
 
+/**
+ * Parse a Meta WhatsApp Cloud API webhook payload and extract message records.
+ * Handles: text, image, video, audio, document, location, sticker, contacts,
+ *          interactive (button_reply / list_reply), reaction, and status updates.
+ */
+// Normalize WhatsApp phone numbers to digits-only — strips '+', spaces, dashes.
+// Meta sometimes includes leading '+' in display_phone_number, sometimes not;
+// without this, the same conversation lands under two different wa_numbers and
+// shows as duplicate chat threads.
+function normalizePhone(s) {
+  if (!s) return s;
+  return String(s).replace(/\D/g, '');
+}
+
+function parseMetaPayload(body) {
+  const records = [];
+
+  if (!body || body.object !== 'whatsapp_business_account') {
+    return records;
+  }
+
+  const entries = body.entry || [];
+  for (const entry of entries) {
+    // entry.id is the WhatsApp Business Account (WABA) id this payload belongs
+    // to. We stamp it on every record so the POST handler can drop messages
+    // from WABAs that aren't registered in coexistence.whatsapp_accounts
+    // (Meta may deliver other tenants' webhooks here if our app is subscribed
+    // to their WABA — see the unregistered-WABA filter below).
+    const wabaId = entry.id || null;
+    const changes = entry.changes || [];
+    for (const change of changes) {
+      const value = change.value || {};
+      if (value.messaging_product !== 'whatsapp') continue;
+
+      const metadata = value.metadata || {};
+      const phoneNumberId = metadata.phone_number_id || '';
+      const displayPhoneNumber = metadata.display_phone_number || '';
+
+      // Contact profile info (name mapping)
+      const contactProfiles = {};
+      (value.contacts || []).forEach(c => {
+        const waId = c.wa_id || '';
+        const name = c.profile?.name || '';
+        if (waId && name) contactProfiles[waId] = name;
+      });
+
+      // Parse a single message (shared logic for incoming and outgoing)
+      function parseMessage(msg, direction, waNum, contactNum) {
+        const record = {
+          message_id: msg.id || '',
+          phone_number_id: phoneNumberId,
+          waba_id: wabaId,
+          wa_number: normalizePhone(waNum || displayPhoneNumber),
+          contact_number: normalizePhone(contactNum || ''),
+          to_number: normalizePhone(msg.to || ''),
+          direction,
+          message_type: msg.type || 'unknown',
+          message_body: null,
+          raw_payload: JSON.stringify(body),
+          media_url: null,
+          media_mime_type: null,
+          status: direction === 'incoming' ? 'received' : 'sent',
+          timestamp: msg.timestamp
+            ? new Date(parseInt(msg.timestamp, 10) * 1000).toISOString()
+            : new Date().toISOString(),
+          contact_name: contactProfiles[contactNum] || null,
+          // Quote-reply: when the customer replies to a specific message, Meta
+          // sends the quoted message's wamid here. Stored so we can render the
+          // quoted bubble above their reply.
+          context_message_id: msg.context?.id || null,
+          // CTWA attribution: present on the first message when the customer
+          // arrived via a click-to-WhatsApp ad / post CTA. Used to set the lead's
+          // Funnel Source (Instagram Ad / Facebook Ad / organic / …).
+          referral: msg.referral || null,
+        };
+
+        const type = msg.type;
+        if (type === 'text' && msg.text) {
+          record.message_body = msg.text.body || '';
+        } else if (type === 'image' && msg.image) {
+          record.message_body = msg.image.caption || '';
+          record.media_mime_type = msg.image.mime_type || null;
+          record.media_url = msg.image.id || null;
+        } else if (type === 'video' && msg.video) {
+          record.message_body = msg.video.caption || '';
+          record.media_mime_type = msg.video.mime_type || null;
+          record.media_url = msg.video.id || null;
+        } else if (type === 'audio' && msg.audio) {
+          record.message_body = 'Audio message';
+          record.media_mime_type = msg.audio.mime_type || null;
+          record.media_url = msg.audio.id || null;
+        } else if (type === 'voice' && msg.voice) {
+          record.message_body = 'Voice message';
+          record.media_mime_type = msg.voice.mime_type || null;
+          record.media_url = msg.voice.id || null;
+        } else if (type === 'document' && msg.document) {
+          record.message_body = msg.document.filename || '';
+          record.media_mime_type = msg.document.mime_type || null;
+          record.media_url = msg.document.id || null;
+          record.media_filename = msg.document.filename || null;
+        } else if (type === 'location' && msg.location) {
+          const lat = msg.location.latitude || '';
+          const lng = msg.location.longitude || '';
+          record.message_body = `Location: ${lat}, ${lng}`;
+        } else if (type === 'sticker' && msg.sticker) {
+          record.message_body = 'Sticker';
+          record.media_mime_type = msg.sticker.mime_type || null;
+          record.media_url = msg.sticker.id || null;
+        } else if (type === 'contacts' && msg.contacts) {
+          const names = msg.contacts.map(c => c.name?.formatted_name || c.name?.first_name || 'Contact').join(', ');
+          record.message_body = `Shared contact(s): ${names}`;
+        } else if (type === 'interactive' && msg.interactive) {
+          // The two interactive shapes were previously MERGED into one label,
+          // after which a button tap was indistinguishable from a list choice.
+          // `message_body` stays the display label (right for the chat bubble);
+          // `reply_kind`/`reply_id` are the ROUTING key. Two different needs
+          // that were being served by one column.
+          //
+          // Extracted HERE and not from `raw_payload` at resume time: that
+          // column holds the WHOLE webhook batch, so any later extraction has
+          // to re-find this message by `m.id === record.message_id` — the join
+          // already documented as load-bearing for the CTWA backfill.
+          const br = msg.interactive.button_reply;
+          const lr = msg.interactive.list_reply;
+          const reply = br || lr || {};
+          record.message_body = reply.title || 'Interactive response';
+          record.message_type = 'interactive';
+          record.reply_kind = br ? 'button' : lr ? 'list' : null;
+          record.reply_id = reply.id || null;
+          record.reply_label = reply.title || null;
+        } else if (type === 'button' && msg.button) {
+          // A TEMPLATE quick-reply tap (distinct from `interactive`, which is a
+          // button on a non-template interactive message). Meta sends
+          // { button: { text, payload } }. Without this branch the row landed
+          // with a NULL body — the bubble rendered empty AND no keyword trigger
+          // could ever match the tap, so "tap the button to get the link" style
+          // automations silently never fired.
+          //
+          // ⚠ This is the shape that matters here: EVERY button-bearing node in
+          // production is a template, so a router that only understands
+          // `interactive.button_reply.id` fixes nothing that is live. Unless we
+          // injected a payload at send time, `payload` is Meta's echo of the
+          // visible LABEL — hence the label fallback in resolveReplyHandle.
+          record.message_body = msg.button.text || msg.button.payload || 'Button tap';
+          record.message_type = 'button';
+          record.reply_kind = 'template_button';
+          record.reply_id = msg.button.payload || null;
+          record.reply_label = msg.button.text || null;
+        } else if (type === 'reaction' && msg.reaction) {
+          record.message_body = `Reaction: ${msg.reaction.emoji || ''}`;
+          record.message_type = 'reaction';
+          // Capture the target message + emoji so the insert loop can attach it
+          // to that message instead of creating a standalone bubble. Empty emoji
+          // = the customer removed their reaction.
+          record.reaction = {
+            targetMessageId: msg.reaction.message_id || null,
+            emoji: msg.reaction.emoji || '',
+            from: msg.from || null,
+          };
+        } else if (type === 'order' && msg.order) {
+          // Meta still delivers this shape if a catalog is enabled on the number
+          // at Meta's end, so the branch stays — the message must land in the
+          // chat rather than vanishing. The cart itself is not modelled here;
+          // the full payload remains available in raw_payload.
+          record.message_body = 'Order received';
+        } else if (type === 'system' && msg.system) {
+          record.message_body = msg.system.body || 'System message';
+        } else if (type === 'unknown' && msg.errors) {
+          record.message_body = `Error: ${msg.errors[0]?.message || 'Unknown error'}`;
+          record.status = 'error';
+        }
+
+        return record;
+      }
+
+      // Incoming messages
+      const messages = value.messages || [];
+      for (const msg of messages) {
+        records.push(parseMessage(msg, 'incoming', displayPhoneNumber, msg.from));
+      }
+
+      // Outgoing message echoes (messages sent from the WhatsApp Business app)
+      const messageEchoes = value.message_echoes || [];
+      for (const msg of messageEchoes) {
+        // For echoes: from = business number, to = customer
+        records.push(parseMessage(msg, 'outgoing', displayPhoneNumber, msg.to));
+      }
+
+      // Status updates (delivered, read, sent)
+      const statuses = value.statuses || [];
+      for (const status of statuses) {
+        records.push({
+          message_id: status.id || '',
+          phone_number_id: phoneNumberId,
+          waba_id: wabaId,
+          wa_number: normalizePhone(displayPhoneNumber),
+          contact_number: normalizePhone(status.recipient_id || ''),
+          to_number: normalizePhone(status.recipient_id || ''),
+          direction: 'outgoing',
+          message_type: 'status',
+          message_body: `Status: ${status.status || ''}`,
+          raw_payload: JSON.stringify(body),
+          media_url: null,
+          media_mime_type: null,
+          status: status.status || 'unknown',
+          timestamp: status.timestamp
+            ? new Date(parseInt(status.timestamp, 10) * 1000).toISOString()
+            : new Date().toISOString(),
+          contact_name: contactProfiles[status.recipient_id] || null,
+          // Include full status payload for trigger evaluation
+          conversation: status.conversation || null,
+          pricing: status.pricing || null,
+          errors: status.errors || null,
+        });
+      }
+    }
+  }
+
+  return records;
+}
 
 /**
  * POST /api/webhook/whatsapp
@@ -433,6 +643,35 @@ router.post('/webhook/whatsapp', async (req, res) => {
     // Push delivery/read tick updates to any open chat (real-time, post-commit).
     for (const u of statusUpdates) bus.emit('message-status', u);
 
+    // Message costs: persist the `pricing` object Meta attaches to every status
+    // receipt. It was previously parsed and discarded — status records never
+    // become chat rows, so it survived only inside the webhook_events blob and
+    // nothing in the app could answer "what did that template cost?".
+    //
+    // Non-blocking: cost accounting must never delay the Meta ack or be able to
+    // fail message ingestion.
+    {
+      const priced = allRecords.filter(r => r.message_type === 'status' && r.pricing && r.message_id);
+      if (priced.length > 0) {
+        (async () => {
+          const costs = require('../services/messageCosts');
+          for (const r of priced) {
+            await costs.recordPricing({
+              messageId: r.message_id,
+              wabaId: r.waba_id,
+              phoneNumberId: r.phone_number_id,
+              waNumber: r.wa_number,
+              recipientNumber: r.contact_number,
+              pricing: r.pricing,
+              status: r.status,
+              timestamp: r.timestamp,
+            }).catch(() => {});
+          }
+          await costs.attributeMessages({ limit: 500 }).catch(() => {});
+        })().catch(e => console.error('[webhook] pricing capture error:', e.message));
+      }
+    }
+
     // ForgeTask hub: forward inbound on the ForgeTask number to its agent and
     // send the reply back out (fire-and-forget so Meta still gets a fast ack).
     bridgeForgeTaskMessages(payloads);
@@ -453,7 +692,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
       const seenLeadNums = new Set();
       for (const rec of incomingRecords) {
         if (!rec.contact_number || seenLeadNums.has(rec.contact_number)) continue;
-        if (isBridgedNumber(rec.phone_number_id)) continue;
+        if ((rec.phone_number_id || '') === FORGETASK_PNID) continue;
         seenLeadNums.add(rec.contact_number);
         // Click-to-WhatsApp attribution runs in the SAME chain as the lead
         // upsert, not as an independent promise. Ordering matters: the referral
@@ -467,13 +706,37 @@ router.post('/webhook/whatsapp', async (req, res) => {
         const refRecords = incomingRecords.filter(
           r => r.referral && r.contact_number === rec.contact_number
         );
+        // Message-format attribution (migration 093). Scans EVERY message this
+        // contact sent in the batch, not just the first: the pre-filled opener
+        // can arrive behind a sticker or a bare "hi". Reads an in-process cache,
+        // so it costs no query and cannot slow ingestion.
+        let fmtHit = null, fmtRecord = null;
+        for (const r of incomingRecords) {
+          if (r.contact_number !== rec.contact_number) continue;
+          const m = messageFormats.matchInbound({ body: r.message_body, waNumber: r.wa_number });
+          if (m) { fmtHit = m; fmtRecord = r; break; }
+        }
         (async () => {
           for (const r of refRecords) await recordCtwaReferral(r);
+          // A matched format is a MORE specific answer than Meta's referral
+          // ("IG Reel 12" vs just "Instagram") and it is one we deliberately
+          // placed, so it wins when both are present. ensureLeadForContact
+          // applies `source` on INSERT only — an existing lead never has its
+          // source rewritten by a later click.
           const lead = await ensureLeadForContact({
             contactNumber: rec.contact_number, name: rec.contact_name,
-            source: deriveLeadSource(rec.referral),
+            source: fmtHit ? fmtHit.label : deriveLeadSource(rec.referral),
           });
           if (lead?.id) await linkReferralsToLead(rec.contact_number, lead.id);
+          if (fmtHit) {
+            await messageFormats.recordHit({
+              formatId: fmtHit.formatId, targetId: fmtHit.targetId,
+              waNumber: fmtRecord.wa_number, contactNumber: fmtRecord.contact_number,
+              messageId: fmtRecord.message_id,
+              leadId: lead?.id || null, isNewLead: !!lead?.inserted,
+              matchKind: fmtHit.matchKind,
+            });
+          }
         })().catch(e => console.error('[webhook] lead/CTWA attribution error:', e.message));
       }
     }
@@ -483,11 +746,18 @@ router.post('/webhook/whatsapp', async (req, res) => {
         try {
           // ForgeTask-number messages are handled by the ForgeTask bridge above —
           // skip CRM automations/agent so the message isn't answered twice.
-          if (isBridgedNumber(record.phone_number_id)) continue;
+          if ((record.phone_number_id || '') === FORGETASK_PNID) continue;
+          // ⚠ awaiting_kind='reply' ONLY — keep this filter even though the
+          // Payment node (the only other pause kind) was removed 2026-08-12.
+          // It is what stops a pause that is NOT waiting for words from being
+          // consumed by a customer typing "ok", which (because the `continue`
+          // below skips fresh trigger evaluation) would also leave them with
+          // no reply at all. Any future non-reply pause inherits the guard.
           const { rows: pausedRows } = await pool.query(
             `SELECT id FROM coexistence.automation_executions
               WHERE wa_number=$1 AND contact_number=$2
                 AND status='paused' AND expires_at>NOW()
+                AND awaiting_kind = 'reply'
               ORDER BY paused_at`,
             [record.wa_number, record.contact_number]
           );
@@ -529,7 +799,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
       r.direction === 'outgoing' && r.message_type !== 'status' && r.message_type !== 'reaction');
     for (const record of outboundEchoRecords) {
       try {
-        if (isBridgedNumber(record.phone_number_id)) continue;
+        if ((record.phone_number_id || '') === FORGETASK_PNID) continue;
         await evaluateOutboundTriggers(record);
       } catch (triggerErr) {
         console.error('[webhook] Outbound echo trigger error:', triggerErr.message);

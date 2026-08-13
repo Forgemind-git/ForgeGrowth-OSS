@@ -62,14 +62,14 @@ export default function ChatsPage({ subParts = [], navigate, user }) {
         }}>
           <button
             onClick={() => setNavCollapsed(false)}
-            title="Show team members"
+            title="Show WhatsApp numbers"
             style={{
               width: 34, height: 34, borderRadius: 8, border: 'none',
               background: 'var(--c-chatPanel)', cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.text,
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#e4e7e9'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#f0f2f5'; }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--c-hover)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'var(--c-chatPanel)'; }}
           >
             <ChevronRight size={18} />
           </button>
@@ -121,7 +121,7 @@ export default function ChatsPage({ subParts = [], navigate, user }) {
           alignItems: 'center',
           justifyContent: 'center',
           color: C.textMuted,
-          fontSize: 14,
+          fontSize: 15,
           background: 'var(--c-chatPanel)',
         }}>
           <div style={{ textAlign: 'center' }}>

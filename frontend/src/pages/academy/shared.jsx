@@ -3,16 +3,17 @@
 import { useState } from 'react';
 import { Inbox, X } from 'lucide-react';
 import { C, FONT, MONO } from '../../constants.js';
-import { funnelStageMeta } from '../../hooks/useFunnelConfig.js';
+import { funnelStageMeta, stageTextColor } from '../../hooks/useFunnelConfig.js';
+import { useTheme } from '../../theme.jsx';
 
 // Stage colors line up with the funnel (cool → warm → won; cold branches red-grey).
 export const STAGE_META = {
-  new:       { label: 'New',       color: '#2563eb', bg: '#E7F0FE' },
-  contacted: { label: 'Contacted', color: '#7c3aed', bg: '#EEEDFE' },
-  engaged:   { label: 'Engaged',   color: '#0891b2', bg: '#E0F7FA' },
-  hot:       { label: 'Hot',       color: '#E8A317', bg: '#FAEEDA' },
-  enrolled:  { label: 'Enrolled',  color: '#0F6E56', bg: '#E1F5EE' },
-  cold_lost: { label: 'Cold / Lost', color: '#6B7280', bg: '#F1F1EE' },
+  new:       { label: 'New',       color: 'var(--c-infoBright, #2563eb)', bg: 'var(--c-infoBg, #E7F0FE)' },
+  contacted: { label: 'Contacted', color: 'var(--c-s7c3aed, #7c3aed)', bg: 'var(--c-purpleBg, #EEEDFE)' },
+  engaged:   { label: 'Engaged',   color: 'var(--c-s0891b2, #0891b2)', bg: 'var(--c-se0f7fa, #E0F7FA)' },
+  hot:       { label: 'Hot',       color: '#E8A317', bg: 'var(--c-warnBg, #FAEEDA)' },
+  enrolled:  { label: 'Enrolled',  color: 'var(--c-successText, #0F6E56)', bg: 'var(--c-successBg, #E1F5EE)' },
+  cold_lost: { label: 'Cold / Lost', color: 'var(--c-textSecondary, #6B7280)', bg: 'var(--c-surfaceMuted, #F1F1EE)' },
 };
 export const STAGE_ORDER = ['new', 'contacted', 'engaged', 'hot', 'enrolled', 'cold_lost'];
 
@@ -26,8 +27,8 @@ export function PageShell({ title, subtitle, actions, children }) {
     <div style={{ padding: '22px 28px 60px', fontFamily: FONT, width: '100%', minWidth: 0, flex: 1, boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 21, fontWeight: 700, color: C.text }}>{title}</h1>
-          {subtitle && <div style={{ fontSize: 13, color: C.textSecondary, marginTop: 4 }}>{subtitle}</div>}
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: C.text }}>{title}</h1>
+          {subtitle && <div style={{ fontSize: 15, color: C.textSecondary, marginTop: 4 }}>{subtitle}</div>}
         </div>
         {actions && <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>{actions}</div>}
       </div>
@@ -39,7 +40,7 @@ export function PageShell({ title, subtitle, actions, children }) {
 export function Button({ variant = 'secondary', children, icon: Icon, ...p }) {
   const base = {
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-    borderRadius: 8, fontFamily: FONT, fontWeight: 600, fontSize: 13, cursor: p.disabled ? 'not-allowed' : 'pointer',
+    borderRadius: 8, fontFamily: FONT, fontWeight: 600, fontSize: 15, cursor: p.disabled ? 'not-allowed' : 'pointer',
     padding: '9px 15px', transition: 'background .15s, opacity .15s', opacity: p.disabled ? 0.55 : 1, whiteSpace: 'nowrap',
   };
   const variants = {
@@ -61,7 +62,7 @@ export function Button({ variant = 'secondary', children, icon: Icon, ...p }) {
 
 export function Badge({ label, color, bg, style }) {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 9px', borderRadius: 99, fontFamily: FONT, fontSize: 11, fontWeight: 600, color, background: bg, whiteSpace: 'nowrap', ...style }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 9px', borderRadius: 99, fontFamily: FONT, fontSize: 13, fontWeight: 600, color, background: bg, whiteSpace: 'nowrap', ...style }}>
       {label}
     </span>
   );
@@ -71,15 +72,18 @@ export function StageBadge({ stage }) {
   // Reads the live funnel config (renames/recolors reflect here); falls back to
   // the static STAGE_META for the seeded defaults before config loads.
   const m = funnelStageMeta(stage) || STAGE_META[stage] || STAGE_META.new;
-  return <Badge label={m.label} color={m.color} bg={m.bg} />;
+  const { effective } = useTheme();
+  // The stage's own colour is the TINT; the text is that hue retargeted to a
+  // lightness that can actually be read on it. See stageTextColor.
+  return <Badge label={m.label} color={stageTextColor(m.color, effective === 'dark')} bg={m.bg} />;
 }
 
 export function EmptyState({ Icon = Inbox, title = 'Nothing here yet', hint }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '56px 20px', textAlign: 'center', fontFamily: FONT }}>
       <Icon size={38} color={C.textMuted} strokeWidth={1.5} style={{ opacity: 0.6 }} />
-      <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginTop: 12 }}>{title}</div>
-      {hint && <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>{hint}</div>}
+      <div style={{ fontSize: 16, fontWeight: 600, color: C.text, marginTop: 12 }}>{title}</div>
+      {hint && <div style={{ fontSize: 15, color: C.textMuted, marginTop: 4 }}>{hint}</div>}
     </div>
   );
 }
@@ -93,13 +97,33 @@ export function Segmented({ options, value, onChange }) {
         return (
           <button key={o.value} onClick={() => onChange(o.value)}
             style={{ padding: '6px 12px', borderRadius: 7, border: 'none', cursor: 'pointer', fontFamily: FONT,
-              fontSize: 12.5, fontWeight: on ? 700 : 500, background: on ? C.cardBg : 'transparent',
+              fontSize: 14, fontWeight: on ? 700 : 500, background: on ? C.cardBg : 'transparent',
               color: on ? C.text : C.textSecondary, boxShadow: on ? C.shadowSm : 'none', transition: 'all .15s' }}>
             {o.label}
           </button>
         );
       })}
     </div>
+  );
+}
+
+/**
+ * Table vs Board for All Leads.
+ *
+ * Rendered by BOTH LeadsPage and PipelinePage from this one definition, because
+ * they are two renderings of the same tab: if each drew its own toggle they
+ * would drift in wording or position and switching would feel like navigating
+ * between two features, which is exactly what demoting Pipeline from a tab was
+ * meant to stop.
+ */
+export function LeadsViewToggle({ view, onChange }) {
+  if (!onChange) return null;
+  return (
+    <Segmented
+      value={view}
+      onChange={onChange}
+      options={[{ value: 'list', label: 'Table' }, { value: 'board', label: 'Board' }]}
+    />
   );
 }
 
@@ -112,7 +136,7 @@ export function Table({ columns, rows, renderRow, onRowClick, empty, keyOf }) {
         <thead>
           <tr>
             {columns.map((c, i) => (
-              <th key={i} style={{ textAlign: c.align || 'left', padding: '11px 14px', fontSize: 11, fontWeight: 700,
+              <th key={i} style={{ textAlign: c.align || 'left', padding: '11px 14px', fontSize: 13, fontWeight: 700,
                 letterSpacing: '.04em', textTransform: 'uppercase', color: C.textMuted, borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' }}>
                 {c.label}
               </th>
@@ -137,7 +161,7 @@ export function Table({ columns, rows, renderRow, onRowClick, empty, keyOf }) {
 
 export function Td({ children, mono, align = 'left', color, bold, style }) {
   return (
-    <td style={{ padding: '11px 14px', fontSize: 13, color: color || C.text, borderBottom: `1px solid ${C.border}`,
+    <td style={{ padding: '11px 14px', fontSize: 15, color: color || C.text, borderBottom: `1px solid ${C.border}`,
       fontFamily: mono ? MONO : FONT, textAlign: align, fontWeight: bold ? 600 : 400, whiteSpace: 'nowrap', ...style }}>
       {children}
     </td>
@@ -167,16 +191,16 @@ export function daysSince(ts) {
 export function Field({ label, children, hint }) {
   return (
     <label style={{ display: 'block', marginBottom: 13 }}>
-      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.04em', textTransform: 'uppercase', color: C.textSecondary, marginBottom: 5 }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: '.04em', textTransform: 'uppercase', color: C.textSecondary, marginBottom: 5 }}>{label}</div>
       {children}
-      {hint && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>{hint}</div>}
+      {hint && <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>{hint}</div>}
     </label>
   );
 }
 
 export const inputStyle = {
   width: '100%', padding: '9px 11px', borderRadius: 8, border: `1.5px solid ${C.border}`,
-  fontSize: 13.5, fontFamily: FONT, color: C.text, outline: 'none', boxSizing: 'border-box', background: C.cardBg,
+  fontSize: 15, fontFamily: FONT, color: C.text, outline: 'none', boxSizing: 'border-box', background: C.cardBg,
 };
 
 // preventBackdropClose: when true, clicking the dimmed backdrop does nothing —
@@ -188,7 +212,7 @@ export function Modal({ title, onClose, children, footer, width = 480, preventBa
     <div onClick={preventBackdropClose ? undefined : onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, fontFamily: FONT, padding: 16 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: C.cardBg, borderRadius: 14, width, maxWidth: '100%', maxHeight: '90vh', overflow: 'auto', boxShadow: C.shadowLg }}>
         <div style={{ padding: '18px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <span style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{title}</span>
+          <span style={{ fontSize: 18, fontWeight: 700, color: C.text }}>{title}</span>
           {showBackButton && (
             <button title="Back" onClick={onClose} style={{ background: 'none', border: `1.5px solid ${C.border}`, borderRadius: 7, padding: '5px 7px', cursor: 'pointer', color: C.textSecondary, display: 'inline-flex' }}>
               <X size={15} />

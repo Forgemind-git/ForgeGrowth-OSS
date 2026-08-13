@@ -45,19 +45,19 @@ export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollap
         alignItems: 'center',
         justifyContent: 'space-between',
       }}>
-        <span style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: FONT, letterSpacing: '-0.01em' }}>
-          Team Members
+        <span style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: FONT, letterSpacing: '-0.01em' }}>
+          WhatsApp Numbers
         </span>
         <button
           onClick={onCollapse}
-          title="Hide team members"
+          title="Hide WhatsApp numbers"
           style={{
             width: 32, height: 32, borderRadius: 8, border: 'none',
             background: 'transparent', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: C.textMuted,
           }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#e4e7e9'; }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'var(--c-hover)'; }}
           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
         >
           <ChevronLeft size={18} />
@@ -75,10 +75,10 @@ export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollap
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search team members..."
+            placeholder="Search numbers..."
             style={{
               flex: 1, border: 'none', background: 'transparent',
-              fontSize: 14, fontFamily: FONT, outline: 'none', color: C.text,
+              fontSize: 15, fontFamily: FONT, outline: 'none', color: C.text,
             }}
           />
         </div>
@@ -87,8 +87,8 @@ export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollap
       {/* Numbers list */}
       <div style={{ flex: 1, overflowY: 'auto', background: 'var(--c-cardBg)' }}>
         {loading && !numbers && (
-          <div style={{ padding: 30, textAlign: 'center', color: C.textMuted, fontSize: 13 }}>
-            Loading team members...
+          <div style={{ padding: 30, textAlign: 'center', color: C.textMuted, fontSize: 15 }}>
+            Loading numbers...
           </div>
         )}
 
@@ -111,14 +111,15 @@ export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollap
                 border: 'none',
                 borderBottom: `1px solid ${C.border}`,
                 cursor: 'pointer',
-                background: isActive ? '#f0f2f5' : 'var(--c-cardBg)',
+                background: isActive ? 'var(--c-rowActive)' : 'var(--c-cardBg)',
                 fontFamily: FONT,
                 textAlign: 'left',
                 transition: 'background .1s',
                 position: 'relative',
               }}
-              onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#f5f6f6'; }}
-              onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = '#ffffff'; }}
+              // Restore the TOKEN on leave, never a literal — see ContactList.
+              onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--c-rowHover)'; }}
+              onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'var(--c-cardBg)'; }}
             >
               {/* Active indicator */}
               {isActive && (
@@ -131,10 +132,10 @@ export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollap
               {/* Avatar */}
               <div style={{
                 width: 44, height: 44, borderRadius: '50%',
-                background: hasPicture ? 'transparent' : (isActive ? C.primary : '#dfe5e7'),
-                color: isActive ? '#fff' : '#54656f',
+                background: hasPicture ? 'transparent' : (isActive ? C.primary : C.avatarBg),
+                color: isActive ? '#fff' : C.avatarText,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 14, fontWeight: 700, flexShrink: 0,
+                fontSize: 15, fontWeight: 700, flexShrink: 0,
                 overflow: 'hidden',
                 position: 'relative',
               }}>
@@ -143,7 +144,7 @@ export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollap
                     src={n.profile_picture_url}
                     alt=""
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    onError={e => { e.target.style.display = 'none'; e.target.parentElement.style.background = isActive ? C.primary : '#dfe5e7'; }}
+                    onError={e => { e.target.style.display = 'none'; e.target.parentElement.style.background = isActive ? C.primary : C.avatarBg; }}
                   />
                 ) : (
                   <span>{getInitials(displayName)}</span>
@@ -155,7 +156,7 @@ export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollap
               <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{
-                    fontSize: 15, fontWeight: 600, color: C.text,
+                    fontSize: 16, fontWeight: 600, color: C.text,
                     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                   }}>
                     {displayName}
@@ -169,9 +170,9 @@ export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollap
                   title={`${unread} unread chat${unread === 1 ? '' : 's'}`}
                   style={{
                     flexShrink: 0,
-                    background: '#25D366', color: '#fff',
+                    background: C.waGreen, color: '#fff',
                     borderRadius: 11, minWidth: 22, height: 22, padding: '0 7px',
-                    fontSize: 12, fontWeight: 700,
+                    fontSize: 14, fontWeight: 700,
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   }}
                 >
@@ -183,8 +184,8 @@ export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollap
         })}
 
         {filtered.length === 0 && !loading && (
-          <div style={{ padding: 40, textAlign: 'center', color: C.textMuted, fontSize: 13 }}>
-            No team members found
+          <div style={{ padding: 40, textAlign: 'center', color: C.textMuted, fontSize: 15 }}>
+            No numbers found
           </div>
         )}
       </div>

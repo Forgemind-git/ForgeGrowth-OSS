@@ -52,11 +52,12 @@ const crypto = require('crypto');
 const pool = require('../db');
 const minio = require('../util/minioClient');
 const { adminOnly } = require('../middleware/access');
-const cfg = require('../services/funnelConfig');
 const {
   RATING_SCALES, DEFAULT_RATING_SCALE, DEFAULT_FEEDBACK_LABEL,
   isDisplayOnly, ratingScale, normalizeRating, isEmptyAnswer, answerToText,
 } = require('../services/formAnswers');
+// One answers -> lead mapping, shared with the AI-agent fill path.
+const { recordSubmission } = require('../services/formSubmission');
 
 const router = Router();
 const publicRouter = Router();
@@ -208,7 +209,14 @@ function sanitizeFields(fields) {
         extras.feedbackLabel = String(f.feedbackLabel || '').trim().slice(0, 200) || DEFAULT_FEEDBACK_LABEL;
       }
     }
-    if (isDisplayOnly(type) && f.description) {
+    // ⚠ This used to be `if (isDisplayOnly(type) && f.description)`, so a
+    // description on a real QUESTION was silently dropped at save. That was a
+    // live defect, not a missing feature: agentFormTools.propertyFor() has
+    // always read `f.description` to tell the model what a field means, and
+    // could never receive one. Kept for BOTH kinds now — on a section it is the
+    // body text under the heading, on a question it is the guidance the agent
+    // reads before filling it in.
+    if (f.description) {
       extras.description = String(f.description).slice(0, 1000);
     }
 
@@ -265,61 +273,24 @@ function rowToPublicForm(r) {
   return {
     id: Number(r.id), name: r.name, slug: r.slug, description: r.description,
     formType: r.form_type || 'link',
-    // scale/feedback/feedbackLabel/description are part of what the respondent
-    // SEES, not admin metadata — a 4-star field renders five stars without the
-    // scale, and a section renders as a bare heading without its description.
+    // scale/feedback/feedbackLabel are part of what the respondent SEES, not
+    // admin metadata — a 4-star field renders five stars without the scale.
+    //
+    // ⚠ `description` is included ONLY for a section, where it is the body text
+    // under the heading. On a real question it is guidance written FOR THE
+    // AGENT ("store the city name only, not the state"), which the public page
+    // does not render and a respondent has no business reading — this endpoint
+    // needs no login.
     fields: (r.fields || []).map(f => ({
       key: f.key, label: f.label, type: f.type, required: f.required,
       options: f.options, placeholder: f.placeholder, mapsTo: f.mapsTo || null,
       ...(f.scale ? { scale: f.scale } : {}),
       ...(f.feedback ? { feedback: true, feedbackLabel: f.feedbackLabel || DEFAULT_FEEDBACK_LABEL } : {}),
-      ...(f.description ? { description: f.description } : {}),
+      ...(isDisplayOnly(f.type) && f.description ? { description: f.description } : {}),
     })),
     hasLogo: !!r.logo_key, hasBanner: !!r.banner_key,
     successMessage: r.success_message,
   };
-}
-
-// Upsert coexistence.leads by phone (last-10-digit match, same convention as
-// routes/leads.js POST /students). Mapped fields win the lead's real columns
-// (blank-only, COALESCE) except `source` which a form submission should set
-// outright the first time; unmapped fields merge into custom_fields JSONB.
-async function upsertLeadFromSubmission({ phone, mapped, customFields, defaultSource }) {
-  const digits = String(phone || '').replace(/\D/g, '');
-  if (digits.length < 7) return null;
-  const last10 = digits.slice(-10);
-  const source = mapped.source || defaultSource || null;
-
-  const { rows: found } = await pool.query(
-    `SELECT id, stage FROM coexistence.leads WHERE right(regexp_replace(whatsapp_number,'\\D','','g'),10) = $1 ORDER BY id LIMIT 1`,
-    [last10]
-  );
-
-  if (found.length) {
-    const leadId = found[0].id;
-    await pool.query(
-      `UPDATE coexistence.leads
-          SET name = COALESCE(name, $2), email = COALESCE($3, email), age = COALESCE($4, age),
-              profession = COALESCE($5, profession), pincode = COALESCE($6, pincode),
-              city = COALESCE($7, city), source = COALESCE(source, $8),
-              custom_fields = custom_fields || $9::jsonb,
-              last_activity_at = NOW(), updated_at = NOW()
-        WHERE id = $1`,
-      [leadId, mapped.name || null, mapped.email || null,
-        Number.isFinite(mapped.age) ? mapped.age : null, mapped.profession || null,
-        mapped.pincode || null, mapped.city || null, source, JSON.stringify(customFields || {})]
-    );
-    return leadId;
-  }
-
-  const stage = cfg.funnelStageKeys()[0] || 'new';
-  const { rows: ins } = await pool.query(
-    `INSERT INTO coexistence.leads (whatsapp_number, name, email, age, profession, pincode, city, source, stage, has_whatsapp_thread, custom_fields, stage_changed_at, last_activity_at, created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,FALSE,$10::jsonb,NOW(),NOW(),NOW(),NOW()) RETURNING id`,
-    [digits, mapped.name || null, mapped.email || null, Number.isFinite(mapped.age) ? mapped.age : null,
-      mapped.profession || null, mapped.pincode || null, mapped.city || null, source, stage, JSON.stringify(customFields || {})]
-  );
-  return ins[0].id;
 }
 
 // Mint a single-use token binding a form to one WhatsApp recipient, so the
@@ -923,49 +894,26 @@ publicRouter.post('/public/lead-forms/:slug/submit', async (req, res) => {
       );
       if (tk.length) { tokenRow = tk[0]; phone = tk[0].phone_number; }
     }
-    const mapped = {};
-    const customFields = {};
-    for (const f of fields) {
-      const v = answers[f.key];
-      if (isEmptyAnswer(f, v)) continue;
-      // A rating is flattened to "4/5 - loved it" for the lead bag only. The
-      // full structured answer is still stored verbatim on the submission row,
-      // so nothing is lost — but the bag is read back by the Leads table and by
-      // {{lead.<key>}} in follow-ups, and an object in either renders as
-      // "[object Object]" to a human.
-      const stored = f.type === 'rating' ? answerToText(f, v) : v;
-      if (f.mapsTo && f.mapsTo.startsWith('cf:')) {
-        // Mapped to a registered custom Leads field — store under the REGISTRY
-        // key so the value shows on the Leads/Sales Log tables and resolves as
-        // {{lead.<key>}} in follow-ups.
-        customFields[f.mapsTo.slice(3)] = stored;
-      } else if (f.mapsTo) {
-        if (f.mapsTo === 'phone') { if (!phone) phone = String(v); }
-        else if (f.mapsTo === 'age') mapped.age = Number.isFinite(Number(v)) ? parseInt(v, 10) : null;
-        else mapped[f.mapsTo] = String(v).trim();
-      } else {
-        customFields[f.key] = stored;
-      }
-    }
-    // The phone is OPTIONAL, by design. leads.whatsapp_number is NOT NULL and
+
+    // The answers -> lead mapping lives in services/formSubmission.js because an
+    // AI agent can now collect the SAME answers conversationally and submit them
+    // on the customer's behalf. Both paths must produce an identical row; a copy
+    // here would drift and the drift would only ever be visible in the database.
+    //
+    // The phone stays OPTIONAL, by design. leads.whatsapp_number is NOT NULL and
     // UNIQUE — it is the join key for the funnel, the WhatsApp thread and the
     // stage-tag mirror — so a response with no phone genuinely CANNOT become a
     // lead. It is stored as an anonymous row in this form's own table with the
-    // phone column blank, which is exactly what a link-only form is for.
-    //
-    // Never reject the fill over a missing phone: the respondent has already
-    // done the work, and a 400 here throws their answers away for a field they
-    // were told was optional. Requiring one is the builder's decision, made per
-    // field via `required` and enforced by the loop above.
-    const leadId = phone
-      ? await upsertLeadFromSubmission({ phone, mapped, customFields, defaultSource: form.default_source || form.name })
-      : null;
-
-    await pool.query(
-      `INSERT INTO coexistence.lead_form_submissions (form_id, lead_id, answers, phone_number, send_token, ip_address, user_agent)
-       VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7)`,
-      [form.id, leadId, JSON.stringify(answers), phone, token, req.ip || null, req.get('user-agent') || null]
-    );
+    // phone column blank, which is exactly what a link-only form is for. Never
+    // reject the fill over a missing phone: the respondent has already done the
+    // work, and a 400 here throws their answers away for a field they were told
+    // was optional. Requiring one is the builder's per-field decision, enforced
+    // by the loop above.
+    await recordSubmission({
+      form, answers, phone, token,
+      ipAddress: req.ip || null,
+      userAgent: req.get('user-agent') || null,
+    });
     // Stamp last-used for audit (the token stays reusable — see the reusable
     // lookups above; this is no longer a single-use consume).
     if (tokenRow) await pool.query(`UPDATE coexistence.lead_form_send_tokens SET used_at = NOW() WHERE token = $1`, [token]);

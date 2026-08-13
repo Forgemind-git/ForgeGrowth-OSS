@@ -14,19 +14,21 @@ const { router: coursesRouter, ensureCourseTables } = require('./routes/courses'
 const { router: paymentRequestsRouter, ensurePaymentRequestTables } = require('./routes/paymentRequests');
 const { ensurePaymentLedgerTables, syncRazorpayPayments } = require('./services/razorpayLedger');
 const { router: categoriesRouter } = require('./routes/categories');
-const { router: teamMembersRouter } = require('./routes/teamMembers');
-const { router: contactFieldsRouter } = require('./routes/contactFields');
 const { router: uploadsRouter, UPLOAD_DIR } = require('./routes/uploads');
 const { router: templatesRouter, syncAllAccountTemplates } = require('./routes/templates');
 const { reconcileMessageStatuses } = require('./services/statusReconciler');
 const { router: broadcastsRouter, runDueBroadcasts } = require('./routes/broadcasts');
-const { router: chatbotsRouter, publicRouter: chatbotsPublicRouter } = require('./routes/chatbots');
+const { router: broadcastSeriesRouter } = require('./routes/broadcastSeries');
+const broadcastSeries = require('./services/broadcastSeries');
+const { router: chatbotsRouter } = require('./routes/chatbots');
+const { resumeExpiredWaits } = require('./engine/automationEngine');
 const { router: mediaRouter } = require('./routes/media');
 const { router: mediaLibraryRouter } = require('./routes/mediaLibrary');
 const minioClient = require('./util/minioClient');
 const { router: whatsappAccountsRouter } = require('./routes/whatsappAccounts');
 const { router: aiModelsRouter } = require('./routes/aiModels');
 const { router: usersRouter } = require('./routes/users');
+const roleConfig = require('./services/roleConfig');
 const { router: eventsRouter } = require('./routes/events');
 const { router: webhookHistoryRouter } = require('./routes/webhookHistory');
 const { router: waLinksRouter, publicRouter: waLinksPublicRouter } = require('./routes/waLinks');
@@ -35,10 +37,10 @@ const { router: pipelinesRouter } = require('./routes/pipelines');
 const { router: leadsRouter } = require('./routes/leads');
 const { router: funnelRouter, ensureFunnelTables } = require('./routes/funnel');
 const funnelTags = require('./services/funnelTags');
+const productTags = require('./services/productTags');
 const { router: salesLogRouter, ensureSalesLogTables } = require('./routes/salesLog');
 const { router: marketingRouter, syncMetaAds, ensureAdSetTables } = require('./routes/marketing');
 const { router: resourcesRouter } = require('./routes/resources');
-const { router: bdaRouter } = require('./routes/bda');
 const { router: leadFormsRouter, publicRouter: leadFormsPublicRouter, ensureLeadFormTables } = require('./routes/leadForms');
 const { router: ctwaRouter, ensureCtwaTables } = require('./routes/ctwa');
 const { router: integrationsRouter, publicRouter: integrationsPublicRouter } = require('./routes/integrations');
@@ -51,15 +53,12 @@ const {
   ensureMcpOAuthTables,
 } = require('./routes/mcpOAuth');
 const { mcpHttpHandler } = require('./mcpHttp');
-const bus = require('./events');
 // Public /pay/<token> redirect — the destination of a payment template's URL
 // button. Mounted at the ROOT (not /api) so the customer-facing link is short.
 const { publicRouter: payLinkPublicRouter } = require('./routes/payLink');
 const { router: projectsRouter, ensureProjectTables } = require('./routes/projects');
 const messageFormats = require('./services/messageFormats');
 const { router: entityFieldsRouter, ensureEntityFieldTables } = require('./routes/entityFields');
-const { router: followUpsRouter } = require('./routes/followUps');
-const followUpEngine = require('./services/followUpEngine');
 // Per-template message costs — what Meta actually charged.
 const { router: messageCostsRouter, ensureCostTables } = require('./routes/messageCosts');
 const { startWorker: startMediaWorker, shutdown: shutdownMediaQueue } = require('./queue/mediaQueue');
@@ -160,7 +159,6 @@ app.get('/health', (req, res) => res.json({ ok: true }));
 // Public routes (webhook from n8n / wa link redirects — no auth)
 app.use('/api', webhookRouter);
 app.use('/api', razorpayPublicRouter);
-app.use('/api', chatbotsPublicRouter);
 app.use('/', waLinksPublicRouter);
 // Before authMiddleware: the customer opens this from WhatsApp with no session.
 app.use('/', payLinkPublicRouter);
@@ -188,11 +186,10 @@ app.use('/api', authRouter);
 // Protected routes
 app.use('/api', authMiddleware, messagesRouter);
 app.use('/api', authMiddleware, categoriesRouter);
-app.use('/api', authMiddleware, teamMembersRouter);
-app.use('/api', authMiddleware, contactFieldsRouter);
 app.use('/api', authMiddleware, uploadsRouter);
 app.use('/api', authMiddleware, templatesRouter);
 app.use('/api', authMiddleware, broadcastsRouter);
+app.use('/api', authMiddleware, broadcastSeriesRouter);
 app.use('/api', authMiddleware, chatbotsRouter);
 app.use('/api', authMiddleware, mediaRouter);
 app.use('/api', authMiddleware, mediaLibraryRouter);
@@ -214,11 +211,9 @@ app.use('/api', authMiddleware, salesLogRouter);
 app.use('/api', authMiddleware, marketingRouter);
 app.use('/api', authMiddleware, ctwaRouter);
 app.use('/api', authMiddleware, resourcesRouter);
-app.use('/api', authMiddleware, bdaRouter);
 app.use('/api', authMiddleware, leadFormsRouter);
 app.use('/api', authMiddleware, projectsRouter);
 app.use('/api', authMiddleware, entityFieldsRouter);
-app.use('/api', authMiddleware, followUpsRouter);
 app.use('/api', authMiddleware, messageCostsRouter);
 app.use('/api', authMiddleware, integrationsRouter);
 app.use('/api', authMiddleware, agentsRouter);
@@ -273,7 +268,20 @@ async function start() {
   await ensurePaymentLedgerTables().catch(err =>
     console.error('[razorpay-ledger] table ensure failed (apply migration 087):', err.message)
   );
+  // Repeating broadcasts. References message_templates + media_library +
+  // broadcasts, all of which ensureTables owns, so it runs after it.
+  await broadcastSeries.ensureSeriesTables().catch(err =>
+    console.error('[series] table ensure failed (apply migration 105):', err.message)
+  );
   // Sales Log references courses(id) — run AFTER ensureCourseTables.
+  // Roles must exist before anything resolves a user's pages. Also drops the
+  // old CHECK on forgecrm_users.role, so adding a role never needs DDL again.
+  await roleConfig.ensureRoleTables().catch(err =>
+    console.error('[roles] table ensure failed (apply migration 107):', err.message));
+  // Product tags mirror courses(name) onto contacts.tags, so this runs AFTER
+  // ensureCourseTables. Same shape as the funnel-stage mirror.
+  await productTags.ensureProductTagTables().catch(err =>
+    console.error('[product-tags] ensure failed (apply migration 107):', err.message));
   await ensureSalesLogTables().catch(err =>
     console.error('[salesLog] table ensure failed (apply migration 064):', err.message)
   );
@@ -293,8 +301,6 @@ async function start() {
   await require('./services/paymentFlow').ensurePaymentFlowTables().catch(err =>
     console.error('[payment-flow] table ensure failed (apply migration 091):', err.message)
   );
-  await followUpEngine.ensureFollowUpTables().catch(err =>
-    console.error('[boot] follow-up tables ensure failed:', err.message));
   // Entity-field registry (Leads / Sales Log / Transaction fields). ALTERs
   // sales_log (custom_fields) so it runs AFTER ensureSalesLogTables, and it
   // loads the fieldRegistry cache the leads routes + variable resolver read.
@@ -319,6 +325,9 @@ async function start() {
   await ensureCostTables().catch(err =>
     console.error('[message-costs] table ensure failed (apply migration 098):', err.message)
   );
+  await require('./services/agentService').ensureAgentTables().catch(err =>
+    console.error('[agents] limit column ensure failed (apply migration 102):', err.message)
+  );
   minioClient.ensureBucket().catch(err =>
     console.error('[minio] bucket ensure failed (will retry on first upload):', err.message)
   );
@@ -331,19 +340,29 @@ async function start() {
   // this is purely hygiene against forever-paused rows accumulating.
   setInterval(async () => {
     try {
-      // A payment-paused execution with a watch still open is NOT stale — the
-      // payment sweeper owns its lifetime and will resume it down `paid` or
-      // `unpaid`. Erroring it here would abandon a customer mid-flow (and lose
-      // the `unpaid` follow-up branch) seconds before the money landed.
+      // FIRST: give every expired wait its `timeout` branch. A customer going
+      // quiet is the commonest outcome in messaging, not a fault — treating it
+      // as one both filled this log with errors (hiding real faults) and made
+      // "chase them if they go quiet" impossible to express. Anything wired is
+      // resumed; anything not is closed as success with a step saying so, so
+      // the blanket UPDATE below now only ever catches genuinely stuck rows.
+      try {
+        const { resumed, closed } = await resumeExpiredWaits(pool);
+        if (resumed || closed) {
+          console.log(`[sweeper] timeouts: resumed ${resumed} down a no-reply branch, closed ${closed} with none wired`);
+        }
+      } catch (twErr) {
+        console.error('[sweeper] timeout-branch resume failed:', twErr.message);
+      }
+
+      // Every remaining pause is a reply wait (the Payment node, the only other
+      // kind of pause, was removed) — so an expired one is genuinely stale.
       const { rowCount } = await pool.query(
         `UPDATE coexistence.automation_executions e
             SET status='error',
                 error_message='Paused execution expired (no reply within timeout)',
                 completed_at=NOW()
-          WHERE e.status='paused' AND e.expires_at < NOW()
-            AND NOT EXISTS (
-              SELECT 1 FROM coexistence.payment_watches w
-               WHERE w.execution_id = e.id AND w.status = 'watching')`
+          WHERE e.status='paused' AND e.expires_at < NOW()`
       );
       if (rowCount > 0) console.log(`[sweeper] expired ${rowCount} paused execution(s)`);
 
@@ -363,15 +382,9 @@ async function start() {
     }
   }, 30 * 60 * 1000).unref();
 
-  // Agent close-summary sweeper: when an idle-summary agent's conversation goes
-  // quiet (no new message for its idle window) and no human has taken over, ask
-  // the agent to write its final summary to the sheet/CRM. Every 2 min.
-  const { sweepClosedConversations } = require('./services/agentCloseSummary');
-  setInterval(() => {
-    sweepClosedConversations()
-      .then(n => { if (n > 0) console.log(`[closeSummary] summarised ${n} closed conversation(s)`); })
-      .catch(err => console.error('[closeSummary] sweep error:', err.message));
-  }, 2 * 60 * 1000).unref();
+  // (The agent close-summary sweeper used to run here. The capability was
+  // removed from the agent, so the timer went with it rather than being left
+  // ticking every 2 minutes over a flag nothing can set any more.)
 
   // Self-healing delivery/read ticks: re-derive outbound status from stored
   // receipts and upgrade any row the live path missed (e.g. a receipt that
@@ -433,6 +446,20 @@ async function start() {
   };
   setTimeout(runBroadcastScheduler, 20 * 1000).unref();          // catch anything due while we were down
   setInterval(runBroadcastScheduler, BROADCAST_TICK_MS).unref(); // every minute
+
+  // Repeating broadcasts, on the SAME cadence and with the same atomic-claim
+  // guarantee. Separate from the one-off tick because a series does more per
+  // fire (resolve the audience, create a broadcast, ledger who was reached) and
+  // a slow series must not delay a one-off that is due to the minute.
+  const runSeriesScheduler = async () => {
+    try {
+      await broadcastSeries.runDueSeries();
+    } catch (err) {
+      console.error('[series-scheduler] error:', err.message);
+    }
+  };
+  setTimeout(runSeriesScheduler, 35 * 1000).unref();
+  setInterval(runSeriesScheduler, BROADCAST_TICK_MS).unref();
 
   // Meta Ads sync: refresh real campaign spend/results from the Marketing API on
   // a schedule (only does anything while a token is connected). Override with
@@ -497,43 +524,11 @@ async function start() {
   setTimeout(runPricingSync, 4 * 60 * 1000).unref();
   setInterval(runPricingSync, PRICING_SYNC_MS).unref();
 
-  // Follow-up sequences: enrollment cursor over lead_events + due-step sender.
-  // 60s like the payment-watch sweeper (a "follow up in 1 hour" step should
-  // fire near the minute promised, not up to 5 minutes late); the bus kick
-  // inside followUpEngine.js handles near-instant enrollment. The sweep runs
-  // even with zero active sequences ON PURPOSE — the cursor must keep
-  // advancing, or activating a sequence later would replay the backlog of
-  // stage changes from while the feature sat unused (retroactive mass
-  // enrollment). Override with FOLLOW_UP_SWEEP_INTERVAL_MS.
-  const FOLLOW_UP_MS = parseInt(process.env.FOLLOW_UP_SWEEP_INTERVAL_MS || '', 10) || 60 * 1000;
-  const sweepFollowUps = () => followUpEngine.sweepFollowUps()
-    .catch(err => console.error('[follow-up] sweep failed:', err.message));
-  setTimeout(sweepFollowUps, 40 * 1000).unref();
-  setInterval(sweepFollowUps, FOLLOW_UP_MS).unref();
-
-  // Payment watches (automation Payment node + agent payment tools): confirm a
-  // payment that landed, chase one that hasn't, give up on one that never will.
-  //
-  // 60s rather than the 5-minute cadence the other dispatchers use, because a
-  // "pay in the next 10 minutes" follow-up is only credible if it actually
-  // fires near the minute it was promised. The bus kick below makes a completed
-  // payment feel instant; this interval is the net for a webhook that never
-  // arrived. Idles with one indexed query when nothing is being watched.
-  const PAYMENT_SWEEP_MS = parseInt(process.env.PAYMENT_WATCH_INTERVAL_MS || '', 10) || 60 * 1000;
-  const paymentFlow = require('./services/paymentFlow');
-  const runPaymentSweep = () => paymentFlow.sweepPaymentWatches()
-    .then(r => {
-      if (r && (r.paid || r.followedUp || r.timedOut)) {
-        console.log(`[payments] paid=${r.paid} chased=${r.followedUp} timedOut=${r.timedOut}`);
-      }
-    })
-    .catch(err => console.error('[payments] sweep failed:', err.message));
-  setTimeout(runPaymentSweep, 30 * 1000).unref();
-  setInterval(runPaymentSweep, PAYMENT_SWEEP_MS).unref();
-  // The Razorpay webhook emits this after it folds a payment_link event into
-  // payment_requests. Debounced inside kickSweep so a burst of events (a link
-  // payment produces three) starts one sweep, not three.
-  bus.on('payment-request-changed', () => paymentFlow.kickSweep());
+  // NOTE: the payment-watch sweeper was retired with the automation Payment
+  // node (2026-08-12). Its only two callers were that node and the agent
+  // payment tools (removed with migration 104), so it had nothing left to
+  // watch. Raising and tracking a payment LINK from Sales → Payments is
+  // untouched — that path runs off the Razorpay webhook, not a watch.
 
   const server = app.listen(PORT, () => {
     console.log(`[ForgeChat] Backend running on port ${PORT}`);

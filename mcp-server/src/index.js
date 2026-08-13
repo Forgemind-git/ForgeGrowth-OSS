@@ -368,7 +368,7 @@ server.registerTool('list_form_submissions', {
 server.registerTool('list_projects', {
   title: 'List projects',
   description:
-    'List the campaign projects (folders), each with a count of the templates, automations, AI agents, follow-up sequences and forms filed under it. ' +
+    'List the campaign projects (folders), each with a count of the templates, automations, AI agents and forms filed under it. ' +
     'Pass projectId to open one and list the actual items inside. Use this to turn a project NAME the user said into the id move_to_project needs — never guess an id.',
   inputSchema: {
     projectId: z.union([z.string(), z.number()]).optional().describe('Open one project and list what it holds. Omit to list every project.'),
@@ -384,12 +384,12 @@ server.registerTool('move_to_project', {
   title: 'Move items into a project',
   description:
     'File one or more items into a campaign project, or take them out of one. ' +
-    "kind is 'template' | 'automation' | 'agent' | 'followup' | 'form' ('form' = a lead-capture form from list_lead_forms). " +
+    "kind is 'template' | 'automation' | 'agent' | 'form' ('form' = a lead-capture form from list_lead_forms). " +
     'ids[] are that kind\'s ids — resolve them first with list_lead_forms / list_templates / list_agents, never guess. ' +
     'Pass projectId to file them there (from list_projects), or null to unfile them. ' +
     'This ONLY changes which folder the items are listed under: nothing is created, edited, published, activated or sent, and no customer is contacted.',
   inputSchema: {
-    kind: z.enum(['template', 'automation', 'agent', 'followup', 'form']),
+    kind: z.enum(['template', 'automation', 'agent', 'form']),
     ids: z.array(z.union([z.string(), z.number()])),
     projectId: z.union([z.string(), z.number()]).nullable().optional(),
   },
@@ -436,21 +436,6 @@ server.registerTool('list_webinars', {
   description: 'List webinar/batch schedule with registrations, attendance %, and hot-lead counts.',
   inputSchema: {},
 }, tool(() => call('GET', '/webinars-list')));
-
-server.registerTool('get_bda_activity', {
-  title: 'Get BDA leaderboard + activity',
-  description: 'Get the BDA conversion leaderboard (leads handled/converted) plus recent raw activity log entries, optionally scoped to one BDA id.',
-  inputSchema: {
-    bdaId: z.union([z.string(), z.number()]).optional().describe('Team member id (from a leaderboard row) to scope activity to just that BDA.'),
-    limit: z.number().int().min(1).max(500).optional(),
-  },
-}, tool(({ bdaId, limit }) => {
-  const p = new URLSearchParams();
-  if (bdaId != null) p.set('bdaId', String(bdaId));
-  if (limit != null) p.set('limit', String(limit));
-  const qs = p.toString();
-  return call('GET', `/bda-activity-summary${qs ? `?${qs}` : ''}`);
-}));
 
 /* ------------------------- courses + payments --------------------------- */
 
@@ -688,7 +673,7 @@ server.registerTool('delete_agent', {
 
 /* =============================== prompt =============================== */
 
-const GUIDE = `This is ForgeGrowth — an AI Academy Marketing/Sales lead funnel with a WhatsApp Chats layer underneath it. Before assuming this is purely an agent-builder: if the user wants to inspect or act on leads, campaigns, webinars, or BDA performance, use the funnel tools directly (list_leads, move_lead_stage, get_campaign_performance, list_webinars, get_bda_activity, or forgechat_request for anything else in an enabled area) — you do NOT need to build an agent for that.
+const GUIDE = `This is ForgeGrowth — an AI Academy Marketing/Sales lead funnel with a WhatsApp Chats layer underneath it. Before assuming this is purely an agent-builder: if the user wants to inspect or act on leads, campaigns, or webinars, use the funnel tools directly (list_leads, move_lead_stage, get_campaign_performance, list_webinars, or forgechat_request for anything else in an enabled area) — you do NOT need to build an agent for that.
 
 You can also CONFIGURE the whole app from a plain-language "game plan": upload a poster (upload_media), create + submit a WhatsApp template for Meta approval (create_template → submit_template → sync_template), build an automation flow (create_automation), make a lead form (create_lead_form) and read its submissions (list_form_submissions), generate a click-to-chat link (create_wa_link), and send/broadcast (send_message, send_template, send_media, send_bulk_message). ALWAYS summarise what you will do and get the user's explicit confirmation before any create/submit/send step.
 

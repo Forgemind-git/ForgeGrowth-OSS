@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, Fragment } from 'react';
-import { Search, Download, Users } from 'lucide-react';
+import { Search, Download, Upload, Users } from 'lucide-react';
 import { api } from '../../api.js';
 import { C, FONT, MONO } from '../../constants.js';
 import { showError } from '../../lib/feedback.js';
@@ -7,18 +7,11 @@ import SearchableSelect from '../../components/SearchableSelect.jsx';
 import { useFunnelConfig } from '../../hooks/useFunnelConfig.js';
 import { useFieldRegistry, formatFieldValue } from '../../hooks/useFieldRegistry.js';
 import {
-  PageShell, Button, Table, Td, StageBadge, Segmented, EmptyState,
+  PageShell, Button, Table, Td, StageBadge, EmptyState, LeadsViewToggle,
   fmtDate, fmtINR,
 } from '../academy/shared.jsx';
 import { Shimmer } from '../../components/charts.jsx';
-
-const VIEWS = [
-  { value: '', label: 'All leads' },
-  { value: 'my', label: 'My Leads' },
-  { value: 'hot', label: 'Hot Leads' },        // arrived within 24h
-  { value: 'unassigned', label: 'Unassigned' },
-  { value: 'needs-follow-up', label: 'Needs Follow-up' },
-];
+import LeadImportModal from './LeadImportModal.jsx';
 
 const CHOICE_TYPES = ['dropdown', 'radio'];
 
@@ -37,7 +30,13 @@ function LeadCell({ f, l }) {
       case 'city': return <Td>{l.city || '—'}</Td>;
       case 'source': return <Td>{l.source || '—'}</Td>;
       case 'stage': return <Td><StageBadge stage={l.stage} /></Td>;
-      case 'follow_up_count': return <Td align="center" mono color={l.followUpCount >= 3 ? C.primary : C.textSecondary}>{l.followUpCount}</Td>;
+      // leads.follow_up_count — the consecutive-chase streak the cold-drop
+      // engine reads. Its only writer was the Follow-ups feature, removed
+      // 2026-08-12, so the value is now frozen at whatever it last held. The
+      // column is hidden by default for that reason (Admin Settings → Fields
+      // can show it again); this renders the stored number if it is.
+      case 'follow_up_count':
+        return <Td align="center" mono color={l.followUpCount > 0 ? C.text : C.textMuted}>{l.followUpCount ?? 0}</Td>;
       case 'assigned_to': return <Td>{l.assignedUserName || l.assignedBda || <span style={{ color: C.textMuted }}>Unassigned</span>}</Td>;
       case 'paid_course': return <Td>{l.paidCourse || '—'}</Td>;
       case 'total_paid': return <Td mono align="right" bold>{l.paidAmount != null ? fmtINR(l.paidAmount) : '—'}</Td>;
@@ -55,14 +54,14 @@ const cellAlign = (f) => (
     : f.isSystem && f.fieldKey === 'total_paid' ? 'right' : 'left'
 );
 
-export default function LeadsPage({ user, subParts, navigate, tabs, onOpenPipeline }) {
+export default function LeadsPage({ user, subParts, navigate, tabs, view = 'list', onChangeView }) {
   const { sources, stages } = useFunnelConfig();
   const { lead: leadFields } = useFieldRegistry();
-  const [view, setView] = useState('');
   const [stage, setStage] = useState('');
   const [source, setSource] = useState('');
   const [cfFilters, setCfFilters] = useState({}); // field_key → value
   const [search, setSearch] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
   const [leads, setLeads] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -78,7 +77,6 @@ export default function LeadsPage({ user, subParts, navigate, tabs, onOpenPipeli
     setLoading(true);
     try {
       const params = {};
-      if (view) params.view = view;
       if (stage) params.stage = stage;
       if (source) params.source = source;
       if (search.trim()) params.search = search.trim();
@@ -87,13 +85,13 @@ export default function LeadsPage({ user, subParts, navigate, tabs, onOpenPipeli
       setLeads(leads);
     } catch (e) { showError(e.message); }
     finally { setLoading(false); }
-  }, [view, stage, source, search, cfFilters]);
+  }, [stage, source, search, cfFilters]);
 
   useEffect(() => { const t = setTimeout(load, search ? 300 : 0); return () => clearTimeout(t); }, [load, search]);
 
   const columns = visible.map(f => ({ label: f.label, align: cellAlign(f) }));
   const exportParams = {
-    ...(view && { view }), ...(stage && { stage }), ...(source && { source }),
+    ...(stage && { stage }), ...(source && { source }),
     ...Object.fromEntries(Object.entries(cfFilters).filter(([, v]) => v).map(([k, v]) => [`cf_${k}`, v])),
   };
 
@@ -102,23 +100,23 @@ export default function LeadsPage({ user, subParts, navigate, tabs, onOpenPipeli
       title="Leads"
       subtitle="The working master table — every lead, filterable and exportable."
       actions={
-        <a href={api.leads.exportUrl(exportParams)} download style={{ textDecoration: 'none' }}>
-          <Button variant="secondary" icon={Download}>Export CSV</Button>
-        </a>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <LeadsViewToggle view={view} onChange={onChangeView} />
+          <Button variant="secondary" icon={Upload} onClick={() => setImportOpen(true)}>Import</Button>
+          {/* A plain <a download> so the auth cookie rides along. */}
+          <a href={api.leads.exportUrl(exportParams)} download style={{ textDecoration: 'none' }}>
+            <Button variant="secondary" icon={Download}>Export CSV</Button>
+          </a>
+        </div>
       }
     >
       {tabs}
-      {/* Saved views */}
-      <div style={{ marginBottom: 14 }}>
-        <Segmented options={VIEWS} value={view} onChange={setView} />
-      </div>
-
       {/* Filter bar */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 200 }}>
           <Search size={15} color={C.textMuted} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)' }} />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, number, email…"
-            style={{ width: '100%', padding: '9px 11px 9px 34px', borderRadius: 8, border: `1.5px solid ${C.border}`, fontFamily: FONT, fontSize: 13.5, outline: 'none', background: C.cardBg, color: C.text, boxSizing: 'border-box' }} />
+            style={{ width: '100%', padding: '9px 11px 9px 34px', borderRadius: 8, border: `1.5px solid ${C.border}`, fontFamily: FONT, fontSize: 15, outline: 'none', background: C.cardBg, color: C.text, boxSizing: 'border-box' }} />
         </div>
         <div style={{ width: 160 }}>
           <SearchableSelect value={stage} onChange={setStage} options={[{ value: '', label: 'All stages' }, ...stages.map(s => ({ value: s.stageKey, label: s.label }))]} placeholder="All stages" />
@@ -139,11 +137,11 @@ export default function LeadsPage({ user, subParts, navigate, tabs, onOpenPipeli
 
       {loading ? <Shimmer height={320} radius={12} /> : (
         <>
-          <div style={{ fontSize: 12.5, color: C.textMuted, marginBottom: 8, fontFamily: MONO }}>{leads?.length || 0} leads</div>
+          <div style={{ fontSize: 14, color: C.textMuted, marginBottom: 8, fontFamily: MONO }}>{leads?.length || 0} leads</div>
           <Table
             columns={columns} rows={leads} keyOf={l => l.id}
-            empty={<EmptyState Icon={Users} title="No leads match" hint="Try clearing filters or a different saved view." />}
-            onRowClick={(l) => (onOpenPipeline ? onOpenPipeline() : navigate && navigate('leads'))}
+            empty={<EmptyState Icon={Users} title="No leads match" hint="Try clearing the filters above." />}
+            onRowClick={(l) => onChangeView && onChangeView('board')}
             renderRow={(l) => (
               <>
                 {visible.map(f => <Fragment key={f.fieldKey}><LeadCell f={f} l={l} /></Fragment>)}
@@ -152,6 +150,12 @@ export default function LeadsPage({ user, subParts, navigate, tabs, onOpenPipeli
           />
         </>
       )}
+
+      <LeadImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={load}
+      />
     </PageShell>
   );
 }

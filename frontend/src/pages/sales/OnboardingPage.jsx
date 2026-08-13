@@ -34,14 +34,14 @@ const txCustomFields = (txFields) => txFields.filter(f => !f.isSystem && f.showI
 
 // One transactions-table cell per registry field — system renames and Shown
 // toggles in Admin Settings → Fields → Transactions take real effect here.
-const txTd = { padding: '9px 4px', fontSize: 13 };
+const txTd = { padding: '9px 4px', fontSize: 15 };
 function TxCell({ f, it }) {
   if (f.isSystem) {
     switch (f.fieldKey) {
       case 'payment_date': return <td style={{ ...txTd, color: C.textSecondary }}>{fmtDate(it.date)}</td>;
       case 'amount': return <td style={{ ...txTd, fontFamily: MONO, fontWeight: 600 }}>{fmtINR(it.amount)}</td>;
-      case 'method': return <td style={txTd}><Badge label={it.method} color={it.kind === 'razorpay' ? '#0F6E56' : '#6B7280'} bg={it.kind === 'razorpay' ? '#E1F5EE' : '#F1F1EE'} /></td>;
-      case 'notes': return <td style={{ ...txTd, color: C.textMuted, fontFamily: MONO, fontSize: 11.5, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.ref || it.notes || '—'}</td>;
+      case 'method': return <td style={txTd}><Badge label={it.method} color={it.kind === 'razorpay' ? 'var(--c-successText, #0F6E56)' : 'var(--c-textSecondary, #6B7280)'} bg={it.kind === 'razorpay' ? 'var(--c-successBg, #E1F5EE)' : 'var(--c-surfaceMuted, #F1F1EE)'} /></td>;
+      case 'notes': return <td style={{ ...txTd, color: C.textMuted, fontFamily: MONO, fontSize: 13, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.ref || it.notes || '—'}</td>;
       case 'product': return <td style={txTd}>{it.productLabel || '—'}</td>;
       default: return <td style={{ ...txTd, color: C.textSecondary }}>—</td>;
     }
@@ -74,11 +74,11 @@ function ExportMenu() {
       {open && (
         <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 10, boxShadow: '0 6px 20px rgba(0,0,0,.12)', overflow: 'hidden', zIndex: 20, minWidth: 170 }}>
           <a href={api.students.exportUrl('csv')} download onClick={() => setOpen(false)}
-            style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 14px', fontFamily: FONT, fontSize: 13, color: C.text, textDecoration: 'none' }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 14px', fontFamily: FONT, fontSize: 15, color: C.text, textDecoration: 'none' }}>
             <FileText size={14} color={C.textSecondary} /> CSV (.csv)
           </a>
           <a href={api.students.exportUrl('xlsx')} download onClick={() => setOpen(false)}
-            style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 14px', fontFamily: FONT, fontSize: 13, color: C.text, textDecoration: 'none', borderTop: `1px solid ${C.border}` }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 14px', fontFamily: FONT, fontSize: 15, color: C.text, textDecoration: 'none', borderTop: `1px solid ${C.border}` }}>
             <FileSpreadsheet size={14} color={C.textSecondary} /> Excel (.xlsx)
           </a>
         </div>
@@ -310,7 +310,7 @@ function SaleDetailPage({ saleId, user, navigate }) {
   if (!s) return <PageShell title="Sale" actions={back}><Shimmer height={280} radius={12} /></PageShell>;
 
   const CheckRow = ({ field, label }) => (
-    <button onClick={() => toggle(field)} style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'none', border: 'none', cursor: 'pointer', padding: '7px 0', fontFamily: FONT, fontSize: 13.5, color: C.text }}>
+    <button onClick={() => toggle(field)} style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'none', border: 'none', cursor: 'pointer', padding: '7px 0', fontFamily: FONT, fontSize: 15, color: C.text }}>
       <span style={{ width: 20, height: 20, borderRadius: 6, border: `1.5px solid ${s[field] ? C.green : C.border}`, background: s[field] ? C.green : 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         {s[field] && <Check size={13} color="#fff" />}
       </span>
@@ -397,22 +397,22 @@ function SaleDetailPage({ saleId, user, navigate }) {
         <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 22px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <SectionTitle nomargin>Transactions ({data.installments.length})</SectionTitle>
-            <Button icon={Plus} onClick={() => setAdding(true)} style={{ padding: '6px 11px', fontSize: 12 }}>Add Transaction</Button>
+            <Button icon={Plus} onClick={() => setAdding(true)} style={{ padding: '6px 11px', fontSize: 14 }}>Add Transaction</Button>
           </div>
-          {data.installments.length === 0 ? <div style={{ fontSize: 13, color: C.textMuted, padding: '10px 0' }}>No payments recorded yet.</div> :
+          {data.installments.length === 0 ? <div style={{ fontSize: 15, color: C.textMuted, padding: '10px 0' }}>No payments recorded yet.</div> :
             <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT }}>
               <thead>
-                <tr style={{ textAlign: 'left', fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                <tr style={{ textAlign: 'left', fontSize: 13, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.04em' }}>
                   {txVisible.map(f => <th key={f.fieldKey} style={{ padding: '6px 4px' }}>{f.label}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {data.installments.map((it) => (
-                  <tr key={`${it.kind}-${it.id}`} style={{ borderTop: `1px solid ${C.border}`, fontSize: 13 }}>
+                  <tr key={`${it.kind}-${it.id}`} style={{ borderTop: `1px solid ${C.border}`, fontSize: 15 }}>
                     {txVisible.map(f => <Fragment key={f.fieldKey}><TxCell f={f} it={it} /></Fragment>)}
                   </tr>
                 ))}
-                <tr style={{ borderTop: `2px solid ${C.border}`, fontSize: 13 }}>
+                <tr style={{ borderTop: `2px solid ${C.border}`, fontSize: 15 }}>
                   <td colSpan={Math.max(txVisible.length, 1)} style={{ padding: '9px 4px', fontWeight: 700 }}>
                     Total <span style={{ fontFamily: MONO, color: C.green, marginLeft: 8 }}>{fmtINR(data.totalPaid)}</span>
                   </td>
@@ -432,14 +432,14 @@ function SaleDetailPage({ saleId, user, navigate }) {
 }
 
 function SectionTitle({ children, nomargin }) {
-  return <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: nomargin ? 0 : 12 }}>{children}</div>;
+  return <div style={{ fontSize: 14, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: nomargin ? 0 : 12 }}>{children}</div>;
 }
 
 function Meta({ label, value, mono }) {
   return (
     <div>
-      <div style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 3 }}>{label}</div>
-      <div style={{ fontSize: 14, color: C.text, fontWeight: 600, fontFamily: mono ? MONO : FONT }}>{value}</div>
+      <div style={{ fontSize: 13, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: 15, color: C.text, fontWeight: 600, fontFamily: mono ? MONO : FONT }}>{value}</div>
     </div>
   );
 }

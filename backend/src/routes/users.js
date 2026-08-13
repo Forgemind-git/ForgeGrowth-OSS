@@ -11,11 +11,11 @@ const { Router } = require('express');
 const bcrypt = require('bcryptjs');
 const pool = require('../db');
 const { adminOnly, auditLog } = require('../middleware/access');
-const { PAGES, ROLE_PAGE_DEFAULTS } = require('../permissions');
+const { PAGES } = require('../permissions');
+const roleConfig = require('../services/roleConfig');
 
 const router = Router();
 
-const VALID_ROLES = Object.keys(ROLE_PAGE_DEFAULTS);
 
 function shapeUser(row, waAssignments = []) {
   return {
@@ -55,9 +55,14 @@ function generatePassword(len = 12) {
   return out;
 }
 
-function validateRole(role) {
-  if (!VALID_ROLES.includes(role)) {
-    throw new Error(`Role must be one of: ${VALID_ROLES.join(', ')}`);
+// ⚠ Reads the TABLE, not the in-process cache. A cache is warm in the running
+// app and empty everywhere else, so a cache-backed check silently accepts any
+// string wherever it has not been loaded — and a user stored with a role that
+// matches no row can log in and reach nothing.
+async function validateRole(role) {
+  if (!(await roleConfig.isAssignableRole(role))) {
+    const names = roleConfig.activeRoles().map(r => r.key).join(', ');
+    throw new Error(`Role must be one of: ${names || 'admin'}`);
   }
 }
 
@@ -107,12 +112,12 @@ router.get('/users/:id', adminOnly, async (req, res) => {
 
 // ─── Create ────────────────────────────────────────────────────────
 router.post('/users', adminOnly, async (req, res) => {
-  const { username, email, displayName, password, role = 'bda_sales', permissions = null, assignedWaNumbers = [] } = req.body || {};
+  const { username, email, displayName, password, role = 'sales', permissions = null, assignedWaNumbers = [] } = req.body || {};
   try {
     if (!username?.trim() || !email?.trim() || !displayName?.trim()) {
       return res.status(400).json({ error: 'username, email and displayName are required' });
     }
-    validateRole(role);
+    await validateRole(role);
     const cleanPerms = validatePermissions(permissions);
     const finalPassword = password?.trim() || generatePassword();
     const hash = await bcrypt.hash(finalPassword, 10);
@@ -137,7 +142,7 @@ router.post('/users', adminOnly, async (req, res) => {
       );
       const user = rows[0];
 
-      // Set WA assignments (only meaningful for bda_sales; we don't enforce that —
+      // Set WA assignments (only meaningful for a non-admin role; we don't enforce that —
       // admin override is technically allowed and gets ignored at query time)
       const waList = Array.isArray(assignedWaNumbers) ? assignedWaNumbers : [];
       for (const wa of waList) {
@@ -205,7 +210,7 @@ router.patch('/users/:id', adminOnly, async (req, res) => {
     if (req.body.displayName != null) set('display_name = $$', String(req.body.displayName).trim());
     if (req.body.email != null) set('email = $$', String(req.body.email).trim().toLowerCase());
     if (req.body.role != null) {
-      validateRole(req.body.role);
+      await validateRole(req.body.role);
       set('role = $$', req.body.role);
     }
     if (req.body.permissions !== undefined) {
@@ -344,5 +349,137 @@ router.get('/audit-log', adminOnly, async (req, res) => {
     res.status(500).json({ error: 'Failed to load audit log' });
   }
 });
+
+/* ── Roles ────────────────────────────────────────────────────────────────
+ * Managed in the same screen as the users who hold them, because "what can
+ * this role do" and "who has it" are one question.
+ *
+ * ⚠ THE ADMIN ROW IS PROTECTED IN THREE WAYS, all for the same reason: this
+ * screen is itself admin-gated, so anything that could strip admin access
+ * could lock every user out of the only place that could undo it.
+ *   • cannot be deleted or deactivated
+ *   • its page list cannot be edited (isAdmin short-circuits it anyway)
+ *   • only its label is writable
+ */
+
+const ROLE_KEY_RE = /^[a-z][a-z0-9_]{1,30}$/;
+
+router.get('/roles', async (req, res) => {
+  try {
+    // Non-admins get the labels only — a role picker needs them, the page
+    // lists are an admin concern.
+    const admin = req.user?.role === 'admin';
+    const roles = roleConfig.roles().map(r => admin ? r : { key: r.key, label: r.label, active: r.active });
+    res.json({ roles, pages: admin ? PAGES : undefined });
+  } catch (err) {
+    console.error('[users] list roles error:', err.message);
+    res.status(500).json({ error: 'Failed to load roles' });
+  }
+});
+
+router.post('/roles', adminOnly, async (req, res) => {
+  try {
+    const key = String(req.body?.key || '').trim().toLowerCase();
+    const label = String(req.body?.label || '').trim();
+    if (!label) return res.status(400).json({ error: 'A role needs a name.' });
+    if (!ROLE_KEY_RE.test(key)) {
+      return res.status(400).json({
+        error: 'The role id must be lowercase letters, numbers and underscores, starting with a letter (e.g. "support_lead").',
+      });
+    }
+    const pages = sanitizeRolePages(req.body?.pages);
+    const { rows } = await pool.query(
+      `INSERT INTO coexistence.user_roles (role_key, label, description, pages, sort_order)
+       VALUES ($1,$2,$3,$4::jsonb, COALESCE((SELECT MAX(sort_order)+1 FROM coexistence.user_roles), 1))
+       ON CONFLICT (role_key) DO NOTHING
+       RETURNING role_key`,
+      [key, label, String(req.body?.description || '').trim() || null, JSON.stringify(pages)],
+    );
+    if (!rows.length) return res.status(409).json({ error: `A role with the id "${key}" already exists.` });
+    await roleConfig.refreshRoles();
+    res.status(201).json({ ok: true, key });
+  } catch (err) {
+    console.error('[users] create role error:', err.message);
+    res.status(500).json({ error: 'Failed to create the role' });
+  }
+});
+
+router.put('/roles/:key', adminOnly, async (req, res) => {
+  try {
+    const key = String(req.params.key);
+    const existing = roleConfig.roleByKey(key);
+    if (!existing) return res.status(404).json({ error: 'Role not found' });
+
+    const sets = [];
+    const params = [];
+    const set = (frag, val) => { params.push(val); sets.push(frag.replace('$$', `$${params.length}`)); };
+
+    if (req.body?.label != null) {
+      const label = String(req.body.label).trim();
+      if (!label) return res.status(400).json({ error: 'A role needs a name.' });
+      set('label = $$', label);
+    }
+    if (req.body?.description != null) set('description = $$', String(req.body.description).trim() || null);
+
+    if (existing.isSystem) {
+      // Relabelling Admin is fine. Anything that could reduce its reach is not.
+      if (req.body?.pages != null || req.body?.active != null) {
+        return res.status(400).json({
+          error: 'The Admin role always has full access and cannot be switched off — otherwise nobody could reach these settings to switch it back on. You can rename it.',
+        });
+      }
+    } else {
+      if (req.body?.pages != null) set('pages = $$::jsonb', JSON.stringify(sanitizeRolePages(req.body.pages)));
+      if (req.body?.active != null) set('active = $$', req.body.active === true || req.body.active === 'true');
+    }
+
+    if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
+    params.push(key);
+    await pool.query(
+      `UPDATE coexistence.user_roles SET ${sets.join(', ')}, updated_at = NOW() WHERE role_key = $${params.length}`,
+      params,
+    );
+    await roleConfig.refreshRoles();
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[users] update role error:', err.message);
+    res.status(500).json({ error: 'Failed to update the role' });
+  }
+});
+
+router.delete('/roles/:key', adminOnly, async (req, res) => {
+  try {
+    const key = String(req.params.key);
+    const existing = roleConfig.roleByKey(key);
+    if (!existing) return res.status(404).json({ error: 'Role not found' });
+    if (existing.isSystem) {
+      return res.status(400).json({ error: 'The Admin role cannot be deleted.' });
+    }
+    // Refuse rather than orphan. A user left holding a deleted role resolves to
+    // no pages at all: they log in successfully and land on an empty app, which
+    // reads as a broken account rather than a removed role.
+    const { rows: held } = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM coexistence.forgecrm_users WHERE role = $1`, [key]);
+    if (held[0].n > 0) {
+      return res.status(409).json({
+        error: `${held[0].n} user${held[0].n === 1 ? ' still has' : 's still have'} the "${existing.label}" role. Move them to another role first.`,
+      });
+    }
+    await pool.query(`DELETE FROM coexistence.user_roles WHERE role_key = $1`, [key]);
+    await roleConfig.refreshRoles();
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[users] delete role error:', err.message);
+    res.status(500).json({ error: 'Failed to delete the role' });
+  }
+});
+
+// Only real page keys are storable — an unknown string would sit in the list
+// looking granted and match no page.
+function sanitizeRolePages(pages) {
+  if (!Array.isArray(pages)) return [];
+  const valid = new Set(PAGES);
+  return [...new Set(pages.map(String).filter(p => valid.has(p)))];
+}
 
 module.exports = { router };

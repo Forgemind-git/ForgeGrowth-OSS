@@ -8,10 +8,13 @@ import logoUrl from '../assets/forgemind-logo.gif';
 const THEME_CYCLE = { light: 'dark', dark: 'system', system: 'light' };
 const THEME_ICON = { light: Sun, dark: Moon, system: Monitor };
 
+// Two workspaces, not three. Chats used to be its own tab, which split one job
+// across two places: the funnel and the conversation are the same people seen
+// from opposite ends, and moving between them meant changing workspace. The
+// inbox, automations and agents now live inside Sales.
 const SECTIONS = [
   { id: 'marketing', label: 'Marketing' },
   { id: 'sales', label: 'Sales' },
-  { id: 'chats', label: 'Chats' },
 ];
 
 export default function Topbar({ user, onLogout, onNavigate, section, onSectionChange, hideSections }) {
@@ -50,7 +53,7 @@ export default function Topbar({ user, onLogout, onNavigate, section, onSectionC
         onClick={() => onNavigate('admin-settings')}
         style={{
           background: '#A32D2D', color: '#fff', padding: '8px 16px',
-          fontSize: 12, fontFamily: FONT, display: 'flex', alignItems: 'center',
+          fontSize: 14, fontFamily: FONT, display: 'flex', alignItems: 'center',
           justifyContent: 'center', gap: 8, cursor: 'pointer', fontWeight: 500,
         }}
       >
@@ -95,7 +98,7 @@ export default function Topbar({ user, onLogout, onNavigate, section, onSectionC
         />
         <div style={{ lineHeight: 1.1 }}>
           <div style={{
-            fontSize: 16,
+            fontSize: 18,
             fontWeight: 900,
             color: C.headerText,
             fontFamily: FONT,
@@ -144,16 +147,24 @@ export default function Topbar({ user, onLogout, onNavigate, section, onSectionC
                   cursor: 'pointer',
                   background: active ? C.primary : 'transparent',
                   color: active ? '#fff' : C.headerText,
-                  opacity: active ? 1 : 0.7,
+                  // ⚠ NO opacity fade. An inactive tab sat at 0.7 and lifted to
+                  // 1 on hover, so the section you are NOT in read as washed
+                  // out and only became solid under the cursor — the same
+                  // "it goes light until I touch it" the sidebar had. The
+                  // active tab is already unmistakable from its red pill and
+                  // heavier weight; dimming the other one adds nothing and
+                  // costs legibility.
                   fontFamily: FONT,
-                  fontSize: 13,
-                  fontWeight: active ? 700 : 500,
+                  fontSize: 15,
+                  fontWeight: active ? 700 : 600,
                   letterSpacing: '-.01em',
                   transition: 'all .15s',
                   whiteSpace: 'nowrap',
                 }}
-                onMouseEnter={e => { if (!active) e.currentTarget.style.opacity = 1; }}
-                onMouseLeave={e => { if (!active) e.currentTarget.style.opacity = 0.7; }}
+                // Hover moves the BACKGROUND only, so there is no value to
+                // restore and no way for the two to drift apart.
+                onMouseEnter={e => { if (!active) e.currentTarget.style.background = C.headerSurface; }}
+                onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
               >
                 {s.label}
               </button>
@@ -206,7 +217,7 @@ export default function Topbar({ user, onLogout, onNavigate, section, onSectionC
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: 15,
+              fontSize: 16,
               fontWeight: 700,
               color: '#fff',
               fontFamily: FONT,
@@ -232,10 +243,10 @@ export default function Topbar({ user, onLogout, onNavigate, section, onSectionC
               zIndex: 200,
             }}>
               <div style={{ padding: '8px 12px', borderBottom: `1px solid ${C.border}`, marginBottom: 4 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>
                   {user.displayName || user.username}
                 </div>
-                <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
+                <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2 }}>
                   {user.role}
                 </div>
               </div>
@@ -252,7 +263,7 @@ export default function Topbar({ user, onLogout, onNavigate, section, onSectionC
                   border: 'none',
                   cursor: 'pointer',
                   color: C.text,
-                  fontSize: 13,
+                  fontSize: 15,
                   fontWeight: 600,
                   fontFamily: FONT,
                   marginBottom: 4,
@@ -274,7 +285,7 @@ export default function Topbar({ user, onLogout, onNavigate, section, onSectionC
                   border: 'none',
                   cursor: 'pointer',
                   color: C.primary,
-                  fontSize: 13,
+                  fontSize: 15,
                   fontWeight: 600,
                   fontFamily: FONT,
                 }}

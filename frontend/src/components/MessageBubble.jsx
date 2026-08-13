@@ -72,8 +72,8 @@ function MediaPlaceholder({ Icon, label, sub }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', minWidth: 180 }}>
       <Icon size={20} color={C.textMuted} />
       <div>
-        <div style={{ fontSize: 12, color: C.textSecondary, fontFamily: FONT }}>{label}</div>
-        {sub && <div style={{ fontSize: 11, color: C.textMuted, fontFamily: FONT }}>{sub}</div>}
+        <div style={{ fontSize: 14, color: C.textSecondary, fontFamily: FONT }}>{label}</div>
+        {sub && <div style={{ fontSize: 13, color: C.textMuted, fontFamily: FONT }}>{sub}</div>}
       </div>
     </div>
   );
@@ -84,7 +84,7 @@ function MediaPending({ Icon, kind }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 4px', minWidth: 200 }}>
       <Loader2 size={16} color={C.textMuted} style={{ animation: 'spin 1s linear infinite' }} />
       <Icon size={18} color={C.textMuted} />
-      <span style={{ fontSize: 12, color: C.textMuted, fontFamily: FONT }}>Downloading {kind}…</span>
+      <span style={{ fontSize: 14, color: C.textMuted, fontFamily: FONT }}>Downloading {kind}…</span>
       <style>{`@keyframes spin { from {transform:rotate(0)} to {transform:rotate(360deg)} }`}</style>
     </div>
   );
@@ -93,21 +93,21 @@ function MediaPending({ Icon, kind }) {
 function MediaFailed({ Icon, label, error, onRetry, status }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', minWidth: 200 }}>
-      <AlertCircle size={16} color="#A32D2D" />
+      <AlertCircle size={16} color="var(--c-dangerText, #A32D2D)" />
       <Icon size={18} color={C.textMuted} />
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 12, color: '#A32D2D', fontFamily: FONT }}>
+        <div style={{ fontSize: 14, color: 'var(--c-dangerText, #A32D2D)', fontFamily: FONT }}>
           {status === 'expired' ? `${label} no longer available` : `Failed to load ${label}`}
         </div>
         {error && status !== 'expired' && (
-          <div style={{ fontSize: 10, color: C.textMuted, fontFamily: FONT, marginTop: 2 }}>{error.slice(0, 60)}</div>
+          <div style={{ fontSize: 12, color: C.textMuted, fontFamily: FONT, marginTop: 2 }}>{error.slice(0, 60)}</div>
         )}
       </div>
       {status !== 'expired' && (
         <button
           onClick={onRetry}
           style={{
-            fontSize: 11, padding: '3px 8px', border: '1px solid var(--c-border)',
+            fontSize: 13, padding: '3px 8px', border: '1px solid var(--c-border)',
             background: 'var(--c-cardBg)', borderRadius: 6, cursor: 'pointer',
             fontFamily: FONT, color: C.text,
           }}
@@ -140,11 +140,11 @@ function friendlyFailure(raw) {
 }
 
 function StatusTicks({ status, error }) {
-  if (status === 'sending') return <Loader2 size={11} color="#8696a0" style={{ animation: 'spin 1s linear infinite' }} />;
-  if (status === 'failed') return <AlertCircle size={11} color="#A32D2D" title={friendlyFailure(error)} />;
+  if (status === 'sending') return <Loader2 size={11} color="var(--c-textMuted, #667180)" style={{ animation: 'spin 1s linear infinite' }} />;
+  if (status === 'failed') return <AlertCircle size={11} color="var(--c-dangerText, #A32D2D)" title={friendlyFailure(error)} />;
   if (status === 'read') return <CheckCheck size={12} color="#53bdeb" />;
-  if (status === 'delivered') return <CheckCheck size={12} color="#8696a0" />;
-  return <Check size={12} color="#8696a0" />;
+  if (status === 'delivered') return <CheckCheck size={12} color="var(--c-textMuted, #667180)" />;
+  return <Check size={12} color="var(--c-textMuted, #667180)" />;
 }
 
 /* ── Seeded waveform — natural speech-like pattern, always "full" ───── */
@@ -177,7 +177,7 @@ function fmtDuration(seconds) {
 }
 
 /* ── Sharp play / pause SVGs matching WhatsApp ─────────────────────── */
-function PlayIcon({ size = 18, color = '#1f3c2e' }) {
+function PlayIcon({ size = 18, color = 'var(--c-x1f3c2e, #1f3c2e)' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill={color} style={{ display: 'block' }}>
       <path d="M8 5v14l11-7z" />
@@ -185,7 +185,7 @@ function PlayIcon({ size = 18, color = '#1f3c2e' }) {
   );
 }
 
-function PauseIcon({ size = 18, color = '#1f3c2e' }) {
+function PauseIcon({ size = 18, color = 'var(--c-x1f3c2e, #1f3c2e)' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill={color} style={{ display: 'block' }}>
       <rect x="6" y="4" width="4" height="16" rx="1" />
@@ -287,7 +287,7 @@ function VoiceMessagePlayer({ src, message, isOutgoing, senderAvatarUrl, contact
             <div style={{
               width: 40, height: 40, borderRadius: '50%', background: avatarBg,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 14, fontWeight: 700, color: '#fff',
+              fontSize: 15, fontWeight: 700, color: '#fff',
             }}>
               {avatarInitial}
             </div>
@@ -354,11 +354,11 @@ function VoiceMessagePlayer({ src, message, isOutgoing, senderAvatarUrl, contact
 
           {/* Bottom row: duration | time + ticks */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 1 }}>
-            <span style={{ fontSize: 11, color: 'var(--c-textSecondary)', fontFamily: FONT }}>
+            <span style={{ fontSize: 13, color: 'var(--c-textSecondary)', fontFamily: FONT }}>
               {fmtDuration(displayTime)}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-              <span style={{ fontSize: 10, color: 'var(--c-textMuted)', fontFamily: MONO, lineHeight: 1 }}>
+              <span style={{ fontSize: 12, color: 'var(--c-textMuted)', fontFamily: MONO, lineHeight: 1 }}>
                 {formatTime(message.timestamp)}
               </span>
               {isOutgoing && <StatusTicks status={message.status} error={message.error_message} />}
@@ -503,7 +503,7 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
 
     switch (type) {
       case 'text':
-        return <div style={{ fontSize: 13.5, lineHeight: 1.5, fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{message.message_body ? renderRichText(message.message_body) : '...'}</div>;
+        return <div style={{ fontSize: 15, lineHeight: 1.5, fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{message.message_body ? renderRichText(message.message_body) : '...'}</div>;
 
       case 'image':
       case 'sticker':
@@ -521,7 +521,7 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
               ),
             })}
             {message.message_body && (
-              <div style={{ fontSize: 13, marginTop: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{renderRichText(message.message_body)}</div>
+              <div style={{ fontSize: 15, marginTop: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{renderRichText(message.message_body)}</div>
             )}
           </div>
         );
@@ -538,7 +538,7 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
               ),
             })}
             {message.message_body && (
-              <div style={{ fontSize: 13, marginTop: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{renderRichText(message.message_body)}</div>
+              <div style={{ fontSize: 15, marginTop: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{renderRichText(message.message_body)}</div>
             )}
           </div>
         );
@@ -567,7 +567,7 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
               ),
             })}
             {message.media_size_bytes && mediaStatus === 'stored' && (
-              <div style={{ fontSize: 10, color: C.textMuted, fontFamily: MONO, marginTop: 2 }}>
+              <div style={{ fontSize: 12, color: C.textMuted, fontFamily: MONO, marginTop: 2 }}>
                 {formatBytes(message.media_size_bytes)}
               </div>
             )}
@@ -606,10 +606,10 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
               >
                 <FileText size={28} color={C.purple} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontSize: 15, fontWeight: 600, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {filename}
                   </div>
-                  <div style={{ fontSize: 10, color: C.textMuted, fontFamily: MONO, marginTop: 2 }}>
+                  <div style={{ fontSize: 12, color: C.textMuted, fontFamily: MONO, marginTop: 2 }}>
                     {[message.media_mime_type, formatBytes(message.media_size_bytes)].filter(Boolean).join(' · ')}
                   </div>
                 </div>
@@ -621,7 +621,7 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
               })
             )}
             {caption && (
-              <div style={{ fontSize: 13, marginTop: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              <div style={{ fontSize: 15, marginTop: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                 {renderRichText(caption)}
               </div>
             )}
@@ -633,7 +633,7 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
             <MapPin size={20} color={C.green} />
-            <span style={{ fontSize: 13 }}>{message.message_body || 'Location shared'}</span>
+            <span style={{ fontSize: 15 }}>{message.message_body || 'Location shared'}</span>
           </div>
         );
 
@@ -641,7 +641,7 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
             <Phone size={20} color={C.purple} />
-            <span style={{ fontSize: 13 }}>{message.message_body || 'Contact shared'}</span>
+            <span style={{ fontSize: 15 }}>{message.message_body || 'Contact shared'}</span>
           </div>
         );
 
@@ -649,14 +649,14 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
       case 'button':
         return (
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.purple, marginBottom: 4 }}>Interactive</div>
-            <div style={{ fontSize: 13 }}>{message.message_body || 'User interacted with a message'}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.purple, marginBottom: 4 }}>Interactive</div>
+            <div style={{ fontSize: 15 }}>{message.message_body || 'User interacted with a message'}</div>
           </div>
         );
 
       case 'reaction':
         return (
-          <div style={{ fontSize: 13, color: C.textMuted }}>
+          <div style={{ fontSize: 15, color: C.textMuted }}>
             Reacted {message.message_body || '...'}
           </div>
         );
@@ -674,7 +674,7 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
           <div style={{ minWidth: 200 }}>
             {/* Header */}
             {tm?.header_type === 'TEXT' && tm.header_text && (
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--c-text)', marginBottom: 5, fontFamily: FONT }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--c-text)', marginBottom: 5, fontFamily: FONT }}>
                 {tm.header_text}
               </div>
             )}
@@ -692,23 +692,23 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6,
                   padding: '6px 8px', borderRadius: 6, background: 'rgba(0,0,0,0.04)',
-                  color: C.textSecondary, fontSize: 11, fontFamily: FONT,
+                  color: C.textSecondary, fontSize: 13, fontFamily: FONT,
                 }}>
                   <HeaderMediaIcon size={14} /> {String(tm.header_type).charAt(0) + String(tm.header_type).slice(1).toLowerCase()} header
                 </div>
               )
             )}
             {/* Body */}
-            <div style={{ fontSize: 13.5, lineHeight: 1.5, fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            <div style={{ fontSize: 15, lineHeight: 1.5, fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
               {message.message_body ? renderRichText(message.message_body) : '...'}
             </div>
             {/* Footer + time/ticks on one row */}
             <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8, marginTop: 5 }}>
-              <span style={{ fontSize: 11, color: 'var(--c-textMuted)', fontFamily: FONT, flex: 1, minWidth: 0 }}>
+              <span style={{ fontSize: 13, color: 'var(--c-textMuted)', fontFamily: FONT, flex: 1, minWidth: 0 }}>
                 {tm?.footer || ''}
               </span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
-                <span style={{ fontSize: 10, color: 'var(--c-textMuted)', fontFamily: MONO, lineHeight: 1 }}>
+                <span style={{ fontSize: 12, color: 'var(--c-textMuted)', fontFamily: MONO, lineHeight: 1 }}>
                   {formatTime(message.timestamp)}
                 </span>
                 {isOutgoing && <StatusTicks status={message.status} error={message.error_message} />}
@@ -721,7 +721,7 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
                   <div key={i} style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                     padding: '9px 8px', borderTop: '1px solid rgba(0,0,0,0.08)',
-                    color: '#027eb5', fontSize: 13.5, fontWeight: 500, fontFamily: FONT,
+                    color: 'var(--c-s027eb5, #027eb5)', fontSize: 15, fontWeight: 500, fontFamily: FONT,
                   }}>
                     {btnIcon(b.type)}
                     <span>{b.text || (b.type === 'URL' ? 'Visit' : b.type === 'PHONE_NUMBER' ? 'Call' : 'Reply')}</span>
@@ -740,7 +740,7 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
       case 'unsupported':
       case 'unknown':
         return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.textMuted, fontStyle: 'italic', fontFamily: FONT }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 15, color: C.textMuted, fontStyle: 'italic', fontFamily: FONT }}>
             <AlertCircle size={14} style={{ flexShrink: 0 }} />
             <span>{message.message_body || 'Unsupported message — open WhatsApp to view'}</span>
           </div>
@@ -751,14 +751,14 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
       // original row stays in our DB but is hidden here, matching WhatsApp.
       case 'revoke':
         return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.textMuted, fontStyle: 'italic', fontFamily: FONT }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 15, color: C.textMuted, fontStyle: 'italic', fontFamily: FONT }}>
             <Ban size={14} style={{ flexShrink: 0 }} />
             <span>This message was deleted</span>
           </div>
         );
 
       default:
-        return <div style={{ fontSize: 13 }}>{message.message_body || `[${message.message_type || 'unknown'}]`}</div>;
+        return <div style={{ fontSize: 15 }}>{message.message_body || `[${message.message_type || 'unknown'}]`}</div>;
     }
   };
 
@@ -818,7 +818,7 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%',
         border: 'none', background: 'transparent', cursor: 'pointer', padding: '10px 14px',
-        fontFamily: FONT, fontSize: 13.5, color: C.text,
+        fontFamily: FONT, fontSize: 15, color: C.text,
       }}>
       <span>{label}</span><Icon size={16} style={{ color: C.textSecondary }} />
     </button>
@@ -872,12 +872,12 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
             >
               {quotedSender && (
                 <span style={{
-                  fontSize: 12, fontWeight: 700, color: quotedAccent,
+                  fontSize: 14, fontWeight: 700, color: quotedAccent,
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>{quotedSender}</span>
               )}
               <span style={{
-                fontSize: 12, color: 'var(--c-textSecondary)', fontFamily: FONT,
+                fontSize: 14, color: 'var(--c-textSecondary)', fontFamily: FONT,
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 240,
               }}>{quotedText}</span>
             </div>
@@ -889,8 +889,8 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
             <div style={{
               display: 'flex', alignItems: 'flex-start', gap: 5, marginTop: 5,
               padding: '5px 8px', borderRadius: 6,
-              background: 'rgba(163,45,45,0.08)', color: '#A32D2D',
-              fontSize: 11.5, lineHeight: 1.4, fontFamily: FONT,
+              background: 'rgba(163,45,45,0.08)', color: 'var(--c-dangerText, #A32D2D)',
+              fontSize: 13, lineHeight: 1.4, fontFamily: FONT,
             }}>
               <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
               <span>{friendlyFailure(message.error_message)}</span>
@@ -902,9 +902,9 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
               display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
               gap: 4, marginTop: 2,
             }}>
-              {starred && <Star size={11} fill="#8696a0" color="#8696a0" />}
+              {starred && <Star size={11} fill="var(--c-textMuted, #667180)" color="var(--c-textMuted, #667180)" />}
               <span style={{
-                fontSize: 10, color: 'var(--c-textMuted)', fontFamily: MONO,
+                fontSize: 12, color: 'var(--c-textMuted)', fontFamily: MONO,
                 lineHeight: 1,
               }}>
                 {formatTime(message.timestamp)}
@@ -924,14 +924,14 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
                   display: 'flex', alignItems: 'center', gap: 1,
                   background: 'var(--c-cardBg)', border: `1px solid ${C.border}`, borderRadius: 12,
                   padding: '1px 5px', boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
-                  fontSize: 12, lineHeight: '15px', whiteSpace: 'nowrap',
+                  fontSize: 14, lineHeight: '15px', whiteSpace: 'nowrap',
                   cursor: 'pointer', fontFamily: FONT, color: C.text,
                 }}
               >
                 {/* WhatsApp caps the emoji run and lets the number carry the rest. */}
                 {reactionGroups.slice(0, 3).map((g, i) => <span key={i}>{g.emoji}</span>)}
                 {reactions.length > 1 && (
-                  <span style={{ fontSize: 11, fontWeight: 600, marginLeft: 2, color: C.textSecondary }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, marginLeft: 2, color: C.textSecondary }}>
                     {reactions.length}
                   </span>
                 )}
@@ -951,7 +951,7 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
                     boxShadow: C.shadowLg, zIndex: 301, padding: '6px 0', fontFamily: FONT,
                   }}>
                     <div style={{
-                      fontSize: 10.5, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase',
+                      fontSize: 12, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase',
                       color: C.textMuted, padding: '2px 12px 6px',
                     }}>
                       {reactions.length} reaction{reactions.length === 1 ? '' : 's'}
@@ -960,16 +960,16 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
                       <div key={i} style={{
                         display: 'flex', alignItems: 'flex-start', gap: 9, padding: '5px 12px',
                       }}>
-                        <span style={{ fontSize: 15, lineHeight: '18px' }}>{g.emoji}</span>
+                        <span style={{ fontSize: 16, lineHeight: '18px' }}>{g.emoji}</span>
                         <div style={{ minWidth: 0, flex: 1 }}>
-                          <div style={{ fontSize: 12.5, color: C.text, fontWeight: 600 }}>
+                          <div style={{ fontSize: 14, color: C.text, fontWeight: 600 }}>
                             {g.count} {g.count === 1 ? 'person' : 'people'}
                           </div>
                           {/* Names only exist where the source provides them
                               (group chats). A 1:1 chat has none, so the row
                               simply shows the count. */}
                           {g.names.length > 0 && (
-                            <div style={{ fontSize: 11.5, color: C.textSecondary, lineHeight: 1.4, wordBreak: 'break-word' }}>
+                            <div style={{ fontSize: 13, color: C.textSecondary, lineHeight: 1.4, wordBreak: 'break-word' }}>
                               {g.names.join(', ')}
                             </div>
                           )}
@@ -1001,11 +1001,11 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
                     <button key={e} disabled={!canReact}
                       onClick={canReact ? () => { onReact(message, myReaction === e ? '' : e); setMenu(null); } : undefined}
                       title={!canReact ? 'Reactions need the 24-hour window open' : (myReaction === e ? 'Remove reaction' : `React ${e}`)}
-                      style={{ border: 'none', background: myReaction === e ? C.primaryLight : 'transparent', borderRadius: '50%', width: 28, height: 28, fontSize: 17, lineHeight: 1, cursor: canReact ? 'pointer' : 'not-allowed' }}>{e}</button>
+                      style={{ border: 'none', background: myReaction === e ? C.primaryLight : 'transparent', borderRadius: '50%', width: 28, height: 28, fontSize: 18, lineHeight: 1, cursor: canReact ? 'pointer' : 'not-allowed' }}>{e}</button>
                   ))}
                 </div>
                 {!canReact && (
-                  <div style={{ padding: '0 9px 6px', fontSize: 11, color: 'var(--c-textMuted)', fontFamily: FONT }}>
+                  <div style={{ padding: '0 9px 6px', fontSize: 13, color: 'var(--c-textMuted)', fontFamily: FONT }}>
                     Reactions need the 24-hour window open
                   </div>
                 )}
@@ -1024,8 +1024,8 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
       {infoOpen && (
         <div onClick={() => setInfoOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, boxShadow: C.shadowLg, width: 'min(380px,100%)', fontFamily: FONT, overflow: 'hidden' }}>
-            <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.border}`, fontWeight: 700, fontSize: 15, color: C.text }}>Message info</div>
-            <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 11, fontSize: 13 }}>
+            <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.border}`, fontWeight: 700, fontSize: 16, color: C.text }}>Message info</div>
+            <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 11, fontSize: 15 }}>
               <InfoRow label="Direction" value={isOutgoing ? 'Sent by you' : 'Received'} />
               {isOutgoing && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1038,7 +1038,7 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
               {starred && <InfoRow label="Starred" value="Yes" />}
             </div>
             <div style={{ padding: '10px 16px', borderTop: `1px solid ${C.border}`, textAlign: 'right' }}>
-              <button onClick={() => setInfoOpen(false)} style={{ border: 'none', background: C.primary, color: '#fff', borderRadius: 8, padding: '7px 16px', cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 600 }}>Close</button>
+              <button onClick={() => setInfoOpen(false)} style={{ border: 'none', background: C.primary, color: '#fff', borderRadius: 8, padding: '7px 16px', cursor: 'pointer', fontFamily: FONT, fontSize: 15, fontWeight: 600 }}>Close</button>
             </div>
           </div>
         </div>

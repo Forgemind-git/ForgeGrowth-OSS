@@ -70,11 +70,37 @@ async function resumeAgent({ waNumber, contactNumber, by }) {
 }
 
 async function isConversationPaused(waNumber, contactNumber) {
+  return (await getPauseState(waNumber, contactNumber)).paused;
+}
+
+/**
+ * WHO paused this conversation, not just whether it is paused.
+ *
+ * `agent_paused_by` is one of:
+ *   'limit'         — a usage cap tripped and handed the chat over.
+ *   'manual:<id>'   — a person took it over from Chats.
+ *   'keyword'/'agent' — the agent escalated it itself.
+ *
+ * The distinction matters because a test number is exempt from the LIMITS, so
+ * a pause the limits themselves caused must not outlive that exemption — while
+ * a pause a PERSON performed has to stand, or the bot talks over a colleague
+ * who is mid-conversation with a customer.
+ */
+async function getPauseState(waNumber, contactNumber) {
   const { rows } = await pool.query(
-    `SELECT agent_paused FROM coexistence.contacts WHERE wa_number = $1 AND contact_number = $2`,
+    `SELECT agent_paused, agent_paused_by, agent_paused_at, agent_paused_reason
+       FROM coexistence.contacts WHERE wa_number = $1 AND contact_number = $2`,
     [waNumber, contactNumber],
   );
-  return !!rows[0]?.agent_paused;
+  const r = rows[0];
+  return {
+    paused: !!r?.agent_paused,
+    by: r?.agent_paused_by || null,
+    at: r?.agent_paused_at || null,
+    reason: r?.agent_paused_reason || null,
+    // Only a cap-induced pause is liftable by a test number.
+    byLimit: !!r?.agent_paused && r?.agent_paused_by === 'limit',
+  };
 }
 
 // comma-separated keywords → does the message contain any? (case-insensitive)
@@ -84,4 +110,4 @@ function matchesAnyHandoffKeyword(messageBody, keywords) {
   return String(keywords).split(',').map(k => k.trim().toLowerCase()).filter(Boolean).some(k => msg.includes(k));
 }
 
-module.exports = { performHandoff, resumeAgent, isConversationPaused, matchesAnyHandoffKeyword };
+module.exports = { performHandoff, resumeAgent, isConversationPaused, getPauseState, matchesAnyHandoffKeyword };

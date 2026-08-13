@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Plus, Trash2, ArrowLeft, Pencil, Loader2, Search, X, Check,
-  FolderKanban, LayoutTemplate, Zap, Bot, CornerUpLeft, ListChecks, FormInput,
+  FolderKanban, LayoutTemplate, Zap, Bot, CornerUpLeft, FormInput,
 } from 'lucide-react';
 import { api } from '../api.js';
 import { C, FONT, MONO } from '../constants.js';
@@ -19,10 +19,11 @@ import SortControl from '../components/SortControl.jsx';
 import { sortList, DEFAULT_SORT } from '../lib/listSort.js';
 import { showError, showSuccess } from '../lib/feedback';
 
+// Themed tokens, not hardcoded light hex — see TemplateBuilderPage for why.
 const B = {
-  card: '#FFFFFF', cardBorder: '#E5E5E0', innerBg: '#FAFAF7', innerBorder: '#EEEEE8',
-  rowSep: '#F5F5F0', t1: '#111111', t2: '#222222', t3: '#444444', t4: '#666666',
-  t5: '#777777', t6: '#888888', t7: '#999999',
+  card: C.cardBg, cardBorder: C.border, innerBg: C.surfaceInner, innerBorder: C.borderSubtle,
+  rowSep: C.rowSep, t1: C.t1, t2: C.t2, t3: C.t3, t4: C.t4,
+  t5: C.t5, t6: C.t6, t7: C.t7,
 };
 
 // The kinds a project can hold. `kind` here is the exact string the backend's
@@ -33,7 +34,6 @@ const KINDS = [
   { kind: 'template',   key: 'templates',   label: 'Templates',  singular: 'template',  Icon: LayoutTemplate, page: 'template-builder' },
   { kind: 'automation', key: 'automations', label: 'Automations', singular: 'automation', Icon: Zap,          page: 'chatbot-builder' },
   { kind: 'agent',      key: 'agents',      label: 'AI Agents',  singular: 'AI agent',  Icon: Bot,            page: 'ai-agent-builder' },
-  { kind: 'followup',   key: 'followups',   label: 'Follow-ups', singular: 'follow-up sequence', Icon: ListChecks, page: 'follow-up-sequence' },
   { kind: 'form',       key: 'forms',       label: 'Forms',      singular: 'form',      Icon: FormInput,      page: 'lead-forms' },
 ];
 
@@ -49,16 +49,16 @@ const fmtDate = (ts) => {
 
 const inputStyle = {
   width: '100%', padding: '9px 12px', borderRadius: 10,
-  border: `1.5px solid ${B.cardBorder}`, fontFamily: FONT, fontSize: 13,
+  border: `1.5px solid ${B.cardBorder}`, fontFamily: FONT, fontSize: 15,
   boxSizing: 'border-box', outline: 'none',
 };
 const btnPrimary = {
   padding: '9px 16px', borderRadius: 8, border: 'none', background: C.primary,
-  color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: FONT,
+  color: '#fff', cursor: 'pointer', fontSize: 15, fontWeight: 700, fontFamily: FONT,
 };
 const btnGhost = {
   padding: '9px 16px', borderRadius: 8, border: `1px solid ${B.cardBorder}`,
-  background: 'transparent', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+  background: 'transparent', cursor: 'pointer', fontSize: 15, fontWeight: 600,
   color: B.t3, fontFamily: FONT,
 };
 
@@ -106,8 +106,8 @@ export default function ProjectsPage({ subParts = [], navigate, user }) {
     <div style={{ padding: '22px 26px', fontFamily: FONT, flex: 1, display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, gap: 16 }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, margin: 0, letterSpacing: '-0.02em', color: B.t1 }}>Projects</h1>
-          <p style={{ fontSize: 12, color: B.t5, margin: '4px 0 0', maxWidth: 720 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, letterSpacing: '-0.02em', color: B.t1 }}>Projects</h1>
+          <p style={{ fontSize: 14, color: B.t5, margin: '4px 0 0', maxWidth: 720 }}>
             Keep everything one campaign needs in one place — the template that goes out, the AI agent
             that answers the replies, and the automation that follows up.
           </p>
@@ -134,10 +134,10 @@ export default function ProjectsPage({ subParts = [], navigate, user }) {
       ) : projects.length === 0 ? (
         <div style={{ background: B.card, border: `1px dashed ${B.cardBorder}`, borderRadius: 12, padding: 60, textAlign: 'center', marginTop: 20 }}>
           <FolderKanban size={36} style={{ color: B.t7, marginBottom: 12 }} />
-          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6, color: B.t2 }}>No projects yet</div>
-          <div style={{ fontSize: 13, color: B.t5, marginBottom: 18, maxWidth: 480, margin: '0 auto 18px' }}>
+          <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 6, color: B.t2 }}>No projects yet</div>
+          <div style={{ fontSize: 15, color: B.t5, marginBottom: 18, maxWidth: 480, margin: '0 auto 18px' }}>
             Create one per campaign or per audience — a Students project for course templates, a
-            Marketing project for a launch — then move its templates, automations, agents, follow-ups
+            Marketing project for a launch — then move its templates, automations, agents
             and forms into it.
           </div>
           {isAdmin && (
@@ -162,19 +162,19 @@ export default function ProjectsPage({ subParts = [], navigate, user }) {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                 <FolderKanban size={17} color={C.primary} />
-                <span style={{ fontSize: 15, fontWeight: 700, color: B.t1 }}>{p.name}</span>
+                <span style={{ fontSize: 16, fontWeight: 700, color: B.t1 }}>{p.name}</span>
                 {p.archived && (
-                  <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800, color: B.t5, background: '#F1F1EC', borderRadius: 20, padding: '2px 8px', textTransform: 'uppercase' }}>
+                  <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 800, color: B.t5, background: 'var(--c-surfaceMuted, #F1F1EC)', borderRadius: 20, padding: '2px 8px', textTransform: 'uppercase' }}>
                     Archived
                   </span>
                 )}
               </div>
               {p.description && (
-                <div style={{ fontSize: 12, color: B.t5, lineHeight: 1.5 }}>{p.description}</div>
+                <div style={{ fontSize: 14, color: B.t5, lineHeight: 1.5 }}>{p.description}</div>
               )}
               <div style={{ display: 'flex', gap: 14, marginTop: 'auto', paddingTop: 4, alignItems: 'center' }}>
                 {KINDS.map(k => (
-                  <span key={k.kind} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: p.counts[k.key] ? B.t3 : B.t7 }}>
+                  <span key={k.kind} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 14, color: p.counts[k.key] ? B.t3 : B.t7 }}>
                     <k.Icon size={13} />
                     <span style={{ fontFamily: MONO, fontWeight: 700 }}>{p.counts[k.key]}</span>
                   </span>
@@ -182,7 +182,7 @@ export default function ProjectsPage({ subParts = [], navigate, user }) {
                 {/* The grid's default order is by this date — showing it is what
                     makes that order readable rather than arbitrary. */}
                 {fmtDate(p.createdAt) && (
-                  <span style={{ marginLeft: 'auto', fontSize: 11, color: B.t7, whiteSpace: 'nowrap' }}>
+                  <span style={{ marginLeft: 'auto', fontSize: 13, color: B.t7, whiteSpace: 'nowrap' }}>
                     {fmtDate(p.createdAt)}
                   </span>
                 )}
@@ -247,8 +247,8 @@ function ProjectDetail({ projectId, isAdmin, navigate, onBack, onChanged }) {
         </button>
         <div style={{ background: B.card, border: `1px dashed ${B.cardBorder}`, borderRadius: 12, padding: 50, textAlign: 'center' }}>
           <FolderKanban size={32} style={{ color: B.t7, marginBottom: 10 }} />
-          <div style={{ fontWeight: 700, fontSize: 15, color: B.t2 }}>Project not found</div>
-          <div style={{ fontSize: 13, color: B.t5, marginTop: 4 }}>It may have been deleted.</div>
+          <div style={{ fontWeight: 700, fontSize: 16, color: B.t2 }}>Project not found</div>
+          <div style={{ fontSize: 15, color: B.t5, marginTop: 4 }}>It may have been deleted.</div>
         </div>
       </div>
     );
@@ -272,7 +272,7 @@ function ProjectDetail({ projectId, isAdmin, navigate, onBack, onChanged }) {
           <ArrowLeft size={14} /> Projects
         </button>
         <FolderKanban size={18} color={C.primary} />
-        <h1 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: B.t1 }}>{p.name}</h1>
+        <h1 style={{ fontSize: 20, fontWeight: 800, margin: 0, color: B.t1 }}>{p.name}</h1>
         {isAdmin && (
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
             <button onClick={() => setEditOpen(true)} style={{ ...btnGhost, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -280,7 +280,7 @@ function ProjectDetail({ projectId, isAdmin, navigate, onBack, onChanged }) {
             </button>
             <button
               onClick={() => setDeleteOpen(true)}
-              style={{ ...btnGhost, border: '1px solid #FECACA', background: '#FEF2F2', color: '#991B1B', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              style={{ ...btnGhost, border: '1px solid #FECACA', background: 'var(--c-dangerBgSoft, #FEF2F2)', color: 'var(--c-dangerStrong, #991B1B)', display: 'inline-flex', alignItems: 'center', gap: 6 }}
             >
               <Trash2 size={14} /> Delete
             </button>
@@ -288,7 +288,7 @@ function ProjectDetail({ projectId, isAdmin, navigate, onBack, onChanged }) {
         )}
       </div>
       {p.description && (
-        <p style={{ fontSize: 13, color: B.t5, margin: '0 0 18px', maxWidth: 720 }}>{p.description}</p>
+        <p style={{ fontSize: 15, color: B.t5, margin: '0 0 18px', maxWidth: 720 }}>{p.description}</p>
       )}
       {!p.description && <div style={{ height: 12 }} />}
 
@@ -299,15 +299,15 @@ function ProjectDetail({ projectId, isAdmin, navigate, onBack, onChanged }) {
             <div key={k.kind} style={{ background: B.card, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                 <k.Icon size={15} color={C.primary} />
-                <span style={{ fontSize: 13, fontWeight: 800, color: B.t2 }}>{k.label}</span>
-                <span style={{ fontFamily: MONO, fontSize: 12, color: B.t5 }}>{items.length}</span>
+                <span style={{ fontSize: 15, fontWeight: 800, color: B.t2 }}>{k.label}</span>
+                <span style={{ fontFamily: MONO, fontSize: 14, color: B.t5 }}>{items.length}</span>
                 {isAdmin && (
                   <button
                     onClick={() => setPickerKind(k.kind)}
                     style={{
                       marginLeft: 'auto', padding: '5px 10px', borderRadius: 7,
                       border: `1px solid ${B.cardBorder}`, background: 'transparent',
-                      cursor: 'pointer', fontSize: 12, fontWeight: 700, color: B.t3,
+                      cursor: 'pointer', fontSize: 14, fontWeight: 700, color: B.t3,
                       fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 4,
                     }}
                   >
@@ -317,7 +317,7 @@ function ProjectDetail({ projectId, isAdmin, navigate, onBack, onChanged }) {
               </div>
 
               {items.length === 0 ? (
-                <div style={{ fontSize: 12.5, color: B.t6, padding: '14px 0', lineHeight: 1.6 }}>
+                <div style={{ fontSize: 14, color: B.t6, padding: '14px 0', lineHeight: 1.6 }}>
                   No {k.label.toLowerCase()} in this project yet.
                 </div>
               ) : (
@@ -338,11 +338,11 @@ function ProjectDetail({ projectId, isAdmin, navigate, onBack, onChanged }) {
                           cursor: 'pointer', fontFamily: FONT, padding: 0, minWidth: 0,
                         }}
                       >
-                        <div style={{ fontSize: 13, fontWeight: 600, color: B.t2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontSize: 15, fontWeight: 600, color: B.t2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {it.name}
                         </div>
                         {(it.status || it.category) && (
-                          <div style={{ fontSize: 11, color: B.t6, marginTop: 2 }}>
+                          <div style={{ fontSize: 13, color: B.t6, marginTop: 2 }}>
                             {[it.category, it.status].filter(Boolean).join(' · ')}
                           </div>
                         )}
@@ -452,7 +452,7 @@ function ItemPicker({ kind, projectId, projectName, onClose, onDone }) {
       <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, padding: '22px 24px', width: 540, maxWidth: '100%', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: C.shadowLg }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
           <meta.Icon size={16} color={C.primary} />
-          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: B.t1 }}>Add {meta.label.toLowerCase()}</h2>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: B.t1 }}>Add {meta.label.toLowerCase()}</h2>
           <button onClick={onClose} style={{ marginLeft: 'auto', background: 'transparent', border: 'none', cursor: 'pointer', color: B.t5, padding: 4 }}>
             <X size={16} />
           </button>
@@ -469,9 +469,9 @@ function ItemPicker({ kind, projectId, projectName, onClose, onDone }) {
 
         <div style={{ flex: 1, overflowY: 'auto', border: `1px solid ${B.cardBorder}`, borderRadius: 10, minHeight: 140 }}>
           {items === null ? (
-            <div style={{ padding: 20, color: B.t6, fontSize: 13 }}>Loading…</div>
+            <div style={{ padding: 20, color: B.t6, fontSize: 15 }}>Loading…</div>
           ) : visible.length === 0 ? (
-            <div style={{ padding: 20, color: B.t6, fontSize: 13 }}>
+            <div style={{ padding: 20, color: B.t6, fontSize: 15 }}>
               {q ? 'Nothing matches that search.' : `Every ${meta.singular} is already in this project.`}
             </div>
           ) : visible.map(i => {
@@ -482,7 +482,7 @@ function ItemPicker({ kind, projectId, projectName, onClose, onDone }) {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
                   borderBottom: `1px solid ${B.rowSep}`, cursor: 'pointer',
-                  background: on ? '#FFF7F7' : 'transparent',
+                  background: on ? 'var(--c-selectedTint, #FFF7F7)' : 'transparent',
                 }}
               >
                 <input
@@ -490,21 +490,21 @@ function ItemPicker({ kind, projectId, projectName, onClose, onDone }) {
                   onChange={() => setChosen(on ? chosen.filter(x => x !== i.id) : [...chosen, i.id])}
                 />
                 <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: B.t2, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: B.t2, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {i.name}
                   </span>
                   {i.projectName && (
-                    <span style={{ fontSize: 11, color: B.t6 }}>Currently in {i.projectName} — this will move it</span>
+                    <span style={{ fontSize: 13, color: B.t6 }}>Currently in {i.projectName} — this will move it</span>
                   )}
                 </span>
-                {i.status && <span style={{ fontSize: 11, color: B.t6 }}>{i.status}</span>}
+                {i.status && <span style={{ fontSize: 13, color: B.t6 }}>{i.status}</span>}
               </label>
             );
           })}
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 14 }}>
-          <span style={{ fontSize: 12, color: B.t5 }}>{chosen.length} selected</span>
+          <span style={{ fontSize: 14, color: B.t5 }}>{chosen.length} selected</span>
           <span style={{ display: 'flex', gap: 10 }}>
             <button onClick={onClose} style={btnGhost}>Cancel</button>
             <button
@@ -541,11 +541,11 @@ function ProjectModal({ initial, onClose, onSave }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 20 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, padding: '24px 28px', width: 460, maxWidth: '100%', boxShadow: C.shadowLg }}>
-        <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700, color: B.t1 }}>
+        <h2 style={{ margin: '0 0 16px', fontSize: 20, fontWeight: 700, color: B.t1 }}>
           {initial ? 'Rename project' : 'New project'}
         </h2>
         <div style={{ marginBottom: 14 }}>
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: B.t4, marginBottom: 5 }}>Name *</label>
+          <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: B.t4, marginBottom: 5 }}>Name *</label>
           <input
             autoFocus value={name} onChange={e => setName(e.target.value)}
             placeholder="e.g. Students — enrolled" style={inputStyle}
@@ -553,7 +553,7 @@ function ProjectModal({ initial, onClose, onSave }) {
           />
         </div>
         <div style={{ marginBottom: 18 }}>
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: B.t4, marginBottom: 5 }}>Description</label>
+          <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: B.t4, marginBottom: 5 }}>Description</label>
           <textarea
             value={description} onChange={e => setDescription(e.target.value)} rows={2}
             placeholder="What this project is for" style={{ ...inputStyle, resize: 'vertical' }}

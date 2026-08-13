@@ -71,19 +71,19 @@ function ForwardModal({ waNumber, message, onClose }) {
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 330, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, boxShadow: C.shadowLg, width: 'min(420px,100%)', maxHeight: '80vh', display: 'flex', flexDirection: 'column', fontFamily: FONT, overflow: 'hidden' }}>
         <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ fontWeight: 700, fontSize: 15, color: C.text }}>Forward message</div>
+          <div style={{ fontWeight: 700, fontSize: 16, color: C.text }}>Forward message</div>
           <button onClick={onClose} style={{ border: 'none', background: C.pageBg, borderRadius: 8, width: 28, height: 28, cursor: 'pointer', color: C.textSecondary }}><X size={15} /></button>
         </div>
         <div style={{ padding: '10px 16px', borderBottom: `1px solid ${C.border}` }}>
-          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 6 }}>Forwarding:</div>
-          <div style={{ fontSize: 13, color: C.text, background: C.pageBg, borderRadius: 8, padding: '8px 10px', maxHeight: 72, overflow: 'hidden' }}>
+          <div style={{ fontSize: 14, color: C.textMuted, marginBottom: 6 }}>Forwarding:</div>
+          <div style={{ fontSize: 15, color: C.text, background: C.pageBg, borderRadius: 8, padding: '8px 10px', maxHeight: 72, overflow: 'hidden' }}>
             {kind ? (
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
                 <kind.Icon size={15} style={{ color: C.textSecondary, flexShrink: 0, marginTop: 1 }} />
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 600 }}>{kind.label}</div>
                   {(fileName || text) && (
-                    <div style={{ fontSize: 12, color: C.textSecondary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div style={{ fontSize: 14, color: C.textSecondary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {fileName || (text.length > 80 ? text.slice(0, 80) + '…' : text)}
                     </div>
                   )}
@@ -93,21 +93,21 @@ function ForwardModal({ waNumber, message, onClose }) {
           </div>
         </div>
         <div style={{ padding: '10px 16px' }}>
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search contacts…" style={{ width: '100%', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', fontSize: 13, fontFamily: FONT, outline: 'none', boxSizing: 'border-box' }} />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search contacts…" style={{ width: '100%', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', fontSize: 15, fontFamily: FONT, outline: 'none', boxSizing: 'border-box' }} />
         </div>
-        {result && <div style={{ margin: '0 16px 8px', fontSize: 12.5, color: result.ok ? C.green : '#A32D2D', background: result.ok ? '#E3F2EC' : C.primaryLight, borderRadius: 8, padding: '8px 10px' }}>{result.msg}</div>}
+        {result && <div style={{ margin: '0 16px 8px', fontSize: 14, color: result.ok ? C.green : 'var(--c-dangerText, #A32D2D)', background: result.ok ? 'var(--c-successBgSoft, #E3F2EC)' : C.primaryLight, borderRadius: 8, padding: '8px 10px' }}>{result.msg}</div>}
         <div style={{ overflowY: 'auto', padding: '0 8px 10px' }}>
-          {loading ? <div style={{ padding: 18, color: C.textMuted, fontSize: 13 }}>Loading…</div>
-            : filtered.length === 0 ? <div style={{ padding: 18, color: C.textMuted, fontSize: 13 }}>No contacts.</div>
+          {loading ? <div style={{ padding: 18, color: C.textMuted, fontSize: 15 }}>Loading…</div>
+            : filtered.length === 0 ? <div style={{ padding: 18, color: C.textMuted, fontSize: 15 }}>No contacts.</div>
               : filtered.map(c => (
                 <button key={c.contact_number} disabled={!!sendingTo || !canSend} onClick={() => send(c)}
                   onMouseEnter={e => { e.currentTarget.style.background = C.pageBg; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', border: 'none', background: 'transparent', cursor: canSend ? 'pointer' : 'not-allowed', padding: '9px 10px', borderRadius: 8, fontFamily: FONT, textAlign: 'left' }}>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name || c.profile_name || `+${maskPhone(c.contact_number)}`}</div>
-                    <div style={{ fontSize: 11.5, color: C.textMuted }}>+{maskPhone(c.contact_number)}</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name || c.profile_name || `+${maskPhone(c.contact_number)}`}</div>
+                    <div style={{ fontSize: 13, color: C.textMuted }}>+{maskPhone(c.contact_number)}</div>
                   </div>
-                  {sendingTo === c.contact_number ? <span style={{ fontSize: 12, color: C.textMuted }}>Sending…</span> : <Forward size={15} style={{ color: C.textSecondary, flexShrink: 0 }} />}
+                  {sendingTo === c.contact_number ? <span style={{ fontSize: 14, color: C.textMuted }}>Sending…</span> : <Forward size={15} style={{ color: C.textSecondary, flexShrink: 0 }} />}
                 </button>
               ))
           }
@@ -129,13 +129,10 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
   const [saving, setSaving] = useState(false);
   const [categories, setCategories] = useState([]);
   const [allTags, setAllTags] = useState([]);
-  const [contactFields, setContactFields] = useState([]);
-  const [contactCustomFields, setContactCustomFields] = useState({});
   const [assignableUsers, setAssignableUsers] = useState(null); // null = unknown, [] = not admin, [...] = admin
   const [assignedUserId, setAssignedUserId] = useState(null);
   const [agentConv, setAgentConv] = useState(null); // { hasAgent, paused, ... } | null
   const [agentBusy, setAgentBusy] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState({});
   const scrollRef = useRef(null);
   const [hasScrolled, setHasScrolled] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -509,12 +506,10 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
     api.contact(waNumber, contactNumber)
       .then(data => {
         setContactTags(data.tags || []);
-        setContactCustomFields(data.custom_fields || {});
         setAssignedUserId(data.assigned_user_id ?? null);
       })
       .catch(() => {
         setContactTags([]);
-        setContactCustomFields({});
         setAssignedUserId(null);
       });
   }, [waNumber, contactNumber]);
@@ -536,8 +531,6 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
     setIsEditing(false);
     setEditValue('');
     setContactTags([]);
-    setContactCustomFields({});
-    setFieldErrors({});
     setReplyTo(null);
   }, [waNumber, contactNumber]);
 
@@ -566,12 +559,14 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
     Promise.all([
       api.categories.list().catch(() => []),
       api.tags.list().catch(() => []),
-      api.contactFields.list().catch(() => []),
       api.users.list().catch(() => null),
-    ]).then(([cats, tgs, flds, usrs]) => {
-      setCategories(cats);
-      setAllTags(tgs);
-      setContactFields(flds);
+    ]).then(([cats, tgs, usrs]) => {
+      // Managed categories (Funnel Stage, Product) are mirrored by the backend
+      // and are not hand-assignable — a "bought X" tag anyone can set stops
+      // meaning "bought X". They still SHOW on the contact; they are just not
+      // offered here, and POST /contacts/save preserves them through a save.
+      setCategories((cats || []).filter(c => !c.managed));
+      setAllTags((tgs || []).filter(t => !t.managed));
       setAssignableUsers(usrs); // null when 403'd (non-admin)
     });
     // Is an AI agent active on this number, and is it paused for a human?
@@ -659,7 +654,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
   // never touch the name. `assigned` omitted = leave assignment untouched.
   const persistContact = async ({ tags = contactTags, assigned } = {}) => {
     const assignedArg = assigned === undefined ? undefined : (assigned === null ? null : Number(assigned));
-    await api.saveContact(waNumber, contactNumber, '', tags, contactCustomFields, assignedArg);
+    await api.saveContact(waNumber, contactNumber, '', tags, assignedArg);
     if (onContactSaved) onContactSaved();
   };
 
@@ -699,51 +694,9 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
     }
   };
 
-  const validateField = (field, value) => {
-    if (!value || !value.trim()) return '';
-    switch (field.field_type) {
-      case 'number':
-        if (!/^\d*\.?\d*$/.test(value)) return 'Must be a valid number';
-        break;
-      case 'phone':
-        if (!/^[\d\s+\-\(\)]*$/.test(value)) return 'Must be a valid phone number';
-        break;
-      case 'email':
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Must be a valid email';
-        break;
-      case 'url':
-        if (!/^https?:\/\/.+/.test(value)) return 'Must start with http:// or https://';
-        break;
-      default:
-        break;
-    }
-    return '';
-  };
-
-  const isFormValid = () => {
-    const errors = {};
-    contactFields.forEach(field => {
-      const val = contactCustomFields[field.id] || '';
-      const err = validateField(field, val);
-      if (err) errors[field.id] = err;
-    });
-    setFieldErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  const handleCustomFieldChange = (fieldId, value) => {
-    setContactCustomFields(prev => ({ ...prev, [fieldId]: value }));
-    const field = contactFields.find(f => f.id === fieldId);
-    if (field) {
-      const err = validateField(field, value);
-      setFieldErrors(prev => ({ ...prev, [fieldId]: err }));
-    }
-  };
-
   const handleSaveName = async () => {
     const name = editValue.trim();
     if (!name) return;
-    if (!isFormValid()) return;
     setSaving(true);
     try {
       // Admin: send assignedUserId so the picker takes effect.
@@ -751,7 +704,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
       const assignedArg = Array.isArray(assignableUsers)
         ? (assignedUserId == null ? null : Number(assignedUserId))
         : undefined;
-      await api.saveContact(waNumber, contactNumber, name, contactTags, contactCustomFields, assignedArg);
+      await api.saveContact(waNumber, contactNumber, name, contactTags, assignedArg);
       setContactName(name);
       setIsEditing(false);
       if (onContactSaved) onContactSaved();
@@ -765,8 +718,6 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
   const handleCancelEdit = () => {
     setIsEditing(false);
     setEditValue('');
-    setContactCustomFields({});
-    setFieldErrors({});
   };
 
   // Apply optimistic reaction + star overrides on top of the server data.
@@ -846,7 +797,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
   };
   const menuItemStyle = {
     display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 14px',
-    border: 'none', background: 'var(--c-cardBg)', cursor: 'pointer', fontSize: 13, fontWeight: 500,
+    border: 'none', background: 'var(--c-cardBg)', cursor: 'pointer', fontSize: 15, fontWeight: 500,
     color: C.text, fontFamily: FONT, textAlign: 'left',
   };
 
@@ -856,10 +807,10 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
       overflow: 'hidden',
       background: 'var(--c-chatWall)',
     }}>
-      {/* Chat header — WhatsApp dark green style */}
+      {/* Chat header — WhatsApp green in light, deep slate in dark */}
       <div style={{
         padding: '10px 16px',
-        background: '#008069',
+        background: 'var(--c-chatHeaderBg)',
         display: 'flex', alignItems: 'center', gap: 12,
         flexShrink: 0,
       }}>
@@ -877,7 +828,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
                 flex: 1, minWidth: 0,
                 padding: '8px 12px', borderRadius: 8,
                 border: '1px solid rgba(255,255,255,0.3)',
-                fontSize: 13, fontFamily: FONT, outline: 'none',
+                fontSize: 15, fontFamily: FONT, outline: 'none',
                 background: 'rgba(255,255,255,0.15)', color: '#fff',
               }}
             />
@@ -893,14 +844,14 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
               background: 'rgba(255,255,255,0.2)',
               color: '#fff',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 16, fontWeight: 700,
+              fontSize: 18, fontWeight: 700,
             }}>
               {contactName ? contactName.charAt(0).toUpperCase() : <Phone size={18} />}
             </div>
 
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{
-                fontSize: 16, fontWeight: 600, color: '#fff',
+                fontSize: 18, fontWeight: 600, color: '#fff',
                 fontFamily: FONT,
                 display: 'flex', alignItems: 'center', gap: 6, minWidth: 0,
               }}>
@@ -921,7 +872,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
                 </button>
               </div>
               <div style={{
-                fontSize: 12, color: 'rgba(255,255,255,0.8)', fontFamily: FONT,
+                fontSize: 14, color: 'rgba(255,255,255,0.8)', fontFamily: FONT,
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               }}>
                 <MaskedNumber number={contactNumber} prefix="+" />
@@ -939,7 +890,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
                 {contactTags.length > 0 && (
                   <span style={{
                     position: 'absolute', top: 0, right: 0, minWidth: 15, height: 15, padding: '0 3px',
-                    borderRadius: 8, background: C.primary, color: '#fff', fontSize: 9.5, fontWeight: 700,
+                    borderRadius: 8, background: C.primary, color: '#fff', fontSize: 11, fontWeight: 700,
                     lineHeight: '15px', textAlign: 'center', fontFamily: MONO,
                   }}>{contactTags.length}</span>
                 )}
@@ -954,18 +905,18 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
                     padding: '12px 14px 8px', position: 'sticky', top: 0, background: 'var(--c-cardBg)',
                     borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '.04em' }}>Tags</span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '.04em' }}>Tags</span>
                     {headerSaving && <Loader2 size={13} style={{ animation: 'spin 1s linear infinite', color: C.textMuted }} />}
                   </div>
                   <div style={{ padding: '10px 14px' }}>
                     {categories.filter(c => allTags.some(t => t.category_id === c.id)).length === 0 ? (
-                      <div style={{ fontSize: 12.5, color: C.textMuted }}>No tags defined yet. Create them in Settings → Tags.</div>
+                      <div style={{ fontSize: 14, color: C.textMuted }}>No tags defined yet. Create them in Settings → Tags.</div>
                     ) : categories.map(cat => {
                       const catTags = allTags.filter(t => t.category_id === cat.id);
                       if (catTags.length === 0) return null;
                       return (
                         <div key={cat.id} style={{ marginBottom: 12 }}>
-                          <div style={{ fontSize: 11.5, fontWeight: 700, color: C.text, marginBottom: 5 }}>{cat.name}</div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 5 }}>{cat.name}</div>
                           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                             {catTags.map(tag => {
                               const isSel = contactTags.some(t => t.id === tag.id);
@@ -978,7 +929,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
                                     border: `1.5px solid ${isSel ? tag.color : C.border}`,
                                     background: isSel ? tag.color : 'var(--c-cardBg)',
                                     color: isSel ? '#fff' : C.textSecondary,
-                                    cursor: 'pointer', fontFamily: FONT, fontSize: 12, fontWeight: 600,
+                                    cursor: 'pointer', fontFamily: FONT, fontSize: 14, fontWeight: 600,
                                     display: 'inline-flex', alignItems: 'center', gap: 4,
                                   }}
                                 >
@@ -1011,12 +962,12 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
                     boxShadow: C.shadowLg, width: 260, zIndex: 50, border: `1px solid ${C.border}`,
                     fontFamily: FONT, overflow: 'hidden',
                   }}>
-                    <div style={{ padding: '12px 14px 8px', borderBottom: `1px solid ${C.border}`, fontSize: 12, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '.04em' }}>Assign to</div>
+                    <div style={{ padding: '12px 14px 8px', borderBottom: `1px solid ${C.border}`, fontSize: 14, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '.04em' }}>Assign to</div>
                     <div style={{ padding: '6px 0', maxHeight: 280, overflowY: 'auto' }}>
                       <button
                         onClick={() => handleHeaderAssign(null)}
                         style={menuItemStyle}
-                        onMouseEnter={e => { e.currentTarget.style.background = '#F3F4F6'; }}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'var(--c-xf3f4f6, #F3F4F6)'; }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'var(--c-cardBg)'; }}
                       >
                         <span style={{ width: 15, display: 'inline-flex', flexShrink: 0 }}>{assignedUserId == null && <Check size={15} color={C.primary} />}</span>
@@ -1029,7 +980,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
                             key={u.id}
                             onClick={() => handleHeaderAssign(u.id)}
                             style={menuItemStyle}
-                            onMouseEnter={e => { e.currentTarget.style.background = '#F3F4F6'; }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'var(--c-xf3f4f6, #F3F4F6)'; }}
                             onMouseLeave={e => { e.currentTarget.style.background = 'var(--c-cardBg)'; }}
                           >
                             <span style={{ width: 15, display: 'inline-flex', flexShrink: 0 }}>{sel && <Check size={15} color={C.primary} />}</span>
@@ -1091,16 +1042,16 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
                   <button
                     onClick={() => { handleEditClick(); setMenuOpen(false); }}
                     style={menuItemStyle}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#F3F4F6'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--c-xf3f4f6, #F3F4F6)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--c-cardBg)'; }}
                   >
                     <User size={15} color={C.textSecondary} /><span>Contact info</span>
                   </button>
                   <button
                     onClick={() => { refetch(); setMenuOpen(false); }}
                     style={menuItemStyle}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#F3F4F6'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--c-xf3f4f6, #F3F4F6)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--c-cardBg)'; }}
                   >
                     <RefreshCw size={15} color={C.textSecondary} /><span>Refresh</span>
                   </button>
@@ -1108,8 +1059,8 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
                     onClick={handleExportChat}
                     disabled={messages.length === 0}
                     style={{ ...menuItemStyle, opacity: messages.length === 0 ? 0.5 : 1, cursor: messages.length === 0 ? 'not-allowed' : 'pointer' }}
-                    onMouseEnter={e => { if (messages.length) e.currentTarget.style.background = '#F3F4F6'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
+                    onMouseEnter={e => { if (messages.length) e.currentTarget.style.background = 'var(--c-xf3f4f6, #F3F4F6)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--c-cardBg)'; }}
                   >
                     <Download size={15} color={C.textSecondary} /><span>Export chat</span>
                   </button>
@@ -1124,7 +1075,11 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
       <div ref={scrollRef} style={{
         flex: 1, overflowY: 'auto',
         background: 'var(--c-chatWall)',
-        backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h50v50H0z' fill='%23d1d7db' fill-opacity='0.12'/%3E%3C/svg%3E")`,
+        // The pattern is a data-URI SVG, so var() cannot be interpolated
+        // INSIDE it — the whole url() has to be the token (index.css swaps it
+        // per theme). Hardcoded here, its light-grey fill showed through the
+        // dark wall as a visible checkerboard of squares.
+        backgroundImage: 'var(--c-chatPattern)',
         backgroundRepeat: 'repeat',
         padding: '16px 20px',
         display: 'flex', flexDirection: 'column', gap: 2,
@@ -1135,7 +1090,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
             color: C.textMuted,
           }}>
             <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} />
-            <span style={{ marginLeft: 8, fontSize: 13 }}>Loading messages...</span>
+            <span style={{ marginLeft: 8, fontSize: 15 }}>Loading messages...</span>
           </div>
         )}
 
@@ -1148,7 +1103,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
               border: `1px solid ${C.border}`,
               background: 'var(--c-cardBg)',
               cursor: 'pointer',
-              fontSize: 12, fontWeight: 600, color: C.textSecondary,
+              fontSize: 14, fontWeight: 600, color: C.textSecondary,
               fontFamily: FONT, marginBottom: 8,
               boxShadow: C.shadowSm,
             }}
@@ -1165,7 +1120,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
                 margin: '12px 0',
               }}>
                 <span style={{
-                  fontSize: 11, fontWeight: 600, color: C.textMuted,
+                  fontSize: 13, fontWeight: 600, color: C.textMuted,
                   background: 'var(--c-cardBg)',
                   padding: '4px 12px', borderRadius: 99,
                   fontFamily: FONT,
@@ -1196,7 +1151,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
         {messages.length === 0 && !loading && (
           <div style={{
             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: C.textMuted, fontSize: 13,
+            color: C.textMuted, fontSize: 15,
           }}>
             No messages yet
           </div>
@@ -1211,7 +1166,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
       {/* Reply composer */}
       <div style={{ borderTop: `1px solid ${C.borderDark}`, background: 'var(--c-chatPanel)', flexShrink: 0 }}>
         {windowStatus && !windowStatus.canSendFreeForm && (
-          <div style={{ padding: '8px 16px', background: '#FFF3E0', borderBottom: `1px solid #FFB74D`, fontSize: 12, color: '#E65100', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ padding: '8px 16px', background: 'var(--c-orangeBg, #FFF3E0)', borderBottom: `1px solid var(--c-orangeBorder, #FFB74D)`, fontSize: 14, color: 'var(--c-orangeText, #E65100)', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6 }}>
             <Lock size={13} />
             <span>
               {windowStatus.reason ? (
@@ -1227,7 +1182,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
           </div>
         )}
         {sendError && (
-          <div style={{ padding: '6px 16px', background: 'var(--c-primaryLight)', color: '#A32D2D', fontSize: 12, fontFamily: FONT, borderBottom: `1px solid #F8C8C8` }}>
+          <div style={{ padding: '6px 16px', background: 'var(--c-primaryLight)', color: 'var(--c-dangerText, #A32D2D)', fontSize: 14, fontFamily: FONT, borderBottom: `1px solid var(--c-dangerBorder, #F8C8C8)` }}>
             {sendError}
           </div>
         )}
@@ -1237,10 +1192,10 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
             <Reply size={16} color={C.textMuted} style={{ alignSelf: 'center', flexShrink: 0 }} />
             <div style={{ width: 3, borderRadius: 3, flexShrink: 0, background: replyTo.direction === 'outgoing' ? '#06cf9c' : '#34b7f1' }} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, fontFamily: FONT, color: replyTo.direction === 'outgoing' ? '#06cf9c' : '#34b7f1' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, fontFamily: FONT, color: replyTo.direction === 'outgoing' ? '#06cf9c' : '#34b7f1' }}>
                 {replyTo.direction === 'outgoing' ? 'You' : (contactName || `+${maskPhone(contactNumber)}`)}
               </div>
-              <div style={{ fontSize: 12, color: C.textSecondary, fontFamily: FONT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <div style={{ fontSize: 14, color: C.textSecondary, fontFamily: FONT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {quoteSnippet(replyTo)}
               </div>
             </div>
@@ -1254,7 +1209,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
           <div style={{ padding: '10px 16px', background: 'var(--c-cardBg)', borderBottom: `1px solid ${C.border}`, display: 'flex', gap: 12, alignItems: 'center' }}>
             <Mic size={20} color={C.primary} />
             <audio controls src={audioPreviewUrl} style={{ flex: 1, height: 36 }} />
-            <button onClick={cancelRecording} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#A32D2D', padding: 4 }} title="Delete recording">
+            <button onClick={cancelRecording} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--c-dangerText, #A32D2D)', padding: 4 }} title="Delete recording">
               <Trash2 size={16} />
             </button>
           </div>
@@ -1275,15 +1230,15 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
               </div>
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: C.text, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pendingFile.name}</div>
-              <div style={{ fontSize: 10, color: C.textMuted, fontFamily: MONO, marginTop: 2 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: C.text, fontFamily: FONT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pendingFile.name}</div>
+              <div style={{ fontSize: 12, color: C.textMuted, fontFamily: MONO, marginTop: 2 }}>
                 {pendingFile.type || 'unknown'} · {(pendingFile.size / 1024).toFixed(1)} KB
               </div>
               <input
                 value={pendingCaption}
                 onChange={e => setPendingCaption(e.target.value)}
                 placeholder="Add a caption…"
-                style={{ width: '100%', marginTop: 6, padding: '6px 10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontFamily: FONT, outline: 'none', boxSizing: 'border-box' }}
+                style={{ width: '100%', marginTop: 6, padding: '6px 10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontFamily: FONT, outline: 'none', boxSizing: 'border-box' }}
               />
             </div>
             <button onClick={clearPending} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: C.textMuted, padding: 4 }} title="Remove">
@@ -1305,7 +1260,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
           }}
         >
           {dragOver && (
-            <div style={{ position: 'absolute', inset: 0, background: 'rgba(220, 38, 38, 0.08)', border: `2px dashed ${C.primary}`, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.primary, fontSize: 13, fontWeight: 600, fontFamily: FONT, zIndex: 5, pointerEvents: 'none' }}>
+            <div style={{ position: 'absolute', inset: 0, background: 'rgba(220, 38, 38, 0.08)', border: `2px dashed ${C.primary}`, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.primary, fontSize: 15, fontWeight: 600, fontFamily: FONT, zIndex: 5, pointerEvents: 'none' }}>
               Drop file to attach
             </div>
           )}
@@ -1333,6 +1288,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
             <Paperclip size={16} />
           </button>
 
+
           <button
             type="button"
             onClick={() => setLibraryOpen(true)}
@@ -1353,11 +1309,11 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
           {isRecording ? (
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'var(--c-primaryLight)', borderRadius: 8, boxShadow: C.shadowSm }}>
               <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#A32D2D', animation: 'pulse 1.2s ease-in-out infinite' }} />
-              <span style={{ fontSize: 13, color: '#A32D2D', fontFamily: FONT, fontWeight: 600 }}>
+              <span style={{ fontSize: 15, color: 'var(--c-dangerText, #A32D2D)', fontFamily: FONT, fontWeight: 600 }}>
                 Recording… {String(Math.floor(recordingSeconds / 60)).padStart(2, '0')}:{String(recordingSeconds % 60).padStart(2, '0')}
               </span>
               <span style={{ flex: 1 }} />
-              <button onClick={cancelRecording} style={{ background: 'transparent', border: 'none', color: C.textMuted, cursor: 'pointer', fontSize: 12, fontFamily: FONT }}>Cancel</button>
+              <button onClick={cancelRecording} style={{ background: 'transparent', border: 'none', color: C.textMuted, cursor: 'pointer', fontSize: 14, fontFamily: FONT }}>Cancel</button>
               <style>{`@keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.3 } }`}</style>
             </div>
           ) : (
@@ -1375,7 +1331,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
               disabled={!windowStatus?.canSendFreeForm || sending || !!pendingFile || !!audioBlob}
               style={{
                 flex: 1, padding: '10px 14px', borderRadius: 8, border: 'none',
-                fontSize: 14, fontFamily: FONT, outline: 'none',
+                fontSize: 15, fontFamily: FONT, outline: 'none',
                 background: windowStatus?.canSendFreeForm && !pendingFile && !audioBlob ? 'var(--c-cardBg)' : 'var(--c-hover)',
                 color: windowStatus?.canSendFreeForm && !pendingFile && !audioBlob ? C.text : C.textMuted,
                 boxShadow: C.shadowSm, cursor: windowStatus?.canSendFreeForm && !pendingFile && !audioBlob ? 'text' : 'not-allowed',
@@ -1415,7 +1371,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
             title="Send"
             style={{
               width: 40, height: 40, borderRadius: 20, border: 'none',
-              background: isRecording || ((!composerText.trim() && !pendingFile && !audioBlob) || !windowStatus?.canSendFreeForm) ? '#ccc' : C.primary,
+              background: isRecording || ((!composerText.trim() && !pendingFile && !audioBlob) || !windowStatus?.canSendFreeForm) ? 'var(--c-borderStrong, #ccc)' : C.primary,
               color: '#fff', cursor: isRecording || ((!composerText.trim() && !pendingFile && !audioBlob) || !windowStatus?.canSendFreeForm) ? 'not-allowed' : 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
             }}
@@ -1439,10 +1395,10 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
             boxShadow: C.shadowLg, overflowY: 'auto',
             display: 'flex', flexDirection: 'column',
           }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 6 }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 6 }}>
               Save Contact
             </div>
-            <div style={{ fontSize: 13, color: C.textSecondary, marginBottom: 18, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 15, color: C.textSecondary, marginBottom: 18, lineHeight: 1.5 }}>
               Set a name and details for <strong><MaskedNumber number={contactNumber} prefix="+" /></strong>. Use the header buttons to tag or assign this contact.
             </div>
             <input
@@ -1456,64 +1412,12 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
               placeholder="Contact name..."
               style={{
                 width: '100%', padding: '10px 12px', borderRadius: 8,
-                border: `1px solid ${C.border}`, fontSize: 14,
+                border: `1px solid ${C.border}`, fontSize: 15,
                 fontFamily: FONT, outline: 'none', color: C.text,
                 marginBottom: 16, boxSizing: 'border-box',
               }}
             />
 
-            {/* Custom Fields */}
-            {contactFields.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: C.textSecondary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Custom Fields</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {contactFields.map(field => {
-                    const value = contactCustomFields[field.id] || '';
-                    const error = fieldErrors[field.id];
-                    const isTextarea = field.field_type === 'textarea';
-                    const inputType = field.field_type === 'date' ? 'date' : field.field_type === 'number' ? 'text' : field.field_type === 'email' ? 'email' : field.field_type === 'url' ? 'url' : 'text';
-                    return (
-                      <div key={field.id}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: C.textSecondary, marginBottom: 3 }}>{field.name}</div>
-                        {isTextarea ? (
-                          <textarea
-                            value={value}
-                            onChange={e => handleCustomFieldChange(field.id, e.target.value)}
-                            onBlur={() => { const err = validateField(field, value); setFieldErrors(prev => ({ ...prev, [field.id]: err })); }}
-                            placeholder={`Enter ${field.name.toLowerCase()}...`}
-                            rows={2}
-                            style={{
-                              width: '100%', padding: '8px 10px', borderRadius: 6,
-                              border: `1px solid ${error ? '#dc2626' : C.border}`, fontSize: 13,
-                              fontFamily: FONT, color: C.text, outline: 'none',
-                              boxSizing: 'border-box', resize: 'vertical',
-                            }}
-                          />
-                        ) : (
-                          <input
-                            type={inputType}
-                            value={value}
-                            onChange={e => handleCustomFieldChange(field.id, e.target.value)}
-                            onBlur={() => { const err = validateField(field, value); setFieldErrors(prev => ({ ...prev, [field.id]: err })); }}
-                            placeholder={`Enter ${field.name.toLowerCase()}...`}
-                            inputMode={field.field_type === 'number' ? 'decimal' : field.field_type === 'phone' ? 'tel' : undefined}
-                            style={{
-                              width: '100%', padding: '8px 10px', borderRadius: 6,
-                              border: `1px solid ${error ? '#dc2626' : C.border}`, fontSize: 13,
-                              fontFamily: FONT, color: C.text, outline: 'none',
-                              boxSizing: 'border-box',
-                            }}
-                          />
-                        )}
-                        {error && (
-                          <div style={{ fontSize: 11, color: '#dc2626', marginTop: 2 }}>{error}</div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 'auto', paddingTop: 24 }}>
               <button
@@ -1521,7 +1425,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
                 style={{
                   padding: '8px 16px', borderRadius: 8,
                   border: `1px solid ${C.border}`, background: 'transparent',
-                  cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                  cursor: 'pointer', fontSize: 15, fontWeight: 600,
                   color: C.textSecondary, fontFamily: FONT,
                 }}
               >
@@ -1534,7 +1438,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
                   padding: '8px 16px', borderRadius: 8, border: 'none',
                   background: C.purple, color: '#fff',
                   cursor: (!editValue.trim() || saving) ? 'not-allowed' : 'pointer',
-                  fontSize: 13, fontWeight: 600, fontFamily: FONT,
+                  fontSize: 15, fontWeight: 600, fontFamily: FONT,
                   opacity: (!editValue.trim() || saving) ? 0.6 : 1,
                   display: 'flex', alignItems: 'center', gap: 6,
                 }}
@@ -1632,8 +1536,8 @@ function LibraryPickerModal({ waNumber, sending, onClose, onSend }) {
         <div style={{ padding: '18px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
           <Library size={20} color={C.primary} />
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Send from Media Library</div>
-            <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 2 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>Send from Media Library</div>
+            <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 2 }}>
               {account
                 ? <>Sending as <strong><MaskedNumber number={account.displayPhoneNumber} /></strong> — items synced for this WABA send immediately, others auto-sync first.</>
                 : 'Resolving WABA…'}
@@ -1664,7 +1568,7 @@ function LibraryPickerModal({ waNumber, sending, onClose, onSend }) {
                   border: `1px solid ${active ? C.primary : C.border}`,
                   background: active ? C.primary : 'var(--c-cardBg)',
                   color: active ? '#fff' : C.text,
-                  cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: FONT,
+                  cursor: 'pointer', fontSize: 14, fontWeight: 600, fontFamily: FONT,
                 }}
               >{f.label}</button>
             );
@@ -1672,14 +1576,14 @@ function LibraryPickerModal({ waNumber, sending, onClose, onSend }) {
         </div>
 
         {/* List */}
-        <div style={{ flex: 1, overflow: 'auto', padding: 16, background: '#FAFAF8' }}>
+        <div style={{ flex: 1, overflow: 'auto', padding: 16, background: 'var(--c-surfaceInner, #FAFAF8)' }}>
           {error && (
-            <div style={{ padding: 10, background: 'var(--c-primaryLight)', color: '#A32D2D', borderRadius: 6, fontSize: 13 }}>{error}</div>
+            <div style={{ padding: 10, background: 'var(--c-primaryLight)', color: 'var(--c-dangerText, #A32D2D)', borderRadius: 6, fontSize: 15 }}>{error}</div>
           )}
           {!media ? (
             <div style={{ padding: 40, textAlign: 'center', color: C.textMuted }}>Loading…</div>
           ) : filtered.length === 0 ? (
-            <div style={{ padding: 40, textAlign: 'center', color: C.textMuted, fontSize: 13 }}>
+            <div style={{ padding: 40, textAlign: 'center', color: C.textMuted, fontSize: 15 }}>
               No media in the library. Upload one from the Media tab first.
             </div>
           ) : (
@@ -1750,11 +1654,11 @@ function LibraryPickerModal({ waNumber, sending, onClose, onSend }) {
                     </div>
                     <div style={{ padding: 8 }}>
                       <div style={{
-                        fontSize: 12, fontWeight: 600, color: C.text,
+                        fontSize: 14, fontWeight: 600, color: C.text,
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                       }}>{m.name || m.originalName}</div>
                       <div style={{
-                        fontSize: 10, marginTop: 4, color: stateColor, fontWeight: 600,
+                        fontSize: 12, marginTop: 4, color: stateColor, fontWeight: 600,
                         display: 'flex', alignItems: 'center', gap: 3,
                       }}>
                         {state.kind === 'synced' && <CheckCircle2 size={10} />}
@@ -1781,7 +1685,7 @@ function LibraryPickerModal({ waNumber, sending, onClose, onSend }) {
             disabled={!selected}
             style={{
               flex: 1, padding: '9px 12px', borderRadius: 8,
-              border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT,
+              border: `1px solid ${C.border}`, fontSize: 15, fontFamily: FONT,
               outline: 'none', boxSizing: 'border-box',
               background: selected ? 'var(--c-cardBg)' : 'var(--c-hover)',
             }}
@@ -1792,7 +1696,7 @@ function LibraryPickerModal({ waNumber, sending, onClose, onSend }) {
             style={{
               padding: '9px 14px', borderRadius: 8, border: `1px solid ${C.border}`,
               background: 'var(--c-cardBg)', color: C.text, cursor: 'pointer',
-              fontSize: 13, fontWeight: 600, fontFamily: FONT,
+              fontSize: 15, fontWeight: 600, fontFamily: FONT,
             }}
           >Cancel</button>
           <button
@@ -1802,7 +1706,7 @@ function LibraryPickerModal({ waNumber, sending, onClose, onSend }) {
               padding: '9px 18px', borderRadius: 8, border: 'none',
               background: !selected ? 'var(--c-hover)' : C.primary, color: '#fff',
               cursor: !selected || sending ? 'not-allowed' : 'pointer',
-              fontSize: 13, fontWeight: 600, fontFamily: FONT,
+              fontSize: 15, fontWeight: 600, fontFamily: FONT,
               display: 'inline-flex', alignItems: 'center', gap: 6,
             }}
           >
@@ -1816,8 +1720,8 @@ function LibraryPickerModal({ waNumber, sending, onClose, onSend }) {
 }
 
 const TYPE_META = {
-  image:    { Icon: ImageIcon, label: 'Image',    color: '#3B82F6' },
-  video:    { Icon: Video,     label: 'Video',    color: '#8B5CF6' },
+  image:    { Icon: ImageIcon, label: 'Image',    color: 'var(--c-s3b82f6, #3B82F6)' },
+  video:    { Icon: Video,     label: 'Video',    color: 'var(--c-s8b5cf6, #8B5CF6)' },
   audio:    { Icon: Music,     label: 'Audio',    color: '#10B981' },
   document: { Icon: FileText,  label: 'Document', color: '#F59E0B' },
 };

@@ -34,9 +34,9 @@ import AccountHealthBanner from '../components/AccountHealthBanner.jsx';
 import { KpiCard, Card, LineTrend, FunnelBars, Shimmer, EmptyChart } from '../components/charts.jsx';
 
 const B = {
-  card: C.cardBg, cardBorder: C.border, innerBg: C.surfaceAlt, innerBorder: C.border,
-  rowSep: C.border, t1: C.text, t2: C.text, t3: C.textSecondary, t4: C.textSecondary,
-  t5: C.textMuted, t6: C.textMuted, t7: C.textMuted,
+  card: C.cardBg, cardBorder: C.border, innerBg: C.surfaceInner, innerBorder: C.borderSubtle,
+  rowSep: C.rowSep, t1: C.t1, t2: C.t2, t3: C.t3, t4: C.t4,
+  t5: C.t5, t6: C.t6, t7: C.t7,
 };
 
 const FORM_TYPES = [
@@ -87,8 +87,8 @@ const MAPS_TO_OPTS = [
 const NEEDS_OPTIONS = ['dropdown', 'radio', 'checkbox'];
 
 const TEMPLATE_CATEGORIES = [
-  { value: 'UTILITY', label: 'Utility', Icon: Bell, color: '#1565C0', bg: '#E3F2FD', desc: 'Follow-ups on something the person already started — a booking, an order, an enquiry they made.' },
-  { value: 'MARKETING', label: 'Marketing', Icon: Megaphone, color: '#B45309', bg: '#FEF3C7', desc: 'Promotions, offers and anything sent to people who did not ask for it. Costs more and needs opt-in.' },
+  { value: 'UTILITY', label: 'Utility', Icon: Bell, color: 'var(--c-infoText, #1565C0)', bg: 'var(--c-infoBg, #E3F2FD)', desc: 'Follow-ups on something the person already started — a booking, an order, an enquiry they made.' },
+  { value: 'MARKETING', label: 'Marketing', Icon: Megaphone, color: 'var(--c-sb45309, #B45309)', bg: 'var(--c-sfef3c7, #FEF3C7)', desc: 'Promotions, offers and anything sent to people who did not ask for it. Costs more and needs opt-in.' },
 ];
 
 function newField(n) {
@@ -112,10 +112,10 @@ function typeDefaults(type, field) {
 
 const btn = (variant = 'secondary') => ({
   display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 15px', borderRadius: 8,
-  fontFamily: FONT, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap',
+  fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: 'pointer', whiteSpace: 'nowrap',
   border: variant === 'secondary' ? `1.5px solid ${B.cardBorder}` : 'none',
-  background: variant === 'primary' ? C.primary : variant === 'danger' ? '#FEF2F2' : C.cardBg,
-  color: variant === 'primary' ? '#fff' : variant === 'danger' ? '#991B1B' : B.t2,
+  background: variant === 'primary' ? C.primary : variant === 'danger' ? 'var(--c-dangerBgSoft, #FEF2F2)' : C.cardBg,
+  color: variant === 'primary' ? '#fff' : variant === 'danger' ? 'var(--c-dangerStrong, #991B1B)' : B.t2,
 });
 
 export default function LeadFormsPage({ user, subParts = [], navigate }) {
@@ -159,8 +159,8 @@ function FormsList({ navigate }) {
     <div style={{ padding: '22px 26px', fontFamily: FONT, flex: 1, display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, margin: 0, letterSpacing: '-0.02em', color: B.t1 }}>Forms</h1>
-          <p style={{ fontSize: 12, color: B.t5, margin: '4px 0 0' }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, letterSpacing: '-0.02em', color: B.t1 }}>Forms</h1>
+          <p style={{ fontSize: 14, color: B.t5, margin: '4px 0 0' }}>
             Build a form with your own fields and branding — share it as a link, or send it over WhatsApp.
           </p>
         </div>
@@ -170,7 +170,7 @@ function FormsList({ navigate }) {
         </div>
       </div>
 
-      {error && <div style={{ padding: 10, background: '#FEF2F2', color: '#991B1B', borderRadius: 8, marginBottom: 14, fontSize: 13 }}>{error}</div>}
+      {error && <div style={{ padding: 10, background: 'var(--c-dangerBgSoft, #FEF2F2)', color: 'var(--c-dangerStrong, #991B1B)', borderRadius: 8, marginBottom: 14, fontSize: 15 }}>{error}</div>}
 
       {forms == null ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{[0, 1, 2].map(i => <Shimmer key={i} height={48} radius={10} />)}</div>
@@ -184,7 +184,7 @@ function FormsList({ navigate }) {
                 {/* Alignment keys off the LABEL, not the column index — inserting
                     a column used to silently right-align whatever landed at 4. */}
                 {['Name', 'Type', 'Status', 'Project', 'Fields', 'Responses', 'Created', ''].map((h, i) => (
-                  <th key={i} style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: B.t4, textAlign: h === 'Responses' ? 'right' : 'left', textTransform: 'uppercase', letterSpacing: '.06em' }}>{h}</th>
+                  <th key={i} style={{ padding: '10px 14px', fontSize: 13, fontWeight: 700, color: B.t4, textAlign: h === 'Responses' ? 'right' : 'left', textTransform: 'uppercase', letterSpacing: '.06em' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -194,7 +194,7 @@ function FormsList({ navigate }) {
                   style={{ borderBottom: `1px solid ${B.rowSep}`, cursor: 'pointer' }}
                   onMouseEnter={e => e.currentTarget.style.background = B.innerBg}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                  <td style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600, color: B.t2 }}>
+                  <td style={{ padding: '12px 14px', fontSize: 15, fontWeight: 600, color: B.t2 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FormInput size={14} color={C.primary} /> {f.name}</div>
                   </td>
                   <td style={{ padding: '12px 14px' }}><TypeBadge type={f.formType} /></td>
@@ -202,19 +202,19 @@ function FormsList({ navigate }) {
                   {/* Which campaign this form belongs to. Read-only here — filing
                       happens on the Projects page, which can move every kind at
                       once (same convention as Templates and Follow-ups). */}
-                  <td style={{ padding: '12px 14px', fontSize: 12, fontFamily: FONT }}>
+                  <td style={{ padding: '12px 14px', fontSize: 14, fontFamily: FONT }}>
                     {f.projectName
-                      ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 99, background: '#F1F1EC', color: B.t3, fontWeight: 600 }}>
+                      ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 99, background: 'var(--c-surfaceMuted, #F1F1EC)', color: B.t3, fontWeight: 600 }}>
                           <FolderKanban size={11} /> {f.projectName}
                         </span>
                       : <span style={{ color: B.t7 }}>—</span>}
                   </td>
-                  <td style={{ padding: '12px 14px', fontSize: 12, color: B.t4, fontFamily: MONO }}>{f.fields.length}</td>
-                  <td style={{ padding: '12px 14px', fontSize: 12, color: B.t4, fontFamily: MONO, textAlign: 'right' }}>{f.submissionCount ?? 0}</td>
-                  <td style={{ padding: '12px 14px', fontSize: 12, color: B.t5 }}>{fmtDate(f.createdAt)}</td>
+                  <td style={{ padding: '12px 14px', fontSize: 14, color: B.t4, fontFamily: MONO }}>{f.fields.length}</td>
+                  <td style={{ padding: '12px 14px', fontSize: 14, color: B.t4, fontFamily: MONO, textAlign: 'right' }}>{f.submissionCount ?? 0}</td>
+                  <td style={{ padding: '12px 14px', fontSize: 14, color: B.t5 }}>{fmtDate(f.createdAt)}</td>
                   <td style={{ padding: '12px 14px' }}>
                     <button onClick={(e) => { e.stopPropagation(); setDeleteModal({ open: true, item: f }); }}
-                      style={{ padding: 6, borderRadius: 6, background: 'transparent', border: 'none', cursor: 'pointer', color: '#991B1B' }} title="Delete">
+                      style={{ padding: 6, borderRadius: 6, background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--c-dangerStrong, #991B1B)' }} title="Delete">
                       <Trash2 size={14} />
                     </button>
                   </td>
@@ -238,8 +238,8 @@ function EmptyState({ onCreate }) {
   return (
     <div style={{ background: B.card, border: `1px dashed ${B.cardBorder}`, borderRadius: 12, padding: 60, textAlign: 'center', marginTop: 20 }}>
       <FormInput size={36} style={{ color: B.t7, marginBottom: 12 }} />
-      <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6, color: B.t2 }}>No forms yet</div>
-      <div style={{ fontSize: 13, color: B.t5, marginBottom: 18 }}>Build a form with any fields you want — no presets.</div>
+      <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 6, color: B.t2 }}>No forms yet</div>
+      <div style={{ fontSize: 15, color: B.t5, marginBottom: 18 }}>Build a form with any fields you want — no presets.</div>
       <button style={btn('primary')} onClick={onCreate}><Plus size={15} /> Create your first form</button>
     </div>
   );
@@ -263,7 +263,7 @@ function CreateFormModal({ onClose, onCreated }) {
 
   return (
     <ModalShell onClose={onClose} width={560}>
-      <h2 style={{ margin: '0 0 18px', fontSize: 18, fontWeight: 700, color: B.t1 }}>New Form</h2>
+      <h2 style={{ margin: '0 0 18px', fontSize: 20, fontWeight: 700, color: B.t1 }}>New Form</h2>
       <FieldRow label="Name *">
         <input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Course Interest Form" style={inputStyle} />
       </FieldRow>
@@ -273,7 +273,7 @@ function CreateFormModal({ onClose, onCreated }) {
       <FieldRow label="How will you share it?" hint="You can change this later.">
         <FormTypePicker value={formType} onChange={setFormType} />
       </FieldRow>
-      {error && <div style={{ color: '#991B1B', fontSize: 13, marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ color: 'var(--c-dangerStrong, #991B1B)', fontSize: 15, marginBottom: 12 }}>{error}</div>}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
         <button style={btn()} onClick={onClose}>Cancel</button>
         <button style={btn('primary')} onClick={submit} disabled={saving}>{saving ? 'Creating…' : 'Create'}</button>
@@ -295,9 +295,9 @@ function FormTypePicker({ value, onChange }) {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
               <t.Icon size={15} color={on ? C.primary : B.t4} />
-              <span style={{ fontSize: 13.5, fontWeight: 700, color: on ? C.primary : B.t2 }}>{t.label}</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: on ? C.primary : B.t2 }}>{t.label}</span>
             </div>
-            <div style={{ fontSize: 11.5, color: B.t5, lineHeight: 1.5 }}>{t.detail}</div>
+            <div style={{ fontSize: 13, color: B.t5, lineHeight: 1.5 }}>{t.detail}</div>
           </button>
         );
       })}
@@ -354,9 +354,9 @@ function FormBuilder({ id, navigate }) {
     <div style={{ padding: '22px 26px', fontFamily: FONT, flex: 1, display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
         {back}
-        <h1 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: B.t1, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{form.name}</h1>
+        <h1 style={{ fontSize: 20, fontWeight: 800, margin: 0, color: B.t1, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{form.name}</h1>
         {form.projectName && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: B.t4, fontWeight: 600 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 14, color: B.t4, fontWeight: 600 }}>
             <FolderKanban size={13} color={C.primary} /> {form.projectName}
           </span>
         )}
@@ -396,7 +396,7 @@ function TabBtn({ active, onClick, icon: Icon, children }) {
   return (
     <button onClick={onClick} style={{
       display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 14px', border: 'none',
-      background: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 700,
+      background: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 15, fontWeight: 700,
       color: active ? C.primary : B.t4, borderBottom: `2px solid ${active ? C.primary : 'transparent'}`, marginBottom: -1,
     }}>
       <Icon size={14} /> {children}
@@ -425,7 +425,7 @@ function StatusMenu({ form, onChange }) {
         <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: B.card, border: `1px solid ${B.cardBorder}`, borderRadius: 10, boxShadow: C.shadowMd, overflow: 'hidden', zIndex: 20, minWidth: 220 }}>
           {opts.map(o => (
             <button key={o.v} onClick={() => { onChange(o.v); setOpen(false); }}
-              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', background: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 13, color: B.t2 }}>
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none', background: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 15, color: B.t2 }}>
               {o.label}
             </button>
           ))}
@@ -439,8 +439,8 @@ function ShareLink({ url }) {
   const [copied, setCopied] = useState(false);
   return (
     <div style={{ background: B.innerBg, border: `1px solid ${B.innerBorder}`, borderRadius: 10, padding: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: B.t5, textTransform: 'uppercase', letterSpacing: '.05em', marginRight: 4 }}>Link</div>
-      <input readOnly value={url} style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: `1px solid ${B.cardBorder}`, fontFamily: MONO, fontSize: 12, background: B.card, color: B.t2 }} />
+      <div style={{ fontSize: 13, fontWeight: 700, color: B.t5, textTransform: 'uppercase', letterSpacing: '.05em', marginRight: 4 }}>Link</div>
+      <input readOnly value={url} style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: `1px solid ${B.cardBorder}`, fontFamily: MONO, fontSize: 14, background: B.card, color: B.t2 }} />
       <button style={btn()} onClick={() => { navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2000); }}>
         {copied ? <><Check size={14} /> Copied</> : <><Copy size={14} /> Copy</>}
       </button>
@@ -577,7 +577,7 @@ function BuilderTab({ form, setForm, showToast, reload }) {
           <PhoneMappingNote formType={formType} phoneField={phoneField} />
 
           {!fields.length ? (
-            <div style={{ padding: '30px 0', textAlign: 'center', color: B.t5, fontSize: 13 }}>No fields yet — add one to start building the form.</div>
+            <div style={{ padding: '30px 0', textAlign: 'center', color: B.t5, fontSize: 15 }}>No fields yet — add one to start building the form.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
               {fields.map((f, i) => (
@@ -613,7 +613,7 @@ function PhoneMappingNote({ formType, phoneField }) {
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: tone.bg, borderRadius: 9, padding: '9px 11px', marginTop: 12 }}>
       <tone.Icon size={14} color={tone.color} style={{ flexShrink: 0, marginTop: 1 }} />
-      <div style={{ fontSize: 12, color: B.t3, lineHeight: 1.5 }}>{text}</div>
+      <div style={{ fontSize: 14, color: B.t3, lineHeight: 1.5 }}>{text}</div>
     </div>
   );
 }
@@ -658,30 +658,30 @@ function WhatsAppSetupCard({ form, showToast, reload }) {
 
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: B.t4 }}>Template</label>
-            <button style={{ ...btn(), padding: '6px 11px', fontSize: 12 }} onClick={() => setCreateOpen(true)} disabled={!accountId}>
+            <label style={{ fontSize: 14, fontWeight: 600, color: B.t4 }}>Template</label>
+            <button style={{ ...btn(), padding: '6px 11px', fontSize: 14 }} onClick={() => setCreateOpen(true)} disabled={!accountId}>
               <Plus size={13} /> Create template
             </button>
           </div>
           {!accountId ? (
-            <div style={{ fontSize: 12.5, color: B.t6 }}>Pick a number first.</div>
+            <div style={{ fontSize: 14, color: B.t6 }}>Pick a number first.</div>
           ) : templates == null ? (
-            <div style={{ fontSize: 12.5, color: B.t6 }}>Loading templates…</div>
+            <div style={{ fontSize: 14, color: B.t6 }}>Loading templates…</div>
           ) : templates.length === 0 ? (
-            <div style={{ fontSize: 12.5, color: B.t6, lineHeight: 1.55 }}>
+            <div style={{ fontSize: 14, color: B.t6, lineHeight: 1.55 }}>
               No template carries this form's link yet. Create one — Meta has to approve it before you can send, which usually takes a few minutes to a day.
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
               {templates.map(t => (
                 <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: B.innerBg, borderRadius: 8 }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 600, color: B.t2, fontFamily: MONO, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: B.t2, fontFamily: MONO, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
                   <CategoryBadge category={t.category} />
                   <TemplateStatusBadge status={t.status} />
                 </div>
               ))}
               {!approved.length && pending.length > 0 && (
-                <div style={{ fontSize: 11.5, color: B.t6, marginTop: 2 }}>Waiting on Meta's approval — you can send as soon as one turns Approved.</div>
+                <div style={{ fontSize: 13, color: B.t6, marginTop: 2 }}>Waiting on Meta's approval — you can send as soon as one turns Approved.</div>
               )}
             </div>
           )}
@@ -728,8 +728,8 @@ function CreateTemplateModal({ form, accountId, onClose, onCreated }) {
 
   return (
     <ModalShell onClose={onClose} width={560}>
-      <h2 style={{ margin: '0 0 6px', fontSize: 18, fontWeight: 700, color: B.t1 }}>Create WhatsApp template</h2>
-      <p style={{ margin: '0 0 18px', fontSize: 12.5, color: B.t5, lineHeight: 1.55 }}>
+      <h2 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 700, color: B.t1 }}>Create WhatsApp template</h2>
+      <p style={{ margin: '0 0 18px', fontSize: 14, color: B.t5, lineHeight: 1.55 }}>
         The button linking to this form is added for you. Meta has to approve the template before you can send it.
       </p>
 
@@ -744,9 +744,9 @@ function CreateTemplateModal({ form, accountId, onClose, onCreated }) {
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
                   <c.Icon size={15} color={on ? c.color : B.t4} />
-                  <span style={{ fontSize: 13, fontWeight: 700, color: on ? c.color : B.t2 }}>{c.label}</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: on ? c.color : B.t2 }}>{c.label}</span>
                 </div>
-                <div style={{ fontSize: 11.5, color: B.t5, lineHeight: 1.5 }}>{c.desc}</div>
+                <div style={{ fontSize: 13, color: B.t5, lineHeight: 1.5 }}>{c.desc}</div>
               </button>
             );
           })}
@@ -763,21 +763,21 @@ function CreateTemplateModal({ form, accountId, onClose, onCreated }) {
         <input value={buttonText} onChange={e => setButtonText(e.target.value)} maxLength={25} style={inputStyle} />
       </FieldRow>
 
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: B.t3, cursor: 'pointer', marginBottom: 14 }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, color: B.t3, cursor: 'pointer', marginBottom: 14 }}>
         <input type="checkbox" checked={submitToMeta} onChange={e => setSubmitToMeta(e.target.checked)} />
         Send to Meta for approval now
       </label>
 
       <div style={{ background: B.innerBg, borderRadius: 9, padding: '10px 12px', marginBottom: 14 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: B.t5, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Preview</div>
-        <div style={{ fontSize: 13, color: B.t2, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{body || '…'}</div>
-        {footer && <div style={{ fontSize: 11.5, color: B.t6, marginTop: 6 }}>{footer}</div>}
-        <div style={{ marginTop: 9, paddingTop: 9, borderTop: `1px solid ${B.cardBorder}`, textAlign: 'center', fontSize: 13, fontWeight: 600, color: cat?.color || C.primary }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: B.t5, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Preview</div>
+        <div style={{ fontSize: 15, color: B.t2, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{body || '…'}</div>
+        {footer && <div style={{ fontSize: 13, color: B.t6, marginTop: 6 }}>{footer}</div>}
+        <div style={{ marginTop: 9, paddingTop: 9, borderTop: `1px solid ${B.cardBorder}`, textAlign: 'center', fontSize: 15, fontWeight: 600, color: cat?.color || C.primary }}>
           {buttonText || 'Open form'}
         </div>
       </div>
 
-      {error && <div style={{ color: '#991B1B', fontSize: 13, marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ color: 'var(--c-dangerStrong, #991B1B)', fontSize: 15, marginBottom: 12 }}>{error}</div>}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
         <button style={btn()} onClick={onClose}>Cancel</button>
         <button style={btn('primary')} onClick={submit} disabled={saving}>{saving ? 'Creating…' : 'Create template'}</button>
@@ -833,16 +833,16 @@ function SendModal({ form, onClose, showToast }) {
 
   return (
     <ModalShell onClose={onClose} width={520}>
-      <h2 style={{ margin: '0 0 6px', fontSize: 18, fontWeight: 700, color: B.t1 }}>Send form</h2>
-      <p style={{ margin: '0 0 18px', fontSize: 12.5, color: B.t5, lineHeight: 1.55 }}>
+      <h2 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 700, color: B.t1 }}>Send form</h2>
+      <p style={{ margin: '0 0 18px', fontSize: 14, color: B.t5, lineHeight: 1.55 }}>
         Every recipient gets their own link, so their number is filled in for them.
       </p>
 
       <FieldRow label="Template">
         {templates == null ? (
-          <div style={{ fontSize: 12.5, color: B.t6 }}>Loading templates…</div>
+          <div style={{ fontSize: 14, color: B.t6 }}>Loading templates…</div>
         ) : templates.length === 0 ? (
-          <div style={{ fontSize: 12.5, color: B.t6, lineHeight: 1.55 }}>
+          <div style={{ fontSize: 14, color: B.t6, lineHeight: 1.55 }}>
             No approved template carries this form's link yet. Create one under WhatsApp setup on the Build tab and wait for Meta to approve it.
           </div>
         ) : (
@@ -854,10 +854,10 @@ function SendModal({ form, onClose, showToast }) {
 
       <FieldRow label="Recipients" hint="One per line — phone number, optional name (e.g. 91XXXXXXXXXX, Jane Doe)">
         <textarea rows={5} value={recipientsText} onChange={e => setRecipientsText(e.target.value)}
-          placeholder={'91XXXXXXXXXX, Jane Doe\n91YYYYYYYYYY'} style={{ ...inputStyle, resize: 'vertical', fontFamily: MONO, fontSize: 12.5 }} />
+          placeholder={'91XXXXXXXXXX, Jane Doe\n91YYYYYYYYYY'} style={{ ...inputStyle, resize: 'vertical', fontFamily: MONO, fontSize: 14 }} />
       </FieldRow>
 
-      {error && <div style={{ color: '#991B1B', fontSize: 13, marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ color: 'var(--c-dangerStrong, #991B1B)', fontSize: 15, marginBottom: 12 }}>{error}</div>}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
         <button style={btn()} onClick={onClose}>Cancel</button>
         <button style={btn('primary')} onClick={send} disabled={sending}><Send size={14} /> {sending ? 'Sending…' : 'Send'}</button>
@@ -889,7 +889,7 @@ function AssetPicker({ label, hasAsset, url, uploading, onPick, onRemove, round 
   return (
     <div style={{ marginBottom: 14 }}
       onMouseEnter={() => setArmed(true)} onMouseLeave={() => setArmed(false)}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: B.t4, marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 14, fontWeight: 600, color: B.t4, marginBottom: 6 }}>{label}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div
           onClick={() => ref.current?.click()}
@@ -905,10 +905,10 @@ function AssetPicker({ label, hasAsset, url, uploading, onPick, onRemove, round 
           {uploading ? <Loader2 size={16} className="spin" /> : hasAsset ? <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <ImagePlus size={16} color={B.t6} />}
         </div>
         <button style={btn()} onClick={() => ref.current?.click()} disabled={!!uploading}>{hasAsset ? 'Replace' : 'Upload'}</button>
-        {hasAsset && <button style={{ ...btn(), color: '#991B1B' }} onClick={onRemove} title={`Remove ${label.toLowerCase()}`}><X size={13} /></button>}
+        {hasAsset && <button style={{ ...btn(), color: 'var(--c-dangerStrong, #991B1B)' }} onClick={onRemove} title={`Remove ${label.toLowerCase()}`}><X size={13} /></button>}
         <input ref={ref} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { onPick(e.target.files?.[0]); e.target.value = ''; }} />
       </div>
-      <div style={{ fontSize: 11, color: B.t6, marginTop: 5 }}>Drop an image here, or hover and press Ctrl+V.</div>
+      <div style={{ fontSize: 13, color: B.t6, marginTop: 5 }}>Drop an image here, or hover and press Ctrl+V.</div>
       <style>{`@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } } .spin { animation: spin 1s linear infinite; }`}</style>
     </div>
   );
@@ -948,9 +948,9 @@ function FieldEditorRow({ field, index, count, onChange, onRemove, onMove }) {
               : { options: [] }),
             ...(isDisplayOnly(v) ? { required: false } : {}),
             ...(NO_MAPPING.includes(v) ? { mapsTo: null } : {}),
-          })} options={FIELD_TYPE_OPTS} triggerStyle={{ padding: '8px 28px 8px 10px', fontSize: 13 }} />
+          })} options={FIELD_TYPE_OPTS} triggerStyle={{ padding: '8px 28px 8px 10px', fontSize: 15 }} />
         </div>
-        <button onClick={onRemove} style={{ ...iconBtnStyle, color: '#991B1B', marginTop: 4 }} title="Remove field"><Trash2 size={14} /></button>
+        <button onClick={onRemove} style={{ ...iconBtnStyle, color: 'var(--c-dangerStrong, #991B1B)', marginTop: 4 }} title="Remove field"><Trash2 size={14} /></button>
       </div>
 
       {NEEDS_OPTIONS.includes(field.type) && (
@@ -965,13 +965,25 @@ function FieldEditorRow({ field, index, count, onChange, onRemove, onMove }) {
         </div>
       )}
 
-      {isDisplayOnly(field.type) && (
-        <div style={{ marginTop: 10, marginLeft: 24 }}>
-          <textarea value={field.description || ''} onChange={e => onChange({ description: e.target.value })}
-            rows={2} maxLength={1000} placeholder="Optional text shown under the heading"
-            style={{ ...inputStyle, resize: 'vertical', fontSize: 12.5 }} />
-        </div>
-      )}
+      {/* One description box, two audiences depending on the field type — and
+          they never overlap, so this is one control rather than two that would
+          drift. On a SECTION it is the body text shown under the heading on the
+          public form. On a QUESTION it is guidance for an AI agent filling this
+          column in chat, and the public form does not render it (nor does the
+          public API return it). */}
+      <div style={{ marginTop: 10, marginLeft: 24 }}>
+        <textarea value={field.description || ''} onChange={e => onChange({ description: e.target.value })}
+          rows={2} maxLength={1000}
+          placeholder={isDisplayOnly(field.type)
+            ? 'Optional text shown under the heading'
+            : 'Optional — tell the AI agent what belongs in this column, e.g. "the city only, not the state"'}
+          style={{ ...inputStyle, resize: 'vertical', fontSize: 14 }} />
+        {!isDisplayOnly(field.type) && (
+          <div style={{ fontSize: 13, color: B.t5, marginTop: 4 }}>
+            Only the agent reads this. People filling the form never see it.
+          </div>
+        )}
+      </div>
 
       {/* A section collects nothing, so Required and Save-to-column are hidden
           rather than shown-and-ignored — a control that saves and then does
@@ -979,16 +991,16 @@ function FieldEditorRow({ field, index, count, onChange, onRemove, onMove }) {
           is a real, answerable question that can be Required. */}
       {!isDisplayOnly(field.type) && (
         <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginTop: 8, marginLeft: 24, flexWrap: 'wrap' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: B.t3, cursor: 'pointer' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: B.t3, cursor: 'pointer' }}>
             <input type="checkbox" checked={field.required} onChange={e => onChange({ required: e.target.checked })} /> Required
           </label>
           {NO_MAPPING.includes(field.type) ? (
-            <span style={{ fontSize: 12, color: B.t5 }}>Answers are kept in this form's own column.</span>
+            <span style={{ fontSize: 14, color: B.t5 }}>Answers are kept in this form's own column.</span>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: '1 1 240px', minWidth: 200 }}>
-              <span style={{ fontSize: 12, color: B.t5, whiteSpace: 'nowrap' }}>Save to column</span>
+              <span style={{ fontSize: 14, color: B.t5, whiteSpace: 'nowrap' }}>Save to column</span>
               <div style={{ flex: 1 }}>
-                <SearchableSelect value={field.mapsTo || ''} onChange={v => onChange({ mapsTo: v || null })} options={mapsToOpts} triggerStyle={{ padding: '6px 26px 6px 9px', fontSize: 12 }} />
+                <SearchableSelect value={field.mapsTo || ''} onChange={v => onChange({ mapsTo: v || null })} options={mapsToOpts} triggerStyle={{ padding: '6px 26px 6px 9px', fontSize: 14 }} />
               </div>
             </div>
           )}
@@ -1006,17 +1018,17 @@ function RatingConfig({ field, onChange }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12, color: B.t5, whiteSpace: 'nowrap' }}>Scale</span>
+        <span style={{ fontSize: 14, color: B.t5, whiteSpace: 'nowrap' }}>Scale</span>
         <div style={{ display: 'flex', gap: 5 }}>
           {RATING_SCALES.map(n => {
             const on = n === scale;
             return (
               <button key={n} onClick={() => onChange({ scale: n })}
                 style={{
-                  fontFamily: FONT, fontSize: 12, fontWeight: on ? 700 : 500, cursor: 'pointer',
+                  fontFamily: FONT, fontSize: 14, fontWeight: on ? 700 : 500, cursor: 'pointer',
                   padding: '5px 11px', borderRadius: 7,
                   border: `1px solid ${on ? C.primary : B.cardBorder}`,
-                  background: on ? '#FEF2F2' : C.cardBg, color: on ? C.primary : B.t3,
+                  background: on ? 'var(--c-dangerBgSoft, #FEF2F2)' : C.cardBg, color: on ? C.primary : B.t3,
                 }}>
                 {n}-star
               </button>
@@ -1030,7 +1042,7 @@ function RatingConfig({ field, onChange }) {
         </div>
       </div>
 
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: B.t3, cursor: 'pointer' }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: B.t3, cursor: 'pointer' }}>
         <input type="checkbox" checked={!!field.feedback} onChange={e => onChange({ feedback: e.target.checked })} />
         Ask for feedback under the stars
       </label>
@@ -1039,10 +1051,10 @@ function RatingConfig({ field, onChange }) {
         <input value={field.feedbackLabel ?? DEFAULT_FEEDBACK_LABEL}
           onChange={e => onChange({ feedbackLabel: e.target.value })}
           placeholder={DEFAULT_FEEDBACK_LABEL}
-          style={{ ...inputStyle, fontSize: 12.5 }} />
+          style={{ ...inputStyle, fontSize: 14 }} />
       )}
       {field.feedback && (
-        <span style={{ fontSize: 11.5, color: B.t5 }}>
+        <span style={{ fontSize: 13, color: B.t5 }}>
           The comment box is always optional, even when the rating is required.
         </span>
       )}
@@ -1090,10 +1102,10 @@ function OptionsEditor({ type, options, onChange }) {
 
   return (
     <div>
-      <div style={{ fontSize: 12, fontWeight: 600, color: B.t4, marginBottom: 7 }}>Options</div>
+      <div style={{ fontSize: 14, fontWeight: 600, color: B.t4, marginBottom: 7 }}>Options</div>
 
       {!list.length && (
-        <div style={{ fontSize: 12, color: B.t6, marginBottom: 8 }}>No options yet — add the first choice people can pick.</div>
+        <div style={{ fontSize: 14, color: B.t6, marginBottom: 8 }}>No options yet — add the first choice people can pick.</div>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -1121,7 +1133,7 @@ function OptionsEditor({ type, options, onChange }) {
             <button onClick={() => move(i, 1)} disabled={i === list.length - 1}
               style={{ ...iconBtnStyle, padding: '3px 5px', opacity: i === list.length - 1 ? 0.3 : 1 }} title="Move down"><ArrowDown size={11} /></button>
             <button onClick={() => remove(i)}
-              style={{ ...iconBtnStyle, padding: '3px 5px', color: '#991B1B' }} title="Remove option"><X size={12} /></button>
+              style={{ ...iconBtnStyle, padding: '3px 5px', color: 'var(--c-dangerStrong, #991B1B)' }} title="Remove option"><X size={12} /></button>
           </div>
         ))}
       </div>
@@ -1129,12 +1141,12 @@ function OptionsEditor({ type, options, onChange }) {
       <button onClick={add} style={{
         display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: list.length ? 8 : 0,
         padding: '7px 12px', borderRadius: 8, cursor: 'pointer', fontFamily: FONT,
-        fontSize: 12.5, fontWeight: 700, color: C.primary,
+        fontSize: 14, fontWeight: 700, color: C.primary,
         background: 'transparent', border: `1.5px dashed ${B.cardBorder}`,
       }}>
         <Plus size={13} /> Add option
       </button>
-      <div style={{ fontSize: 11, color: B.t6, marginTop: 6 }}>
+      <div style={{ fontSize: 13, color: B.t6, marginTop: 6 }}>
         Press Enter for the next one, or paste a list to add several at once.
       </div>
     </div>
@@ -1145,7 +1157,7 @@ function ChoiceGlyph({ type, index }) {
   const common = { width: 18, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: B.t6 };
   if (type === 'radio') return <div style={common}><Circle size={13} /></div>;
   if (type === 'checkbox') return <div style={common}><Square size={13} /></div>;
-  return <div style={{ ...common, fontSize: 11.5, fontFamily: MONO }}>{index + 1}.</div>;
+  return <div style={{ ...common, fontSize: 13, fontFamily: MONO }}>{index + 1}.</div>;
 }
 
 // ── Responses tab ───────────────────────────────────────────────────────────
@@ -1171,7 +1183,7 @@ function TableTab({ form }) {
   return (
     <div style={{ background: B.card, border: `1px solid ${B.cardBorder}`, borderRadius: 12, overflow: 'hidden' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: `1px solid ${B.cardBorder}` }}>
-        <div style={{ fontSize: 13, color: B.t4 }}>{data.total} response{data.total === 1 ? '' : 's'}</div>
+        <div style={{ fontSize: 15, color: B.t4 }}>{data.total} response{data.total === 1 ? '' : 's'}</div>
         <a href={api.leadForms.exportUrl(form.id)} download style={{ textDecoration: 'none' }}>
           <button style={btn()}><Download size={14} /> Export CSV</button>
         </a>
@@ -1182,16 +1194,16 @@ function TableTab({ form }) {
             <thead>
               <tr style={{ background: B.innerBg, borderBottom: `1px solid ${B.cardBorder}` }}>
                 {['Submitted', 'Phone', ...answerFields.map(f => f.label), 'Lead'].map((h, i) => (
-                  <th key={i} style={{ padding: '9px 12px', fontSize: 11, fontWeight: 700, color: B.t4, textAlign: 'left', textTransform: 'uppercase', letterSpacing: '.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                  <th key={i} style={{ padding: '9px 12px', fontSize: 13, fontWeight: 700, color: B.t4, textAlign: 'left', textTransform: 'uppercase', letterSpacing: '.05em', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {data.submissions.map(s => (
-                <tr key={s.id} style={{ borderBottom: `1px solid ${B.rowSep}`, fontSize: 12.5 }}>
+                <tr key={s.id} style={{ borderBottom: `1px solid ${B.rowSep}`, fontSize: 14 }}>
                   <td style={{ padding: '9px 12px', color: B.t5, whiteSpace: 'nowrap' }}>{fmtDate(s.submittedAt)}</td>
                   <td style={{ padding: '9px 12px', color: s.phoneNumber ? B.t3 : B.t7, fontFamily: s.phoneNumber ? MONO : FONT, whiteSpace: 'nowrap' }}>
-                    {s.phoneNumber || <span style={{ fontSize: 12 }}>Not given</span>}
+                    {s.phoneNumber || <span style={{ fontSize: 14 }}>Not given</span>}
                   </td>
                   {answerFields.map(f => {
                     // Formatted, never rendered raw: a rating answer is an
@@ -1207,7 +1219,7 @@ function TableTab({ form }) {
                     );
                   })}
                   <td style={{ padding: '9px 12px', color: s.leadId ? B.t3 : B.t7 }}>
-                    {s.leadName || (s.leadId ? `#${s.leadId}` : <span style={{ fontSize: 12 }}>Not linked</span>)}
+                    {s.leadName || (s.leadId ? `#${s.leadId}` : <span style={{ fontSize: 14 }}>Not linked</span>)}
                   </td>
                 </tr>
               ))}
@@ -1216,7 +1228,7 @@ function TableTab({ form }) {
         </div>
       )}
       {totalPages > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 10, padding: 12, borderTop: `1px solid ${B.cardBorder}`, fontSize: 12.5 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 10, padding: 12, borderTop: `1px solid ${B.cardBorder}`, fontSize: 14 }}>
           <button style={btn()} disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Prev</button>
           <span style={{ color: B.t4, padding: '9px 0' }}>Page {page} of {totalPages}</span>
           <button style={btn()} disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Next</button>
@@ -1257,9 +1269,9 @@ function DashboardTab({ form }) {
       </div>
 
       {(data.anonymousSubmissions ?? 0) > 0 && form.formType === 'link' && (
-        <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', background: '#FEF9E7', borderRadius: 10, padding: '11px 13px' }}>
-          <AlertTriangle size={15} color="#92680B" style={{ flexShrink: 0, marginTop: 1 }} />
-          <div style={{ fontSize: 12.5, color: '#92680B', lineHeight: 1.55 }}>
+        <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', background: 'var(--c-warnBgSoft, #FEF9E7)', borderRadius: 10, padding: '11px 13px' }}>
+          <AlertTriangle size={15} color="var(--c-s92680b, #92680B)" style={{ flexShrink: 0, marginTop: 1 }} />
+          <div style={{ fontSize: 14, color: 'var(--c-s92680b, #92680B)', lineHeight: 1.55 }}>
             {data.anonymousSubmissions} response{data.anonymousSubmissions === 1 ? '' : 's'} came in without a phone number, so {data.anonymousSubmissions === 1 ? 'it is' : 'they are'} recorded here but not in the funnel. Mark your phone field Required on the Build tab if you need every respondent reachable.
           </div>
         </div>
@@ -1276,13 +1288,13 @@ function DashboardTab({ form }) {
               <thead>
                 <tr style={{ borderBottom: `1px solid ${B.cardBorder}` }}>
                   {['Name', 'Phone', 'Email', 'Submitted', 'Lead'].map((h, i) => (
-                    <th key={i} style={{ padding: '8px 10px', fontSize: 11, fontWeight: 700, color: B.t4, textAlign: 'left', textTransform: 'uppercase', letterSpacing: '.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                    <th key={i} style={{ padding: '8px 10px', fontSize: 13, fontWeight: 700, color: B.t4, textAlign: 'left', textTransform: 'uppercase', letterSpacing: '.05em', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {recent.map(r => (
-                  <tr key={r.id} style={{ borderBottom: `1px solid ${B.rowSep}`, fontSize: 12.5 }}>
+                  <tr key={r.id} style={{ borderBottom: `1px solid ${B.rowSep}`, fontSize: 14 }}>
                     <td style={{ padding: '8px 10px', color: r.name ? B.t2 : B.t7, fontWeight: r.name ? 600 : 400 }}>{r.name || 'Anonymous'}</td>
                     <td style={{ padding: '8px 10px', color: r.phoneNumber ? B.t3 : B.t7, fontFamily: r.phoneNumber ? MONO : FONT, whiteSpace: 'nowrap' }}>{r.phoneNumber || 'Not given'}</td>
                     <td style={{ padding: '8px 10px', color: r.email ? B.t3 : B.t7 }}>{r.email || '—'}</td>
@@ -1318,10 +1330,10 @@ function RatingCard({ rating }) {
   return (
     <Card title={label}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-        <span style={{ fontFamily: MONO, fontSize: 26, fontWeight: 700, color: B.t2 }}>
+        <span style={{ fontFamily: MONO, fontSize: 30, fontWeight: 700, color: B.t2 }}>
           {average == null ? '—' : average.toFixed(2)}
         </span>
-        <span style={{ fontSize: 12.5, color: B.t5 }}>
+        <span style={{ fontSize: 14, color: B.t5 }}>
           average out of {max} · {responses} rating{responses === 1 ? '' : 's'}
           {withFeedback ? ` · ${withFeedback} with a comment` : ''}
         </span>
@@ -1336,20 +1348,20 @@ function RatingCard({ rating }) {
 
       {feedback.length > 0 && (
         <div style={{ marginTop: 14, borderTop: `1px solid ${B.cardBorder}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 9 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: B.t5, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: B.t5, textTransform: 'uppercase', letterSpacing: '.05em' }}>
             Comments
           </div>
           {feedback.map((f, i) => (
             <div key={i} style={{ display: 'flex', gap: 9, alignItems: 'flex-start' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0, fontFamily: MONO, fontSize: 11.5, color: B.t5, paddingTop: 1 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0, fontFamily: MONO, fontSize: 13, color: B.t5, paddingTop: 1 }}>
                 <Star size={11} strokeWidth={2} color="#F59E0B" fill="#F59E0B" />
                 {f.rating ?? '—'}
               </span>
-              <span style={{ fontSize: 12.5, color: B.t2, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{f.text}</span>
+              <span style={{ fontSize: 14, color: B.t2, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{f.text}</span>
             </div>
           ))}
           {withFeedback > feedback.length && (
-            <div style={{ fontSize: 11.5, color: B.t6 }}>
+            <div style={{ fontSize: 13, color: B.t6 }}>
               Showing {feedback.length} of {withFeedback} — export the responses for the rest.
             </div>
           )}
@@ -1361,9 +1373,9 @@ function RatingCard({ rating }) {
 
 // ── shared bits ───────────────────────────────────────────────────────────────
 function StatusBadge({ status }) {
-  const map = { draft: { bg: '#F1F1EE', color: '#6B7280', label: 'Draft' }, published: { bg: '#E1F5EE', color: '#0F6E56', label: 'Published' }, closed: { bg: '#FEF2F2', color: '#991B1B', label: 'Closed' } };
+  const map = { draft: { bg: 'var(--c-surfaceMuted, #F1F1EE)', color: 'var(--c-textSecondary, #6B7280)', label: 'Draft' }, published: { bg: 'var(--c-successBg, #E1F5EE)', color: 'var(--c-successText, #0F6E56)', label: 'Published' }, closed: { bg: 'var(--c-dangerBgSoft, #FEF2F2)', color: 'var(--c-dangerStrong, #991B1B)', label: 'Closed' } };
   const m = map[status] || map.draft;
-  return <span style={{ background: m.bg, color: m.color, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99, fontFamily: FONT, whiteSpace: 'nowrap' }}>{m.label}</span>;
+  return <span style={{ background: m.bg, color: m.color, fontSize: 13, fontWeight: 700, padding: '3px 9px', borderRadius: 99, fontFamily: FONT, whiteSpace: 'nowrap' }}>{m.label}</span>;
 }
 
 function TypeBadge({ type }) {
@@ -1371,8 +1383,8 @@ function TypeBadge({ type }) {
   const wa = type === 'whatsapp';
   return (
     <span title={m.detail} style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5, background: wa ? '#E1F5EE' : '#EEF2FF',
-      color: wa ? '#0F6E56' : '#4338CA', fontSize: 11, fontWeight: 700, padding: '3px 9px',
+      display: 'inline-flex', alignItems: 'center', gap: 5, background: wa ? 'var(--c-successBg, #E1F5EE)' : 'var(--c-seef2ff, #EEF2FF)',
+      color: wa ? 'var(--c-successText, #0F6E56)' : 'var(--c-s4338ca, #4338CA)', fontSize: 13, fontWeight: 700, padding: '3px 9px',
       borderRadius: 99, fontFamily: FONT, whiteSpace: 'nowrap',
     }}>
       <m.Icon size={11} /> {wa ? 'WhatsApp' : 'Link'}
@@ -1383,30 +1395,30 @@ function TypeBadge({ type }) {
 function CategoryBadge({ category }) {
   const c = TEMPLATE_CATEGORIES.find(x => x.value === category);
   if (!c) return null;
-  return <span style={{ background: c.bg, color: c.color, fontSize: 10.5, fontWeight: 700, padding: '2px 7px', borderRadius: 99, fontFamily: FONT, whiteSpace: 'nowrap' }}>{c.label}</span>;
+  return <span style={{ background: c.bg, color: c.color, fontSize: 12, fontWeight: 700, padding: '2px 7px', borderRadius: 99, fontFamily: FONT, whiteSpace: 'nowrap' }}>{c.label}</span>;
 }
 
 function TemplateStatusBadge({ status }) {
   const map = {
-    APPROVED: { bg: '#E1F5EE', color: '#0F6E56', label: 'Approved' },
-    SUBMITTED: { bg: '#FEF9E7', color: '#92680B', label: 'In review' },
-    REJECTED: { bg: '#FEF2F2', color: '#991B1B', label: 'Rejected' },
-    DRAFT: { bg: '#F1F1EE', color: '#6B7280', label: 'Draft' },
+    APPROVED: { bg: 'var(--c-successBg, #E1F5EE)', color: 'var(--c-successText, #0F6E56)', label: 'Approved' },
+    SUBMITTED: { bg: 'var(--c-warnBgSoft, #FEF9E7)', color: 'var(--c-s92680b, #92680B)', label: 'In review' },
+    REJECTED: { bg: 'var(--c-dangerBgSoft, #FEF2F2)', color: 'var(--c-dangerStrong, #991B1B)', label: 'Rejected' },
+    DRAFT: { bg: 'var(--c-surfaceMuted, #F1F1EE)', color: 'var(--c-textSecondary, #6B7280)', label: 'Draft' },
   };
   const m = map[status] || map.DRAFT;
-  return <span style={{ background: m.bg, color: m.color, fontSize: 10.5, fontWeight: 700, padding: '2px 7px', borderRadius: 99, fontFamily: FONT, whiteSpace: 'nowrap' }}>{m.label}</span>;
+  return <span style={{ background: m.bg, color: m.color, fontSize: 12, fontWeight: 700, padding: '2px 7px', borderRadius: 99, fontFamily: FONT, whiteSpace: 'nowrap' }}>{m.label}</span>;
 }
 
 function SectionTitle({ children, nomargin }) {
-  return <div style={{ fontSize: 12, fontWeight: 700, color: B.t5, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: nomargin ? 0 : 12 }}>{children}</div>;
+  return <div style={{ fontSize: 14, fontWeight: 700, color: B.t5, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: nomargin ? 0 : 12 }}>{children}</div>;
 }
 
 function FieldRow({ label, hint, children }) {
   return (
     <div style={{ marginBottom: 12 }}>
-      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: B.t4, marginBottom: 5 }}>{label}</label>
+      <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: B.t4, marginBottom: 5 }}>{label}</label>
       {children}
-      {hint && <div style={{ fontSize: 11, color: B.t6, marginTop: 4 }}>{hint}</div>}
+      {hint && <div style={{ fontSize: 13, color: B.t6, marginTop: 4 }}>{hint}</div>}
     </div>
   );
 }
@@ -1422,10 +1434,10 @@ function ModalShell({ onClose, width = 480, children }) {
 }
 
 function Toast({ children }) {
-  return <div style={{ position: 'fixed', bottom: 20, right: 20, padding: '10px 16px', background: '#111', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 600, boxShadow: C.shadowLg, zIndex: 1000, maxWidth: 420, lineHeight: 1.45 }}>{children}</div>;
+  return <div style={{ position: 'fixed', bottom: 20, right: 20, padding: '10px 16px', background: 'var(--c-toastBg, #111111)', color: 'var(--c-toastText, #ffffff)', borderRadius: 8, fontSize: 15, fontWeight: 600, boxShadow: C.shadowLg, zIndex: 1000, maxWidth: 420, lineHeight: 1.45 }}>{children}</div>;
 }
 
-const inputStyle = { width: '100%', padding: '9px 12px', borderRadius: 10, border: `1.5px solid ${B.cardBorder}`, fontFamily: FONT, fontSize: 13, boxSizing: 'border-box', outline: 'none', background: B.card, color: B.t2 };
+const inputStyle = { width: '100%', padding: '9px 12px', borderRadius: 10, border: `1.5px solid ${B.cardBorder}`, fontFamily: FONT, fontSize: 15, boxSizing: 'border-box', outline: 'none', background: B.card, color: B.t2 };
 const iconBtnStyle = { background: 'none', border: `1.5px solid ${B.cardBorder}`, borderRadius: 6, padding: '4px 6px', cursor: 'pointer', color: B.t4, display: 'inline-flex' };
 
 function fmtDate(iso) {

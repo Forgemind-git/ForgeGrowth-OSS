@@ -146,7 +146,7 @@ export default function GoogleSheetsToolConfig({ agentId, ensureAgentId, existin
 
   if (loadingIntegrations) {
     return (
-      <div style={{ padding: 20, textAlign: 'center', color: C.textMuted, fontSize: 12 }}>
+      <div style={{ padding: 20, textAlign: 'center', color: C.textMuted, fontSize: 14 }}>
         <Loader2 size={14} style={{ animation: 'spin 1s linear infinite', verticalAlign: 'middle', marginRight: 6 }} />
         Loading integrations…
       </div>
@@ -155,7 +155,7 @@ export default function GoogleSheetsToolConfig({ agentId, ensureAgentId, existin
 
   if (!sheetsConnected) {
     return (
-      <div style={{ padding: 16, background: 'var(--c-surfaceAlt)', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 12, fontFamily: FONT }}>
+      <div style={{ padding: 16, background: 'var(--c-surfaceAlt)', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 14, fontFamily: FONT }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.text, fontWeight: 600, marginBottom: 6 }}>
           <AlertCircle size={14} /> Google Sheets isn't connected yet
         </div>
@@ -177,7 +177,7 @@ export default function GoogleSheetsToolConfig({ agentId, ensureAgentId, existin
       border: `1px solid ${C.border}`, fontFamily: FONT,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>
           {isEdit ? 'Edit Google Sheets tool' : 'Add Google Sheets tool'}
         </div>
         <button onClick={onCancel} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textMuted, display: 'flex', padding: 6 }}>
@@ -186,21 +186,21 @@ export default function GoogleSheetsToolConfig({ agentId, ensureAgentId, existin
       </div>
 
       {sheetsIntegration?.accountEmail && (
-        <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 12, fontFamily: MONO }}>
+        <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 12, fontFamily: MONO }}>
           Connected as {sheetsIntegration.accountEmail}
         </div>
       )}
 
       {error && (
         <div style={{ padding: '8px 12px', borderRadius: 8, marginBottom: 12,
-          background: '#FCEBEB', color: '#A32D2D', border: '1px solid #FBC8C8', fontSize: 12 }}>
+          background: 'var(--c-dangerBg, #FCEBEB)', color: 'var(--c-dangerText, #A32D2D)', border: '1px solid var(--c-dangerBorder, #FBC8C8)', fontSize: 14 }}>
           {error}
         </div>
       )}
 
       <Field label="Spreadsheet" hint="Drive-listed spreadsheets you've granted this app access to.">
         {loadingSheets ? (
-          <div style={{ fontSize: 12, color: C.textMuted, padding: '8px 0' }}>
+          <div style={{ fontSize: 14, color: C.textMuted, padding: '8px 0' }}>
             <Loader2 size={12} style={{ animation: 'spin 1s linear infinite', verticalAlign: 'middle' }} /> Loading spreadsheets…
           </div>
         ) : (
@@ -210,14 +210,14 @@ export default function GoogleSheetsToolConfig({ agentId, ensureAgentId, existin
             options={spreadsheets.map(s => ({ value: String(s.id), label: s.name }))}
             placeholder="— Select —"
             searchPlaceholder="Search spreadsheets…"
-            triggerStyle={{ padding: '9px 32px 9px 12px', fontSize: 13 }}
+            triggerStyle={{ padding: '9px 32px 9px 12px', fontSize: 15 }}
           />
         )}
       </Field>
 
       <Field label="Sheet tab">
         {loadingTabs ? (
-          <div style={{ fontSize: 12, color: C.textMuted, padding: '8px 0' }}>
+          <div style={{ fontSize: 14, color: C.textMuted, padding: '8px 0' }}>
             <Loader2 size={12} style={{ animation: 'spin 1s linear infinite', verticalAlign: 'middle' }} /> Loading tabs…
           </div>
         ) : (
@@ -228,7 +228,7 @@ export default function GoogleSheetsToolConfig({ agentId, ensureAgentId, existin
             placeholder="— Select —"
             searchPlaceholder="Search tabs…"
             disabled={!spreadsheetId}
-            triggerStyle={{ padding: '9px 32px 9px 12px', fontSize: 13 }}
+            triggerStyle={{ padding: '9px 32px 9px 12px', fontSize: 15 }}
           />
         )}
       </Field>
@@ -240,14 +240,14 @@ export default function GoogleSheetsToolConfig({ agentId, ensureAgentId, existin
               display: 'flex', alignItems: 'flex-start', gap: 10,
               padding: '10px 12px', borderRadius: 8,
               border: ops.includes(o.key) ? `1.5px solid ${C.primary}` : `1px solid ${C.border}`,
-              background: ops.includes(o.key) ? '#FEF1F1' : C.cardBg,
+              background: ops.includes(o.key) ? 'var(--c-dangerBgSoft, #FEF1F1)' : C.cardBg,
               cursor: 'pointer',
             }}>
               <input type="checkbox" checked={ops.includes(o.key)} onChange={() => toggleOp(o.key)}
                 style={{ marginTop: 3 }} />
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{o.label}</div>
-                <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{o.desc}</div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{o.label}</div>
+                <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2 }}>{o.desc}</div>
               </div>
             </label>
           ))}
@@ -267,31 +267,31 @@ export default function GoogleSheetsToolConfig({ agentId, ensureAgentId, existin
 
 const input = {
   width: '100%', padding: '9px 12px', borderRadius: 8,
-  border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT,
+  border: `1px solid ${C.border}`, fontSize: 15, fontFamily: FONT,
   color: C.text, background: C.cardBg, outline: 'none',
   boxSizing: 'border-box',
 };
 const cancelBtn = {
   padding: '8px 14px', borderRadius: 8,
   border: `1px solid ${C.border}`, background: C.cardBg,
-  color: C.text, fontSize: 12, fontFamily: FONT, fontWeight: 600,
+  color: C.text, fontSize: 14, fontFamily: FONT, fontWeight: 600,
   cursor: 'pointer',
 };
 const saveBtn = (busy) => ({
   display: 'flex', alignItems: 'center', gap: 6,
   padding: '8px 16px', borderRadius: 8,
   border: 'none', background: C.primary, color: '#fff',
-  fontSize: 12, fontFamily: FONT, fontWeight: 700,
+  fontSize: 14, fontFamily: FONT, fontWeight: 700,
   cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.7 : 1,
 });
 
 function Field({ label, hint, children }) {
   return (
     <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: C.textSecondary,
+      <div style={{ fontSize: 13, fontWeight: 700, color: C.textSecondary,
         textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>{label}</div>
       {children}
-      {hint && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6, lineHeight: 1.45 }}>{hint}</div>}
+      {hint && <div style={{ fontSize: 13, color: C.textMuted, marginTop: 6, lineHeight: 1.45 }}>{hint}</div>}
     </div>
   );
 }

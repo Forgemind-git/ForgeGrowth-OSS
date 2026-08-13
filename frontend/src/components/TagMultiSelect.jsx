@@ -45,9 +45,9 @@ export default function TagMultiSelect({ categories = [], tags = [], selectedIds
         style={{
           display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px',
           borderRadius: 6, cursor: 'pointer', fontFamily: FONT,
-          background: on ? '#FDF6F6' : 'transparent',
+          background: on ? 'var(--c-dangerBgSoft, #FDF6F6)' : 'transparent',
         }}
-        onMouseEnter={e => { if (!on) e.currentTarget.style.background = '#F5F5F0'; }}
+        onMouseEnter={e => { if (!on) e.currentTarget.style.background = 'var(--c-xf5f5f0, #F5F5F0)'; }}
         onMouseLeave={e => { if (!on) e.currentTarget.style.background = 'transparent'; }}
       >
         <span style={{
@@ -59,7 +59,7 @@ export default function TagMultiSelect({ categories = [], tags = [], selectedIds
           {on && <Check size={11} color="#fff" />}
         </span>
         <span style={{ width: 10, height: 10, borderRadius: 3, background: tag.color || C.textMuted, flexShrink: 0 }} />
-        <span style={{ fontSize: 13, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tag.name}</span>
+        <span style={{ fontSize: 15, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tag.name}</span>
       </div>
     );
   };
@@ -76,7 +76,7 @@ export default function TagMultiSelect({ categories = [], tags = [], selectedIds
         }}
       >
         <Filter size={14} color={count ? C.primary : C.textMuted} style={{ flexShrink: 0 }} />
-        <span style={{ flex: 1, textAlign: 'left', fontSize: 13, color: count ? C.text : C.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        <span style={{ flex: 1, textAlign: 'left', fontSize: 15, color: count ? C.text : C.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {label}
         </span>
         {count > 0 && (
@@ -100,11 +100,11 @@ export default function TagMultiSelect({ categories = [], tags = [], selectedIds
           zIndex: 60, maxHeight: 320, overflowY: 'auto', padding: 6, fontFamily: FONT,
         }}>
           {groups.length === 0 && uncategorized.length === 0 && (
-            <div style={{ padding: 12, color: C.textMuted, fontSize: 12 }}>No tags available</div>
+            <div style={{ padding: 12, color: C.textMuted, fontSize: 14 }}>No tags available</div>
           )}
           {groups.map(({ cat, catTags }) => (
             <div key={cat.id} style={{ marginBottom: 2 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.04em', padding: '6px 8px 2px' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.04em', padding: '6px 8px 2px' }}>
                 {cat.name}
               </div>
               {catTags.map(tag => <Row key={tag.id} tag={tag} />)}
@@ -112,7 +112,7 @@ export default function TagMultiSelect({ categories = [], tags = [], selectedIds
           ))}
           {uncategorized.length > 0 && (
             <div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.04em', padding: '6px 8px 2px' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.04em', padding: '6px 8px 2px' }}>
                 Other
               </div>
               {uncategorized.map(tag => <Row key={tag.id} tag={tag} />)}

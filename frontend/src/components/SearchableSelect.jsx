@@ -86,7 +86,7 @@ export default function SearchableSelect({
           width: '100%', display: 'flex', alignItems: 'center', gap: 8,
           padding: '10px 32px 10px 12px', borderRadius: 8,
           border: `1.5px solid ${open ? C.primary : C.border}`,
-          fontSize: 13, fontFamily: FONT, color: selected ? C.text : C.textMuted,
+          fontSize: 15, fontFamily: FONT, color: selected ? C.text : C.textMuted,
           background: disabled ? 'var(--c-hover)' : 'var(--c-cardBg)',
           cursor: disabled ? 'not-allowed' : 'pointer', textAlign: 'left',
           position: 'relative', outline: 'none', boxSizing: 'border-box',
@@ -118,7 +118,7 @@ export default function SearchableSelect({
                   placeholder={searchPlaceholder}
                   style={{
                     width: '100%', padding: '7px 9px 7px 28px', borderRadius: 7,
-                    border: `1px solid ${C.border}`, fontSize: 12.5, fontFamily: FONT,
+                    border: `1px solid ${C.border}`, fontSize: 14, fontFamily: FONT,
                     color: C.text, outline: 'none', background: 'var(--c-cardBg)', boxSizing: 'border-box',
                   }}
                 />
@@ -129,7 +129,7 @@ export default function SearchableSelect({
           {/* Options */}
           <div style={{ maxHeight: 240, overflowY: 'auto', padding: 6 }}>
             {filtered.length === 0 ? (
-              <div style={{ padding: '10px 8px', color: C.textMuted, fontSize: 12 }}>{emptyText}</div>
+              <div style={{ padding: '10px 8px', color: C.textMuted, fontSize: 14 }}>{emptyText}</div>
             ) : filtered.map(o => {
               const on = String(o.value) === String(value);
               return (
@@ -139,15 +139,15 @@ export default function SearchableSelect({
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8, padding: '8px 8px',
                     borderRadius: 6, cursor: 'pointer',
-                    background: on ? '#FDF6F6' : 'transparent',
+                    background: on ? 'var(--c-dangerBgSoft, #FDF6F6)' : 'transparent',
                   }}
-                  onMouseEnter={e => { if (!on) e.currentTarget.style.background = '#F5F5F0'; }}
+                  onMouseEnter={e => { if (!on) e.currentTarget.style.background = 'var(--c-xf5f5f0, #F5F5F0)'; }}
                   onMouseLeave={e => { if (!on) e.currentTarget.style.background = 'transparent'; }}
                 >
                   <Check size={13} color={C.primary} style={{ flexShrink: 0, opacity: on ? 1 : 0 }} />
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 13, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.label}</div>
-                    {o.sublabel && <div style={{ fontSize: 11, color: C.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.sublabel}</div>}
+                    <div style={{ fontSize: 15, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.label}</div>
+                    {o.sublabel && <div style={{ fontSize: 13, color: C.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.sublabel}</div>}
                   </div>
                 </div>
               );
@@ -161,9 +161,9 @@ export default function SearchableSelect({
               style={{
                 display: 'flex', alignItems: 'center', gap: 7, padding: '10px 12px',
                 borderTop: `1px solid ${C.border}`, cursor: 'pointer',
-                fontSize: 13, fontWeight: 600, color: C.primary, fontFamily: FONT,
+                fontSize: 15, fontWeight: 600, color: C.primary, fontFamily: FONT,
               }}
-              onMouseEnter={e => e.currentTarget.style.background = '#FDF6F6'}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--c-xfdf6f6, #FDF6F6)'}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
               <Plus size={14} /> {createLabel}

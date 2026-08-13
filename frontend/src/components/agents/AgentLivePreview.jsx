@@ -44,7 +44,7 @@ function downscaleImage(file, maxDim = 1024, quality = 0.8) {
  * Sheets tools ARE real (they hit the configured spreadsheet). When `canTest`
  * is false (an unsaved agent) the composer is disabled.
  */
-export default function AgentLivePreview({ agentId, headerTitle, canTest = true }) {
+export default function AgentLivePreview({ agentId, headerTitle, canTest = true, fill = false }) {
   const [messages, setMessages] = useState([]); // see message shape below
   const [input, setInput] = useState('');
   const [pendingImage, setPendingImage] = useState(null); // { dataUrl, mime, data }
@@ -87,6 +87,7 @@ export default function AgentLivePreview({ agentId, headerTitle, canTest = true 
         content: res.reply || '',
         media: Array.isArray(res.media) ? res.media : [],
         links: Array.isArray(res.links) ? res.links : [],
+        templates: Array.isArray(res.templates) ? res.templates : [],
         status: res.status,
       }]);
     } catch (e) {
@@ -197,7 +198,7 @@ export default function AgentLivePreview({ agentId, headerTitle, canTest = true 
       {pendingImage && !recording && !transcribing && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 2px 7px', padding: 5, background: 'var(--c-cardBg)', border: '1px solid var(--c-border)', borderRadius: 10, width: 'fit-content', position: 'relative' }}>
           <img src={pendingImage.dataUrl} alt="attachment" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 6, display: 'block' }} />
-          <span style={{ fontSize: 11, color: C.textMuted, fontFamily: FONT, paddingRight: 4 }}>Image attached</span>
+          <span style={{ fontSize: 13, color: C.textMuted, fontFamily: FONT, paddingRight: 4 }}>Image attached</span>
           <button type="button" onClick={() => setPendingImage(null)} title="Remove image"
             style={{ background: 'var(--c-pageBg)', border: '1px solid var(--c-border)', borderRadius: 99, cursor: 'pointer', color: C.text, display: 'flex', padding: 2 }}>
             <X size={12} />
@@ -208,12 +209,12 @@ export default function AgentLivePreview({ agentId, headerTitle, canTest = true 
       {recording ? (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: 'var(--c-cardBg)', borderRadius: 99, border: '1px solid var(--c-border)' }}>
           <span style={{ width: 8, height: 8, borderRadius: 99, background: '#EF4444', animation: 'agentRecPulse 1s ease-in-out infinite' }} />
-          <span style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>Recording… tap ◼ to send</span>
+          <span style={{ fontSize: 14, color: C.text, fontFamily: FONT }}>Recording… tap ◼ to send</span>
         </div>
       ) : transcribing ? (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: 'var(--c-cardBg)', borderRadius: 99, border: '1px solid var(--c-border)' }}>
           <Loader2 size={13} style={{ animation: 'spin 1s linear infinite', color: C.textMuted }} />
-          <span style={{ fontSize: 12, color: C.textMuted, fontFamily: FONT }}>Transcribing…</span>
+          <span style={{ fontSize: 14, color: C.textMuted, fontFamily: FONT }}>Transcribing…</span>
         </div>
       ) : (
         <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, background: 'var(--c-cardBg)', borderRadius: 99, padding: '3px 4px 3px 6px', border: '1px solid var(--c-border)', opacity: canTest ? 1 : 0.6 }}>
@@ -236,7 +237,7 @@ export default function AgentLivePreview({ agentId, headerTitle, canTest = true 
             placeholder={canTest ? (pendingImage ? 'Add a caption (optional)' : 'Message') : 'Save the agent to test'}
             style={{
               flex: 1, minWidth: 0, background: 'transparent', border: 'none',
-              padding: '5px 2px', fontSize: 12, color: C.text, fontFamily: FONT, outline: 'none',
+              padding: '5px 2px', fontSize: 14, color: C.text, fontFamily: FONT, outline: 'none',
             }}
           />
         </div>
@@ -252,7 +253,7 @@ export default function AgentLivePreview({ agentId, headerTitle, canTest = true 
       ) : (
         <CircleBtn
           label={recording ? 'Stop & send' : 'Record voice note'}
-          color={recording ? '#EF4444' : '#25D366'}
+          color={recording ? 'var(--c-sef4444, #EF4444)' : '#25D366'}
           onClick={recording ? stopRecording : startRecording}
           disabled={!canTest || transcribing || sending}
         >
@@ -264,22 +265,29 @@ export default function AgentLivePreview({ agentId, headerTitle, canTest = true 
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, fontFamily: FONT }}>
+    // `fill` lets the editor hand the phone the full height of a pinned pane.
+    // PhoneFrame's internals are already flex:1/minHeight:0, so a '100%'
+    // height stretches it correctly rather than overflowing.
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, fontFamily: FONT,
+      ...(fill ? { height: '100%', minHeight: 0 } : null),
+    }}>
       <style>{`@keyframes agentTypingBlink{0%,80%,100%{opacity:.25}40%{opacity:1}}@keyframes agentRecPulse{0%,100%{opacity:1}50%{opacity:.3}}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       <PhoneFrame
         headerTitle={(headerTitle || '').trim() || 'Test Agent'}
         headerSubtitle={sending ? 'typing…' : (recording ? 'recording…' : 'online')}
         inputBar={composer}
         bodyRef={bodyRef}
+        height={fill ? '100%' : 580}
       >
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
-          <span style={{ background: '#E1F2FA', color: '#3C6678', fontSize: 9, padding: '2px 9px', borderRadius: 99, fontWeight: 600 }}>TODAY</span>
+          <span style={{ background: 'var(--c-infoBg, #E1F2FA)', color: 'var(--c-s3c6678, #3C6678)', fontSize: 11, padding: '2px 9px', borderRadius: 99, fontWeight: 600 }}>TODAY</span>
         </div>
 
         {messages.length === 0 && !sending && !transcribing && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', textAlign: 'center' }}>
-            <div style={{ fontSize: 26, marginBottom: 6, opacity: 0.4 }}>💬</div>
-            <div style={{ fontSize: 10.5, color: '#5b6b73', fontWeight: 500, lineHeight: 1.5, whiteSpace: 'pre-line' }}>
+            <div style={{ fontSize: 30, marginBottom: 6, opacity: 0.4 }}>💬</div>
+            <div style={{ fontSize: 12, color: 'var(--c-x5b6b73, #5b6b73)', fontWeight: 500, lineHeight: 1.5, whiteSpace: 'pre-line' }}>
               {canTest ? 'Send a message or 🎤 voice note\nto chat with this agent live' : 'Save the agent first,\nthen test it here'}
             </div>
           </div>
@@ -296,7 +304,7 @@ export default function AgentLivePreview({ agentId, headerTitle, canTest = true 
         )}
 
         {error && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '8px auto 0', maxWidth: '92%', padding: '6px 9px', borderRadius: 8, background: '#FCEBEB', color: '#A32D2D', fontSize: 10, lineHeight: 1.4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '8px auto 0', maxWidth: '92%', padding: '6px 9px', borderRadius: 8, background: 'var(--c-dangerBg, #FCEBEB)', color: 'var(--c-dangerText, #A32D2D)', fontSize: 12, lineHeight: 1.4 }}>
             <AlertCircle size={12} style={{ flexShrink: 0 }} />
             <span style={{ wordBreak: 'break-word' }}>{error}</span>
           </div>
@@ -310,7 +318,7 @@ export default function AgentLivePreview({ agentId, headerTitle, canTest = true 
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 5,
           background: 'transparent', border: 'none',
-          fontSize: 12, color: C.textSecondary, fontFamily: FONT, fontWeight: 600,
+          fontSize: 14, color: C.textSecondary, fontFamily: FONT, fontWeight: 600,
           cursor: (messages.length === 0 && !error) ? 'default' : 'pointer',
           opacity: (messages.length === 0 && !error) ? 0.45 : 1,
         }}
@@ -322,18 +330,19 @@ export default function AgentLivePreview({ agentId, headerTitle, canTest = true 
 }
 
 // All the bubbles for one message: text, a recorded voice note (user), and any
-// media / links the agent sent.
+// media / links / templates the agent sent.
 function MessageBlock({ message }) {
   const isUser = message.role === 'user';
   const media = message.media || [];
   const links = message.links || [];
+  const templates = message.templates || [];
   return (
     <>
       {message.voice && (
         <Bubble isUser={isUser}>
           <audio controls src={message.audioUrl} style={{ width: 200, maxWidth: '100%', height: 34, display: 'block' }} />
           {message.content && <div style={textStyle}>{message.content}</div>}
-          {message.note && <div style={{ fontSize: 10, color: '#B45309', marginTop: 3 }}>{message.note}</div>}
+          {message.note && <div style={{ fontSize: 12, color: 'var(--c-sb45309, #B45309)', marginTop: 3 }}>{message.note}</div>}
           <MetaRow isUser={isUser} />
         </Bubble>
       )}
@@ -350,7 +359,7 @@ function MessageBlock({ message }) {
         <Bubble isUser={isUser}>
           <div style={textStyle}>{message.content}</div>
           {message.status === 'capped' && (
-            <div style={{ fontSize: 9.5, color: '#B45309', marginTop: 3 }}>Hit the tool-iteration cap; reply may be partial.</div>
+            <div style={{ fontSize: 11, color: 'var(--c-sb45309, #B45309)', marginTop: 3 }}>Hit the tool-iteration cap; reply may be partial.</div>
           )}
           <MetaRow isUser={isUser} />
         </Bubble>
@@ -365,11 +374,89 @@ function MessageBlock({ message }) {
 
       {links.map((url, i) => (
         <Bubble key={`l${i}`} isUser={isUser}>
-          <a href={url} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: '#027EB5', textDecoration: 'underline', wordBreak: 'break-all', fontFamily: FONT }}>{url}</a>
+          <a href={url} target="_blank" rel="noreferrer" style={{ fontSize: 15, color: 'var(--c-s027eb5, #027EB5)', textDecoration: 'underline', wordBreak: 'break-all', fontFamily: FONT }}>{url}</a>
           <MetaRow isUser={isUser} />
         </Bubble>
       ))}
+
+      {templates.map((t, i) => <TemplateBubble key={`t${i}`} template={t} isUser={isUser} />)}
     </>
+  );
+}
+
+/**
+ * An approved template, drawn the way WhatsApp draws it.
+ *
+ * Deliberately NOT the shared `WhatsAppPreview`: that component wraps its
+ * output in a whole `PhoneFrame`, and this already sits inside one — nesting
+ * them would render a phone inside a phone. Same content, no chrome.
+ *
+ * Buttons are rendered on a separate panel under the bubble with a divider
+ * between each, which is how WhatsApp actually shows template buttons; drawing
+ * them as inline text is what made the earlier preview unrecognisable.
+ */
+function TemplateBubble({ template, isUser }) {
+  const t = template || {};
+  const buttons = Array.isArray(t.buttons) ? t.buttons : [];
+  const mediaHeader = ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(t.headerType);
+  return (
+    <div style={{ marginLeft: isUser ? 'auto' : 0, marginRight: isUser ? 0 : 'auto', maxWidth: '82%', marginBottom: 6 }}>
+      <div style={{
+        background: isUser ? 'var(--c-sdcf8c6, #DCF8C6)' : 'var(--c-cardBg)',
+        borderRadius: isUser ? '7.5px 7.5px 0 7.5px' : '7.5px 7.5px 7.5px 0',
+        padding: mediaHeader ? 3 : '6px 9px 5px',
+        boxShadow: '0 1px 0.5px rgba(11,20,26,.13)', overflow: 'hidden',
+      }}>
+        {/* A media header shows the actual file when the template still points
+            at a Media Library row (header_media_library_id). Meta's own upload
+            handle is single-use and not a URL, so without that pointer there is
+            genuinely nothing to show — a neutral placeholder is the honest
+            answer rather than a broken image. */}
+        {mediaHeader && (
+          t.headerMediaLibraryId ? (
+            t.headerType === 'VIDEO'
+              ? <video src={api.mediaLibrary.downloadUrl(t.headerMediaLibraryId)} controls style={{ display: 'block', width: '100%', maxWidth: 230, borderRadius: 5 }} />
+              : <img src={api.mediaLibrary.downloadUrl(t.headerMediaLibraryId)} alt="" style={{ display: 'block', width: '100%', maxWidth: 230, borderRadius: 5 }} />
+          ) : (
+            <div style={{ height: 96, borderRadius: 5, background: 'var(--c-surfaceAlt)', display: 'flex',
+              alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--c-textMuted)', fontFamily: FONT }}>
+              {t.headerType} header
+            </div>
+          )
+        )}
+
+        <div style={{ padding: mediaHeader ? '5px 6px 2px' : 0 }}>
+          {t.headerType === 'TEXT' && t.headerText && (
+            <div style={{ ...textStyle, fontWeight: 700, marginBottom: 3 }}>{t.headerText}</div>
+          )}
+          {t.body && <div style={{ ...textStyle, whiteSpace: 'pre-wrap' }}>{t.body}</div>}
+          {t.footer && (
+            <div style={{ fontSize: 13, color: 'var(--c-textMuted)', fontFamily: FONT, marginTop: 3 }}>{t.footer}</div>
+          )}
+          <MetaRow isUser={isUser} />
+        </div>
+      </div>
+
+      {buttons.length > 0 && (
+        <div style={{ marginTop: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {buttons.map((b, i) => (
+            <div key={i} style={{
+              background: 'var(--c-cardBg)', borderRadius: 6, padding: '7px 9px', textAlign: 'center',
+              fontSize: 14, fontFamily: FONT, fontWeight: 500, color: 'var(--c-s027eb5, #027EB5)',
+              boxShadow: '0 1px 0.5px rgba(11,20,26,.13)',
+            }}>
+              {b.text || b.label || 'Button'}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Named, because a template is not free text: which one went out is the
+          thing an operator is checking in the simulator. */}
+      <div style={{ fontSize: 11, color: 'var(--c-textMuted)', fontFamily: FONT, marginTop: 3, textAlign: isUser ? 'right' : 'left' }}>
+        Template · {t.name}{t.language ? ` · ${t.language}` : ''}
+      </div>
+    </div>
   );
 }
 
@@ -377,7 +464,7 @@ function Bubble({ isUser, children, pad }) {
   return (
     <div style={{ marginLeft: isUser ? 'auto' : 0, marginRight: isUser ? 0 : 'auto', maxWidth: '82%', marginBottom: 6 }}>
       <div style={{
-        background: isUser ? '#DCF8C6' : 'var(--c-cardBg)',
+        background: isUser ? 'var(--c-sdcf8c6, #DCF8C6)' : 'var(--c-cardBg)',
         borderRadius: isUser ? '7.5px 7.5px 0 7.5px' : '7.5px 7.5px 7.5px 0',
         padding: pad != null ? pad : '6px 9px 5px',
         boxShadow: '0 1px 0.5px rgba(11,20,26,.13)', overflow: 'hidden',
@@ -407,12 +494,12 @@ function MediaItem({ item }) {
   // document / other → a file card that opens on tap
   return (
     <a href={src} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 170, textDecoration: 'none', padding: '2px 0' }}>
-      <div style={{ width: 34, height: 38, background: '#fff', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 1px 3px rgba(0,0,0,.15)' }}>
-        <FileText size={16} color="#e94235" />
+      <div style={{ width: 34, height: 38, background: 'var(--c-surface, #fff)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 1px 3px rgba(0,0,0,.15)' }}>
+        <FileText size={16} color="var(--c-xe94235, #e94235)" />
       </div>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--c-text)', fontFamily: FONT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
-        <div style={{ fontSize: 9.5, color: 'var(--c-textMuted)', fontFamily: FONT, textTransform: 'uppercase' }}>{(item.type || 'file')}</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--c-text)', fontFamily: FONT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
+        <div style={{ fontSize: 11, color: 'var(--c-textMuted)', fontFamily: FONT, textTransform: 'uppercase' }}>{(item.type || 'file')}</div>
       </div>
     </a>
   );
@@ -421,7 +508,7 @@ function MediaItem({ item }) {
 function MetaRow({ isUser }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 3, marginTop: 2, marginBottom: -1 }}>
-      <span style={{ fontSize: 10, color: 'var(--c-textSecondary)', fontFamily: FONT }}>9:41</span>
+      <span style={{ fontSize: 12, color: 'var(--c-textSecondary)', fontFamily: FONT }}>9:41</span>
       {isUser && (
         <svg width="16" height="11" viewBox="0 0 16 11" fill="none"><path d="M1 5.5L5 9.5L11.5 1" stroke="#53BDEB" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /><path d="M5 5.5L9 9.5L15.5 1" stroke="#53BDEB" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
       )}
@@ -446,7 +533,7 @@ function CircleBtn({ children, color, onClick, disabled, label }) {
 }
 
 const textStyle = {
-  fontSize: 13, color: 'var(--c-text)', lineHeight: 1.5,
+  fontSize: 15, color: 'var(--c-text)', lineHeight: 1.5,
   whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere', fontFamily: FONT,
 };
 

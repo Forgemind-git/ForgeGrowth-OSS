@@ -2,7 +2,7 @@
 // Projects, Follow-ups, Templates, Forms).
 //
 // Why the caller passes ACCESSORS instead of a field name: these six endpoints
-// do not agree on key casing. `agents`, `projects`, `follow-up-sequences` and
+// do not agree on key casing. `agents`, `projects` and
 // `lead-forms` return camelCase (`createdAt`), while `chatbots` and `templates`
 // return raw Postgres rows (`created_at`). A helper that guessed one casing
 // would sort exactly nothing on the other three — silently, since a comparator

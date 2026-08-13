@@ -113,7 +113,7 @@ export default function OverviewPage({ user, navigate }) {
 
       {/* ── Lead sources (was its own tab) ─────────────────────────────────── */}
       <Card title="Lead sources"
-        right={<span style={{ fontSize: 12, color: C.textMuted, fontFamily: FONT }}>Ranked by quality, not just volume</span>}>
+        right={<span style={{ fontSize: 14, color: C.textMuted, fontFamily: FONT }}>Ranked by quality, not just volume</span>}>
         {!sources ? <Shimmer height={220} radius={10} /> : (
           <Table
             columns={[{ label: 'Source' }, { label: 'Leads', align: 'right' }, { label: 'Entry Stage' },
@@ -146,7 +146,7 @@ function Bar({ pct, color }) {
       <span style={{ width: 54, height: 6, borderRadius: 4, background: C.hover, overflow: 'hidden' }}>
         <span style={{ display: 'block', width: `${Math.min(100, pct)}%`, height: '100%', background: color }} />
       </span>
-      <span style={{ fontFamily: MONO, fontSize: 12.5, color: C.text, minWidth: 32 }}>{pct}%</span>
+      <span style={{ fontFamily: MONO, fontSize: 14, color: C.text, minWidth: 32 }}>{pct}%</span>
     </span>
   );
 }
@@ -154,7 +154,7 @@ function Bar({ pct, color }) {
 function LinkText({ onClick, children }) {
   return (
     <span onClick={onClick}
-      style={{ fontSize: 12, color: C.primary, cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      style={{ fontSize: 14, color: C.primary, cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
       {children} <ArrowRight size={12} />
     </span>
   );
@@ -163,8 +163,8 @@ function LinkText({ onClick, children }) {
 function Stat({ label, value, accent }) {
   return (
     <div style={{ minWidth: 74 }}>
-      <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.textMuted }}>{label}</div>
-      <div style={{ fontSize: 17, fontWeight: 700, fontFamily: MONO, color: accent || C.text, marginTop: 2 }}>{value}</div>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.textMuted }}>{label}</div>
+      <div style={{ fontSize: 18, fontWeight: 700, fontFamily: MONO, color: accent || C.text, marginTop: 2 }}>{value}</div>
     </div>
   );
 }
@@ -175,12 +175,12 @@ function CtwaStrip({ data, days, navigate }) {
     <Card title="Click-to-WhatsApp"
       right={<LinkText onClick={() => navigate && navigate('ctwa-ads')}>Open</LinkText>}>
       {data === null ? <Shimmer height={110} /> : data === false ? (
-        <div style={{ fontSize: 12.5, color: C.textMuted, fontFamily: FONT }}>Not available for your account.</div>
+        <div style={{ fontSize: 14, color: C.textMuted, fontFamily: FONT }}>Not available for your account.</div>
       ) : (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
             <MousePointerClick size={15} color={C.textSecondary} />
-            <span style={{ fontSize: 12.5, color: C.textSecondary, fontFamily: FONT }}>
+            <span style={{ fontSize: 14, color: C.textSecondary, fontFamily: FONT }}>
               Conversations that started from an ad, last {days} days.
             </span>
           </div>

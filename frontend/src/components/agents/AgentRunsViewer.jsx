@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, ChevronRight, CheckCircle2, AlertCircle, Clock, Cpu, Wrench, MessageSquare } from 'lucide-react';
+import { RefreshCw, ChevronRight, CheckCircle2, AlertCircle, Clock, Cpu, Wrench, MessageSquare, ShieldBan } from 'lucide-react';
 import { api } from '../../api.js';
 import { C, FONT, MONO } from '../../constants.js';
 
@@ -56,15 +56,15 @@ export default function AgentRunsViewer({ agentId }) {
         <button onClick={() => setCollapsed(c => !c)}
           style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, fontFamily: FONT }}>
           <ChevronRight size={15} style={{ transform: collapsed ? 'rotate(0deg)' : 'rotate(90deg)', transition: 'transform .15s', color: C.textMuted }} />
-          <span style={{ fontSize: 14, fontWeight: 700, color: C.text, letterSpacing: '-.01em' }}>Recent runs</span>
-          {runs.length > 0 && <span style={{ fontSize: 12, color: C.textMuted, fontWeight: 600 }}>({runs.length})</span>}
+          <span style={{ fontSize: 15, fontWeight: 700, color: C.text, letterSpacing: '-.01em' }}>Recent runs</span>
+          {runs.length > 0 && <span style={{ fontSize: 14, color: C.textMuted, fontWeight: 600 }}>({runs.length})</span>}
         </button>
         <button onClick={refresh}
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '6px 10px', borderRadius: 8,
             border: `1px solid ${C.border}`, background: C.cardBg,
-            color: C.text, fontSize: 12, fontFamily: FONT, fontWeight: 600,
+            color: C.text, fontSize: 14, fontFamily: FONT, fontWeight: 600,
             cursor: 'pointer',
           }}>
           <RefreshCw size={12} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} /> Refresh
@@ -75,14 +75,14 @@ export default function AgentRunsViewer({ agentId }) {
       <div style={{ marginTop: 16 }}>
       {error && (
         <div style={{ padding: '8px 12px', borderRadius: 8, marginBottom: 10,
-          background: '#FCEBEB', color: '#A32D2D', border: '1px solid #FBC8C8', fontSize: 12 }}>
+          background: 'var(--c-dangerBg, #FCEBEB)', color: 'var(--c-dangerText, #A32D2D)', border: '1px solid var(--c-dangerBorder, #FBC8C8)', fontSize: 14 }}>
           {error}
         </div>
       )}
 
       {!loading && runs.length === 0 && (
         <div style={{ padding: 16, background: C.surfaceAlt, borderRadius: 8,
-          border: `1px dashed ${C.border}`, textAlign: 'center', fontSize: 12, color: C.textSecondary }}>
+          border: `1px dashed ${C.border}`, textAlign: 'center', fontSize: 14, color: C.textSecondary }}>
           No runs yet. Send the agent a WhatsApp message to trigger one.
         </div>
       )}
@@ -105,10 +105,25 @@ export default function AgentRunsViewer({ agentId }) {
               }} />
               <StatusIcon status={r.status} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, color: C.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {r.finalReply || (r.errorMessage ? `Error: ${r.errorMessage}` : '(no reply)')}
+                <div style={{ fontSize: 15, color: r.status === 'limited' ? C.textSecondary : C.text, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {/* A 'limited' row carries its reason in errorMessage but is
+                      not a failure — prefixing it with "Error:" would report a
+                      working limit as a fault. */}
+                  {r.status === 'limited'
+                    ? `Not answered — ${r.errorMessage || 'usage limit reached'}`
+                    : (r.finalReply || (r.errorMessage ? `Error: ${r.errorMessage}` : '(no reply)'))}
                 </div>
-                <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2, fontFamily: MONO }}>
+                <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2, fontFamily: MONO }}>
+                  {/* A test run consumed no allowance and answers nobody real —
+                      saying so here is what keeps the history readable after an
+                      afternoon of trying things out. */}
+                  {r.isTest && (
+                    <span style={{
+                      display: 'inline-block', marginRight: 6, padding: '1px 6px', borderRadius: 5,
+                      background: 'var(--c-infoBg, #E6EEFC)', color: 'var(--c-infoText, #1D4ED8)',
+                      fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: '.04em',
+                    }}>TEST</span>
+                  )}
                   +{r.contactNumber} · {formatRelative(r.startedAt)} · {durationMs(r)} ·{' '}
                   {(r.totalInputTokens || 0)}↓/{(r.totalOutputTokens || 0)}↑ tok
                 </div>
@@ -117,7 +132,7 @@ export default function AgentRunsViewer({ agentId }) {
             {openId === r.id && (
               <div style={{ borderTop: `1px solid ${C.border}`, padding: 12, background: C.surfaceAlt }}>
                 {loadingDetail && (
-                  <div style={{ fontSize: 12, color: C.textMuted }}>Loading…</div>
+                  <div style={{ fontSize: 14, color: C.textMuted }}>Loading…</div>
                 )}
                 {openDetail && (
                   <Steps run={openDetail} />
@@ -134,16 +149,19 @@ export default function AgentRunsViewer({ agentId }) {
 }
 
 function StatusIcon({ status }) {
-  if (status === 'completed') return <CheckCircle2 size={14} color="#0F7A38" />;
+  if (status === 'completed') return <CheckCircle2 size={14} color="var(--c-x0f7a38, #0F7A38)" />;
   if (status === 'failed')    return <AlertCircle size={14} color={C.primary} />;
-  if (status === 'capped')    return <AlertCircle size={14} color="#B45309" />;
+  if (status === 'capped')    return <AlertCircle size={14} color="var(--c-sb45309, #B45309)" />;
+  // A usage limit declined to answer. Not an error — a deliberate decision —
+  // so it gets its own glyph rather than borrowing the red one.
+  if (status === 'limited')   return <ShieldBan size={14} color={C.textMuted} />;
   return <Clock size={14} color={C.textMuted} />;
 }
 
 function Steps({ run }) {
   const steps = run.steps || [];
   if (steps.length === 0) {
-    return <div style={{ fontSize: 12, color: C.textMuted }}>No steps recorded.</div>;
+    return <div style={{ fontSize: 14, color: C.textMuted }}>No steps recorded.</div>;
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -151,8 +169,8 @@ function Steps({ run }) {
       {run.finalReply && (
         <div style={{
           padding: '10px 12px', borderRadius: 8,
-          background: '#ECFDF5', border: '1px solid #A7F3D0',
-          fontSize: 12, color: '#065F46', display: 'flex', gap: 8, alignItems: 'flex-start',
+          background: 'var(--c-successBgSoft, #ECFDF5)', border: '1px solid #A7F3D0',
+          fontSize: 14, color: 'var(--c-s065f46, #065F46)', display: 'flex', gap: 8, alignItems: 'flex-start',
         }}>
           <MessageSquare size={13} style={{ marginTop: 1 }} />
           <div>
@@ -175,17 +193,17 @@ function Step({ step }) {
       background: C.cardBg, border: `1px solid ${C.border}`,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-        <Icon size={13} color={isTool ? '#0F7A38' : '#534AB7'} />
-        <div style={{ fontSize: 12, fontWeight: 700, color: titleColor, flex: 1 }}>
+        <Icon size={13} color={isTool ? 'var(--c-x0f7a38, #0F7A38)' : 'var(--c-purple, #534AB7)'} />
+        <div style={{ fontSize: 14, fontWeight: 700, color: titleColor, flex: 1 }}>
           {isTool ? `Tool: ${step.toolType}` : 'LLM call'}
           {step.status === 'error' && ' · error'}
         </div>
-        <div style={{ fontSize: 11, color: C.textMuted, fontFamily: MONO }}>
+        <div style={{ fontSize: 13, color: C.textMuted, fontFamily: MONO }}>
           {step.latencyMs != null ? `${step.latencyMs}ms` : ''}
         </div>
       </div>
       {step.errorMessage && (
-        <div style={{ fontSize: 11, color: C.primary, marginBottom: 6 }}>{step.errorMessage}</div>
+        <div style={{ fontSize: 13, color: C.primary, marginBottom: 6 }}>{step.errorMessage}</div>
       )}
       {step.input && (
         <CollapseBlock label="input" content={step.input} />
@@ -206,7 +224,7 @@ function CollapseBlock({ label, content }) {
       <button onClick={() => setOpen(o => !o)}
         style={{
           background: 'transparent', border: 'none', cursor: 'pointer',
-          fontSize: 11, color: C.textSecondary, fontWeight: 600, fontFamily: FONT,
+          fontSize: 13, color: C.textSecondary, fontWeight: 600, fontFamily: FONT,
           padding: 0,
         }}>
         {open ? '▾' : '▸'} {label}
@@ -214,7 +232,7 @@ function CollapseBlock({ label, content }) {
       <pre style={{
         margin: '4px 0 0', padding: open ? '8px 10px' : '4px 10px',
         background: C.surfaceAlt, borderRadius: 6,
-        fontFamily: MONO, fontSize: 11, color: C.text,
+        fontFamily: MONO, fontSize: 13, color: C.text,
         whiteSpace: 'pre-wrap', wordBreak: 'break-word',
         maxHeight: open ? 240 : 30, overflow: 'auto',
       }}>

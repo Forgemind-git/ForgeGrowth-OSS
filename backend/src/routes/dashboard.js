@@ -60,62 +60,26 @@ router.get('/dashboard', async (req, res) => {
       return rows;
     };
 
-    // Resolve the "Lead Source" category id (case-insensitive). A "lead" is a
-    // contact tagged under this category — drives the New Leads + Open
-    // Conversations cards.
-    const { rows: lsRows } = await pool.query(
-      `SELECT id FROM coexistence.categories WHERE LOWER(name) = LOWER($1) ORDER BY created_at LIMIT 1`,
-      ['Lead Source']
-    );
-    const leadSourceCatId = lsRows[0]?.id || null;
-
-    // ── Contacts (totals + new this/prev period), counted per PERSON ──
+    // ── Leads (totals + new this/prev period) ─────────────────────────
     //
-    // contacts is keyed on (wa_number, contact_number), so someone who has
-    // messaged three of our business numbers is three rows. Collapsing to one
-    // row per contact_number first makes `total` a count of people.
+    // Counted from coexistence.leads, the same table Sales → Leads reads, so
+    // the two pages cannot disagree about how many leads exist.
     //
-    // It also fixes what "new" means. Filtering rows on created_at counts a
-    // person again the day they happen to message a SECOND business number —
-    // they are not a new person, so the range is tested against their earliest
-    // appearance anywhere (first_seen), not against each row's own date.
-    const [contactRow] = await q(
+    // This used to count CONTACTS, which answered a different question and
+    // answered it wrong: contacts is keyed on (wa_number, contact_number), so
+    // one person who has messaged three business numbers is three rows. Leads
+    // are one row per person by construction (whatsapp_number is UNIQUE), so no
+    // per-person collapse is needed here at all.
+    const [leadRow] = await q(
       `SELECT
          count(*)::int AS total,
-         count(*) FILTER (WHERE p.first_seen >= NOW() - ($1 * INTERVAL '1 day'))::int AS new_in_range,
-         count(*) FILTER (WHERE p.first_seen >= NOW() - ($1 * INTERVAL '1 day') * 2
-                            AND p.first_seen <  NOW() - ($1 * INTERVAL '1 day'))::int AS prev_new
-       FROM (
-         SELECT c.contact_number, MIN(c.created_at) AS first_seen
-           FROM coexistence.contacts c
-          WHERE TRUE /*SCOPE*/
-          GROUP BY c.contact_number
-       ) p`,
-      [days], 'contacts'
+         count(*) FILTER (WHERE l.created_at >= NOW() - ($1 * INTERVAL '1 day'))::int AS new_in_range,
+         count(*) FILTER (WHERE l.created_at >= NOW() - ($1 * INTERVAL '1 day') * 2
+                            AND l.created_at <  NOW() - ($1 * INTERVAL '1 day'))::int AS prev_new
+       FROM coexistence.leads l
+       WHERE TRUE /*SCOPE*/`,
+      [days], 'leads'
     );
-
-    // ── New leads: people tagged under "Lead Source", new this/prev ────
-    //
-    // Same per-person collapse as the contacts totals above, for the same two
-    // reasons: one person is several contact rows, and "new" must mean the
-    // first time we saw THEM, not the first time we saw each of their rows.
-    let leadRow = { new_in_range: 0, prev_new: 0 };
-    if (leadSourceCatId) {
-      [leadRow] = await q(
-        `SELECT
-           count(*) FILTER (WHERE p.first_seen >= NOW() - ($1 * INTERVAL '1 day'))::int AS new_in_range,
-           count(*) FILTER (WHERE p.first_seen >= NOW() - ($1 * INTERVAL '1 day') * 2
-                              AND p.first_seen <  NOW() - ($1 * INTERVAL '1 day'))::int AS prev_new
-         FROM (
-           SELECT c.contact_number, MIN(c.created_at) AS first_seen
-             FROM coexistence.contacts c,
-                  jsonb_array_elements(COALESCE(c.tags, '[]'::jsonb)) t
-            WHERE (t->>'category_id') = $2 /*SCOPE*/
-            GROUP BY c.contact_number
-         ) p`,
-        [days, leadSourceCatId], 'contacts'
-      );
-    }
 
     // ── Messages + active conversations (this/prev period) ────────────
     const [msgRow] = await q(
@@ -150,32 +114,26 @@ router.get('/dashboard', async (req, res) => {
       [days], 'chat'
     );
 
-    // ── Open conversations: unread incoming newer than last read, AND the
-    //    contact is tagged under the "Lead Source" category ──────────────
-    let openRow = { open_convos: 0 };
-    if (leadSourceCatId) {
-      [openRow] = await q(
-        `WITH last_in AS (
-           SELECT ch.wa_number, ch.contact_number, max(ch.timestamp) AS last_in_ts
-           FROM coexistence.chat_history ch
-           WHERE ch.direction='incoming' /*SCOPE*/
-           GROUP BY ch.wa_number, ch.contact_number
-         )
-         SELECT count(*)::int AS open_convos
-         FROM last_in li
-         LEFT JOIN coexistence.conversation_reads r
-           ON r.wa_number = li.wa_number AND r.contact_number = li.contact_number
-         WHERE (r.last_read_at IS NULL OR li.last_in_ts > r.last_read_at)
-           AND EXISTS (
-             SELECT 1 FROM coexistence.contacts lc,
-                  jsonb_array_elements(COALESCE(lc.tags, '[]'::jsonb)) lt
-              WHERE lc.wa_number = li.wa_number
-                AND lc.contact_number = li.contact_number
-                AND (lt->>'category_id') = $1
-           )`,
-        [leadSourceCatId], 'chat'
-      );
-    }
+    // ── Open conversations: an unread inbound newer than the last read ─
+    //
+    // No longer gated on a "Lead Source" tag category. That gate meant the tile
+    // silently read 0 on any workspace that had never created a category with
+    // that exact name — a number that looks like "nothing is waiting" rather
+    // than "this is not configured". Every unanswered customer counts now.
+    const [openRow] = await q(
+      `WITH last_in AS (
+         SELECT ch.wa_number, ch.contact_number, max(ch.timestamp) AS last_in_ts
+         FROM coexistence.chat_history ch
+         WHERE ch.direction='incoming' /*SCOPE*/
+         GROUP BY ch.wa_number, ch.contact_number
+       )
+       SELECT count(*)::int AS open_convos
+       FROM last_in li
+       LEFT JOIN coexistence.conversation_reads r
+         ON r.wa_number = li.wa_number AND r.contact_number = li.contact_number
+       WHERE (r.last_read_at IS NULL OR li.last_in_ts > r.last_read_at)`,
+      [], 'chat'
+    );
 
     // ── Daily inbound/outbound trend ──────────────────────────────────
     const trend = await q(
@@ -242,22 +200,28 @@ router.get('/dashboard', async (req, res) => {
         source: 'leads',
       };
     } else {
-      // Funnel config unavailable (cache not loaded). Fall back to the tag
-      // mirror rather than showing nothing — deduped by PERSON, not by row.
-      const stages = await q(
-        `SELECT t->>'name' AS name,
-                COALESCE(t->>'color', '#dc2626') AS color,
-                count(DISTINCT c.contact_number)::int AS count
-         FROM coexistence.contacts c,
-              jsonb_array_elements(COALESCE(c.tags, '[]'::jsonb)) t
-         WHERE (t->>'category_id') = 'cat-funnel-stage' /*SCOPE*/
-         GROUP BY 1, 2
-         ORDER BY count DESC`,
-        [], 'contacts'
+      // ⚠ The cache is cold. Read `funnel_stages` DIRECTLY rather than falling
+      // back to the contact TAG mirror, which answers a different question and
+      // answers it wrong: contacts is keyed on (wa_number, contact_number), so
+      // the mirror tags every row a person has and over-counts them. Live, that
+      // read 13 enrolled leads as 24.
+      //
+      // The counts above already came from `leads`; only the stage LIST was
+      // missing, and that is one query away. Same lesson as the agent's stage
+      // validator — never let a cold cache silently change what a number means.
+      const { rows: dbStages } = await pool.query(
+        `SELECT stage_key, label, color, is_funnel
+           FROM coexistence.funnel_stages
+          WHERE active = TRUE
+          ORDER BY order_index, id`
       );
+      const stages = dbStages.map(r => ({
+        name: r.label, color: r.color, count: byStage[r.stage_key] || 0,
+        stageKey: r.stage_key, isFunnel: r.is_funnel,
+      }));
       funnel = {
-        categoryId: 'cat-funnel-stage', categoryName: 'Funnel Stage',
-        stages, total: stages.reduce((s, r) => s + r.count, 0), source: 'tags',
+        categoryId: null, categoryName: null,
+        stages, total: stages.reduce((s, r) => s + r.count, 0), source: 'leads',
       };
     }
     // All categories for a future selector
@@ -266,23 +230,43 @@ router.get('/dashboard', async (req, res) => {
     );
     funnel.categories = allCats;
 
-    // ── Tag distribution (top 8 across visible contacts) ──────────────
+    // ── Where leads came from (top 8) ─────────────────────────────────
     //
-    // DISTINCT contact_number, not DISTINCT id: the same person can hold a row
-    // per business number they have messaged, and counting rows counted them
-    // once per number. The chart answers "how many PEOPLE carry this tag".
-    const tagDistribution = await q(
-      `SELECT t->>'name' AS name,
-              COALESCE(t->>'color', '#dc2626') AS color,
-              count(DISTINCT c.contact_number)::int AS count
-       FROM coexistence.contacts c,
-            jsonb_array_elements(COALESCE(c.tags, '[]'::jsonb)) t
-       WHERE TRUE /*SCOPE*/
-       GROUP BY 1, 2
-       ORDER BY count DESC
-       LIMIT 8`,
-      [], 'contacts'
+    // Was a distribution of TAGS across contact rows. Leads carry their own
+    // `source` — set from the CTWA referral, a Message Format label, a form or
+    // an import — so this now answers "where did these people come from",
+    // which is the question the donut was always trying to answer.
+    const leadSources = await q(
+      `SELECT COALESCE(NULLIF(btrim(l.source), ''), 'Unknown') AS name,
+              COUNT(*)::int AS count
+         FROM coexistence.leads l
+        WHERE TRUE /*SCOPE*/
+        GROUP BY 1
+        ORDER BY count DESC
+        LIMIT 8`,
+      [], 'leads'
     );
+    // The donut colours its own slices; sources have no stored colour.
+    const tagDistribution = leadSources.map(r => ({ name: r.name, count: r.count, color: null }));
+
+    // ── Sales log ─────────────────────────────────────────────────────
+    //
+    // Read through services/productSales so Home, Products and the Sales Log
+    // cannot report three different revenue figures for the same money.
+    let sales = { totalSales: 0, newSales: 0, prevSales: 0, totalPaise: 0, rangePaise: 0, prevPaise: 0, rangePayments: 0 };
+    let recentSalesRows = [];
+    try {
+      const ps = require('../services/productSales');
+      const scopeUid = admin ? null : uid;
+      [sales, recentSalesRows] = await Promise.all([
+        ps.salesSummary({ days, uid: scopeUid }),
+        ps.recentSales({ limit: 6, uid: scopeUid }),
+      ]);
+    } catch (e) {
+      // A sales-log hiccup must not blank the whole dashboard — the funnel and
+      // messaging numbers above are still worth showing.
+      console.error('[dashboard] sales summary failed:', e.message);
+    }
 
     // ── Build KPI tiles (5 common + 1 role-specific) ──────────────────
     const responseRate = respRow.inbound_convos > 0
@@ -291,22 +275,29 @@ router.get('/dashboard', async (req, res) => {
 
     const kpis = [
       {
-        key: 'contacts', label: 'Total Contacts', value: contactRow.total, unit: '',
-        delta: pct(contactRow.new_in_range, contactRow.prev_new),
-        sub: `+${contactRow.new_in_range} new`,
+        key: 'leads', label: 'Total Leads', value: leadRow.total, unit: '',
+        delta: pct(leadRow.new_in_range, leadRow.prev_new),
+        sub: `+${leadRow.new_in_range} new`,
         tooltip: admin
-          ? 'All contacts captured. Change compares new contacts this period vs the previous one.'
-          : 'Contacts assigned to you. Change compares new ones this period vs the previous one.',
+          ? 'Everyone in the funnel. One row per person — change compares new leads this period vs the previous one.'
+          : 'Leads assigned to you. Change compares new ones this period vs the previous one.',
       },
       {
-        key: 'newLeads', label: 'New Leads', value: leadRow.new_in_range, unit: '',
-        delta: pct(leadRow.new_in_range, leadRow.prev_new), sub: `in last ${days}d`,
-        tooltip: 'New contacts tagged under the “Lead Source” category in the selected period.',
+        key: 'sales', label: 'Sales', value: sales.totalSales, unit: '',
+        delta: pct(sales.newSales, sales.prevSales),
+        sub: `+${sales.newSales} this period`,
+        tooltip: 'Leads that reached a won stage — the same count the Sales Log shows.',
+      },
+      {
+        key: 'revenue', label: 'Revenue', value: Math.round(sales.rangePaise / 100), unit: '₹',
+        delta: pct(sales.rangePaise, sales.prevPaise),
+        sub: `${sales.rangePayments} payment(s) · ₹${Math.round(sales.totalPaise / 100).toLocaleString('en-IN')} all time`,
+        tooltip: 'Collected in this period — gateway payments matched to a sale plus manually logged ones, deduplicated. The same figure the Sales Log and Products report.',
       },
       {
         key: 'open', label: 'Open Conversations', value: openRow.open_convos, unit: '',
         delta: null, sub: 'awaiting reply',
-        tooltip: 'Conversations awaiting a reply where the contact is tagged under the “Lead Source” category.',
+        tooltip: 'Conversations whose latest inbound message is newer than the last time anyone read the thread.',
       },
       {
         key: 'sent', label: 'Messages Sent', value: msgRow.sent, unit: '',
@@ -389,7 +380,7 @@ router.get('/dashboard', async (req, res) => {
              AND ch.timestamp >= NOW() - ($1 * INTERVAL '1 day')
            GROUP BY sc.assigned_user_id
          ) m ON m.uid = u.id
-         WHERE u.is_active = TRUE AND u.role IN ('admin','bda_sales')
+         WHERE u.is_active = TRUE
          GROUP BY u.id, u.display_name, u.role, m.sent
          ORDER BY "messagesSent" DESC, contacts DESC
          LIMIT 10`,
@@ -432,7 +423,11 @@ router.get('/dashboard', async (req, res) => {
       kpis,
       trend,
       funnel,
+      // Where the leads came from — the donut's data. Kept under the old key so
+      // the existing chart component binds unchanged; its title now says Sources.
       tagDistribution,
+      // Sales-log totals + the latest sales, from services/productSales.
+      sales: { ...sales, recent: recentSalesRows },
       automations,
       broadcasts,
       leaderboard,
@@ -463,12 +458,6 @@ router.get('/dashboard/details', async (req, res) => {
       const { rows } = await pool.query(built.sql, built.params);
       return rows;
     };
-    const leadCat = async () => {
-      const { rows } = await pool.query(
-        `SELECT id FROM coexistence.categories WHERE LOWER(name) = LOWER('Lead Source') ORDER BY created_at LIMIT 1`
-      );
-      return rows[0]?.id || null;
-    };
     // Reusable display-name expression for a contacts alias.
     const nameExpr = (a) => `COALESCE(NULLIF(${a}.name,''), NULLIF(${a}.profile_name,''), ${a}.contact_number)`;
 
@@ -476,55 +465,53 @@ router.get('/dashboard/details', async (req, res) => {
     let items = [];
 
     switch (metric) {
-      case 'contacts': {
-        // One row per PERSON, matching the KPI it drills into — otherwise the
-        // tile says 328 and the list behind it shows the same person three
-        // times. DISTINCT ON keeps their earliest row, so the date shown is
-        // when we first saw them (the same first_seen the tile counts on).
-        title = 'All contacts';
+      case 'leads': {
+        title = 'All leads';
         items = await q(
-          `SELECT p.primary, p.secondary, to_char(p.first_seen, 'DD Mon YYYY') AS meta
-             FROM (
-               SELECT DISTINCT ON (c.contact_number)
-                      ${nameExpr('c')} AS primary, c.contact_number AS secondary,
-                      c.created_at AS first_seen
-                 FROM coexistence.contacts c
-                WHERE TRUE /*SCOPE*/
-                ORDER BY c.contact_number, c.created_at ASC
-             ) p
-            ORDER BY p.first_seen DESC LIMIT ${LIMIT}`,
-          [], 'contacts'
+          `SELECT COALESCE(NULLIF(l.name,''), l.whatsapp_number) AS primary,
+                  l.whatsapp_number AS secondary,
+                  to_char(l.created_at, 'DD Mon YYYY') AS meta
+             FROM coexistence.leads l
+            WHERE TRUE /*SCOPE*/
+            ORDER BY l.created_at DESC LIMIT ${LIMIT}`,
+          [], 'leads'
         );
         break;
       }
       case 'newLeads': {
-        // Same per-person collapse as the tile: the range is tested against
-        // the person's first appearance, so someone who already existed and
-        // merely messaged another business number is not listed as new.
         title = `New leads · last ${days}d`;
-        const cat = await leadCat();
-        if (cat) items = await q(
-          `SELECT p.primary, p.secondary, to_char(p.first_seen, 'DD Mon YYYY') AS meta
-             FROM (
-               SELECT DISTINCT ON (c.contact_number)
-                      ${nameExpr('c')} AS primary, c.contact_number AS secondary,
-                      MIN(c.created_at) OVER (PARTITION BY c.contact_number) AS first_seen
-                 FROM coexistence.contacts c
-                WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(c.tags,'[]'::jsonb)) t
-                               WHERE (t->>'category_id') = $1)
-                  /*SCOPE*/
-                ORDER BY c.contact_number, c.created_at ASC
-             ) p
-            WHERE p.first_seen >= NOW() - ($2 * INTERVAL '1 day')
-            ORDER BY p.first_seen DESC LIMIT ${LIMIT}`,
-          [cat, days], 'contacts'
+        items = await q(
+          `SELECT COALESCE(NULLIF(l.name,''), l.whatsapp_number) AS primary,
+                  l.whatsapp_number AS secondary,
+                  to_char(l.created_at, 'DD Mon YYYY') AS meta
+             FROM coexistence.leads l
+            WHERE l.created_at >= NOW() - ($1 * INTERVAL '1 day') /*SCOPE*/
+            ORDER BY l.created_at DESC LIMIT ${LIMIT}`,
+          [days], 'leads'
         );
         break;
       }
+      case 'sales':
+      case 'revenue': {
+        // Both tiles drill into the same list — the sales themselves — because
+        // "which sales made this revenue" is the question either one raises.
+        title = metric === 'revenue' ? `Revenue · last ${days}d` : 'Sales';
+        try {
+          const ps = require('../services/productSales');
+          const rows = await ps.recentSales({ limit: LIMIT, uid: admin ? null : uid });
+          items = rows.map(r => ({
+            primary: r.name || r.whatsappNumber,
+            secondary: r.product || r.whatsappNumber,
+            meta: `₹${Math.round(r.amountPaise / 100).toLocaleString('en-IN')}`,
+          }));
+        } catch (e) {
+          console.error('[dashboard] sales drill-down failed:', e.message);
+        }
+        break;
+      }
       case 'open': {
-        title = 'Open conversations · Lead Source';
-        const cat = await leadCat();
-        if (cat) items = await q(
+        title = 'Open conversations';
+        items = await q(
           `WITH last_in AS (
              SELECT ch.wa_number, ch.contact_number, max(ch.timestamp) AS last_in_ts
              FROM coexistence.chat_history ch
@@ -539,11 +526,8 @@ router.get('/dashboard/details', async (req, res) => {
            LEFT JOIN coexistence.contacts c
              ON c.wa_number = li.wa_number AND c.contact_number = li.contact_number
            WHERE (r.last_read_at IS NULL OR li.last_in_ts > r.last_read_at)
-             AND EXISTS (SELECT 1 FROM coexistence.contacts lc, jsonb_array_elements(COALESCE(lc.tags,'[]'::jsonb)) lt
-                          WHERE lc.wa_number = li.wa_number AND lc.contact_number = li.contact_number
-                            AND (lt->>'category_id') = $1)
            ORDER BY li.last_in_ts DESC LIMIT ${LIMIT}`,
-          [cat], 'chat'
+          [], 'chat'
         );
         break;
       }

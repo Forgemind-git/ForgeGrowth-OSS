@@ -7,18 +7,18 @@ import { api } from '../api.js';
 import { C, FONT, MONO, maskPhone } from '../constants.js';
 
 const TYPE_META = {
-  image:    { Icon: ImageIcon, label: 'Image',    color: '#3B82F6' },
-  video:    { Icon: Video,     label: 'Video',    color: '#8B5CF6' },
+  image:    { Icon: ImageIcon, label: 'Image',    color: 'var(--c-s3b82f6, #3B82F6)' },
+  video:    { Icon: Video,     label: 'Video',    color: 'var(--c-s8b5cf6, #8B5CF6)' },
   audio:    { Icon: Music,     label: 'Audio',    color: '#10B981' },
   document: { Icon: FileText,  label: 'Document', color: '#F59E0B' },
 };
 
 const STATUS_META = {
-  pending: { label: 'Not synced',   bg: '#F3F4F6', fg: '#6B7280' },
-  syncing: { label: 'Syncing…',     bg: '#EFF6FF', fg: '#3B82F6' },
-  synced:  { label: 'Synced',       bg: '#ECFDF5', fg: '#059669' },
-  failed:  { label: 'Failed',       bg: '#FEF2F2', fg: '#DC2626' },
-  expired: { label: 'Expired',      bg: '#FEF3C7', fg: '#B45309' },
+  pending: { label: 'Not synced',   bg: 'var(--c-surfaceMuted, #F3F4F6)', fg: 'var(--c-textSecondary, #6B7280)' },
+  syncing: { label: 'Syncing…',     bg: 'var(--c-infoBg, #EFF6FF)', fg: 'var(--c-s3b82f6, #3B82F6)' },
+  synced:  { label: 'Synced',       bg: 'var(--c-successBgSoft, #ECFDF5)', fg: 'var(--c-successBright, #059669)' },
+  failed:  { label: 'Failed',       bg: 'var(--c-dangerBgSoft, #FEF2F2)', fg: 'var(--c-primary, #DC2626)' },
+  expired: { label: 'Expired',      bg: 'var(--c-sfef3c7, #FEF3C7)', fg: 'var(--c-sb45309, #B45309)' },
 };
 
 function fmtBytes(n) {
@@ -117,8 +117,8 @@ export default function MediaLibraryPage() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 20 }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, letterSpacing: '-0.02em' }}>Media Library</h1>
-          <p style={{ fontSize: 13, color: C.textSecondary, margin: '6px 0 0' }}>
+          <h1 style={{ fontSize: 26, fontWeight: 700, margin: 0, letterSpacing: '-0.02em' }}>Media Library</h1>
+          <p style={{ fontSize: 15, color: C.textSecondary, margin: '6px 0 0' }}>
             Upload media once, sync to each WhatsApp account on demand. Meta media IDs expire after 28 days —
             toggle <strong>Auto-resync</strong> to keep them fresh.
           </p>
@@ -129,7 +129,7 @@ export default function MediaLibraryPage() {
             display: 'inline-flex', alignItems: 'center', gap: 8,
             padding: '10px 16px', background: C.primary, color: '#fff',
             border: 'none', borderRadius: 8, fontFamily: FONT, fontWeight: 600,
-            fontSize: 13, cursor: 'pointer',
+            fontSize: 15, cursor: 'pointer',
           }}
         >
           <Upload size={15} /> Upload Media
@@ -137,7 +137,7 @@ export default function MediaLibraryPage() {
       </div>
 
       {error && (
-        <div style={{ padding: 12, background: '#FEF2F2', color: '#991B1B', borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+        <div style={{ padding: 12, background: 'var(--c-dangerBgSoft, #FEF2F2)', color: 'var(--c-dangerStrong, #991B1B)', borderRadius: 8, marginBottom: 16, fontSize: 15 }}>
           {error}
         </div>
       )}
@@ -181,7 +181,7 @@ export default function MediaLibraryPage() {
         <div style={{
           position: 'fixed', bottom: 24, right: 24, padding: '10px 16px',
           background: toast.kind === 'err' ? '#991B1B' : toast.kind === 'ok' ? '#065F46' : '#111',
-          color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 600,
+          color: '#fff', borderRadius: 8, fontSize: 15, fontWeight: 600,
           boxShadow: C.shadowLg, zIndex: 1000,
         }}>{toast.msg}</div>
       )}
@@ -249,7 +249,7 @@ function MediaRow({ media, accounts, syncingKey, isLast, onSync, onToggleAutoRes
             onClick={onPreview}
             title={media.name || media.originalName}
             style={{
-              fontWeight: 600, fontSize: 14, marginBottom: 2,
+              fontWeight: 600, fontSize: 15, marginBottom: 2,
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               color: C.primary, cursor: 'pointer', textDecoration: 'underline',
               textUnderlineOffset: 2,
@@ -257,7 +257,7 @@ function MediaRow({ media, accounts, syncingKey, isLast, onSync, onToggleAutoRes
           >
             {media.name || media.originalName}
           </div>
-          <div style={{ fontSize: 12, color: C.textSecondary, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 14, color: C.textSecondary, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <span>{meta.label}</span>
             <span>•</span>
             <span>{fmtBytes(media.sizeBytes)}</span>
@@ -269,12 +269,12 @@ function MediaRow({ media, accounts, syncingKey, isLast, onSync, onToggleAutoRes
                 <span style={{
                   display: 'inline-flex', alignItems: 'center', gap: 4,
                   padding: '2px 8px', borderRadius: 4,
-                  background: '#ECFDF5', color: '#059669', fontWeight: 600,
+                  background: 'var(--c-successBgSoft, #ECFDF5)', color: 'var(--c-successBright, #059669)', fontWeight: 600,
                 }}>
                   <CheckCircle2 size={11} />
                   Synced to {syncedCount}/{accounts.length} WABA{accounts.length > 1 ? 's' : ''}
                   {nearestExpiry !== undefined && (
-                    <span style={{ color: nearestExpiry < 3 ? '#B45309' : '#059669' }}>
+                    <span style={{ color: nearestExpiry < 3 ? 'var(--c-sb45309, #B45309)' : '#059669' }}>
                       &nbsp;· next expires in {nearestExpiry}d
                     </span>
                   )}
@@ -291,10 +291,10 @@ function MediaRow({ media, accounts, syncingKey, isLast, onSync, onToggleAutoRes
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
             padding: '7px 12px', borderRadius: 6,
-            background: media.autoResync ? '#ECFDF5' : 'var(--c-hover)',
-            color: media.autoResync ? '#059669' : '#6B7280',
-            border: `1px solid ${media.autoResync ? '#A7F3D0' : '#E5E7EB'}`,
-            cursor: 'pointer', fontFamily: FONT, fontSize: 12, fontWeight: 600,
+            background: media.autoResync ? 'var(--c-secfdf5, #ECFDF5)' : 'var(--c-hover)',
+            color: media.autoResync ? 'var(--c-s059669, #059669)' : 'var(--c-textSecondary, #6B7280)',
+            border: `1px solid ${media.autoResync ? 'var(--c-sa7f3d0, #A7F3D0)' : 'var(--c-se5e7eb, #E5E7EB)'}`,
+            cursor: 'pointer', fontFamily: FONT, fontSize: 14, fontWeight: 600,
           }}
         >
           <Power size={13} /> Auto-resync {media.autoResync ? 'ON' : 'OFF'}
@@ -305,7 +305,7 @@ function MediaRow({ media, accounts, syncingKey, isLast, onSync, onToggleAutoRes
           style={{
             padding: '7px 12px', borderRadius: 6, background: 'var(--c-cardBg)',
             border: `1px solid ${C.border}`, cursor: 'pointer',
-            fontFamily: FONT, fontSize: 12, fontWeight: 600, color: C.text,
+            fontFamily: FONT, fontSize: 14, fontWeight: 600, color: C.text,
           }}
         >
           {expanded ? 'Hide' : 'Show'} sync ({media.syncs.length}/{accounts.length})
@@ -316,7 +316,7 @@ function MediaRow({ media, accounts, syncingKey, isLast, onSync, onToggleAutoRes
           title="Delete"
           style={{
             padding: 8, borderRadius: 6, background: 'var(--c-cardBg)',
-            border: `1px solid ${C.border}`, cursor: 'pointer', color: '#991B1B',
+            border: `1px solid ${C.border}`, cursor: 'pointer', color: 'var(--c-dangerStrong, #991B1B)',
           }}
         >
           <Trash2 size={14} />
@@ -325,15 +325,15 @@ function MediaRow({ media, accounts, syncingKey, isLast, onSync, onToggleAutoRes
 
       {/* Sync grid */}
       {expanded && (
-        <div style={{ padding: '0 18px 18px 78px', background: '#FAFAF8' }}>
+        <div style={{ padding: '0 18px 18px 78px', background: 'var(--c-surfaceInner, #FAFAF8)' }}>
           {accounts.length === 0 ? (
-            <div style={{ padding: 12, color: C.textMuted, fontSize: 13 }}>
+            <div style={{ padding: 12, color: C.textMuted, fontSize: 15 }}>
               No WhatsApp accounts configured. Add one under Admin Settings → WhatsApp Accounts.
             </div>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
               <thead>
-                <tr style={{ textAlign: 'left', color: C.textSecondary, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                <tr style={{ textAlign: 'left', color: C.textSecondary, fontSize: 13, textTransform: 'uppercase', letterSpacing: '.04em' }}>
                   <th style={{ padding: '10px 8px', fontWeight: 600 }}>WhatsApp Account</th>
                   <th style={{ padding: '10px 8px', fontWeight: 600 }}>Status</th>
                   <th style={{ padding: '10px 8px', fontWeight: 600 }}>Meta Media ID</th>
@@ -354,22 +354,22 @@ function MediaRow({ media, accounts, syncingKey, isLast, onSync, onToggleAutoRes
                     <tr key={acc.id} style={{ borderTop: `1px solid ${C.border}` }}>
                       <td style={{ padding: '10px 8px' }}>
                         <div style={{ fontWeight: 600 }}>{acc.displayName || acc.display_name || maskPhone(acc.display_phone_number || acc.displayPhoneNumber) || '—'}</div>
-                        <div style={{ fontSize: 11, color: C.textMuted }}>
+                        <div style={{ fontSize: 13, color: C.textMuted }}>
                           {maskPhone(acc.display_phone_number || acc.displayPhoneNumber) || ''}
                         </div>
                       </td>
                       <td style={{ padding: '10px 8px' }}>
                         <span style={{
                           display: 'inline-block', padding: '3px 8px', borderRadius: 4,
-                          background: s.bg, color: s.fg, fontSize: 11, fontWeight: 600,
+                          background: s.bg, color: s.fg, fontSize: 13, fontWeight: 600,
                         }}>{s.label}</span>
                         {sync.lastError && (
-                          <div style={{ marginTop: 4, fontSize: 11, color: '#991B1B' }} title={sync.lastError}>
+                          <div style={{ marginTop: 4, fontSize: 13, color: 'var(--c-dangerStrong, #991B1B)' }} title={sync.lastError}>
                             <AlertTriangle size={11} style={{ verticalAlign: '-2px' }} /> {sync.lastError.slice(0, 60)}
                           </div>
                         )}
                       </td>
-                      <td style={{ padding: '10px 8px', fontFamily: MONO, fontSize: 12 }}>
+                      <td style={{ padding: '10px 8px', fontFamily: MONO, fontSize: 14 }}>
                         {sync.metaMediaId ? (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                             {sync.metaMediaId.length > 18 ? sync.metaMediaId.slice(0, 16) + '…' : sync.metaMediaId}
@@ -386,8 +386,8 @@ function MediaRow({ media, accounts, syncingKey, isLast, onSync, onToggleAutoRes
                       <td style={{ padding: '10px 8px' }}>
                         {sync.expiresAt ? (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            <Clock size={11} style={{ color: days < 1 ? '#DC2626' : days < 3 ? '#B45309' : C.textMuted }} />
-                            <span style={{ color: days < 1 ? '#DC2626' : C.text }}>
+                            <Clock size={11} style={{ color: days < 1 ? '#DC2626' : days < 3 ? 'var(--c-sb45309, #B45309)' : C.textMuted }} />
+                            <span style={{ color: days < 1 ? 'var(--c-primary, #DC2626)' : C.text }}>
                               {days < 0 ? `${-days}d ago` : `in ${days}d`}
                             </span>
                           </span>
@@ -404,7 +404,7 @@ function MediaRow({ media, accounts, syncingKey, isLast, onSync, onToggleAutoRes
                             color: sync.status === 'synced' ? C.text : '#fff',
                             border: sync.status === 'synced' ? `1px solid ${C.border}` : 'none',
                             cursor: isSyncing ? 'wait' : 'pointer',
-                            fontFamily: FONT, fontSize: 12, fontWeight: 600,
+                            fontFamily: FONT, fontSize: 14, fontWeight: 600,
                             opacity: isSyncing ? 0.6 : 1,
                           }}
                         >
@@ -431,8 +431,8 @@ function EmptyState({ onUpload }) {
       padding: 60, textAlign: 'center',
     }}>
       <ImageIcon size={36} style={{ color: C.textMuted, marginBottom: 12 }} />
-      <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>No media yet</div>
-      <div style={{ fontSize: 13, color: C.textSecondary, marginBottom: 18 }}>
+      <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 6 }}>No media yet</div>
+      <div style={{ fontSize: 15, color: C.textSecondary, marginBottom: 18 }}>
         Upload images, videos, audio or documents. Sync to Meta when you're ready to use them in chats or broadcasts.
       </div>
       <button
@@ -441,7 +441,7 @@ function EmptyState({ onUpload }) {
           display: 'inline-flex', alignItems: 'center', gap: 8,
           padding: '10px 18px', background: C.primary, color: '#fff',
           border: 'none', borderRadius: 8, fontFamily: FONT, fontWeight: 600,
-          fontSize: 13, cursor: 'pointer',
+          fontSize: 15, cursor: 'pointer',
         }}
       >
         <Upload size={15} /> Upload your first media
@@ -495,27 +495,27 @@ function UploadModal({ onClose, onUploaded, onError }) {
           boxShadow: C.shadowLg,
         }}
       >
-        <h2 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700 }}>Upload Media</h2>
+        <h2 style={{ margin: '0 0 16px', fontSize: 20, fontWeight: 700 }}>Upload Media</h2>
 
         <div
           onClick={() => inputRef.current?.click()}
           style={{
             border: `2px dashed ${file ? C.primary : C.border}`,
             borderRadius: 8, padding: 28, textAlign: 'center', cursor: 'pointer',
-            background: file ? '#FFF7F7' : '#FAFAF8',
+            background: file ? 'var(--c-selectedTint, #FFF7F7)' : '#FAFAF8',
           }}
         >
           <Upload size={28} style={{ color: file ? C.primary : C.textMuted, marginBottom: 8 }} />
-          <div style={{ fontWeight: 600, fontSize: 13 }}>
+          <div style={{ fontWeight: 600, fontSize: 15 }}>
             {file ? file.name : 'Click to choose a file'}
           </div>
           {file && (
-            <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 4 }}>
+            <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 4 }}>
               {fmtBytes(file.size)} · {file.type || 'unknown'}
             </div>
           )}
           {!file && (
-            <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 4 }}>
+            <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 4 }}>
               Image, Video, Audio, or Document (max 50 MB)
             </div>
           )}
@@ -529,7 +529,7 @@ function UploadModal({ onClose, onUploaded, onError }) {
         </div>
 
         <div style={{ marginTop: 14 }}>
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.textSecondary, marginBottom: 4 }}>
+          <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.textSecondary, marginBottom: 4 }}>
             Name <span style={{ fontWeight: 400, color: C.textMuted }}>(optional)</span>
           </label>
           <input
@@ -539,14 +539,14 @@ function UploadModal({ onClose, onUploaded, onError }) {
             placeholder="e.g. Diwali greeting v2"
             style={{
               width: '100%', padding: '8px 10px', borderRadius: 6,
-              border: `1px solid ${C.border}`, fontFamily: FONT, fontSize: 13,
+              border: `1px solid ${C.border}`, fontFamily: FONT, fontSize: 15,
               boxSizing: 'border-box',
             }}
           />
         </div>
 
         <div style={{ marginTop: 12 }}>
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.textSecondary, marginBottom: 4 }}>
+          <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.textSecondary, marginBottom: 4 }}>
             Notes <span style={{ fontWeight: 400, color: C.textMuted }}>(optional)</span>
           </label>
           <input
@@ -556,7 +556,7 @@ function UploadModal({ onClose, onUploaded, onError }) {
             placeholder="Internal notes about this media"
             style={{
               width: '100%', padding: '8px 10px', borderRadius: 6,
-              border: `1px solid ${C.border}`, fontFamily: FONT, fontSize: 13,
+              border: `1px solid ${C.border}`, fontFamily: FONT, fontSize: 15,
               boxSizing: 'border-box',
             }}
           />
@@ -569,7 +569,7 @@ function UploadModal({ onClose, onUploaded, onError }) {
             style={{
               padding: '9px 14px', borderRadius: 6, background: 'var(--c-cardBg)',
               border: `1px solid ${C.border}`, cursor: 'pointer',
-              fontFamily: FONT, fontSize: 13, fontWeight: 600, color: C.text,
+              fontFamily: FONT, fontSize: 15, fontWeight: 600, color: C.text,
             }}
           >Cancel</button>
           <button
@@ -580,7 +580,7 @@ function UploadModal({ onClose, onUploaded, onError }) {
               background: !file ? 'var(--c-hover)' : C.primary,
               color: '#fff', border: 'none',
               cursor: !file || uploading ? 'not-allowed' : 'pointer',
-              fontFamily: FONT, fontSize: 13, fontWeight: 600,
+              fontFamily: FONT, fontSize: 15, fontWeight: 600,
             }}
           >{uploading ? 'Uploading…' : 'Upload'}</button>
         </div>
@@ -621,14 +621,14 @@ function PreviewModal({ media, onClose }) {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '14px 18px', borderBottom: `1px solid ${C.border}`,
         }}>
-          <div style={{ fontWeight: 700, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontWeight: 700, fontSize: 16, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {displayName}
           </div>
           <button
             onClick={onClose}
             style={{
               padding: '4px 10px', borderRadius: 6, background: 'var(--c-hover)',
-              border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 12, fontWeight: 600,
+              border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 14, fontWeight: 600,
               color: C.text,
             }}
           >Close</button>
@@ -655,14 +655,14 @@ function PreviewModal({ media, onClose }) {
             />
           ) : isAudio ? (
             <div style={{ textAlign: 'center', color: '#fff' }}>
-              <div style={{ fontSize: 13, marginBottom: 12, opacity: .8 }}>{displayName}</div>
+              <div style={{ fontSize: 15, marginBottom: 12, opacity: .8 }}>{displayName}</div>
               <audio src={downloadUrl} controls style={{ width: 320 }} />
             </div>
           ) : (
             <div style={{ textAlign: 'center', color: '#fff' }}>
               <FileText size={48} style={{ opacity: .5, marginBottom: 12 }} />
-              <div style={{ fontSize: 14, marginBottom: 4 }}>{displayName}</div>
-              <div style={{ fontSize: 12, opacity: .6 }}>{media.mimeType} · {fmtBytes(media.sizeBytes)}</div>
+              <div style={{ fontSize: 15, marginBottom: 4 }}>{displayName}</div>
+              <div style={{ fontSize: 14, opacity: .6 }}>{media.mimeType} · {fmtBytes(media.sizeBytes)}</div>
             </div>
           )}
         </div>
@@ -670,7 +670,7 @@ function PreviewModal({ media, onClose }) {
         {/* Footer info */}
         <div style={{
           padding: '12px 18px', borderTop: `1px solid ${C.border}`,
-          fontSize: 12, color: C.textSecondary, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center',
+          fontSize: 14, color: C.textSecondary, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center',
         }}>
           <span><strong>Type:</strong> {(TYPE_META[media.mediaType] || TYPE_META.document).label}</span>
           <span><strong>Size:</strong> {fmtBytes(media.sizeBytes)}</span>

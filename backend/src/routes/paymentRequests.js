@@ -280,7 +280,6 @@ async function applyLinkStatus(plinkEntity) {
     [plinkEntity.id, status, paid]
   );
   if (rows[0]) bus.emit('payment-request-changed', { id: Number(rows[0].id), status: rows[0].status });
-
   return rows[0] || null;
 }
 

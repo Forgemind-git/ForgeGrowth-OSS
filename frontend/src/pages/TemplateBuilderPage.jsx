@@ -20,42 +20,45 @@ import { api } from '../api.js';
 import { C, FONT, maskPhone } from '../constants.js';
 
 // ─── Builder-local Design Tokens (purple accent per plan) ─────────────────────
+// Every entry maps to a themed token. These used to be hardcoded light hex
+// values, which is why this page rendered a white card with an invisible
+// (near-black) title once the rest of the app went dark.
 const B = {
-  bg: '#F7F7F3',
-  card: '#FFFFFF',
-  cardBorder: '#E5E5E0',
-  innerBg: '#FAFAF7',
-  innerBorder: '#EEEEE8',
-  sectionBg: '#F8F7F2',
-  sectionBorder: '#EEEEE8',
-  divider: '#F0F0EA',
-  rowSep: '#F5F5F0',
-  t1: '#111111',
-  t2: '#222222',
-  t3: '#444444',
-  t4: '#666666',
-  t5: '#777777',
-  t6: '#888888',
-  t7: '#999999',
+  bg: C.pageBg,
+  card: C.cardBg,
+  cardBorder: C.border,
+  innerBg: C.surfaceInner,
+  innerBorder: C.borderSubtle,
+  sectionBg: C.surfaceSection,
+  sectionBorder: C.borderSubtle,
+  divider: C.divider,
+  rowSep: C.rowSep,
+  t1: C.t1,
+  t2: C.t2,
+  t3: C.t3,
+  t4: C.t4,
+  t5: C.t5,
+  t6: C.t6,
+  t7: C.t7,
   accent: C.primary,
   accentBg: C.primaryLight,
   accentDark: C.primaryHover,
-  green: '#0F6E56',
-  greenBright: '#1D9E75',
-  greenBg: '#E1F5EE',
-  red: '#A32D2D',
-  redBg: '#FCEBEB',
-  orange: '#E65100',
-  orangeBg: '#FFF3E0',
-  warn: '#854F0B',
-  warnBg: '#FAEEDA',
-  wa: '#25D366',
-  waHeader: '#00A884',
+  green: C.successText,
+  greenBright: C.successBright,
+  greenBg: C.successBg,
+  red: C.dangerText,
+  redBg: C.dangerBg,
+  orange: C.orangeText,
+  orangeBg: C.orangeBg,
+  warn: C.warnText,
+  warnBg: C.warnBg,
+  wa: C.waGreen,
+  waHeader: '#00A884', // WhatsApp brand green — identical in both themes
 };
 
 const CATEGORIES = [
   { id: 'MARKETING', icon: Megaphone, label: 'Marketing', color: B.orange, bg: B.orangeBg, desc: 'Promotions, offers, announcements' },
-  { id: 'UTILITY', icon: Bell, label: 'Utility', color: '#1565C0', bg: '#E3F2FD', desc: 'Order updates, delivery alerts' },
+  { id: 'UTILITY', icon: Bell, label: 'Utility', color: 'var(--c-infoText, #1565C0)', bg: 'var(--c-infoBg, #E3F2FD)', desc: 'Order updates, delivery alerts' },
   { id: 'AUTHENTICATION', icon: Shield, label: 'Authentication', color: B.green, bg: B.greenBg, desc: 'OTPs, verification codes' },
 ];
 
@@ -78,18 +81,18 @@ const HEADER_TYPES = [
 ];
 
 const STATUSES = {
-  DRAFT: { color: B.t6, bg: '#EEEDE8', dot: '#aaa', label: 'DRAFT' },
+  DRAFT: { color: B.t6, bg: 'var(--c-surfaceSubtle, #EEEDE8)', dot: '#aaa', label: 'DRAFT' },
   SUBMITTED: { color: B.accentDark, bg: B.accentBg, dot: B.accent, label: 'PENDING REVIEW' },
   APPROVED: { color: B.green, bg: B.greenBg, dot: B.greenBright, label: 'APPROVED' },
   REJECTED: { color: B.red, bg: B.redBg, dot: B.red, label: 'REJECTED' },
-  PAUSED: { color: '#E65100', bg: '#FFF3E0', dot: '#E65100', label: 'PAUSED' },
-  DISABLED: { color: '#666', bg: '#EEEDE8', dot: '#666', label: 'DISABLED' },
+  PAUSED: { color: 'var(--c-orangeText, #E65100)', bg: 'var(--c-orangeBg, #FFF3E0)', dot: 'var(--c-orangeText, #E65100)', label: 'PAUSED' },
+  DISABLED: { color: 'var(--c-t4, #666)', bg: 'var(--c-surfaceSubtle, #EEEDE8)', dot: 'var(--c-t4, #666)', label: 'DISABLED' },
 };
 
 const QUALITY_STYLES = {
-  GREEN: { color: '#0F6E56', label: 'Quality: Green' },
-  YELLOW: { color: '#E65100', label: 'Quality: Yellow' },
-  RED: { color: '#A32D2D', label: 'Quality: Red' },
+  GREEN: { color: 'var(--c-successText, #0F6E56)', label: 'Quality: Green' },
+  YELLOW: { color: 'var(--c-orangeText, #E65100)', label: 'Quality: Yellow' },
+  RED: { color: 'var(--c-dangerText, #A32D2D)', label: 'Quality: Red' },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -249,16 +252,16 @@ function buildPayload({ name, category, language, headerType, headerText, mediaH
 // ─── Shared UI Components ─────────────────────────────────────────────────────
 function Lbl({ children, required, note }) {
   return (
-    <label style={{ fontSize: 12, fontWeight: 600, color: B.t3, display: 'block', marginBottom: 5, fontFamily: FONT }}>
+    <label style={{ fontSize: 14, fontWeight: 600, color: B.t3, display: 'block', marginBottom: 5, fontFamily: FONT }}>
       {children}{required && <span style={{ color: B.red }}> *</span>}
-      {note && <span style={{ color: B.t6, fontWeight: 500, marginLeft: 5, fontSize: 11 }}>{note}</span>}
+      {note && <span style={{ color: B.t6, fontWeight: 500, marginLeft: 5, fontSize: 13 }}>{note}</span>}
     </label>
   );
 }
 
 function Hint({ children, error, warn }) {
   return (
-    <div style={{ fontSize: 11, marginTop: 4, color: error ? B.red : warn ? B.warn : B.t7, display: 'flex', alignItems: 'flex-start', gap: 4, fontFamily: FONT }}>
+    <div style={{ fontSize: 13, marginTop: 4, color: error ? B.red : warn ? B.warn : B.t7, display: 'flex', alignItems: 'flex-start', gap: 4, fontFamily: FONT }}>
       {(error || warn) && <span style={{ flexShrink: 0, marginTop: 1 }}>{error ? '⚠' : 'ℹ'}</span>}
       <span>{children}</span>
     </div>
@@ -269,9 +272,9 @@ function Sec({ n, title, note, children }) {
   return (
     <div style={{ background: B.card, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: '16px 18px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-        <span style={{ width: 22, height: 22, borderRadius: 99, background: B.accent, color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: FONT }}>{n}</span>
-        <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: '#888', fontWeight: 700, fontFamily: FONT }}>{title}</span>
-        {note && <span style={{ fontSize: 10, color: '#bbb', fontFamily: FONT, textTransform: 'none', letterSpacing: 0, fontStyle: 'italic' }}>{note}</span>}
+        <span style={{ width: 22, height: 22, borderRadius: 99, background: B.accent, color: '#fff', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: FONT }}>{n}</span>
+        <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--c-t6, #888)', fontWeight: 700, fontFamily: FONT }}>{title}</span>
+        {note && <span style={{ fontSize: 12, color: '#bbb', fontFamily: FONT, textTransform: 'none', letterSpacing: 0, fontStyle: 'italic' }}>{note}</span>}
       </div>
       {children}
     </div>
@@ -281,12 +284,12 @@ function Sec({ n, title, note, children }) {
 function Toggle({ on, onChange, label, desc }) {
   return (
     <div onClick={() => onChange(!on)} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 14px', background: on ? B.greenBg : B.innerBg, border: `1.5px solid ${on ? B.greenBright + '66' : B.innerBorder}`, borderRadius: 10, transition: 'all .15s' }}>
-      <div style={{ width: 36, height: 20, borderRadius: 99, background: on ? B.greenBright : '#D5D5D0', transition: 'background .2s', position: 'relative', flexShrink: 0 }}>
+      <div style={{ width: 36, height: 20, borderRadius: 99, background: on ? B.greenBright : 'var(--c-borderStrong, #D5D5D0)', transition: 'background .2s', position: 'relative', flexShrink: 0 }}>
         <div style={{ position: 'absolute', top: 2, left: on ? 18 : 2, width: 16, height: 16, borderRadius: 99, background: 'var(--c-cardBg)', transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
       </div>
       <div>
-        <div style={{ fontSize: 12, fontWeight: 600, color: B.t2, fontFamily: FONT }}>{label}</div>
-        {desc && <div style={{ fontSize: 11, color: B.t5, marginTop: 1, fontFamily: FONT }}>{desc}</div>}
+        <div style={{ fontSize: 14, fontWeight: 600, color: B.t2, fontFamily: FONT }}>{label}</div>
+        {desc && <div style={{ fontSize: 13, color: B.t5, marginTop: 1, fontFamily: FONT }}>{desc}</div>}
       </div>
     </div>
   );
@@ -295,7 +298,7 @@ function Toggle({ on, onChange, label, desc }) {
 function StatusBadge({ status }) {
   const st = STATUSES[status] || STATUSES.DRAFT;
   return (
-    <span style={{ padding: '4px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: st.bg, color: st.color, display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: FONT, whiteSpace: 'nowrap' }}>
+    <span style={{ padding: '4px 10px', borderRadius: 99, fontSize: 13, fontWeight: 700, background: st.bg, color: st.color, display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: FONT, whiteSpace: 'nowrap' }}>
       <span style={{ width: 6, height: 6, borderRadius: 99, background: st.dot, display: 'inline-block' }} />
       {st.label}
     </span>
@@ -304,7 +307,7 @@ function StatusBadge({ status }) {
 
 
 // ─── WhatsApp Preview ─────────────────────────────────────────────────────────
-function WaPreview({ headerType, headerText, bodyText, footerText, buttons, securityRec, codeExpiry, headerMediaLibraryId, templateType, carouselCards }) {
+function WaPreview({ headerType, headerText, bodyText, footerText, buttons, securityRec, codeExpiry, headerMediaLibraryId, templateType, carouselCards, fill = false }) {
   const hasBubble = bodyText || footerText || (headerType !== 'NONE' && (headerText || ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(headerType)));
   const hasButtons = buttons.length > 0;
   const bRadius = hasButtons ? '7.5px 7.5px 0 0' : '7.5px 7.5px 0 7.5px';
@@ -318,23 +321,23 @@ function WaPreview({ headerType, headerText, bodyText, footerText, buttons, secu
   const bLabel = (btn) => btn.text || (btn.type === 'QUICK_REPLY' ? 'Quick Reply' : btn.type === 'URL' ? 'Visit Website' : btn.type === 'PHONE_NUMBER' ? 'Call Us' : 'Copy Code');
 
   return (
-    <PhoneFrame headerTitle="Your Business" headerSubtitle="online" minHeight={330}>
+    <PhoneFrame headerTitle="Your Business" headerSubtitle="online" minHeight={330} height={fill ? '100%' : 580}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
-        <span style={{ background: '#E1F2FA', color: '#3C6678', fontSize: 9, padding: '2px 9px', borderRadius: 99, fontWeight: 600 }}>TODAY</span>
+        <span style={{ background: 'var(--c-infoBg, #E1F2FA)', color: 'var(--c-s3c6678, #3C6678)', fontSize: 11, padding: '2px 9px', borderRadius: 99, fontWeight: 600 }}>TODAY</span>
       </div>
       {!hasBubble && !hasButtons ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20, textAlign: 'center' }}>
-          <div style={{ fontSize: 26, marginBottom: 6, opacity: 0.4 }}>💬</div>
-          <div style={{ fontSize: 10, color: '#888', fontWeight: 500, lineHeight: 1.5, fontFamily: FONT }}>Your message<br />will appear here</div>
+          <div style={{ fontSize: 30, marginBottom: 6, opacity: 0.4 }}>💬</div>
+          <div style={{ fontSize: 12, color: 'var(--c-t6, #888)', fontWeight: 500, lineHeight: 1.5, fontFamily: FONT }}>Your message<br />will appear here</div>
         </div>
       ) : (
         <div style={{ marginLeft: 'auto', maxWidth: '88%', minWidth: '55%' }}>
-          <div style={{ background: '#DCF8C6', borderRadius: bRadius, padding: '6px 7px 5px 9px', boxShadow: '0 1px 0.5px rgba(11,20,26,.13)', position: 'relative', marginRight: hasButtons ? 0 : 8 }}>
+          <div style={{ background: 'var(--c-sdcf8c6, #DCF8C6)', borderRadius: bRadius, padding: '6px 7px 5px 9px', boxShadow: '0 1px 0.5px rgba(11,20,26,.13)', position: 'relative', marginRight: hasButtons ? 0 : 8 }}>
             {!hasButtons && <div style={{ position: 'absolute', bottom: 0, right: -8, width: 0, height: 0, borderStyle: 'solid', borderWidth: '0 0 9px 9px', borderColor: 'transparent transparent #DCF8C6 transparent' }} />}
             {headerType === 'IMAGE' && (
               headerMediaLibraryId
                 ? <img src={api.mediaLibrary.downloadUrl(headerMediaLibraryId)} alt="" style={{ margin: '-6px -7px 6px -9px', borderRadius: '7.5px 7.5px 0 0', height: 120, width: 'calc(100% + 16px)', objectFit: 'cover', display: 'block' }} />
-                : <div style={{ margin: '-6px -7px 6px -9px', borderRadius: '7.5px 7.5px 0 0', height: 120, background: 'linear-gradient(135deg,#c9c9c9,#999)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Image size={28} color="rgba(255,255,255,.8)" /></div>
+                : <div style={{ margin: '-6px -7px 6px -9px', borderRadius: '7.5px 7.5px 0 0', height: 120, background: 'linear-gradient(135deg,var(--c-borderStrong, #c9c9c9),#999)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Image size={28} color="rgba(255,255,255,.8)" /></div>
             )}
             {headerType === 'VIDEO' && (
               headerMediaLibraryId
@@ -356,19 +359,19 @@ function WaPreview({ headerType, headerText, bodyText, footerText, buttons, secu
                       <FileText size={16} color="#9e9e9e" />
                     </div>
                     <div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--c-text)', fontFamily: FONT }}>Document</div>
-                      <div style={{ fontSize: 9.5, color: 'var(--c-textMuted)', marginTop: 1, fontFamily: FONT }}>From Media Library</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--c-text)', fontFamily: FONT }}>Document</div>
+                      <div style={{ fontSize: 11, color: 'var(--c-textMuted)', marginTop: 1, fontFamily: FONT }}>From Media Library</div>
                     </div>
                   </div>
-                : <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 8px', background: 'rgba(0,0,0,.06)', borderRadius: 6, marginBottom: 7 }}><div style={{ width: 34, height: 38, background: 'var(--c-cardBg)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 1px 3px rgba(0,0,0,.15)', position: 'relative', overflow: 'hidden' }}><div style={{ position: 'absolute', top: 0, right: 0, width: 10, height: 10, background: '#e94235', clipPath: 'polygon(100% 0,0 0,100% 100%)' }} /><FileText size={16} color="#9e9e9e" /></div><div><div style={{ fontSize: 11, fontWeight: 600, color: 'var(--c-text)', fontFamily: FONT }}>document.pdf</div><div style={{ fontSize: 9.5, color: 'var(--c-textMuted)', marginTop: 1, fontFamily: FONT }}>PDF · 1 page</div></div></div>
+                : <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 8px', background: 'rgba(0,0,0,.06)', borderRadius: 6, marginBottom: 7 }}><div style={{ width: 34, height: 38, background: 'var(--c-cardBg)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 1px 3px rgba(0,0,0,.15)', position: 'relative', overflow: 'hidden' }}><div style={{ position: 'absolute', top: 0, right: 0, width: 10, height: 10, background: '#e94235', clipPath: 'polygon(100% 0,0 0,100% 100%)' }} /><FileText size={16} color="#9e9e9e" /></div><div><div style={{ fontSize: 13, fontWeight: 600, color: 'var(--c-text)', fontFamily: FONT }}>document.pdf</div><div style={{ fontSize: 11, color: 'var(--c-textMuted)', marginTop: 1, fontFamily: FONT }}>PDF · 1 page</div></div></div>
             )}
-            {headerType === 'TEXT' && headerText && <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c-text)', marginBottom: 4, lineHeight: 1.4, fontFamily: FONT }}>{headerText}</div>}
-            {bodyText && <div style={{ fontSize: 13.5, color: 'var(--c-text)', lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: FONT }}>{bodyText}</div>}
-            {securityRec && <div style={{ fontSize: 11, color: 'var(--c-textSecondary)', marginTop: 4, fontFamily: FONT }}>🔒 For your security, do not share this code.</div>}
-            {codeExpiry && <div style={{ fontSize: 11, color: 'var(--c-textSecondary)', marginTop: 2, fontFamily: FONT }}>⏱ This code expires in {codeExpiry} minute{+codeExpiry !== 1 ? 's' : ''}.</div>}
-            {footerText && <div style={{ fontSize: 11.5, color: 'var(--c-textSecondary)', marginTop: 4, fontFamily: FONT }}>{footerText}</div>}
+            {headerType === 'TEXT' && headerText && <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--c-text)', marginBottom: 4, lineHeight: 1.4, fontFamily: FONT }}>{headerText}</div>}
+            {bodyText && <div style={{ fontSize: 15, color: 'var(--c-text)', lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: FONT }}>{bodyText}</div>}
+            {securityRec && <div style={{ fontSize: 13, color: 'var(--c-textSecondary)', marginTop: 4, fontFamily: FONT }}>🔒 For your security, do not share this code.</div>}
+            {codeExpiry && <div style={{ fontSize: 13, color: 'var(--c-textSecondary)', marginTop: 2, fontFamily: FONT }}>⏱ This code expires in {codeExpiry} minute{+codeExpiry !== 1 ? 's' : ''}.</div>}
+            {footerText && <div style={{ fontSize: 13, color: 'var(--c-textSecondary)', marginTop: 4, fontFamily: FONT }}>{footerText}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 3, marginTop: 2, marginBottom: -1 }}>
-              <span style={{ fontSize: 10.5, color: 'var(--c-textSecondary)', fontFamily: FONT }}>9:41</span>
+              <span style={{ fontSize: 12, color: 'var(--c-textSecondary)', fontFamily: FONT }}>9:41</span>
               <svg width="16" height="11" viewBox="0 0 16 11" fill="none"><path d="M1 5.5L5 9.5L11.5 1" stroke="#53BDEB" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /><path d="M5 5.5L9 9.5L15.5 1" stroke="#53BDEB" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </div>
           </div>
@@ -377,7 +380,7 @@ function WaPreview({ headerType, headerText, bodyText, footerText, buttons, secu
               {buttons.map((btn, i) => (
                 <div key={i} style={{ padding: '9px 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, borderTop: '1px solid rgba(0,0,0,.07)' }}>
                   {bIcon(btn.type)}
-                  <span style={{ fontSize: 13, fontWeight: 500, color: B.waHeader, fontFamily: FONT }}>{bLabel(btn)}</span>
+                  <span style={{ fontSize: 15, fontWeight: 500, color: B.waHeader, fontFamily: FONT }}>{bLabel(btn)}</span>
                 </div>
               ))}
             </div>
@@ -387,7 +390,7 @@ function WaPreview({ headerType, headerText, bodyText, footerText, buttons, secu
       {templateType === 'CAROUSEL' && Array.isArray(carouselCards) && carouselCards.length > 0 && (
         <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginTop: 8, paddingBottom: 4, marginLeft: 'auto', maxWidth: '94%' }}>
           {carouselCards.map((card, ci) => (
-            <div key={ci} style={{ flex: '0 0 150px', background: '#DCF8C6', borderRadius: 7.5, overflow: 'hidden', boxShadow: '0 1px 0.5px rgba(11,20,26,.13)' }}>
+            <div key={ci} style={{ flex: '0 0 150px', background: 'var(--c-sdcf8c6, #DCF8C6)', borderRadius: 7.5, overflow: 'hidden', boxShadow: '0 1px 0.5px rgba(11,20,26,.13)' }}>
               {card.media_library_id ? (
                 card.header_type === 'VIDEO' ? (
                   <div style={{ position: 'relative', height: 90 }}>
@@ -398,17 +401,17 @@ function WaPreview({ headerType, headerText, bodyText, footerText, buttons, secu
                   <img src={api.mediaLibrary.downloadUrl(card.media_library_id)} alt="" style={{ width: '100%', height: 90, objectFit: 'cover', display: 'block' }} />
                 )
               ) : (
-                <div style={{ height: 90, background: 'linear-gradient(135deg,#c9c9c9,#999)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ height: 90, background: 'linear-gradient(135deg,var(--c-borderStrong, #c9c9c9),#999)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {card.header_type === 'VIDEO' ? <Video size={20} color="rgba(255,255,255,.85)" /> : <Image size={20} color="rgba(255,255,255,.85)" />}
                 </div>
               )}
               <div style={{ padding: '6px 8px' }}>
-                <div style={{ fontSize: 11, color: 'var(--c-text)', lineHeight: 1.4, fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{card.body || 'Card text'}</div>
+                <div style={{ fontSize: 13, color: 'var(--c-text)', lineHeight: 1.4, fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{card.body || 'Card text'}</div>
               </div>
               {(card.buttons || []).length > 0 && (
                 <div style={{ background: 'var(--c-cardBg)' }}>
                   {(card.buttons || []).map((b, bi) => (
-                    <div key={bi} style={{ padding: '6px 8px', textAlign: 'center', borderTop: '1px solid rgba(0,0,0,.07)', fontSize: 11, fontWeight: 500, color: B.waHeader, fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                    <div key={bi} style={{ padding: '6px 8px', textAlign: 'center', borderTop: '1px solid rgba(0,0,0,.07)', fontSize: 13, fontWeight: 500, color: B.waHeader, fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
                       {bIcon(b.type)} {b.text || (b.type === 'URL' ? 'Visit' : b.type === 'PHONE_NUMBER' ? 'Call' : 'Reply')}
                     </div>
                   ))}
@@ -454,7 +457,7 @@ function ButtonsSection({ buttons, onAdd, onRemove, onUpdate, category, errors }
   return (
     <Sec n={6} title="Buttons" note="optional">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div style={{ fontSize: 12, color: B.t5, fontFamily: FONT }}>
+        <div style={{ fontSize: 14, color: B.t5, fontFamily: FONT }}>
           {isAuth ? 'Auth templates: OTP buttons only.' : `${buttons.length}/3 buttons.`}
           {errors.btnMaxUrl && <span style={{ color: B.red, marginLeft: 6 }}>⚠ {errors.btnMaxUrl}</span>}
           {errors.btnMaxPhone && <span style={{ color: B.red, marginLeft: 6 }}>⚠ {errors.btnMaxPhone}</span>}
@@ -463,20 +466,20 @@ function ButtonsSection({ buttons, onAdd, onRemove, onUpdate, category, errors }
           <div style={{ position: 'relative' }}>
             <button
               onClick={() => setMenuOpen(!menuOpen)}
-              style={{ padding: '7px 14px', background: 'var(--c-cardBg)', border: '1.5px solid #D5D5D0', borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, color: '#444', transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 5 }}
+              style={{ padding: '7px 14px', background: 'var(--c-cardBg)', border: '1.5px solid var(--c-borderStrong, #D5D5D0)', borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, color: 'var(--c-t3, #444)', transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 5 }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = B.accent; e.currentTarget.style.color = B.accent; e.currentTarget.style.background = B.accentBg; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = '#D5D5D0'; e.currentTarget.style.color = '#444'; e.currentTarget.style.background = '#fff'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--c-borderStrong)'; e.currentTarget.style.color = 'var(--c-t3)'; e.currentTarget.style.background = 'var(--c-cardBg)'; }}
             >+ Add Button</button>
             {menuOpen && (
               <div style={{ position: 'absolute', right: 0, top: '110%', background: 'var(--c-cardBg)', border: '1px solid var(--c-border)', borderRadius: 10, padding: 6, boxShadow: '0 8px 32px rgba(0,0,0,.12)', zIndex: 50, minWidth: 200 }}>
                 {menuOpts.map(o => (
                   <button key={o.type} disabled={o.disabled}
                     onClick={() => { if (!o.disabled) { onAdd(o.type); setMenuOpen(false); } }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', border: 'none', background: 'none', fontSize: 12, fontFamily: FONT, cursor: o.disabled ? 'not-allowed' : 'pointer', fontWeight: 600, borderRadius: 8, color: o.disabled ? '#bbb' : B.t2, transition: 'background .1s' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', border: 'none', background: 'none', fontSize: 14, fontFamily: FONT, cursor: o.disabled ? 'not-allowed' : 'pointer', fontWeight: 600, borderRadius: 8, color: o.disabled ? '#bbb' : B.t2, transition: 'background .1s' }}
                     onMouseEnter={e => { if (!o.disabled) e.currentTarget.style.background = B.bg; }}
                     onMouseLeave={e => e.currentTarget.style.background = 'none'}>
-                    <span style={{ fontSize: 16 }}>{o.icon}</span>
-                    <div><div>{o.label}</div><div style={{ fontSize: 10, color: o.disabled ? '#ccc' : B.t6, fontWeight: 500 }}>{o.disabled ? o.disabledMsg : o.hint}</div></div>
+                    <span style={{ fontSize: 18 }}>{o.icon}</span>
+                    <div><div>{o.label}</div><div style={{ fontSize: 12, color: o.disabled ? 'var(--c-t8, #ccc)' : B.t6, fontWeight: 500 }}>{o.disabled ? o.disabledMsg : o.hint}</div></div>
                   </button>
                 ))}
               </div>
@@ -484,7 +487,7 @@ function ButtonsSection({ buttons, onAdd, onRemove, onUpdate, category, errors }
           </div>
         )}
       </div>
-      {buttons.length === 0 && <div style={{ textAlign: 'center', padding: '14px 0', color: '#bbb', fontSize: 12, fontFamily: FONT }}>No buttons added yet.</div>}
+      {buttons.length === 0 && <div style={{ textAlign: 'center', padding: '14px 0', color: '#bbb', fontSize: 14, fontFamily: FONT }}>No buttons added yet.</div>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {buttons.map((btn, i) => {
           const urlVars = btn.type === 'URL' ? extractVars(btn.value || '') : [];
@@ -492,18 +495,18 @@ function ButtonsSection({ buttons, onAdd, onRemove, onUpdate, category, errors }
           return (
             <div key={i} style={{ border: `1.5px solid ${hasErr ? B.red + '44' : B.innerBorder}`, borderRadius: 10, padding: '12px 14px', background: B.innerBg }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 99,
-                  background: isPaymentButton(btn) ? '#EDF6F1' : tBg[btn.type],
-                  color: isPaymentButton(btn) ? '#0F6E56' : tColor[btn.type], fontFamily: FONT }}>
+                <span style={{ fontSize: 13, fontWeight: 700, padding: '3px 10px', borderRadius: 99,
+                  background: isPaymentButton(btn) ? 'var(--c-successBgSoft, #EDF6F1)' : tBg[btn.type],
+                  color: isPaymentButton(btn) ? 'var(--c-successText, #0F6E56)' : tColor[btn.type], fontFamily: FONT }}>
                   {isPaymentButton(btn) ? 'Payment Link' : tLabel[btn.type]}
                 </span>
-                <button onClick={() => onRemove(i)} style={{ width: 22, height: 22, borderRadius: 99, background: B.redBg, border: 'none', cursor: 'pointer', color: B.red, fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>×</button>
+                <button onClick={() => onRemove(i)} style={{ width: 22, height: 22, borderRadius: 99, background: B.redBg, border: 'none', cursor: 'pointer', color: B.red, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>×</button>
               </div>
               {btn.type === 'OTP' ? (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                   <div>
                     <Lbl>Button Text</Lbl>
-                    <input style={{ border: '1.5px solid #D5D5D0', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontFamily: FONT, width: '100%', background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none' }} placeholder="Copy Code" value={btn.text || ''} maxLength={25} onChange={e => onUpdate(i, 'text', e.target.value)} />
+                    <input style={{ border: '1.5px solid var(--c-borderStrong, #D5D5D0)', borderRadius: 8, padding: '7px 12px', fontSize: 14, fontFamily: FONT, width: '100%', background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none' }} placeholder="Copy Code" value={btn.text || ''} maxLength={25} onChange={e => onUpdate(i, 'text', e.target.value)} />
                   </div>
                   <div>
                     <Lbl>OTP Type</Lbl>
@@ -514,13 +517,13 @@ function ButtonsSection({ buttons, onAdd, onRemove, onUpdate, category, errors }
                         { value: 'COPY_CODE', label: 'Copy Code' },
                         { value: 'ONE_TAP', label: 'One Tap (Android)' },
                       ]}
-                      triggerStyle={{ fontSize: 12, padding: '7px 12px' }}
+                      triggerStyle={{ fontSize: 14, padding: '7px 12px' }}
                     />
                   </div>
                   {btn.otpType === 'ONE_TAP' && (
                     <>
-                      <div><Lbl note="Android only">Package Name</Lbl><input style={{ border: '1.5px solid #D5D5D0', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontFamily: FONT, width: '100%', background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none' }} placeholder="com.example.app" value={btn.packageName || ''} onChange={e => onUpdate(i, 'packageName', e.target.value)} /></div>
-                      <div><Lbl>Signature Hash</Lbl><input style={{ border: '1.5px solid #D5D5D0', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontFamily: FONT, width: '100%', background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none' }} placeholder="K8a%2FAINcGX7" value={btn.signatureHash || ''} onChange={e => onUpdate(i, 'signatureHash', e.target.value)} /></div>
+                      <div><Lbl note="Android only">Package Name</Lbl><input style={{ border: '1.5px solid var(--c-borderStrong, #D5D5D0)', borderRadius: 8, padding: '7px 12px', fontSize: 14, fontFamily: FONT, width: '100%', background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none' }} placeholder="com.example.app" value={btn.packageName || ''} onChange={e => onUpdate(i, 'packageName', e.target.value)} /></div>
+                      <div><Lbl>Signature Hash</Lbl><input style={{ border: '1.5px solid var(--c-borderStrong, #D5D5D0)', borderRadius: 8, padding: '7px 12px', fontSize: 14, fontFamily: FONT, width: '100%', background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none' }} placeholder="K8a%2FAINcGX7" value={btn.signatureHash || ''} onChange={e => onUpdate(i, 'signatureHash', e.target.value)} /></div>
                     </>
                   )}
                 </div>
@@ -530,16 +533,16 @@ function ButtonsSection({ buttons, onAdd, onRemove, onUpdate, category, errors }
                     {btn.type !== 'COPY_CODE' && (
                       <div>
                         <Lbl required>Button Text</Lbl>
-                        <input style={{ border: `1.5px solid ${errors[`btn_text_${i}`] ? B.red : '#D5D5D0'}`, borderRadius: 8, padding: '7px 12px', fontSize: 12, fontFamily: FONT, width: '100%', background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none' }}
+                        <input style={{ border: `1.5px solid ${errors[`btn_text_${i}`] ? B.red : 'var(--c-borderStrong, #D5D5D0)'}`, borderRadius: 8, padding: '7px 12px', fontSize: 14, fontFamily: FONT, width: '100%', background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none' }}
                           placeholder={btn.type === 'QUICK_REPLY' ? 'e.g. Yes, Confirm' : btn.type === 'URL' ? 'e.g. View Order' : 'e.g. Call Us'}
                           value={btn.text || ''} maxLength={25} onChange={e => onUpdate(i, 'text', e.target.value)} />
-                        <div style={{ fontSize: 10, color: B.t7, textAlign: 'right', marginTop: 2, fontFamily: "'DM Mono', monospace" }}>{(btn.text || '').length}/25</div>
+                        <div style={{ fontSize: 12, color: B.t7, textAlign: 'right', marginTop: 2, fontFamily: "'DM Mono', monospace" }}>{(btn.text || '').length}/25</div>
                       </div>
                     )}
                     {btn.type === 'COPY_CODE' ? (
                       <div>
                         <Lbl required>Coupon code</Lbl>
-                        <input style={{ border: `1.5px solid ${errors[`btn_code_${i}`] ? B.red : '#D5D5D0'}`, borderRadius: 8, padding: '7px 12px', fontSize: 12, fontFamily: "'DM Mono', monospace", width: '100%', background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none', textTransform: 'uppercase' }}
+                        <input style={{ border: `1.5px solid ${errors[`btn_code_${i}`] ? B.red : 'var(--c-borderStrong, #D5D5D0)'}`, borderRadius: 8, padding: '7px 12px', fontSize: 14, fontFamily: "'DM Mono', monospace", width: '100%', background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none', textTransform: 'uppercase' }}
                           placeholder="PROMO50"
                           value={btn.value || ''} maxLength={15} onChange={e => onUpdate(i, 'value', e.target.value.toUpperCase())} />
                         {errors[`btn_code_${i}`]
@@ -549,15 +552,15 @@ function ButtonsSection({ buttons, onAdd, onRemove, onUpdate, category, errors }
                     ) : isPaymentButton(btn) ? (
                       <div>
                         <Lbl>Payment link</Lbl>
-                        <div style={{ border: '1.5px solid #9CC9B4', background: '#EDF6F1', borderRadius: 8, padding: '9px 12px' }}>
-                          <div style={{ fontSize: 11.5, color: '#0F6E56', fontWeight: 600, fontFamily: FONT }}>
+                        <div style={{ border: '1.5px solid #9CC9B4', background: 'var(--c-successBgSoft, #EDF6F1)', borderRadius: 8, padding: '9px 12px' }}>
+                          <div style={{ fontSize: 13, color: 'var(--c-successText, #0F6E56)', fontWeight: 600, fontFamily: FONT }}>
                             Each recipient gets their own Razorpay link
                           </div>
-                          <div style={{ fontSize: 10.5, color: '#3C6656', marginTop: 4, lineHeight: 1.5, fontFamily: FONT }}>
+                          <div style={{ fontSize: 12, color: 'var(--c-s3c6656, #3C6656)', marginTop: 4, lineHeight: 1.5, fontFamily: FONT }}>
                             The link is created when the message is sent — by the automation Payment node, the AI
                             agent, or a broadcast — so one approved template works for every customer and every amount.
                           </div>
-                          <div style={{ fontSize: 10, color: '#3C6656', marginTop: 6, fontFamily: "'DM Mono', monospace", wordBreak: 'break-all' }}>
+                          <div style={{ fontSize: 12, color: 'var(--c-s3c6656, #3C6656)', marginTop: 6, fontFamily: "'DM Mono', monospace", wordBreak: 'break-all' }}>
                             {btn.value}
                           </div>
                         </div>
@@ -566,7 +569,7 @@ function ButtonsSection({ buttons, onAdd, onRemove, onUpdate, category, errors }
                     ) : btn.type !== 'QUICK_REPLY' ? (
                       <div>
                         <Lbl required>{btn.type === 'URL' ? 'Website URL' : 'Phone Number (E.164)'}</Lbl>
-                        <input style={{ border: `1.5px solid ${errors[`btn_url_${i}`] || errors[`btn_phone_${i}`] ? B.red : '#D5D5D0'}`, borderRadius: 8, padding: '7px 12px', fontSize: 12, fontFamily: FONT, width: '100%', background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none' }}
+                        <input style={{ border: `1.5px solid ${errors[`btn_url_${i}`] || errors[`btn_phone_${i}`] ? B.red : 'var(--c-borderStrong, #D5D5D0)'}`, borderRadius: 8, padding: '7px 12px', fontSize: 14, fontFamily: FONT, width: '100%', background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none' }}
                           placeholder={btn.type === 'URL' ? 'https://example.com/orders/{{1}}' : '+919876543210'}
                           value={btn.value || ''} onChange={e => onUpdate(i, 'value', e.target.value)} />
                         {errors[`btn_url_${i}`] && <Hint error>{errors[`btn_url_${i}`]}</Hint>}
@@ -578,10 +581,10 @@ function ButtonsSection({ buttons, onAdd, onRemove, onUpdate, category, errors }
                   </div>
                   {btn.type === 'URL' && urlVars.length > 0 && !isPaymentButton(btn) && (
                     <div style={{ padding: '10px 12px', background: B.sectionBg, border: `1px solid ${errors[`btn_urlsample_${i}`] ? B.red + '44' : B.sectionBorder}`, borderRadius: 8 }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: B.t4, marginBottom: 6, fontFamily: FONT }}>
-                        URL has <span style={{ fontFamily: "'DM Mono', monospace", background: B.accentBg, padding: '1px 5px', borderRadius: 4, fontSize: 11, color: B.accentDark }}>{'{{1}}'}</span> — provide a sample URL:
+                      <div style={{ fontSize: 13, fontWeight: 600, color: B.t4, marginBottom: 6, fontFamily: FONT }}>
+                        URL has <span style={{ fontFamily: "'DM Mono', monospace", background: B.accentBg, padding: '1px 5px', borderRadius: 4, fontSize: 13, color: B.accentDark }}>{'{{1}}'}</span> — provide a sample URL:
                       </div>
-                      <input style={{ border: `1.5px solid ${errors[`btn_urlsample_${i}`] ? B.red : '#D5D5D0'}`, borderRadius: 8, padding: '7px 12px', fontSize: 12, fontFamily: FONT, width: '100%', background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none' }}
+                      <input style={{ border: `1.5px solid ${errors[`btn_urlsample_${i}`] ? B.red : 'var(--c-borderStrong, #D5D5D0)'}`, borderRadius: 8, padding: '7px 12px', fontSize: 14, fontFamily: FONT, width: '100%', background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none' }}
                         placeholder="https://example.com/orders/ORD-12345"
                         value={btn.urlSample || ''} onChange={e => onUpdate(i, 'urlSample', e.target.value)} />
                       {errors[`btn_urlsample_${i}`] && <Hint error>{errors[`btn_urlsample_${i}`]}</Hint>}
@@ -640,8 +643,8 @@ function LibraryBrowseModal({ open, accounts, onClose, onCloned }) {
       <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, width: 760, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: FONT, boxShadow: C.shadowLg }}>
         <div style={{ padding: '18px 24px', borderBottom: `1px solid ${B.cardBorder}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div style={{ fontSize: 17, fontWeight: 700, color: B.t1 }}>Browse Meta Template Library</div>
-            <div style={{ fontSize: 11, color: B.t5, marginTop: 2 }}>Pre-approved templates from Meta's curated catalog. Clone to a local DRAFT, then submit.</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: B.t1 }}>Browse Meta Template Library</div>
+            <div style={{ fontSize: 13, color: B.t5, marginTop: 2 }}>Pre-approved templates from Meta's curated catalog. Clone to a local DRAFT, then submit.</div>
           </div>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: B.t6 }}><X size={20} /></button>
         </div>
@@ -652,19 +655,19 @@ function LibraryBrowseModal({ open, accounts, onClose, onCloned }) {
             options={accounts.map(a => ({ value: a.id, label: `${a.displayName} (${maskPhone(a.displayPhoneNumber)})` }))}
             placeholder="— Pick account —"
             style={{ flex: 1 }}
-            triggerStyle={{ padding: '8px 12px', fontSize: 12 }}
+            triggerStyle={{ padding: '8px 12px', fontSize: 14 }}
           />
-          <input value={topic} onChange={e => setTopic(e.target.value)} placeholder="Topic filter (optional, e.g. UTILITY)" style={{ padding: '8px 12px', border: `1px solid ${B.cardBorder}`, borderRadius: 8, fontSize: 12, fontFamily: FONT, background: 'var(--c-cardBg)', color: B.t2, flex: 1 }} />
+          <input value={topic} onChange={e => setTopic(e.target.value)} placeholder="Topic filter (optional, e.g. UTILITY)" style={{ padding: '8px 12px', border: `1px solid ${B.cardBorder}`, borderRadius: 8, fontSize: 14, fontFamily: FONT, background: 'var(--c-cardBg)', color: B.t2, flex: 1 }} />
         </div>
         <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
           {loading ? (
-            <div style={{ padding: 40, textAlign: 'center', color: B.t5, fontSize: 13 }}>
+            <div style={{ padding: 40, textAlign: 'center', color: B.t5, fontSize: 15 }}>
               <Loader2 size={18} style={{ animation: 'spin 1s linear infinite', marginRight: 8, verticalAlign: 'middle' }} /> Loading…
             </div>
           ) : items.length === 0 ? (
-            <div style={{ padding: 40, textAlign: 'center', color: B.t5, fontSize: 12 }}>
-              <LayoutTemplate size={36} color="#ccc" style={{ marginBottom: 10 }} />
-              <div style={{ fontWeight: 600, color: B.t3, marginBottom: 4, fontSize: 13 }}>No library templates available</div>
+            <div style={{ padding: 40, textAlign: 'center', color: B.t5, fontSize: 14 }}>
+              <LayoutTemplate size={36} color="var(--c-t8, #ccc)" style={{ marginBottom: 10 }} />
+              <div style={{ fontWeight: 600, color: B.t3, marginBottom: 4, fontSize: 15 }}>No library templates available</div>
               <div>{error || 'This WhatsApp account may not have library access yet. Try a different account or topic, or check Meta Business Manager.'}</div>
             </div>
           ) : (
@@ -674,15 +677,15 @@ function LibraryBrowseModal({ open, accounts, onClose, onCloned }) {
                 const isCloning = cloningId === (lib.id || lib.name);
                 return (
                   <div key={lib.id || lib.name || idx} style={{ border: `1px solid ${B.cardBorder}`, borderRadius: 10, padding: 12, background: B.card, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: B.t1, lineHeight: 1.3 }}>{lib.name}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: B.t1, lineHeight: 1.3 }}>{lib.name}</div>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 10, padding: '1px 6px', background: B.innerBg, borderRadius: 4, color: B.t4 }}>{lib.category || 'MARKETING'}</span>
-                      <span style={{ fontSize: 10, padding: '1px 6px', background: B.innerBg, borderRadius: 4, color: B.t4, fontFamily: 'DM Mono, monospace' }}>{lib.language || 'en'}</span>
+                      <span style={{ fontSize: 12, padding: '1px 6px', background: B.innerBg, borderRadius: 4, color: B.t4 }}>{lib.category || 'MARKETING'}</span>
+                      <span style={{ fontSize: 12, padding: '1px 6px', background: B.innerBg, borderRadius: 4, color: B.t4, fontFamily: 'DM Mono, monospace' }}>{lib.language || 'en'}</span>
                     </div>
-                    <div style={{ fontSize: 11, color: B.t5, lineHeight: 1.4, minHeight: 40, maxHeight: 60, overflow: 'hidden' }}>
+                    <div style={{ fontSize: 13, color: B.t5, lineHeight: 1.4, minHeight: 40, maxHeight: 60, overflow: 'hidden' }}>
                       {(body?.text || '').slice(0, 120)}{(body?.text || '').length > 120 ? '…' : ''}
                     </div>
-                    <button onClick={() => clone(lib)} disabled={isCloning || !accountId} style={{ marginTop: 'auto', padding: '7px 12px', border: 'none', borderRadius: 6, background: isCloning ? '#ccc' : B.green, color: '#fff', cursor: isCloning ? 'wait' : 'pointer', fontSize: 11, fontWeight: 700, fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                    <button onClick={() => clone(lib)} disabled={isCloning || !accountId} style={{ marginTop: 'auto', padding: '7px 12px', border: 'none', borderRadius: 6, background: isCloning ? 'var(--c-borderStrong, #ccc)' : B.green, color: '#fff', cursor: isCloning ? 'wait' : 'pointer', fontSize: 13, fontWeight: 700, fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
                       {isCloning ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> : '+'} Clone to DRAFT
                     </button>
                   </div>
@@ -758,8 +761,8 @@ function TemplateList({ templates, loading, onAdd, onEdit, onDelete, onView, onB
   );
 
   const chipStyle = (active) => ({
-    padding: '6px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, fontFamily: FONT,
-    border: `1px solid ${active ? C.primary : '#D5D5D0'}`,
+    padding: '6px 12px', borderRadius: 99, fontSize: 14, fontWeight: 600, fontFamily: FONT,
+    border: `1px solid ${active ? C.primary : 'var(--c-borderStrong, #D5D5D0)'}`,
     background: active ? C.primary : 'var(--c-cardBg)',
     color: active ? '#fff' : B.t3, cursor: 'pointer',
   });
@@ -768,27 +771,27 @@ function TemplateList({ templates, loading, onAdd, onEdit, onDelete, onView, onB
     <div style={{ padding: 24, fontFamily: FONT }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: B.t1, margin: 0, letterSpacing: '-.02em' }}>Message Templates</h1>
-          <p style={{ fontSize: 12, color: B.t5, margin: '4px 0 0' }}>Create and manage WhatsApp Business API message templates.</p>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: B.t1, margin: 0, letterSpacing: '-.02em' }}>Message Templates</h1>
+          <p style={{ fontSize: 14, color: B.t5, margin: '4px 0 0' }}>Create and manage WhatsApp Business API message templates.</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button
             onClick={onSyncAll}
             disabled={syncingAll}
-            style={{ padding: '9px 14px', background: 'var(--c-cardBg)', color: B.t3, border: `1px solid ${B.cardBorder}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: syncingAll ? 'wait' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6 }}
+            style={{ padding: '9px 14px', background: 'var(--c-cardBg)', color: B.t3, border: `1px solid ${B.cardBorder}`, borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: syncingAll ? 'wait' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6 }}
           >
             {syncingAll ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Search size={13} />}
             Refresh All from Meta
           </button>
           <button
             onClick={() => setLibraryOpen(true)}
-            style={{ padding: '9px 14px', background: 'var(--c-cardBg)', color: B.t3, border: `1px solid ${B.cardBorder}`, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6 }}
+            style={{ padding: '9px 14px', background: 'var(--c-cardBg)', color: B.t3, border: `1px solid ${B.cardBorder}`, borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6 }}
           >
             <LayoutTemplate size={13} /> Browse Library
           </button>
           <button
             onClick={onAdd}
-            style={{ padding: '10px 18px', background: C.primary, color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6, transition: 'background .15s' }}
+            style={{ padding: '10px 18px', background: C.primary, color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6, transition: 'background .15s' }}
             onMouseEnter={e => e.currentTarget.style.background = C.primaryHover}
             onMouseLeave={e => e.currentTarget.style.background = C.primary}
           >
@@ -818,21 +821,21 @@ function TemplateList({ templates, loading, onAdd, onEdit, onDelete, onView, onB
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 1 360px', minWidth: 220 }}>
           <Search size={16} color={B.t6} />
           <input
-            style={{ flex: 1, border: '1.5px solid #D5D5D0', borderRadius: 8, padding: '8px 12px', fontSize: 13, fontFamily: FONT, background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none' }}
+            style={{ flex: 1, border: '1.5px solid var(--c-borderStrong, #D5D5D0)', borderRadius: 8, padding: '8px 12px', fontSize: 15, fontFamily: FONT, background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none' }}
             placeholder="Search by name or body…"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
         </div>
         <SortControl value={sort} onChange={setSort} />
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: B.t4, fontFamily: FONT, cursor: 'pointer' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: B.t4, fontFamily: FONT, cursor: 'pointer' }}>
           <input type="checkbox" checked={groupByTranslation} onChange={e => onToggleGroup(e.target.checked)} />
           Group translations
         </label>
         {selectedDrafts.length > 0 && (
           <button
             onClick={() => onBulkSubmit(selectedDrafts.map(t => t.id))}
-            style={{ padding: '8px 14px', background: B.green, color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6 }}
+            style={{ padding: '8px 14px', background: B.green, color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6 }}
           >
             <Send size={13} /> Submit {selectedDrafts.length} draft{selectedDrafts.length > 1 ? 's' : ''} to Meta
           </button>
@@ -849,16 +852,16 @@ function TemplateList({ templates, loading, onAdd, onEdit, onDelete, onView, onB
 
       {loading ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 60, gap: 8 }}>
-          <Loader2 size={18} className="spin" style={{ animation: 'spin 1s linear infinite' }} /> <span style={{ fontSize: 13, color: B.t5, fontFamily: FONT }}>Loading...</span>
+          <Loader2 size={18} className="spin" style={{ animation: 'spin 1s linear infinite' }} /> <span style={{ fontSize: 15, color: B.t5, fontFamily: FONT }}>Loading...</span>
         </div>
       ) : filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 20px', background: B.card, border: `1px solid ${B.cardBorder}`, borderRadius: 12 }}>
-          <LayoutTemplate size={40} color="#ccc" style={{ marginBottom: 12 }} />
-          <div style={{ fontSize: 15, fontWeight: 600, color: B.t3, marginBottom: 4, fontFamily: FONT }}>No templates yet</div>
-          <div style={{ fontSize: 12, color: B.t6, marginBottom: 16, fontFamily: FONT }}>Create your first WhatsApp message template.</div>
+          <LayoutTemplate size={40} color="var(--c-t8, #ccc)" style={{ marginBottom: 12 }} />
+          <div style={{ fontSize: 16, fontWeight: 600, color: B.t3, marginBottom: 4, fontFamily: FONT }}>No templates yet</div>
+          <div style={{ fontSize: 14, color: B.t6, marginBottom: 16, fontFamily: FONT }}>Create your first WhatsApp message template.</div>
           <button
             onClick={onAdd}
-            style={{ padding: '10px 18px', background: C.primary, color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            style={{ padding: '10px 18px', background: C.primary, color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 6 }}
           >
             <Plus size={16} /> Add Template
           </button>
@@ -870,7 +873,7 @@ function TemplateList({ templates, loading, onAdd, onEdit, onDelete, onView, onB
               <tr style={{ background: B.innerBg, borderBottom: `1px solid ${B.cardBorder}` }}>
                 <th style={{ padding: '10px 14px', width: 36 }}><SelectAllCheckbox sel={sel} /></th>
                 {['Name', 'Account', 'Project', 'Category', 'Language', 'Status', 'Sent', 'Created', 'Actions'].map(h => (
-                  <th key={h} style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: B.t4, textAlign: 'left', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap' }}>{h}</th>
+                  <th key={h} style={{ padding: '10px 14px', fontSize: 13, fontWeight: 700, color: B.t4, textAlign: 'left', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -879,35 +882,35 @@ function TemplateList({ templates, loading, onAdd, onEdit, onDelete, onView, onB
                 const cat = CATEGORIES.find(c => c.id === t.category);
                 const canEdit = ['DRAFT', 'REJECTED', 'APPROVED', 'PAUSED'].includes(t.status);
                 return (
-                  <tr key={t.id} style={{ borderBottom: `1px solid ${B.rowSep}`, background: sel.isSelected(t.id) ? '#FDF6F6' : 'transparent' }}>
+                  <tr key={t.id} style={{ borderBottom: `1px solid ${B.rowSep}`, background: sel.isSelected(t.id) ? 'var(--c-dangerBgSoft, #FDF6F6)' : 'transparent' }}>
                     <td style={{ padding: '12px 14px', width: 36 }}><RowCheckbox sel={sel} id={t.id} label={t.name} /></td>
-                    <td style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600, color: B.t2, fontFamily: FONT }}>{t.name}</td>
+                    <td style={{ padding: '12px 14px', fontSize: 15, fontWeight: 600, color: B.t2, fontFamily: FONT }}>{t.name}</td>
                     <td style={{ padding: '12px 14px' }}>
                       {t.whatsappAccountName ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: B.t2, fontFamily: FONT }}>{t.whatsappAccountName}</span>
-                          <span style={{ fontSize: 10, color: B.t6, fontFamily: 'DM Mono, monospace' }}>{maskPhone(t.whatsappAccountPhone)}</span>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: B.t2, fontFamily: FONT }}>{t.whatsappAccountName}</span>
+                          <span style={{ fontSize: 12, color: B.t6, fontFamily: 'DM Mono, monospace' }}>{maskPhone(t.whatsappAccountPhone)}</span>
                         </div>
                       ) : (
-                        <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 99, background: '#FFF3E0', color: '#E65100', fontWeight: 600, fontFamily: FONT }}>Unassigned</span>
+                        <span style={{ fontSize: 13, padding: '3px 8px', borderRadius: 99, background: 'var(--c-orangeBg, #FFF3E0)', color: 'var(--c-orangeText, #E65100)', fontWeight: 600, fontFamily: FONT }}>Unassigned</span>
                       )}
                     </td>
                     {/* Which campaign this template belongs to. Read-only here —
                         filing happens on the Projects page, which can move all
                         three kinds at once. */}
-                    <td style={{ padding: '12px 14px', fontSize: 12, fontFamily: FONT }}>
+                    <td style={{ padding: '12px 14px', fontSize: 14, fontFamily: FONT }}>
                       {t.projectName
-                        ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 99, background: '#F1F1EC', color: B.t3, fontWeight: 600 }}>
+                        ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 99, background: 'var(--c-surfaceMuted, #F1F1EC)', color: B.t3, fontWeight: 600 }}>
                             <FolderKanban size={11} /> {t.projectName}
                           </span>
                         : <span style={{ color: B.t7 }}>—</span>}
                     </td>
                     <td style={{ padding: '12px 14px' }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 4, background: cat?.bg || B.innerBg, color: cat?.color || B.t4, fontSize: 11, fontWeight: 700, fontFamily: FONT }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 4, background: cat?.bg || B.innerBg, color: cat?.color || B.t4, fontSize: 13, fontWeight: 700, fontFamily: FONT }}>
                         {cat && <cat.icon size={12} />} {cat?.label || t.category}
                       </span>
                     </td>
-                    <td style={{ padding: '12px 14px', fontSize: 12, color: B.t4, fontFamily: FONT }}>
+                    <td style={{ padding: '12px 14px', fontSize: 14, color: B.t4, fontFamily: FONT }}>
                       {t._siblings && t._siblings.length > 1 ? (
                         <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
                           {t._siblings.map(s => (
@@ -916,8 +919,8 @@ function TemplateList({ templates, loading, onAdd, onEdit, onDelete, onView, onB
                               onClick={(e) => { e.stopPropagation(); onView(s); }}
                               title={`Open ${s.language} variant (${s.status})`}
                               style={{
-                                fontSize: 10, padding: '2px 7px', borderRadius: 99,
-                                border: `1px solid ${STATUSES[s.status]?.bg || '#eee'}`,
+                                fontSize: 12, padding: '2px 7px', borderRadius: 99,
+                                border: `1px solid ${STATUSES[s.status]?.bg || 'var(--c-borderSubtle, #EEEEE8)'}`,
                                 background: s.id === t.id ? STATUSES[s.status]?.bg : 'var(--c-cardBg)',
                                 color: STATUSES[s.status]?.color || B.t5,
                                 fontWeight: 700, cursor: 'pointer', textTransform: 'uppercase',
@@ -933,28 +936,28 @@ function TemplateList({ templates, loading, onAdd, onEdit, onDelete, onView, onB
                     <td style={{ padding: '12px 14px' }}>
                       <StatusBadge status={t.status} />
                       {t.quality_score && QUALITY_STYLES[t.quality_score] && (
-                        <div style={{ fontSize: 10, marginTop: 3, color: QUALITY_STYLES[t.quality_score].color, fontFamily: FONT, fontWeight: 600 }}>● {t.quality_score}</div>
+                        <div style={{ fontSize: 12, marginTop: 3, color: QUALITY_STYLES[t.quality_score].color, fontFamily: FONT, fontWeight: 600 }}>● {t.quality_score}</div>
                       )}
                     </td>
-                    <td style={{ padding: '12px 14px', fontSize: 12, color: B.t4, fontFamily: FONT }}>
+                    <td style={{ padding: '12px 14px', fontSize: 14, color: B.t4, fontFamily: FONT }}>
                       <div style={{ fontWeight: 600, color: B.t2 }}>{t.sendCount || 0}</div>
-                      {t.broadcastCount > 0 && <div style={{ fontSize: 10, color: B.t6 }}>in {t.broadcastCount} broadcast{t.broadcastCount > 1 ? 's' : ''}</div>}
+                      {t.broadcastCount > 0 && <div style={{ fontSize: 12, color: B.t6 }}>in {t.broadcastCount} broadcast{t.broadcastCount > 1 ? 's' : ''}</div>}
                     </td>
-                    <td style={{ padding: '12px 14px', fontSize: 11, color: B.t6, fontFamily: FONT, whiteSpace: 'nowrap' }}>{new Date(t.created_at).toLocaleDateString()}</td>
+                    <td style={{ padding: '12px 14px', fontSize: 13, color: B.t6, fontFamily: FONT, whiteSpace: 'nowrap' }}>{new Date(t.created_at).toLocaleDateString()}</td>
                     <td style={{ padding: '12px 14px' }}>
                       <div style={{ display: 'flex', gap: 6 }}>
                         {canEdit && (
-                          <button onClick={() => onEdit(t)} title="Edit" style={{ width: 28, height: 28, borderRadius: 6, border: '1.5px solid #D5D5D0', background: 'var(--c-cardBg)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: B.t4 }}>
+                          <button onClick={() => onEdit(t)} title="Edit" style={{ width: 28, height: 28, borderRadius: 6, border: '1.5px solid var(--c-borderStrong, #D5D5D0)', background: 'var(--c-cardBg)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: B.t4 }}>
                             <Pencil size={13} />
                           </button>
                         )}
-                        <button onClick={() => onView(t)} title="View" style={{ width: 28, height: 28, borderRadius: 6, border: '1.5px solid #D5D5D0', background: 'var(--c-cardBg)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: B.t4 }}>
+                        <button onClick={() => onView(t)} title="View" style={{ width: 28, height: 28, borderRadius: 6, border: '1.5px solid var(--c-borderStrong, #D5D5D0)', background: 'var(--c-cardBg)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: B.t4 }}>
                           <Eye size={13} />
                         </button>
-                        <button onClick={() => onDuplicate(t)} title="Duplicate" style={{ width: 28, height: 28, borderRadius: 6, border: '1.5px solid #D5D5D0', background: 'var(--c-cardBg)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: B.t4 }}>
+                        <button onClick={() => onDuplicate(t)} title="Duplicate" style={{ width: 28, height: 28, borderRadius: 6, border: '1.5px solid var(--c-borderStrong, #D5D5D0)', background: 'var(--c-cardBg)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: B.t4 }}>
                           <Plus size={13} />
                         </button>
-                        <button onClick={() => setDeleteModal({ open: true, template: t })} title="Delete" style={{ width: 28, height: 28, borderRadius: 6, border: '1.5px solid #D5D5D0', background: 'var(--c-cardBg)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: B.red }}>
+                        <button onClick={() => setDeleteModal({ open: true, template: t })} title="Delete" style={{ width: 28, height: 28, borderRadius: 6, border: '1.5px solid var(--c-borderStrong, #D5D5D0)', background: 'var(--c-cardBg)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: B.red }}>
                           <Trash2 size={13} />
                         </button>
                       </div>
@@ -1025,12 +1028,12 @@ function CarouselCardsEditor({ cards, onChange, readOnly, accountId, errors = {}
   return (
     <Sec n={6} title={`Carousel Cards (${cards.length}/10)`} note="2–10 cards required">
       {cards.length === 0 && (
-        <div style={{ fontSize: 12, color: B.t5, marginBottom: 10, fontFamily: FONT, padding: '12px 14px', background: B.innerBg, borderRadius: 8, border: `1px dashed ${B.cardBorder}` }}>
+        <div style={{ fontSize: 14, color: B.t5, marginBottom: 10, fontFamily: FONT, padding: '12px 14px', background: B.innerBg, borderRadius: 8, border: `1px dashed ${B.cardBorder}` }}>
           No cards yet. A carousel needs at least 2 cards. Click "Add card" below.
         </div>
       )}
       {cards.length > 0 && cards[0].buttons?.length === 0 && (
-        <div style={{ fontSize: 11, color: '#E65100', marginBottom: 10, fontFamily: FONT, padding: '8px 10px', background: '#FFF3E0', borderRadius: 6 }}>
+        <div style={{ fontSize: 13, color: 'var(--c-orangeText, #E65100)', marginBottom: 10, fontFamily: FONT, padding: '8px 10px', background: 'var(--c-orangeBg, #FFF3E0)', borderRadius: 6 }}>
           ⚠ Meta requires every carousel card to have at least one button, and all cards must share the same set of button types (e.g. all 2 URL buttons, or all 1 QUICK_REPLY).
         </div>
       )}
@@ -1039,7 +1042,7 @@ function CarouselCardsEditor({ cards, onChange, readOnly, accountId, errors = {}
         {cards.map((card, i) => (
           <div key={i} style={{ border: `1px solid ${B.cardBorder}`, borderRadius: 10, padding: 12, background: B.innerBg }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: B.t2, fontFamily: FONT }}>Card {i + 1}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: B.t2, fontFamily: FONT }}>Card {i + 1}</div>
               {!readOnly && (
                 <div style={{ display: 'flex', gap: 4 }}>
                   <button onClick={() => moveCard(i, -1)} disabled={i === 0} title="Move up" style={{ ...iconBtnSmall, opacity: i === 0 ? 0.4 : 1 }}>↑</button>
@@ -1061,7 +1064,7 @@ function CarouselCardsEditor({ cards, onChange, readOnly, accountId, errors = {}
                     { value: 'VIDEO', label: 'Video' },
                   ]}
                   disabled={readOnly}
-                  triggerStyle={{ padding: '7px 10px', fontSize: 12 }}
+                  triggerStyle={{ padding: '7px 10px', fontSize: 14 }}
                 />
               </div>
               <div>
@@ -1072,10 +1075,10 @@ function CarouselCardsEditor({ cards, onChange, readOnly, accountId, errors = {}
                   options={mediaItems.filter(m => m.mediaType === (card.header_type === 'VIDEO' ? 'video' : 'image')).map(m => ({ value: m.id, label: m.name || m.originalName || `Media #${m.id}` }))}
                   placeholder="— Select from library —"
                   disabled={readOnly || uploading[i]}
-                  triggerStyle={{ padding: '7px 10px', fontSize: 12, borderColor: errors[`card_media_${i}`] ? B.red : undefined }}
+                  triggerStyle={{ padding: '7px 10px', fontSize: 14, borderColor: errors[`card_media_${i}`] ? B.red : undefined }}
                 />
                 {uploading[i] && (
-                  <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: B.t6, fontFamily: FONT }}>
+                  <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: B.t6, fontFamily: FONT }}>
                     <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> Uploading to Meta…
                   </div>
                 )}
@@ -1109,9 +1112,9 @@ function CarouselCardsEditor({ cards, onChange, readOnly, accountId, errors = {}
                 rows={2}
                 readOnly={readOnly}
                 placeholder="e.g. Get 20% off this weekend only!"
-                style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #D5D5D0', borderRadius: 8, fontSize: 12, fontFamily: FONT, background: 'var(--c-cardBg)', color: B.t2, outline: 'none', resize: 'vertical', boxSizing: 'border-box' }}
+                style={{ width: '100%', padding: '7px 10px', border: '1.5px solid var(--c-borderStrong, #D5D5D0)', borderRadius: 8, fontSize: 14, fontFamily: FONT, background: 'var(--c-cardBg)', color: B.t2, outline: 'none', resize: 'vertical', boxSizing: 'border-box' }}
               />
-              <div style={{ fontSize: 10, color: B.t6, marginTop: 2, fontFamily: FONT }}>{(card.body || '').length}/160</div>
+              <div style={{ fontSize: 12, color: B.t6, marginTop: 2, fontFamily: FONT }}>{(card.body || '').length}/160</div>
               {(errors[`card_body_${i}`] || errors[`card_bodyvar_${i}`]) && <Hint error>{errors[`card_body_${i}`] || errors[`card_bodyvar_${i}`]}</Hint>}
             </div>
 
@@ -1129,18 +1132,18 @@ function CarouselCardsEditor({ cards, onChange, readOnly, accountId, errors = {}
                       { value: 'PHONE_NUMBER', label: 'Phone' },
                     ]}
                     disabled={readOnly}
-                    triggerStyle={{ padding: '5px 8px', fontSize: 11, borderRadius: 6 }}
+                    triggerStyle={{ padding: '5px 8px', fontSize: 13, borderRadius: 6 }}
                   />
-                  <input value={btn.text || ''} onChange={e => { const bs = [...(card.buttons || [])]; bs[bi] = { ...bs[bi], text: e.target.value }; updateCard(i, { buttons: bs }); }} placeholder="Button text" disabled={readOnly} maxLength={25} style={{ padding: '5px 8px', border: '1px solid #D5D5D0', borderRadius: 6, fontSize: 11, fontFamily: FONT, background: 'var(--c-cardBg)', outline: 'none' }} />
+                  <input value={btn.text || ''} onChange={e => { const bs = [...(card.buttons || [])]; bs[bi] = { ...bs[bi], text: e.target.value }; updateCard(i, { buttons: bs }); }} placeholder="Button text" disabled={readOnly} maxLength={25} style={{ padding: '5px 8px', border: '1px solid var(--c-borderStrong, #D5D5D0)', borderRadius: 6, fontSize: 13, fontFamily: FONT, background: 'var(--c-cardBg)', outline: 'none' }} />
                   {btn.type !== 'QUICK_REPLY' && (
-                    <input value={btn.value || ''} onChange={e => { const bs = [...(card.buttons || [])]; bs[bi] = { ...bs[bi], value: e.target.value }; updateCard(i, { buttons: bs }); }} placeholder={btn.type === 'URL' ? 'https://…' : '+919xxx'} disabled={readOnly} style={{ padding: '5px 8px', border: '1px solid #D5D5D0', borderRadius: 6, fontSize: 11, fontFamily: FONT, background: 'var(--c-cardBg)', outline: 'none' }} />
+                    <input value={btn.value || ''} onChange={e => { const bs = [...(card.buttons || [])]; bs[bi] = { ...bs[bi], value: e.target.value }; updateCard(i, { buttons: bs }); }} placeholder={btn.type === 'URL' ? 'https://…' : '+919xxx'} disabled={readOnly} style={{ padding: '5px 8px', border: '1px solid var(--c-borderStrong, #D5D5D0)', borderRadius: 6, fontSize: 13, fontFamily: FONT, background: 'var(--c-cardBg)', outline: 'none' }} />
                   )}
                   {btn.type === 'QUICK_REPLY' && <span />}
-                  <button onClick={() => { const bs = (card.buttons || []).filter((_, idx) => idx !== bi); updateCard(i, { buttons: bs }); }} disabled={readOnly} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: B.red, fontSize: 14 }}>×</button>
+                  <button onClick={() => { const bs = (card.buttons || []).filter((_, idx) => idx !== bi); updateCard(i, { buttons: bs }); }} disabled={readOnly} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: B.red, fontSize: 15 }}>×</button>
                 </div>
               ))}
               {!readOnly && (card.buttons || []).length < 2 && (
-                <button onClick={() => updateCard(i, { buttons: [...(card.buttons || []), { type: 'QUICK_REPLY', text: '', value: '' }] })} style={{ marginTop: 6, fontSize: 11, padding: '4px 10px', border: '1px dashed #D5D5D0', borderRadius: 6, background: 'transparent', color: B.t4, cursor: 'pointer', fontFamily: FONT }}>+ Add button</button>
+                <button onClick={() => updateCard(i, { buttons: [...(card.buttons || []), { type: 'QUICK_REPLY', text: '', value: '' }] })} style={{ marginTop: 6, fontSize: 13, padding: '4px 10px', border: '1px dashed var(--c-borderStrong, #D5D5D0)', borderRadius: 6, background: 'transparent', color: B.t4, cursor: 'pointer', fontFamily: FONT }}>+ Add button</button>
               )}
             </div>
           </div>
@@ -1150,7 +1153,7 @@ function CarouselCardsEditor({ cards, onChange, readOnly, accountId, errors = {}
       {!readOnly && cards.length < 10 && (
         <button
           onClick={addCard}
-          style={{ marginTop: 12, width: '100%', padding: '10px', border: `2px dashed ${B.cardBorder}`, borderRadius: 8, background: 'transparent', color: B.t4, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}
+          style={{ marginTop: 12, width: '100%', padding: '10px', border: `2px dashed ${B.cardBorder}`, borderRadius: 8, background: 'transparent', color: B.t4, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}
         >
           + Add Card
         </button>
@@ -1159,7 +1162,7 @@ function CarouselCardsEditor({ cards, onChange, readOnly, accountId, errors = {}
   );
 }
 
-const iconBtnSmall = { width: 26, height: 26, border: '1px solid #D5D5D0', borderRadius: 6, background: 'var(--c-cardBg)', cursor: 'pointer', fontSize: 14, color: '#666', display: 'flex', alignItems: 'center', justifyContent: 'center' };
+const iconBtnSmall = { width: 26, height: 26, border: '1px solid var(--c-borderStrong, #D5D5D0)', borderRadius: 6, background: 'var(--c-cardBg)', cursor: 'pointer', fontSize: 15, color: 'var(--c-t4, #666)', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 
 // ─── Analytics Drawer ─────────────────────────────────────────────────────────
 function AnalyticsDrawer({ templateId, templateName, onClose }) {
@@ -1224,40 +1227,40 @@ function AnalyticsDrawer({ templateId, templateName, onClose }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 250, display: 'flex', justifyContent: 'flex-end' }}>
       <div onClick={e => e.stopPropagation()} style={{ width: 600, maxWidth: '94vw', height: '100%', background: 'var(--c-cardBg)', boxShadow: C.shadowLg, display: 'flex', flexDirection: 'column', fontFamily: FONT, overflow: 'hidden' }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #EEEDE8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--c-borderSubtle, #EEEDE8)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--c-text)' }}>Template Analytics</div>
-            <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{templateName}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--c-text)' }}>Template Analytics</div>
+            <div style={{ fontSize: 13, color: 'var(--c-t6, #888)', marginTop: 2 }}>{templateName}</div>
           </div>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#666' }}><X size={20} /></button>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--c-t4, #666)' }}><X size={20} /></button>
         </div>
 
-        <div style={{ padding: '12px 20px', borderBottom: '1px solid #EEEDE8', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--c-borderSubtle, #EEEDE8)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', gap: 6 }}>
             {[7, 30, 90].map(d => (
               <button
                 key={d}
                 onClick={() => setDays(d)}
                 style={{
-                  padding: '4px 12px', borderRadius: 99, fontSize: 11, fontWeight: 700,
-                  border: `1px solid ${days === d ? '#dc2626' : '#D5D5D0'}`,
-                  background: days === d ? '#FDF6F6' : 'var(--c-cardBg)',
-                  color: days === d ? '#dc2626' : '#666',
+                  padding: '4px 12px', borderRadius: 99, fontSize: 13, fontWeight: 700,
+                  border: `1px solid ${days === d ? '#dc2626' : 'var(--c-borderStrong, #D5D5D0)'}`,
+                  background: days === d ? 'var(--c-xfdf6f6, #FDF6F6)' : 'var(--c-cardBg)',
+                  color: days === d ? '#dc2626' : 'var(--c-t4, #666)',
                   cursor: 'pointer',
                 }}
               >{d}d</button>
             ))}
           </div>
-          <button onClick={refresh} disabled={refreshing} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '5px 12px', border: '1px solid #D5D5D0', borderRadius: 6, background: 'var(--c-cardBg)', color: '#333', cursor: refreshing ? 'wait' : 'pointer', fontFamily: FONT }}>
+          <button onClick={refresh} disabled={refreshing} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '5px 12px', border: '1px solid var(--c-borderStrong, #D5D5D0)', borderRadius: 6, background: 'var(--c-cardBg)', color: 'var(--c-s333333, #333)', cursor: refreshing ? 'wait' : 'pointer', fontFamily: FONT }}>
             {refreshing ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={11} />}
             {' '}Refresh from Meta
           </button>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
-          {loading && <div style={{ padding: 40, textAlign: 'center', color: '#888', fontSize: 13 }}><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /></div>}
+          {loading && <div style={{ padding: 40, textAlign: 'center', color: 'var(--c-t6, #888)', fontSize: 15 }}><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /></div>}
           {insightsDisabled && (
-            <div style={{ background: '#FFF8E1', border: '1px solid #FFD54F', borderRadius: 10, padding: '12px 14px', marginBottom: 14, fontSize: 12, color: '#7A5500', fontFamily: FONT }}>
+            <div style={{ background: 'var(--c-warnBgSoft, #FFF8E1)', border: '1px solid #FFD54F', borderRadius: 10, padding: '12px 14px', marginBottom: 14, fontSize: 14, color: 'var(--c-s7a5500, #7A5500)', fontFamily: FONT }}>
               <div style={{ fontWeight: 700, marginBottom: 4 }}>⚠ Template Insights not enabled for this WhatsApp Business Account</div>
               <div>
                 Enable insights in Meta Business Suite to fetch live analytics:
@@ -1270,21 +1273,21 @@ function AnalyticsDrawer({ templateId, templateName, onClose }) {
               </div>
             </div>
           )}
-          {error && !insightsDisabled && <div style={{ background: 'var(--c-primaryLight)', color: '#A32D2D', padding: '10px 12px', borderRadius: 8, fontSize: 12, marginBottom: 14 }}>{error}</div>}
+          {error && !insightsDisabled && <div style={{ background: 'var(--c-primaryLight)', color: 'var(--c-dangerText, #A32D2D)', padding: '10px 12px', borderRadius: 8, fontSize: 14, marginBottom: 14 }}>{error}</div>}
 
           {/* 4 KPI tiles */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 18 }}>
-            <KpiTile label="Sent"      value={totals.sent}      sub="—"                                    color="#1565C0" hint="Total messages sent in window" />
-            <KpiTile label="Delivered" value={totals.delivered} sub={`${pct(totals.delivered, totals.sent)}% of sent`} color="#7A5500" hint="Meta confirmed delivered to device" />
-            <KpiTile label="Read"      value={totals.read}      sub={`${pct(totals.read, totals.delivered)}% of delivered`} color="#0F6E56" hint="Recipient opened the message" />
-            <KpiTile label="Clicked"   value={totals.clicked}   sub={`${pct(totals.clicked, totals.read)}% of read`} color="#dc2626" hint="Recipient clicked any button" />
+            <KpiTile label="Sent"      value={totals.sent}      sub="—"                                    color="var(--c-infoText, #1565C0)" hint="Total messages sent in window" />
+            <KpiTile label="Delivered" value={totals.delivered} sub={`${pct(totals.delivered, totals.sent)}% of sent`} color="var(--c-s7a5500, #7A5500)" hint="Meta confirmed delivered to device" />
+            <KpiTile label="Read"      value={totals.read}      sub={`${pct(totals.read, totals.delivered)}% of delivered`} color="var(--c-successText, #0F6E56)" hint="Recipient opened the message" />
+            <KpiTile label="Clicked"   value={totals.clicked}   sub={`${pct(totals.clicked, totals.read)}% of read`} color="var(--c-primary, #dc2626)" hint="Recipient clicked any button" />
           </div>
 
           {/* Line chart */}
-          <div style={{ background: 'var(--c-hover)', border: '1px solid #EEEDE8', borderRadius: 10, padding: '12px 14px', marginBottom: 18 }}>
+          <div style={{ background: 'var(--c-hover)', border: '1px solid var(--c-borderSubtle, #EEEDE8)', borderRadius: 10, padding: '12px 14px', marginBottom: 18 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#333' }}>Daily trend</div>
-              <div style={{ display: 'flex', gap: 10, fontSize: 10, color: '#666' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--c-s333333, #333)' }}>Daily trend</div>
+              <div style={{ display: 'flex', gap: 10, fontSize: 12, color: 'var(--c-t4, #666)' }}>
                 {Object.entries(metricColors).map(([k, c]) => (
                   <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                     <span style={{ width: 9, height: 9, background: c, borderRadius: 2 }} /> {k}
@@ -1293,7 +1296,7 @@ function AnalyticsDrawer({ templateId, templateName, onClose }) {
               </div>
             </div>
             {series.length === 0 ? (
-              <div style={{ padding: 24, textAlign: 'center', color: '#888', fontSize: 12 }}>
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--c-t6, #888)', fontSize: 14 }}>
                 No data in this window. Click "Refresh from Meta" to fetch fresh stats — analytics may take 24h to appear after first send.
               </div>
             ) : (
@@ -1304,13 +1307,13 @@ function AnalyticsDrawer({ templateId, templateName, onClose }) {
                   return (
                     <g key={f}>
                       <line x1={pad.l} y1={y} x2={chartW - pad.r} y2={y} stroke="#E5E5E0" strokeDasharray="2 3" />
-                      <text x={pad.l - 6} y={y + 3} textAnchor="end" fontSize="9" fill="#999" fontFamily="DM Mono, monospace">{Math.round(f * maxY)}</text>
+                      <text x={pad.l - 6} y={y + 3} textAnchor="end" fontSize="11" fill="var(--c-t7, #999)" fontFamily="DM Mono, monospace">{Math.round(f * maxY)}</text>
                     </g>
                   );
                 })}
                 {/* X axis ticks (first/middle/last) */}
                 {series.length > 1 && [0, Math.floor(series.length / 2), series.length - 1].map(i => (
-                  <text key={i} x={xAt(i)} y={chartH - pad.b + 14} textAnchor="middle" fontSize="9" fill="#999" fontFamily="DM Mono, monospace">
+                  <text key={i} x={xAt(i)} y={chartH - pad.b + 14} textAnchor="middle" fontSize="11" fill="var(--c-t7, #999)" fontFamily="DM Mono, monospace">
                     {series[i].day.slice(5)}
                   </text>
                 ))}
@@ -1331,13 +1334,13 @@ function AnalyticsDrawer({ templateId, templateName, onClose }) {
                 {/* Hover tooltip */}
                 {hover !== null && series[hover] && (
                   <g>
-                    <line x1={xAt(hover)} x2={xAt(hover)} y1={pad.t} y2={chartH - pad.b} stroke="#999" strokeDasharray="2 2" />
+                    <line x1={xAt(hover)} x2={xAt(hover)} y1={pad.t} y2={chartH - pad.b} stroke="var(--c-t7, #999)" strokeDasharray="2 2" />
                   </g>
                 )}
               </svg>
             )}
             {hover !== null && series[hover] && (
-              <div style={{ fontSize: 11, color: '#333', marginTop: 4, padding: '6px 10px', background: 'var(--c-cardBg)', border: '1px solid var(--c-border)', borderRadius: 6, fontFamily: 'DM Mono, monospace' }}>
+              <div style={{ fontSize: 13, color: 'var(--c-s333333, #333)', marginTop: 4, padding: '6px 10px', background: 'var(--c-cardBg)', border: '1px solid var(--c-border)', borderRadius: 6, fontFamily: 'DM Mono, monospace' }}>
                 {series[hover].day} · sent {series[hover].sent} · delivered {series[hover].delivered} · read {series[hover].read} · clicked {series[hover].clicked}
               </div>
             )}
@@ -1346,22 +1349,22 @@ function AnalyticsDrawer({ templateId, templateName, onClose }) {
           {/* Per-button click breakdown */}
           {data?.buttonBreakdown?.length > 0 && (
             <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#333', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--c-s333333, #333)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <MousePointerClick size={13} /> Button clicks ({days}d)
               </div>
-              <div style={{ background: 'var(--c-hover)', border: '1px solid #EEEDE8', borderRadius: 10, overflow: 'hidden' }}>
+              <div style={{ background: 'var(--c-hover)', border: '1px solid var(--c-borderSubtle, #EEEDE8)', borderRadius: 10, overflow: 'hidden' }}>
                 {data.buttonBreakdown.map((b, i) => {
                   const max = data.buttonBreakdown[0].count;
                   const bar = max > 0 ? (b.count / max) * 100 : 0;
                   return (
-                    <div key={i} style={{ padding: '8px 12px', borderBottom: i < data.buttonBreakdown.length - 1 ? '1px solid #EEEDE8' : 'none', position: 'relative' }}>
-                      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${bar}%`, background: '#FDF6F6' }} />
+                    <div key={i} style={{ padding: '8px 12px', borderBottom: i < data.buttonBreakdown.length - 1 ? '1px solid var(--c-borderSubtle, #EEEDE8)' : 'none', position: 'relative' }}>
+                      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${bar}%`, background: 'var(--c-dangerBgSoft, #FDF6F6)' }} />
                       <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
-                          <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 4, background: 'var(--c-cardBg)', border: '1px solid var(--c-border)', fontFamily: 'DM Mono, monospace', marginRight: 8 }}>{b.type}</span>
-                          <span style={{ fontSize: 12, color: '#333' }}>{b.button_content || '—'}</span>
+                          <span style={{ fontSize: 13, padding: '1px 6px', borderRadius: 4, background: 'var(--c-cardBg)', border: '1px solid var(--c-border)', fontFamily: 'DM Mono, monospace', marginRight: 8 }}>{b.type}</span>
+                          <span style={{ fontSize: 14, color: 'var(--c-s333333, #333)' }}>{b.button_content || '—'}</span>
                         </div>
-                        <span style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 13, color: '#dc2626' }}>{b.count}</span>
+                        <span style={{ fontFamily: 'DM Mono, monospace', fontWeight: 700, fontSize: 15, color: 'var(--c-primary, #dc2626)' }}>{b.count}</span>
                       </div>
                     </div>
                   );
@@ -1371,7 +1374,7 @@ function AnalyticsDrawer({ templateId, templateName, onClose }) {
           )}
 
           {data?.lastFetchedAt && (
-            <div style={{ fontSize: 10, color: 'var(--c-textMuted)', marginTop: 14, textAlign: 'right' }}>
+            <div style={{ fontSize: 12, color: 'var(--c-textMuted)', marginTop: 14, textAlign: 'right' }}>
               Last refreshed: {new Date(data.lastFetchedAt).toLocaleString('en-IN')}
             </div>
           )}
@@ -1383,12 +1386,12 @@ function AnalyticsDrawer({ templateId, templateName, onClose }) {
 
 function KpiTile({ label, value, sub, color, hint }) {
   return (
-    <div title={hint} style={{ background: 'var(--c-cardBg)', border: '1px solid #EEEDE8', borderRadius: 10, padding: '12px 14px', boxShadow: C.shadowSm }}>
-      <div style={{ fontSize: 10, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '.06em', display: 'flex', alignItems: 'center', gap: 4 }}>
+    <div title={hint} style={{ background: 'var(--c-cardBg)', border: '1px solid var(--c-borderSubtle, #EEEDE8)', borderRadius: 10, padding: '12px 14px', boxShadow: C.shadowSm }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--c-t6, #888)', textTransform: 'uppercase', letterSpacing: '.06em', display: 'flex', alignItems: 'center', gap: 4 }}>
         {label} <Info size={10} style={{ opacity: 0.5 }} />
       </div>
-      <div style={{ fontSize: 22, fontWeight: 700, color, fontFamily: 'DM Mono, monospace', marginTop: 4 }}>{value.toLocaleString()}</div>
-      <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>{sub}</div>
+      <div style={{ fontSize: 24, fontWeight: 700, color, fontFamily: 'DM Mono, monospace', marginTop: 4 }}>{value.toLocaleString()}</div>
+      <div style={{ fontSize: 12, color: 'var(--c-t6, #888)', marginTop: 2 }}>{sub}</div>
     </div>
   );
 }
@@ -1437,10 +1440,10 @@ function RevisionHistoryDrawer({ templateId, templateName, currentStatus, onClos
   };
 
   const sourceLabel = {
-    manual_edit: { label: 'Edit',    color: '#0F6E56', bg: '#E4F3EE' },
-    restore:     { label: 'Restore', color: '#7A5500', bg: '#FFF8E1' },
-    meta_sync:   { label: 'Sync',    color: '#1565C0', bg: '#E3F2FD' },
-    initial:     { label: 'Initial', color: '#666',    bg: '#EEEDE8' },
+    manual_edit: { label: 'Edit',    color: 'var(--c-successText, #0F6E56)', bg: 'var(--c-successBgSoft, #E4F3EE)' },
+    restore:     { label: 'Restore', color: 'var(--c-s7a5500, #7A5500)', bg: 'var(--c-warnBgSoft, #FFF8E1)' },
+    meta_sync:   { label: 'Sync',    color: 'var(--c-infoText, #1565C0)', bg: 'var(--c-infoBg, #E3F2FD)' },
+    initial:     { label: 'Initial', color: 'var(--c-t4, #666)',    bg: 'var(--c-surfaceSubtle, #EEEDE8)' },
   };
 
   const fmtBytes = (obj) => {
@@ -1450,19 +1453,19 @@ function RevisionHistoryDrawer({ templateId, templateName, currentStatus, onClos
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 250, display: 'flex', justifyContent: 'flex-end' }}>
       <div onClick={e => e.stopPropagation()} style={{ width: 540, maxWidth: '92vw', height: '100%', background: 'var(--c-cardBg)', boxShadow: C.shadowLg, display: 'flex', flexDirection: 'column', fontFamily: FONT, overflow: 'hidden' }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #EEEDE8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--c-borderSubtle, #EEEDE8)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--c-text)' }}>Revision History</div>
-            <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{templateName}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--c-text)' }}>Revision History</div>
+            <div style={{ fontSize: 13, color: 'var(--c-t6, #888)', marginTop: 2 }}>{templateName}</div>
           </div>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#666' }}><X size={20} /></button>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--c-t4, #666)' }}><X size={20} /></button>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '14px 20px' }}>
-          {loading && <div style={{ padding: 40, textAlign: 'center', color: '#888', fontSize: 13 }}><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /></div>}
-          {error && <div style={{ background: 'var(--c-primaryLight)', color: '#A32D2D', padding: '10px 12px', borderRadius: 8, fontSize: 12 }}>{error}</div>}
+          {loading && <div style={{ padding: 40, textAlign: 'center', color: 'var(--c-t6, #888)', fontSize: 15 }}><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /></div>}
+          {error && <div style={{ background: 'var(--c-primaryLight)', color: 'var(--c-dangerText, #A32D2D)', padding: '10px 12px', borderRadius: 8, fontSize: 14 }}>{error}</div>}
           {!loading && revisions.length === 0 && (
-            <div style={{ padding: 40, textAlign: 'center', color: '#888', fontSize: 13 }}>
+            <div style={{ padding: 40, textAlign: 'center', color: 'var(--c-t6, #888)', fontSize: 15 }}>
               <Clock size={22} style={{ opacity: 0.4, marginBottom: 8 }} />
               <div>No revisions yet — edits will appear here.</div>
             </div>
@@ -1477,17 +1480,17 @@ function RevisionHistoryDrawer({ templateId, templateName, currentStatus, onClos
                 <div style={{ position: 'absolute', left: -6, top: 4, width: 10, height: 10, borderRadius: 99, background: s.color, border: '2px solid #fff', boxShadow: '0 0 0 1px #E5E5E0' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 4 }}>
                   <div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--c-text)' }}>{rev.change_summary || 'Snapshot'}</div>
-                    <div style={{ fontSize: 11, color: '#888', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--c-text)' }}>{rev.change_summary || 'Snapshot'}</div>
+                    <div style={{ fontSize: 13, color: 'var(--c-t6, #888)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Clock size={11} /> {new Date(rev.revised_at).toLocaleString('en-IN')}
                       {rev.revised_by && <><User size={11} style={{ marginLeft: 4 }} /> {rev.revised_by}</>}
-                      <span style={{ padding: '1px 7px', borderRadius: 99, background: s.bg, color: s.color, fontSize: 10, fontWeight: 700 }}>{s.label}</span>
+                      <span style={{ padding: '1px 7px', borderRadius: 99, background: s.bg, color: s.color, fontSize: 12, fontWeight: 700 }}>{s.label}</span>
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button
                       onClick={() => setExpanded({ ...expanded, [rev.id]: !isOpen })}
-                      style={{ ...iconBtnSmall, fontSize: 11, width: 'auto', padding: '0 10px', height: 26 }}
+                      style={{ ...iconBtnSmall, fontSize: 13, width: 'auto', padding: '0 10px', height: 26 }}
                       title="Show snapshot"
                     >
                       {isOpen ? 'Hide' : 'View'}
@@ -1496,7 +1499,7 @@ function RevisionHistoryDrawer({ templateId, templateName, currentStatus, onClos
                       <button
                         onClick={() => handleRestore(rev.id)}
                         disabled={restoring === rev.id}
-                        style={{ ...iconBtnSmall, fontSize: 11, width: 'auto', padding: '0 10px', height: 26, color: '#dc2626', borderColor: '#FCC' }}
+                        style={{ ...iconBtnSmall, fontSize: 13, width: 'auto', padding: '0 10px', height: 26, color: 'var(--c-primary, #dc2626)', borderColor: '#FCC' }}
                         title="Restore this version"
                       >
                         {restoring === rev.id
@@ -1507,26 +1510,26 @@ function RevisionHistoryDrawer({ templateId, templateName, currentStatus, onClos
                   </div>
                 </div>
                 {isOpen && (
-                  <div style={{ marginTop: 8, background: 'var(--c-hover)', border: '1px solid #EEEDE8', borderRadius: 8, padding: 12 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#666', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Body</div>
-                    <pre style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#333', whiteSpace: 'pre-wrap', margin: 0, marginBottom: 10 }}>{snap.body || '—'}</pre>
+                  <div style={{ marginTop: 8, background: 'var(--c-hover)', border: '1px solid var(--c-borderSubtle, #EEEDE8)', borderRadius: 8, padding: 12 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c-t4, #666)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Body</div>
+                    <pre style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: 'var(--c-s333333, #333)', whiteSpace: 'pre-wrap', margin: 0, marginBottom: 10 }}>{snap.body || '—'}</pre>
                     {snap.footer && (
                       <>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#666', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Footer</div>
-                        <pre style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#333', margin: 0, marginBottom: 10 }}>{snap.footer}</pre>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c-t4, #666)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Footer</div>
+                        <pre style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: 'var(--c-s333333, #333)', margin: 0, marginBottom: 10 }}>{snap.footer}</pre>
                       </>
                     )}
                     {Array.isArray(snap.buttons) && snap.buttons.length > 0 && (
                       <>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#666', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Buttons</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c-t4, #666)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Buttons</div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
                           {snap.buttons.map((b, bi) => (
-                            <span key={bi} style={{ padding: '2px 8px', background: 'var(--c-cardBg)', border: '1px solid var(--c-border)', borderRadius: 4, fontSize: 11, fontFamily: 'DM Mono, monospace' }}>{b.type}: {b.text}</span>
+                            <span key={bi} style={{ padding: '2px 8px', background: 'var(--c-cardBg)', border: '1px solid var(--c-border)', borderRadius: 4, fontSize: 13, fontFamily: 'DM Mono, monospace' }}>{b.type}: {b.text}</span>
                           ))}
                         </div>
                       </>
                     )}
-                    <div style={{ fontSize: 10, color: 'var(--c-textMuted)' }}>Category: <strong>{snap.category}</strong> · Status at the time: <strong>{snap.status}</strong></div>
+                    <div style={{ fontSize: 12, color: 'var(--c-textMuted)' }}>Category: <strong>{snap.category}</strong> · Status at the time: <strong>{snap.status}</strong></div>
                   </div>
                 )}
               </div>
@@ -1577,6 +1580,9 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
   const [submittedAt, setSubmittedAt] = useState(template?.submitted_at || '');
   const [showErrors, setShowErrors] = useState(false);
   const [showPayload, setShowPayload] = useState(false);
+  // Collapsed by default: the checklist used to make the preview column taller
+  // than the scrollport, which is precisely what stopped `sticky` holding.
+  const [checklistOpen, setChecklistOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -1763,36 +1769,70 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
   ].filter(([,,, show]) => show !== false);
 
   // Input styles
-  const inpStyle = { border: '1.5px solid #D5D5D0', borderRadius: 10, padding: '9px 14px', fontSize: 13, fontFamily: FONT, width: '100%', background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none', transition: 'border .15s' };
+  const inpStyle = { border: '1.5px solid var(--c-borderStrong, #D5D5D0)', borderRadius: 10, padding: '9px 14px', fontSize: 15, fontFamily: FONT, width: '100%', background: 'var(--c-cardBg)', color: 'var(--c-text)', outline: 'none', transition: 'border .15s' };
   const inpErrStyle = { ...inpStyle, borderColor: B.red };
   const selStyle = { ...inpStyle, cursor: 'pointer', appearance: 'none' };
   const taStyle = { ...inpStyle, resize: 'vertical', lineHeight: 1.65 };
   const taErrStyle = { ...taStyle, borderColor: B.red };
-  const btnPriStyle = { padding: '10px 22px', background: B.accent, color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' };
-  const btnGhostStyle = { padding: '7px 14px', background: 'var(--c-cardBg)', border: '1.5px solid #D5D5D0', borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, color: '#444', transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 5 };
-  const hdrTabStyle = { padding: '7px 14px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: '1.5px solid #D5D5D0', background: 'var(--c-cardBg)', color: '#444', transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 5, fontFamily: FONT };
-  const hdrTabOnStyle = { ...hdrTabStyle, background: '#111', color: '#fff', borderColor: 'var(--c-text)' };
+  const btnPriStyle = { padding: '10px 22px', background: B.accent, color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' };
+  const btnGhostStyle = { padding: '7px 14px', background: 'var(--c-cardBg)', border: '1.5px solid var(--c-borderStrong, #D5D5D0)', borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, color: 'var(--c-t3, #444)', transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 5 };
+  const hdrTabStyle = { padding: '7px 14px', borderRadius: 99, fontSize: 14, fontWeight: 600, cursor: 'pointer', border: '1.5px solid var(--c-borderStrong, #D5D5D0)', background: 'var(--c-cardBg)', color: 'var(--c-t3, #444)', transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 5, fontFamily: FONT };
+  const hdrTabOnStyle = { ...hdrTabStyle, background: 'var(--c-text)', color: 'var(--c-cardBg)', borderColor: 'var(--c-text)' };
   const catCardStyle = { border: '2px solid var(--c-border)', borderRadius: 12, padding: '14px 16px', cursor: 'pointer', background: 'var(--c-cardBg)', transition: 'all .18s', textAlign: 'left', width: '100%', fontFamily: FONT };
   const catCardOnStyle = { ...catCardStyle, borderColor: B.accent, background: B.accentBg };
 
+  // Full-height flex column: one compact header bar that never scrolls, then a
+  // row of [scrolling form | pinned preview]. Previously the whole page was one
+  // scroller with a `sticky` preview column — but that column also held the
+  // submission checklist, making it TALLER than the scrollport, and a sticky
+  // box taller than its scrollport necessarily scrolls. That is why the
+  // preview drifted no matter what `top` it was given.
   return (
-    <div style={{ fontFamily: FONT, background: B.bg, minHeight: '100%', padding: '24px 16px' }}>
-      <div>
+    <div style={{ fontFamily: FONT, background: B.bg, height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
 
-        {/* Header */}
-        <div style={{ marginBottom: 20, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <div>
-            <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-.03em', color: B.t1, margin: 0, fontFamily: FONT }}>Message Template Builder</h1>
-            <div style={{ fontSize: 12, color: B.t5, marginTop: 4, fontFamily: FONT }}>{readOnly ? 'Viewing template — read only' : 'Fill all required fields to submit for Meta approval.'}</div>
+        {/* Header — one compact row, pinned above both panes */}
+        <div style={{ flexShrink: 0, padding: '12px 16px', borderBottom: `1px solid ${B.cardBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            <h1 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-.02em', color: B.t1, margin: 0, fontFamily: FONT, whiteSpace: 'nowrap' }}>Message Template Builder</h1>
+            {/* The Standard/Carousel choice was two full-width cards eating
+                ~90px of vertical space above the fold. It is one segmented
+                control now — same two options, same handler. */}
+            {!isAuth && (
+              <div style={{ display: 'inline-flex', border: `1px solid ${B.cardBorder}`, borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
+                {[
+                  { key: 'STANDARD', label: 'Standard', title: 'Header + body + buttons' },
+                  { key: 'CAROUSEL', label: 'Carousel', title: '2–10 product cards with horizontal scroll' },
+                ].map(opt => {
+                  const on = templateType === opt.key;
+                  const locked = readOnly || (isEdit && status !== 'DRAFT' && status !== 'REJECTED');
+                  return (
+                    <button
+                      key={opt.key}
+                      title={opt.title}
+                      onClick={() => { if (!locked) { setTemplateType(opt.key); if (opt.key === 'CAROUSEL') { setHeaderType('NONE'); setFooter(''); setButtons([]); } } }}
+                      disabled={locked}
+                      style={{
+                        padding: '6px 14px', border: 'none', cursor: locked ? 'not-allowed' : 'pointer',
+                        background: on ? C.primary : 'var(--c-cardBg)',
+                        color: on ? '#fff' : B.t4,
+                        fontSize: 14, fontWeight: on ? 700 : 600, fontFamily: FONT,
+                        opacity: locked ? 0.6 : 1,
+                      }}
+                    >{opt.label}</button>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <button onClick={onBack} style={{ ...btnGhostStyle }}><ArrowLeft size={14} /> Back</button>
             <StatusBadge status={status} />
-            {status === 'REJECTED' && !readOnly && <button style={{ ...btnGhostStyle, fontSize: 12 }} onClick={() => setStatus('DRAFT')}>Reset to Draft</button>}
-            {showErrors && errCount > 0 && <span style={{ fontSize: 11, color: B.red, fontWeight: 600, fontFamily: FONT }}>⚠ {errCount} issue{errCount > 1 ? 's' : ''}</span>}
+            {status === 'REJECTED' && !readOnly && <button style={{ ...btnGhostStyle, fontSize: 14 }} onClick={() => setStatus('DRAFT')}>Reset to Draft</button>}
+            {showErrors && errCount > 0 && <span style={{ fontSize: 13, color: B.red, fontWeight: 600, fontFamily: FONT }}>⚠ {errCount} issue{errCount > 1 ? 's' : ''}</span>}
             {!readOnly && (
               <button
-                style={{ ...btnPriStyle, background: (canSubmit && !editQuotaExhausted) ? B.green : '#ccc' }}
+                style={{ ...btnPriStyle, background: (canSubmit && !editQuotaExhausted) ? B.green : 'var(--c-borderStrong, #ccc)' }}
                 onClick={isApprovedEdit ? () => handleSave('DRAFT') : handleSubmit}
                 disabled={saving || editQuotaExhausted}
                 title={
@@ -1842,29 +1882,29 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
           <div onClick={() => setTranslationOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
             <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, width: 440, padding: 22, boxShadow: C.shadowLg, fontFamily: FONT }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
-                <div style={{ fontSize: 16, fontWeight: 700 }}>Add translation for {template.name}</div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>Add translation for {template.name}</div>
                 <button onClick={() => setTranslationOpen(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}><X size={18} /></button>
               </div>
               <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: B.t4, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.05em' }}>Target language</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: B.t4, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.05em' }}>Target language</div>
                 <SearchableSelect
                   value={translationLang}
                   onChange={(val) => setTranslationLang(val)}
                   options={LANGUAGES.filter(l => l.code !== template.language).map(l => ({ value: l.code, label: l.label }))}
-                  triggerStyle={{ padding: '8px 12px', fontSize: 13 }}
+                  triggerStyle={{ padding: '8px 12px', fontSize: 15 }}
                 />
-                <div style={{ fontSize: 11, color: B.t6, marginTop: 6 }}>
+                <div style={{ fontSize: 13, color: B.t6, marginTop: 6 }}>
                   Creates a new DRAFT with the same content, grouped under the same template name. Edit the body to translate, then submit.
                 </div>
               </div>
               {translationResult && (
-                <div style={{ marginBottom: 12, padding: '8px 10px', borderRadius: 8, fontSize: 12, background: translationResult.ok ? B.greenBg : 'var(--c-primaryLight)', color: translationResult.ok ? B.green : B.red }}>
+                <div style={{ marginBottom: 12, padding: '8px 10px', borderRadius: 8, fontSize: 14, background: translationResult.ok ? B.greenBg : 'var(--c-primaryLight)', color: translationResult.ok ? B.green : B.red }}>
                   {translationResult.ok ? '✓ ' : '⚠ '}{translationResult.msg}
                 </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                 <button onClick={() => setTranslationOpen(false)} style={{ ...btnGhostStyle }}>Cancel</button>
-                <button onClick={handleAddTranslation} disabled={translationSaving} style={{ ...btnPriStyle, background: translationSaving ? '#ccc' : B.green }}>
+                <button onClick={handleAddTranslation} disabled={translationSaving} style={{ ...btnPriStyle, background: translationSaving ? 'var(--c-borderStrong, #ccc)' : B.green }}>
                   {translationSaving ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Plus size={13} />} Create
                 </button>
               </div>
@@ -1877,35 +1917,35 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
           <div onClick={() => setTestOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
             <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, width: 440, padding: 22, boxShadow: C.shadowLg, fontFamily: FONT }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
-                <div style={{ fontSize: 16, fontWeight: 700 }}>Test Send: {template.name}</div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>Test Send: {template.name}</div>
                 <button onClick={() => setTestOpen(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}><X size={18} /></button>
               </div>
               <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: B.t4, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.05em' }}>Recipient phone</div>
-                <input value={testTo} onChange={e => setTestTo(e.target.value)} placeholder="+919xxxxxxxxx" style={{ width: '100%', padding: '8px 12px', border: '1px solid #D5D5D0', borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', boxSizing: 'border-box' }} />
+                <div style={{ fontSize: 13, fontWeight: 700, color: B.t4, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.05em' }}>Recipient phone</div>
+                <input value={testTo} onChange={e => setTestTo(e.target.value)} placeholder="+919xxxxxxxxx" style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--c-borderStrong, #D5D5D0)', borderRadius: 8, fontSize: 15, fontFamily: FONT, outline: 'none', boxSizing: 'border-box' }} />
               </div>
               {bodyVars.length > 0 && (
                 <div style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: B.t4, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.05em' }}>Body variable values</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: B.t4, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.05em' }}>Body variable values</div>
                   {bodyVars.map(v => (
                     <input
                       key={v}
                       value={testSampleValues[v] || samples[v] || ''}
                       onChange={e => setTestSampleValues({ ...testSampleValues, [v]: e.target.value })}
                       placeholder={`{{${v}}}`}
-                      style={{ width: '100%', padding: '7px 12px', border: '1px solid #D5D5D0', borderRadius: 8, fontSize: 12, fontFamily: FONT, outline: 'none', marginTop: 4, boxSizing: 'border-box' }}
+                      style={{ width: '100%', padding: '7px 12px', border: '1px solid var(--c-borderStrong, #D5D5D0)', borderRadius: 8, fontSize: 14, fontFamily: FONT, outline: 'none', marginTop: 4, boxSizing: 'border-box' }}
                     />
                   ))}
                 </div>
               )}
               {testResult && (
-                <div style={{ marginBottom: 12, padding: '8px 10px', borderRadius: 8, fontSize: 12, background: testResult.ok ? B.greenBg : 'var(--c-primaryLight)', color: testResult.ok ? B.green : B.red }}>
+                <div style={{ marginBottom: 12, padding: '8px 10px', borderRadius: 8, fontSize: 14, background: testResult.ok ? B.greenBg : 'var(--c-primaryLight)', color: testResult.ok ? B.green : B.red }}>
                   {testResult.ok ? '✓ ' : '⚠ '}{testResult.msg}
                 </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                 <button onClick={() => setTestOpen(false)} style={{ ...btnGhostStyle }}>Close</button>
-                <button onClick={handleTestSend} disabled={testSending || !testTo.trim()} style={{ ...btnPriStyle, background: testSending || !testTo.trim() ? '#ccc' : B.green }}>
+                <button onClick={handleTestSend} disabled={testSending || !testTo.trim()} style={{ ...btnPriStyle, background: testSending || !testTo.trim() ? 'var(--c-borderStrong, #ccc)' : B.green }}>
                   {testSending ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={13} />} Send Test
                 </button>
               </div>
@@ -1913,9 +1953,15 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
           </div>
         )}
 
+
+        {/* Two panes. Only the left one scrolls; the right is pinned. */}
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 0 }}>
+
+          {/* LEFT — the only scrolling column */}
+          <div style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: 'auto', padding: '14px 16px 40px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {/* Approved-edit warning — appears when editing a live template */}
         {isApprovedEdit && !readOnly && (
-          <div style={{ background: editQuotaExhausted ? 'var(--c-primaryLight)' : '#FFF8E1', border: `1px solid ${editQuotaExhausted ? '#E48A8A' : '#FFD54F'}`, borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: editQuotaExhausted ? '#A32D2D' : '#7A5500', fontFamily: FONT, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ background: editQuotaExhausted ? 'var(--c-primaryLight)' : 'var(--c-warnBgSoft, #FFF8E1)', border: `1px solid ${editQuotaExhausted ? 'var(--c-se48a8a, #E48A8A)' : 'var(--c-sffd54f, #FFD54F)'}`, borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 14, color: editQuotaExhausted ? 'var(--c-dangerText, #A32D2D)' : 'var(--c-s7a5500, #7A5500)', fontFamily: FONT, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 280 }}>
               {editQuotaExhausted ? (
                 <>🚫 <strong>Edit limit reached.</strong> You've used {editsInLast24h} of {editLimit} edits in the last 24 hours. Next edit available at <strong>{nextEditAt ? new Date(nextEditAt).toLocaleString('en-IN') : '—'}</strong>.</>
@@ -1923,7 +1969,7 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
                 <>⚠ <strong>You're editing a live template.</strong> Saving sends the changes to Meta for re-review (status reverts to SUBMITTED until re-approval, usually within 24h). Name and language are locked.</>
               )}
             </div>
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, padding: '4px 10px', borderRadius: 99, background: 'var(--c-cardBg)', border: `1px solid ${editQuotaExhausted ? '#E48A8A' : '#FFD54F'}`, fontWeight: 700, whiteSpace: 'nowrap' }}>
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, padding: '4px 10px', borderRadius: 99, background: 'var(--c-cardBg)', border: `1px solid ${editQuotaExhausted ? 'var(--c-se48a8a, #E48A8A)' : 'var(--c-sffd54f, #FFD54F)'}`, fontWeight: 700, whiteSpace: 'nowrap' }}>
               {editsInLast24h}/{editLimit} edits used · {editsRemaining} left in 24h
             </div>
           </div>
@@ -1952,16 +1998,16 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
         {status === 'SUBMITTED' && templateId && (
           <div style={{ background: B.greenBg, border: `1px solid ${B.greenBright}44`, borderRadius: 10, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <span style={{ fontSize: 18 }}>🎉</span>
+              <span style={{ fontSize: 20 }}>🎉</span>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: B.green, fontFamily: FONT }}>Submitted to Meta for review</div>
-                <div style={{ fontSize: 11, color: B.green, opacity: 0.8, fontFamily: FONT }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: B.green, fontFamily: FONT }}>Submitted to Meta for review</div>
+                <div style={{ fontSize: 13, color: B.green, opacity: 0.8, fontFamily: FONT }}>
                   Meta ID: <span style={{ fontFamily: "'DM Mono', monospace" }}>{templateId}</span> · {submittedAt ? new Date(submittedAt).toLocaleString('en-IN') : ''} · Reviews within ~24 hrs · Auto-refreshes every 4h
                 </div>
               </div>
             </div>
             {!readOnly && (
-              <button style={{ ...btnGhostStyle, fontSize: 11, color: B.green, borderColor: B.greenBright + '44' }}
+              <button style={{ ...btnGhostStyle, fontSize: 13, color: B.green, borderColor: B.greenBright + '44' }}
                 onClick={async () => { try { await api.templates.sync(template.id); onSave?.({}); } catch (e) { notify(e.message); } }}>
                 Refresh from Meta
               </button>
@@ -1969,32 +2015,32 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
           </div>
         )}
         {status === 'APPROVED' && (
-          <div style={{ background: B.greenBg, border: `1px solid ${B.greenBright}44`, borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 13, fontWeight: 700, color: B.green, fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <div style={{ background: B.greenBg, border: `1px solid ${B.greenBright}44`, borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 15, fontWeight: 700, color: B.green, fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             <span><CheckCircle2 size={16} style={{ display: 'inline', marginRight: 6, verticalAlign: 'text-bottom' }} /> Template approved by Meta — live and usable.</span>
             {template?.quality_score && QUALITY_STYLES[template.quality_score] && (
-              <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 99, background: 'var(--c-cardBg)', color: QUALITY_STYLES[template.quality_score].color, fontWeight: 700 }}>
+              <span style={{ fontSize: 13, padding: '3px 10px', borderRadius: 99, background: 'var(--c-cardBg)', color: QUALITY_STYLES[template.quality_score].color, fontWeight: 700 }}>
                 {QUALITY_STYLES[template.quality_score].label}
               </span>
             )}
           </div>
         )}
         {status === 'PAUSED' && (
-          <div style={{ background: '#FFF3E0', border: '1px solid #FFB74D', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#E65100', fontFamily: FONT }}>⏸ Template paused by Meta</div>
-            <div style={{ fontSize: 11, color: '#E65100', marginTop: 4, opacity: 0.85, fontFamily: FONT }}>
+          <div style={{ background: 'var(--c-orangeBg, #FFF3E0)', border: '1px solid var(--c-orangeBorder, #FFB74D)', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--c-orangeText, #E65100)', fontFamily: FONT }}>⏸ Template paused by Meta</div>
+            <div style={{ fontSize: 13, color: 'var(--c-orangeText, #E65100)', marginTop: 4, opacity: 0.85, fontFamily: FONT }}>
               Quality score dropped — sends are blocked until quality recovers. Reduce send volume and improve recipient engagement, then click Refresh from Meta to re-check.
             </div>
           </div>
         )}
         {status === 'DISABLED' && (
-          <div style={{ background: '#EEEDE8', border: '1px solid #aaa', borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 13, fontWeight: 700, color: '#444', fontFamily: FONT }}>
+          <div style={{ background: 'var(--c-surfaceSubtle, #EEEDE8)', border: '1px solid #aaa', borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 15, fontWeight: 700, color: 'var(--c-t3, #444)', fontFamily: FONT }}>
             🚫 Template disabled by Meta — cannot be sent. Duplicate and resubmit with revised content.
           </div>
         )}
         {status === 'REJECTED' && (
           <div style={{ background: B.redBg, border: `1px solid ${B.red}44`, borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: B.red, fontFamily: FONT }}><XCircle size={16} style={{ display: 'inline', marginRight: 6, verticalAlign: 'text-bottom' }} /> Template rejected by Meta</div>
-            <div style={{ fontSize: 11, color: B.red, marginTop: 4, opacity: 0.85, fontFamily: FONT }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: B.red, fontFamily: FONT }}><XCircle size={16} style={{ display: 'inline', marginRight: 6, verticalAlign: 'text-bottom' }} /> Template rejected by Meta</div>
+            <div style={{ fontSize: 13, color: B.red, marginTop: 4, opacity: 0.85, fontFamily: FONT }}>
               {template?.rejection_reason
                 ? <>Reason: <strong>{template.rejection_reason}</strong>. Address this then click "Edit Draft" and resubmit.</>
                 : 'Review the category and body text, then resubmit.'}
@@ -2003,42 +2049,10 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
         )}
         {/* Category auto-change banner */}
         {template?.previous_category && template.previous_category !== category && (
-          <div style={{ background: '#FFF3E0', border: '1px solid #FFB74D', borderRadius: 10, padding: '10px 16px', marginBottom: 16, fontSize: 12, color: '#E65100', fontFamily: FONT }}>
+          <div style={{ background: 'var(--c-orangeBg, #FFF3E0)', border: '1px solid var(--c-orangeBorder, #FFB74D)', borderRadius: 10, padding: '10px 16px', marginBottom: 16, fontSize: 14, color: 'var(--c-orangeText, #E65100)', fontFamily: FONT }}>
             ℹ Meta reclassified this template from <strong>{template.previous_category}</strong> → <strong>{category}</strong>.
           </div>
         )}
-
-        {/* Template type toggle — Standard vs Carousel */}
-        {!isAuth && (
-          <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-            {[
-              { key: 'STANDARD', label: 'Standard', desc: 'Header + body + buttons' },
-              { key: 'CAROUSEL', label: 'Carousel', desc: '2–10 product cards with horizontal scroll' },
-            ].map(opt => {
-              const on = templateType === opt.key;
-              return (
-                <button
-                  key={opt.key}
-                  onClick={() => { if (!readOnly) { setTemplateType(opt.key); if (opt.key === 'CAROUSEL') { setHeaderType('NONE'); setFooter(''); setButtons([]); } } }}
-                  disabled={readOnly || (isEdit && status !== 'DRAFT' && status !== 'REJECTED')}
-                  style={{
-                    flex: 1, padding: '10px 14px', borderRadius: 10, border: `2px solid ${on ? C.primary : B.cardBorder}`,
-                    background: on ? '#FDF6F6' : 'var(--c-cardBg)', cursor: 'pointer', textAlign: 'left', fontFamily: FONT,
-                  }}
-                >
-                  <div style={{ fontSize: 13, fontWeight: 700, color: on ? B.accentDark : B.t2 }}>{opt.label}</div>
-                  <div style={{ fontSize: 11, color: B.t5, marginTop: 2 }}>{opt.desc}</div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Two-column layout */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16, alignItems: 'start' }}>
-
-          {/* LEFT */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
             {/* 1 — Basic Info */}
             <Sec n={1} title="Basic Information">
@@ -2057,7 +2071,7 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
                     triggerStyle={{ padding: '9px 14px', borderRadius: 10 }}
                   />
                 ) : (
-                  <div style={{ padding: '8px 12px', background: '#FFF3E0', border: `1px solid #E65100`, borderRadius: 8, fontSize: 12, color: '#E65100', fontFamily: FONT }}>
+                  <div style={{ padding: '8px 12px', background: 'var(--c-orangeBg, #FFF3E0)', border: `1px solid #E65100`, borderRadius: 8, fontSize: 14, color: 'var(--c-orangeText, #E65100)', fontFamily: FONT }}>
                     No WhatsApp accounts configured yet. Add one in Settings → WhatsApp Accounts.
                   </div>
                 )}
@@ -2091,13 +2105,13 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
                   return (
                     <button key={cat.id} style={on ? catCardOnStyle : catCardStyle} onClick={() => !readOnly && handleCategoryChange(cat.id)} disabled={readOnly}>
                       <div style={{ marginBottom: 7 }}><Icon size={22} color={on ? cat.color : B.t4} /></div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: on ? B.accentDark : B.t1, marginBottom: 3, fontFamily: FONT }}>{cat.label}</div>
-                      <div style={{ fontSize: 11, color: on ? '#6055cc' : B.t6, lineHeight: 1.45, fontFamily: FONT }}>{cat.desc}</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: on ? B.accentDark : B.t1, marginBottom: 3, fontFamily: FONT }}>{cat.label}</div>
+                      <div style={{ fontSize: 13, color: on ? 'var(--c-s6055cc, #6055CC)' : B.t6, lineHeight: 1.45, fontFamily: FONT }}>{cat.desc}</div>
                     </button>
                   );
                 })}
               </div>
-              {isAuth && <div style={{ marginTop: 10, padding: '10px 12px', background: B.greenBg, border: `1px solid ${B.greenBright}44`, borderRadius: 8, fontSize: 11, color: B.green, lineHeight: 1.6, fontFamily: FONT }}><Shield size={12} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }} /> <strong>Auth rules:</strong> No media headers · OTP buttons only · Footer = code expiry only</div>}
+              {isAuth && <div style={{ marginTop: 10, padding: '10px 12px', background: B.greenBg, border: `1px solid ${B.greenBright}44`, borderRadius: 8, fontSize: 13, color: B.green, lineHeight: 1.6, fontFamily: FONT }}><Shield size={12} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }} /> <strong>Auth rules:</strong> No media headers · OTP buttons only · Footer = code expiry only</div>}
               <div style={{ marginTop: 12 }}>
                 <Toggle on={allowCatChange} onChange={setAllowCatChange} label="Allow Meta to auto-correct category" desc="Prevents rejection if Meta disagrees — they'll fix it instead" />
               </div>
@@ -2124,13 +2138,13 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
                   {showErrors && errors.headerVars && <Hint error>{errors.headerVars}</Hint>}
                   {showErrors && errors.headerTextLen && <Hint error>{errors.headerTextLen}</Hint>}
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                    <Hint>Max 1 variable — <code style={{ background: B.accentBg, padding: '1px 5px', borderRadius: 4, fontSize: 11, color: B.accentDark }}>{'{{1}}'}</code></Hint>
-                    <span style={{ fontSize: 11, color: B.t7, fontFamily: "'DM Mono', monospace" }}>{headerText.length}/60</span>
+                    <Hint>Max 1 variable — <code style={{ background: B.accentBg, padding: '1px 5px', borderRadius: 4, fontSize: 13, color: B.accentDark }}>{'{{1}}'}</code></Hint>
+                    <span style={{ fontSize: 13, color: B.t7, fontFamily: "'DM Mono', monospace" }}>{headerText.length}/60</span>
                   </div>
                   {hdrVars.length > 0 && (
                     <div style={{ marginTop: 10, padding: '10px 12px', background: B.sectionBg, border: `1px solid ${showErrors && errors.headerSamples ? B.red + '55' : B.sectionBorder}`, borderRadius: 8 }}>
-                      <Lbl required>Sample for <span style={{ fontFamily: "'DM Mono', monospace", background: B.accentBg, padding: '1px 5px', borderRadius: 4, fontSize: 11, color: B.accentDark }}>{`{{${hdrVars[0]}}}`}</span></Lbl>
-                      <input style={showErrors && errors.headerSamples ? inpErrStyle : { ...inpStyle, fontSize: 12, padding: '7px 12px' }} placeholder="Sample header value" value={samples[hdrVars[0]] || ''} onChange={e => setSamples({ ...samples, [hdrVars[0]]: e.target.value })} readOnly={readOnly} />
+                      <Lbl required>Sample for <span style={{ fontFamily: "'DM Mono', monospace", background: B.accentBg, padding: '1px 5px', borderRadius: 4, fontSize: 13, color: B.accentDark }}>{`{{${hdrVars[0]}}}`}</span></Lbl>
+                      <input style={showErrors && errors.headerSamples ? inpErrStyle : { ...inpStyle, fontSize: 14, padding: '7px 12px' }} placeholder="Sample header value" value={samples[hdrVars[0]] || ''} onChange={e => setSamples({ ...samples, [hdrVars[0]]: e.target.value })} readOnly={readOnly} />
                       {showErrors && errors.headerSamples && <Hint error>{errors.headerSamples}</Hint>}
                     </div>
                   )}
@@ -2175,7 +2189,7 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
                       triggerStyle={{ padding: '8px 12px', borderRadius: 8, borderColor: showErrors && errors.mediaHandle ? B.red + '55' : undefined }}
                     />
                     {headerMediaUploading && (
-                      <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: B.t6, fontFamily: FONT }}>
+                      <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: B.t6, fontFamily: FONT }}>
                         <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> Uploading to Meta…
                       </div>
                     )}
@@ -2201,7 +2215,7 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
                           />
                           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.25)' }}>
                             <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <Play size={16} color="#111" fill="#111" />
+                              <Play size={16} color="var(--c-t1, #111)" fill="var(--c-t1, #111)" />
                             </div>
                           </div>
                         </div>
@@ -2211,8 +2225,8 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
                             <FileText size={20} />
                           </div>
                           <div>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: B.t2, fontFamily: FONT }}>{libSourceName || headerMediaItems.find(m => String(m.id) === String(headerMediaLibraryId))?.name || 'Document'}</div>
-                            <div style={{ fontSize: 11, color: B.t6, fontFamily: FONT }}>Document • {headerMediaItems.find(m => String(m.id) === String(headerMediaLibraryId))?.mimeType || ''}</div>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: B.t2, fontFamily: FONT }}>{libSourceName || headerMediaItems.find(m => String(m.id) === String(headerMediaLibraryId))?.name || 'Document'}</div>
+                            <div style={{ fontSize: 13, color: B.t6, fontFamily: FONT }}>Document • {headerMediaItems.find(m => String(m.id) === String(headerMediaLibraryId))?.mimeType || ''}</div>
                           </div>
                         </div>
                       )}
@@ -2223,7 +2237,7 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
                     <Lbl>Meta File Handle</Lbl>
                     <input style={inpStyle} placeholder="Auto-filled when you select from library above" value={mediaHandle} onChange={e => { setMediaHandle(e.target.value); setLibSourceName(''); setHeaderMediaLibraryId(null); }} readOnly={readOnly} />
                     {libSourceName && (
-                      <div style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 12, background: B.accentBg, color: B.accentDark, fontSize: 11, fontWeight: 600, fontFamily: FONT }}>
+                      <div style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 12, background: B.accentBg, color: B.accentDark, fontSize: 13, fontWeight: 600, fontFamily: FONT }}>
                         <Library size={11} /> From library: {libSourceName}
                       </div>
                     )}
@@ -2231,7 +2245,7 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
                   </div>
                 </div>
               )}
-              {headerType === 'NONE' && <div style={{ fontSize: 12, color: B.t6, fontFamily: FONT }}>No header will be shown in the message.</div>}
+              {headerType === 'NONE' && <div style={{ fontSize: 14, color: B.t6, fontFamily: FONT }}>No header will be shown in the message.</div>}
             </Sec>
             )}
 
@@ -2240,7 +2254,7 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <div style={{ display: 'flex', gap: 5 }}>
                   {[['*', 'B', { fontWeight: 700 }], ['_', 'I', { fontStyle: 'italic' }], ['~', 'S', { textDecoration: 'line-through' }]].map(([w, l, s]) => (
-                    <button key={w} style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #D5D5D0', borderRadius: 8, background: 'var(--c-cardBg)', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#444', fontFamily: FONT, transition: 'all .15s', ...s }} onClick={() => !readOnly && wrapFmt(w)} disabled={readOnly}>{l}</button>
+                    <button key={w} style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid var(--c-borderStrong, #D5D5D0)', borderRadius: 8, background: 'var(--c-cardBg)', cursor: 'pointer', fontSize: 14, fontWeight: 700, color: 'var(--c-t3, #444)', fontFamily: FONT, transition: 'all .15s', ...s }} onClick={() => !readOnly && wrapFmt(w)} disabled={readOnly}>{l}</button>
                   ))}
                 </div>
                 {!readOnly && (
@@ -2254,7 +2268,7 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
                 value={body} onChange={e => setBody(e.target.value)} maxLength={1024} readOnly={readOnly} />
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
                 {showErrors && errors.body ? <Hint error>{errors.body}</Hint> : <Hint>*bold* · _italic_ · ~strikethrough~ · {'{{1}}'} variables</Hint>}
-                <span style={{ fontSize: 11, color: B.t7, fontFamily: "'DM Mono', monospace", flexShrink: 0, marginLeft: 8 }}>{body.length}/1024</span>
+                <span style={{ fontSize: 13, color: B.t7, fontFamily: "'DM Mono', monospace", flexShrink: 0, marginLeft: 8 }}>{body.length}/1024</span>
               </div>
 
               {/* Auth add-ons */}
@@ -2268,7 +2282,7 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
                     {codeExpiry !== '' && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                         <input style={showErrors && errors.codeExpiry ? { ...inpStyle, width: 70, textAlign: 'center', fontFamily: "'DM Mono', monospace" } : { ...inpStyle, width: 70, textAlign: 'center', fontFamily: "'DM Mono', monospace" }} type="number" min="1" max="90" value={codeExpiry} onChange={e => setCodeExpiry(e.target.value)} readOnly={readOnly} />
-                        <span style={{ fontSize: 12, color: B.t5, whiteSpace: 'nowrap', fontFamily: FONT }}>mins (1–90)</span>
+                        <span style={{ fontSize: 14, color: B.t5, whiteSpace: 'nowrap', fontFamily: FONT }}>mins (1–90)</span>
                       </div>
                     )}
                     {showErrors && errors.codeExpiry && <Hint error>{errors.codeExpiry}</Hint>}
@@ -2279,14 +2293,14 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
               {/* Samples */}
               {bodyVars.length > 0 && (
                 <div style={{ marginTop: 14, padding: '12px 14px', background: B.sectionBg, border: `1px solid ${showErrors && errors.bodySamples ? B.red + '55' : B.sectionBorder}`, borderRadius: 10 }}>
-                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: '#888', fontWeight: 700, marginBottom: 6, fontFamily: FONT }}>Sample Values for Variables</div>
-                  <div style={{ fontSize: 11, color: B.t6, marginBottom: 10, fontFamily: FONT }}>Required by Meta — realistic examples for each placeholder.</div>
+                  <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--c-t6, #888)', fontWeight: 700, marginBottom: 6, fontFamily: FONT }}>Sample Values for Variables</div>
+                  <div style={{ fontSize: 13, color: B.t6, marginBottom: 10, fontFamily: FONT }}>Required by Meta — realistic examples for each placeholder.</div>
                   {showErrors && errors.bodySamples && <Hint error style={{ marginBottom: 8 }}>{errors.bodySamples}</Hint>}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                     {bodyVars.map(v => (
                       <div key={v}>
-                        <Lbl required><span style={{ fontFamily: "'DM Mono', monospace", background: B.accentBg, padding: '1px 6px', borderRadius: 4, fontSize: 11, color: B.accentDark }}>{`{{${v}}}`}</span></Lbl>
-                        <input style={showErrors && !samples[v]?.trim() ? inpErrStyle : { ...inpStyle, fontSize: 12, padding: '7px 12px' }} placeholder={`Sample for {{${v}}}`} value={samples[v] || ''} onChange={e => setSamples({ ...samples, [v]: e.target.value })} readOnly={readOnly} />
+                        <Lbl required><span style={{ fontFamily: "'DM Mono', monospace", background: B.accentBg, padding: '1px 6px', borderRadius: 4, fontSize: 13, color: B.accentDark }}>{`{{${v}}}`}</span></Lbl>
+                        <input style={showErrors && !samples[v]?.trim() ? inpErrStyle : { ...inpStyle, fontSize: 14, padding: '7px 12px' }} placeholder={`Sample for {{${v}}}`} value={samples[v] || ''} onChange={e => setSamples({ ...samples, [v]: e.target.value })} readOnly={readOnly} />
                       </div>
                     ))}
                   </div>
@@ -2303,7 +2317,7 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
                 {showErrors && errors.footerLen && <Hint error>{errors.footerLen}</Hint>}
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
                   <Hint>Small grey text · No variables allowed</Hint>
-                  <span style={{ fontSize: 11, color: B.t7, fontFamily: "'DM Mono', monospace" }}>{footer.length}/60</span>
+                  <span style={{ fontSize: 13, color: B.t7, fontFamily: "'DM Mono', monospace" }}>{footer.length}/60</span>
                 </div>
               </Sec>
             )}
@@ -2331,81 +2345,21 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
             {/* 7 — Submit / Save */}
             {!readOnly && (
               <div style={{ background: B.card, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: '16px 18px' }}>
-                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: '#888', fontWeight: 700, marginBottom: 14, fontFamily: FONT }}>Submit for Meta Approval</div>
+                <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--c-t6, #888)', fontWeight: 700, marginBottom: 14, fontFamily: FONT }}>Submit for Meta Approval</div>
                 {showErrors && errCount > 0 && (
                   <div style={{ background: B.redBg, border: `1px solid ${B.red}33`, borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: B.red, marginBottom: 8, fontFamily: FONT }}>⚠ {errCount} issue{errCount > 1 ? 's' : ''} to fix before submitting:</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: B.red, marginBottom: 8, fontFamily: FONT }}>⚠ {errCount} issue{errCount > 1 ? 's' : ''} to fix before submitting:</div>
                     {Object.entries(errors).map(([k, msg]) => (
                       <div key={k} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '4px 0', borderBottom: `1px solid ${B.red}22` }}>
                         <span style={{ color: B.red, flexShrink: 0 }}>·</span>
-                        <span style={{ fontSize: 12, color: B.red, fontFamily: FONT }}>{msg}</span>
+                        <span style={{ fontSize: 14, color: B.red, fontFamily: FONT }}>{msg}</span>
                       </div>
                     ))}
                   </div>
                 )}
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button style={{ ...btnPriStyle, background: canSubmit ? B.green : '#ccc', flex: 1, justifyContent: 'center', fontSize: 14, padding: 12 }} onClick={handleSubmit} disabled={saving}>
-                    {saving ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={16} />} Submit for Approval
-                  </button>
-                  <button style={{ ...btnGhostStyle }} onClick={() => { setShowPayload(p => !p); setShowErrors(true); }}>
-                    {showPayload ? 'Hide' : 'View'} API Payload
-                  </button>
-                </div>
-                {!canSubmit && <div style={{ marginTop: 8, fontSize: 11, color: B.t6, textAlign: 'center', fontFamily: FONT }}>Fix the issues above to enable submission</div>}
-              </div>
-            )}
-
-            {/* API Payload */}
-            {showPayload && (
-              <div style={{ background: B.card, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: '16px 18px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                  <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: '#888', fontWeight: 700, fontFamily: FONT }}>API Payload</div>
-                  <button style={{ ...btnGhostStyle, fontSize: 11, gap: 5 }} onClick={copyPayload}>
-                    {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Copied!' : 'Copy JSON'}
-                  </button>
-                </div>
-                <div style={{ marginBottom: 8, fontSize: 11, color: B.t5, fontFamily: "'DM Mono', monospace", background: B.sectionBg, padding: '6px 10px', borderRadius: 6 }}>
-                  POST https://graph.facebook.com/v20.0/<strong style={{ color: B.accent }}>{'{WABA_ID}'}</strong>/message_templates
-                </div>
-                <div style={{ background: '#1A1A2E', borderRadius: 10, padding: '14px 16px', overflow: 'auto', fontFamily: "'DM Mono', monospace", fontSize: 11, color: '#E8E8F0', lineHeight: 1.7, maxHeight: 320 }}>
-                  <pre style={{ margin: 0 }}>{JSON.stringify(payload, null, 2)}</pre>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* RIGHT */}
-          <div style={{ position: 'sticky', top: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: '#888', fontWeight: 700, fontFamily: FONT }}>Live Preview</span>
-              <span style={{ fontSize: 11, color: B.t7, fontStyle: 'italic', fontFamily: FONT }}>Updates as you type</span>
-            </div>
-            <WaPreview headerType={headerType} headerText={previewHeader} bodyText={previewBody} footerText={footer} buttons={buttons} securityRec={securityRec} codeExpiry={codeExpiry} headerMediaLibraryId={headerMediaLibraryId} templateType={templateType} carouselCards={carouselCards} />
-
-            {/* Checklist */}
-            <div style={{ background: B.card, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: '14px 16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: '#888', fontWeight: 700, fontFamily: FONT }}>Submission Checklist</div>
-                {errCount === 0
-                  ? <span style={{ fontSize: 10, fontWeight: 700, color: B.green, background: B.greenBg, padding: '2px 8px', borderRadius: 99, fontFamily: FONT }}>✓ Ready</span>
-                  : <span style={{ fontSize: 10, fontWeight: 700, color: B.red, background: B.redBg, padding: '2px 8px', borderRadius: 99, fontFamily: FONT }}>{errCount} issues</span>
-                }
-              </div>
-              {checklist.map(([key, label, ok]) => (
-                <div key={key} style={{ borderBottom: `1px solid ${B.rowSep}`, paddingBottom: 6, marginBottom: 6 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 18, height: 18, borderRadius: 99, background: ok ? B.greenBg : B.redBg, border: `1.5px solid ${ok ? B.greenBright : B.red}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <span style={{ fontSize: 10, color: ok ? B.green : B.red, fontWeight: 700 }}>{ok ? '✓' : '!'}</span>
-                    </div>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: ok ? B.t3 : B.red, fontFamily: FONT }}>{label}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
             {/* Spec */}
             <div style={{ background: B.card, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: '14px 16px' }}>
-              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: '#888', fontWeight: 700, marginBottom: 10, fontFamily: FONT }}>Template Spec</div>
+              <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--c-t6, #888)', fontWeight: 700, marginBottom: 10, fontFamily: FONT }}>Template Spec</div>
               {[
                 ['Name', name || '—', true],
                 ['Category', CATEGORIES.find(c => c.id === category)?.label || '—', false],
@@ -2418,13 +2372,84 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
               ].map(([label, val, mono]) => (
                 <div key={label} style={{ borderBottom: `1px solid ${B.rowSep}`, paddingBottom: 6, marginBottom: 6 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: B.t6, flexShrink: 0, fontFamily: FONT }}>{label}</span>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: B.t2, fontFamily: mono ? "'DM Mono', monospace" : FONT, textAlign: 'right', wordBreak: 'break-all', maxWidth: '62%' }}>{val}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: B.t6, flexShrink: 0, fontFamily: FONT }}>{label}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: B.t2, fontFamily: mono ? "'DM Mono', monospace" : FONT, textAlign: 'right', wordBreak: 'break-all', maxWidth: '62%' }}>{val}</span>
                   </div>
                 </div>
               ))}
             </div>
+
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button style={{ ...btnPriStyle, background: canSubmit ? B.green : 'var(--c-borderStrong, #ccc)', flex: 1, justifyContent: 'center', fontSize: 15, padding: 12 }} onClick={handleSubmit} disabled={saving}>
+                    {saving ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={16} />} Submit for Approval
+                  </button>
+                  <button style={{ ...btnGhostStyle }} onClick={() => { setShowPayload(p => !p); setShowErrors(true); }}>
+                    {showPayload ? 'Hide' : 'View'} API Payload
+                  </button>
+                </div>
+                {!canSubmit && <div style={{ marginTop: 8, fontSize: 13, color: B.t6, textAlign: 'center', fontFamily: FONT }}>Fix the issues above to enable submission</div>}
+              </div>
+            )}
+
+            {/* API Payload */}
+            {showPayload && (
+              <div style={{ background: B.card, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: '16px 18px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--c-t6, #888)', fontWeight: 700, fontFamily: FONT }}>API Payload</div>
+                  <button style={{ ...btnGhostStyle, fontSize: 13, gap: 5 }} onClick={copyPayload}>
+                    {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Copied!' : 'Copy JSON'}
+                  </button>
+                </div>
+                <div style={{ marginBottom: 8, fontSize: 13, color: B.t5, fontFamily: "'DM Mono', monospace", background: B.sectionBg, padding: '6px 10px', borderRadius: 6 }}>
+                  POST https://graph.facebook.com/v20.0/<strong style={{ color: B.accent }}>{'{WABA_ID}'}</strong>/message_templates
+                </div>
+                <div style={{ background: '#1A1A2E', borderRadius: 10, padding: '14px 16px', overflow: 'auto', fontFamily: "'DM Mono', monospace", fontSize: 13, color: '#E8E8F0', lineHeight: 1.7, maxHeight: 320 }}>
+                  <pre style={{ margin: 0 }}>{JSON.stringify(payload, null, 2)}</pre>
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* RIGHT — pinned pane, full height, never scrolls. The phone takes
+              whatever the header and the checklist strip leave, so it is always
+              as tall as the window allows. */}
+          <aside style={{
+            flex: '0 0 360px', minHeight: 0, height: '100%',
+            borderLeft: `1px solid ${B.cardBorder}`, background: B.bg,
+            display: 'flex', flexDirection: 'column', gap: 10,
+            padding: '14px 16px 16px', boxSizing: 'border-box', overflow: 'hidden',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--c-t6, #888)', fontWeight: 700, fontFamily: FONT }}>Live Preview</span>
+              <span style={{ fontSize: 13, color: B.t7, fontStyle: 'italic', fontFamily: FONT }}>Updates as you type</span>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', justifyContent: 'center' }}>
+              <WaPreview headerType={headerType} headerText={previewHeader} bodyText={previewBody} footerText={footer} buttons={buttons} securityRec={securityRec} codeExpiry={codeExpiry} headerMediaLibraryId={headerMediaLibraryId} templateType={templateType} carouselCards={carouselCards} fill />
+            </div>
+
+            {/* Checklist — collapsed to its verdict by default so the phone
+                keeps the pane. Every row is still here on expand. */}
+            <div style={{ background: B.card, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: '10px 14px', flexShrink: 0, maxHeight: checklistOpen ? '46%' : undefined, overflowY: checklistOpen ? 'auto' : 'visible' }}>
+              <div onClick={() => setChecklistOpen(o => !o)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: checklistOpen ? 12 : 0, cursor: 'pointer', userSelect: 'none' }}>
+                <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--c-t6, #888)', fontWeight: 700, fontFamily: FONT }}>Submission Checklist</div>
+                {errCount === 0
+                  ? <span style={{ fontSize: 12, fontWeight: 700, color: B.green, background: B.greenBg, padding: '2px 8px', borderRadius: 99, fontFamily: FONT }}>✓ Ready</span>
+                  : <span style={{ fontSize: 12, fontWeight: 700, color: B.red, background: B.redBg, padding: '2px 8px', borderRadius: 99, fontFamily: FONT }}>{errCount} issues</span>
+                }
+              </div>
+              {checklistOpen && checklist.map(([key, label, ok]) => (
+                <div key={key} style={{ borderBottom: `1px solid ${B.rowSep}`, paddingBottom: 6, marginBottom: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 18, height: 18, borderRadius: 99, background: ok ? B.greenBg : B.redBg, border: `1.5px solid ${ok ? B.greenBright : B.red}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <span style={{ fontSize: 12, color: ok ? B.green : B.red, fontWeight: 700 }}>{ok ? '✓' : '!'}</span>
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: ok ? B.t3 : B.red, fontFamily: FONT }}>{label}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+          </aside>
         </div>
       </div>
 
@@ -2496,10 +2521,10 @@ function TemplateLibraryPickerModal({ headerType, accountId, onClose, onPicked }
         }}
       >
         <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--c-border)', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Library size={20} color="#dc2626" />
+          <Library size={20} color="var(--c-primary, #dc2626)" />
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--c-text)' }}>Pick {targetType} from Media Library</div>
-            <div style={{ fontSize: 12, color: 'var(--c-textSecondary)', marginTop: 2 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--c-text)' }}>Pick {targetType} from Media Library</div>
+            <div style={{ fontSize: 14, color: 'var(--c-textSecondary)', marginTop: 2 }}>
               The selected file is uploaded to Meta's resumable upload API and the resulting handle is filled into your template header.
             </div>
           </div>
@@ -2508,14 +2533,14 @@ function TemplateLibraryPickerModal({ headerType, accountId, onClose, onPicked }
           </button>
         </div>
 
-        <div style={{ flex: 1, overflow: 'auto', padding: 16, background: '#FAFAF8' }}>
+        <div style={{ flex: 1, overflow: 'auto', padding: 16, background: 'var(--c-surfaceInner, #FAFAF8)' }}>
           {error && (
-            <div style={{ padding: 10, background: 'var(--c-primaryLight)', color: '#A32D2D', borderRadius: 6, fontSize: 13, marginBottom: 12 }}>{error}</div>
+            <div style={{ padding: 10, background: 'var(--c-primaryLight)', color: 'var(--c-dangerText, #A32D2D)', borderRadius: 6, fontSize: 15, marginBottom: 12 }}>{error}</div>
           )}
           {!media ? (
             <div style={{ padding: 40, textAlign: 'center', color: 'var(--c-textMuted)' }}>Loading…</div>
           ) : media.length === 0 ? (
-            <div style={{ padding: 40, textAlign: 'center', color: 'var(--c-textMuted)', fontSize: 13 }}>
+            <div style={{ padding: 40, textAlign: 'center', color: 'var(--c-textMuted)', fontSize: 15 }}>
               No {targetType}s in the library. Upload one from the Media tab first.
             </div>
           ) : (
@@ -2528,7 +2553,7 @@ function TemplateLibraryPickerModal({ headerType, accountId, onClose, onPicked }
                     onClick={() => setSelected(m)}
                     style={{
                       textAlign: 'left', padding: 0, background: 'var(--c-cardBg)', borderRadius: 10,
-                      border: `2px solid ${isSel ? '#dc2626' : '#E5E5E0'}`,
+                      border: `2px solid ${isSel ? '#dc2626' : 'var(--c-border, #E5E5E0)'}`,
                       cursor: 'pointer', overflow: 'hidden', fontFamily: FONT,
                     }}
                   >
@@ -2563,7 +2588,7 @@ function TemplateLibraryPickerModal({ headerType, accountId, onClose, onPicked }
                           </div>
                         </>
                       ) : (
-                        <Icon size={40} color={targetType === 'video' ? '#8B5CF6' : '#F59E0B'} />
+                        <Icon size={40} color={targetType === 'video' ? 'var(--c-s8b5cf6, #8B5CF6)' : '#F59E0B'} />
                       )}
                       {isSel && (
                         <div style={{ position: 'absolute', top: 6, right: 6, background: '#dc2626', color: '#fff', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -2572,8 +2597,8 @@ function TemplateLibraryPickerModal({ headerType, accountId, onClose, onPicked }
                       )}
                     </div>
                     <div style={{ padding: 8 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--c-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name || m.originalName}</div>
-                      <div style={{ fontSize: 10, color: 'var(--c-textSecondary)', marginTop: 2 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--c-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name || m.originalName}</div>
+                      <div style={{ fontSize: 12, color: 'var(--c-textSecondary)', marginTop: 2 }}>
                         {(m.sizeBytes / 1024).toFixed(0)} KB · {m.mimeType}
                       </div>
                     </div>
@@ -2591,7 +2616,7 @@ function TemplateLibraryPickerModal({ headerType, accountId, onClose, onPicked }
             style={{
               padding: '9px 14px', borderRadius: 8, border: '1px solid var(--c-border)',
               background: 'var(--c-cardBg)', color: 'var(--c-text)', cursor: 'pointer',
-              fontSize: 13, fontWeight: 600, fontFamily: FONT,
+              fontSize: 15, fontWeight: 600, fontFamily: FONT,
             }}
           >Cancel</button>
           <button
@@ -2601,7 +2626,7 @@ function TemplateLibraryPickerModal({ headerType, accountId, onClose, onPicked }
               padding: '9px 18px', borderRadius: 8, border: 'none',
               background: !selected ? 'var(--c-hover)' : '#dc2626', color: '#fff',
               cursor: !selected || uploading ? 'not-allowed' : 'pointer',
-              fontSize: 13, fontWeight: 600, fontFamily: FONT,
+              fontSize: 15, fontWeight: 600, fontFamily: FONT,
               display: 'inline-flex', alignItems: 'center', gap: 6,
             }}
           >

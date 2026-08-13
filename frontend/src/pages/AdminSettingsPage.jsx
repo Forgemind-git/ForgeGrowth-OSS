@@ -8,7 +8,7 @@ import {
   Bot, Copy, Check, Plug, Calendar as CalendarIcon, FileSpreadsheet, Link2, Unplug,
   ChevronRight, ExternalLink, Sheet, Table2, Inbox, PlugZap, Terminal,
   IndianRupee, CreditCard, Link as LinkIcon, SlidersHorizontal,
-  ChevronDown, Wrench, ShieldAlert, Package, Download,
+  ChevronDown, Wrench, ShieldAlert, Package, Download, Shield,
 } from 'lucide-react';
 import { api } from '../api.js';
 import { C, FONT, MONO, maskPhone } from '../constants.js';
@@ -23,7 +23,6 @@ import EntityFieldsManager from '../components/EntityFieldsManager.jsx';
 
 const TABS = [
   { key: 'general', label: 'General', icon: Settings },
-  { key: 'team', label: 'Team members', icon: Users },
   { key: 'tags', label: 'Tags', icon: Tag },
   { key: 'category', label: 'Category', icon: FolderOpen },
   { key: 'fields', label: 'Fields', icon: LayoutList },
@@ -72,12 +71,12 @@ function PlaceholderTab({ label }) {
   return (
     <div style={{
       flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      color: C.textMuted, fontSize: 14, fontFamily: FONT,
+      color: C.textMuted, fontSize: 15, fontFamily: FONT,
     }}>
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 36, marginBottom: 12 }}>🚧</div>
         <div style={{ fontWeight: 600, color: C.text, marginBottom: 4 }}>{label}</div>
-        <div style={{ fontSize: 13 }}>This section is coming soon.</div>
+        <div style={{ fontSize: 15 }}>This section is coming soon.</div>
       </div>
     </div>
   );
@@ -107,12 +106,12 @@ function GeneralTab({ onLogout, user }) {
     <div style={{ flex: 1, padding: '32px 40px', overflowY: 'auto', fontFamily: FONT }}>
       <div style={{ maxWidth: '100%' }}>
         <div style={{ marginBottom: 28 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>General Settings</h1>
-          <p style={{ fontSize: 12, color: C.textMuted, margin: '4px 0 0', fontFamily: FONT }}>Manage your account preferences and settings</p>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>General Settings</h1>
+          <p style={{ fontSize: 14, color: C.textMuted, margin: '4px 0 0', fontFamily: FONT }}>Manage your account preferences and settings</p>
         </div>
 
         <div style={{ marginBottom: 32 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
             Appearance
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
@@ -125,7 +124,7 @@ function GeneralTab({ onLogout, user }) {
                   padding: '12px 16px', borderRadius: 10,
                   border: `1.5px solid ${isActive ? C.primary : C.border}`,
                   background: isActive ? C.primaryLight : 'var(--c-cardBg)',
-                  cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 600,
+                  cursor: 'pointer', fontFamily: FONT, fontSize: 15, fontWeight: 600,
                   color: isActive ? C.primary : C.text, transition: 'all .15s',
                 }}>
                   <Icon size={16} /> {t.label}
@@ -136,7 +135,7 @@ function GeneralTab({ onLogout, user }) {
         </div>
 
         <div style={{ marginBottom: 32 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
             Timezone
           </div>
           <SearchableSelect
@@ -145,19 +144,19 @@ function GeneralTab({ onLogout, user }) {
             options={TIMEZONES.map(tz => ({ value: tz, label: tz }))}
             searchPlaceholder="Search timezones…"
             style={{ width: '100%', maxWidth: 360 }}
-            triggerStyle={{ padding: '10px 32px 10px 12px', fontSize: 14 }}
+            triggerStyle={{ padding: '10px 32px 10px 12px', fontSize: 15 }}
           />
         </div>
 
         <div style={{ marginBottom: 32 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
             Account
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <button onClick={onLogout} style={{
               width: 'fit-content', display: 'flex', alignItems: 'center', gap: 8,
               padding: '10px 18px', borderRadius: 8, border: `1px solid ${C.border}`,
-              background: 'var(--c-cardBg)', cursor: 'pointer', fontFamily: FONT, fontSize: 13,
+              background: 'var(--c-cardBg)', cursor: 'pointer', fontFamily: FONT, fontSize: 15,
               fontWeight: 600, color: C.text,
             }}>
               <LogOut size={14} /> Sign out
@@ -168,21 +167,21 @@ function GeneralTab({ onLogout, user }) {
               <button onClick={handleDeleteClick} style={{
                 width: 'fit-content', display: 'flex', alignItems: 'center', gap: 8,
                 padding: '10px 18px', borderRadius: 8, border: '1.5px solid #fca5a5',
-                background: '#fef2f2', cursor: 'pointer', fontFamily: FONT, fontSize: 13,
+                background: 'var(--c-dangerBgSoft, #fef2f2)', cursor: 'pointer', fontFamily: FONT, fontSize: 15,
                 fontWeight: 600, color: C.primary,
               }}>
                 <Trash2 size={14} /> Delete account
               </button>
               {showDeleteInput && (
                 <div style={{ marginTop: 12, maxWidth: 360 }}>
-                  <div style={{ fontSize: 12, color: C.textSecondary, marginBottom: 8 }}>
+                  <div style={{ fontSize: 14, color: C.textSecondary, marginBottom: 8 }}>
                     Type <strong>"delete"</strong> below to confirm permanent account deletion.
                   </div>
                   <input autoFocus value={deleteConfirm} onChange={e => setDeleteConfirm(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleDeleteClick()}
                     placeholder="Type delete..." style={{
                       width: '100%', padding: '10px 12px', borderRadius: 8,
-                      border: `1px solid ${C.border}`, fontSize: 14, fontFamily: FONT,
+                      border: `1px solid ${C.border}`, fontSize: 15, fontFamily: FONT,
                       color: C.text, outline: 'none', boxSizing: 'border-box',
                     }} />
                 </div>
@@ -197,498 +196,30 @@ function GeneralTab({ onLogout, user }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Team Members                                                       */
+/*  (Team Members removed 2026-08-12 — a number is named in its own tab)  */
 /* ------------------------------------------------------------------ */
-function TeamMembersTab({ teamMembers, onRefresh }) {
-  const [showAdd, setShowAdd] = useState(false);
-  const [editingMember, setEditingMember] = useState(null);
-  const [form, setForm] = useState({ name: '', phone_number: '', bda_id: '', address: '', email: '', profile_picture_url: '' });
-  const [previewUrl, setPreviewUrl] = useState(null);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const [deleteModal, setDeleteModal] = useState({ open: false, id: null });
+function FieldsTab() {
+  // Which TABLE's columns are being managed. The contact_field_definitions CRUD
+  // that used to live here is gone with the rest of contacts-as-a-CRM-record.
+  const [section, setSection] = useState('lead:leads');
 
-  // Only manual team members are deletable — chat-derived members cannot be removed
-  const deletableMembers = teamMembers.filter(m => !m.is_chat_bda);
-  const sel = useTableSelection(deletableMembers);
-  const handleBulkDelete = async (ids) => {
-    await runBulkDelete(ids, (id) => api.teamMembers.delete(id), {
-      label: 'team member',
-      onSuccess: () => onRefresh(),
-    });
-  };
-
-  const openAdd = () => {
-    setEditingMember(null);
-    setForm({ name: '', phone_number: '', bda_id: '', address: '', email: '', profile_picture_url: '' });
-    setPreviewUrl(null);
-    setSelectedFile(null);
-    setShowAdd(true);
-  };
-
-  const openEdit = (member) => {
-    setEditingMember(member);
-    setForm({
-      name: member.name || '',
-      phone_number: member.phone_number || '',
-      bda_id: member.bda_id || '',
-      address: member.address || '',
-      email: member.email || '',
-      profile_picture_url: member.profile_picture_url || '',
-    });
-    setPreviewUrl(member.profile_picture_url || null);
-    setSelectedFile(null);
-    setShowAdd(true);
-  };
-
-  const openAddFromChat = (member) => {
-    // Pre-fill form from chat-derived team member but treat as new create
-    setEditingMember(null);
-    setForm({
-      name: member.name || '',
-      phone_number: member.phone_number || '',
-      bda_id: '',
-      address: '',
-      email: '',
-      profile_picture_url: '',
-    });
-    setPreviewUrl(null);
-    setSelectedFile(null);
-    setShowAdd(true);
-  };
-
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    if (!['image/jpeg', 'image/png'].includes(file.type)) {
-      notify('Only JPG and PNG files are allowed');
-      return;
-    }
-    setSelectedFile(file);
-    const reader = new FileReader();
-    reader.onload = (ev) => setPreviewUrl(ev.target.result);
-    reader.readAsDataURL(file);
-  };
-
-  const handleSave = async () => {
-    const trimmed = form.name.trim();
-    if (!trimmed) { notify('Name is required'); return; }
-    setUploading(true);
-    try {
-      let pictureUrl = form.profile_picture_url;
-      if (selectedFile) {
-        const uploadRes = await api.upload(selectedFile);
-        pictureUrl = uploadRes.url;
-      }
-      const payload = { ...form, profile_picture_url: pictureUrl };
-      if (editingMember) {
-        await api.teamMembers.update(editingMember.id, payload);
-      } else {
-        await api.teamMembers.create(payload);
-      }
-      onRefresh();
-      setShowAdd(false);
-      setEditingMember(null);
-      setForm({ name: '', phone_number: '', bda_id: '', address: '', email: '', profile_picture_url: '' });
-      setPreviewUrl(null);
-      setSelectedFile(null);
-    } catch (err) {
-      notify('Failed to save: ' + err.message);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleDeleteClick = (id) => {
-    setDeleteModal({ open: true, id });
-  };
-
-  const handleDeleteConfirm = async () => {
-    try {
-      await api.teamMembers.delete(deleteModal.id);
-      onRefresh();
-      setDeleteModal({ open: false, id: null });
-    } catch (err) {
-      notify('Failed to delete: ' + err.message);
-    }
-  };
-
-  const getInitials = (name) => {
-    if (!name) return '?';
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-  };
-
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{
-        padding: '20px 32px',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        borderBottom: `1px solid ${C.border}`,
-      }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>Team Members</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <BulkDeleteButton sel={sel} label="team member" onConfirm={handleBulkDelete} />
-          <button onClick={openAdd} style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '8px 14px', borderRadius: 8, border: 'none',
-            background: C.primary, color: '#fff', cursor: 'pointer',
-            fontFamily: FONT, fontSize: 13, fontWeight: 600,
-          }}>
-            <Plus size={14} /> Add Team Member
-          </button>
-        </div>
-      </div>
-
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 32px' }}>
-        {teamMembers.length === 0 ? (
-          <div style={{ textAlign: 'center', color: C.textMuted, fontSize: 14, marginTop: 60 }}>
-            No team members yet. Click "Add Team Member" to create one.
-          </div>
-        ) : (
-          <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT, fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: 'var(--c-hover)' }}>
-                  <th style={{ padding: '12px 16px', width: 40, borderBottom: `1px solid ${C.border}` }}><SelectAllCheckbox sel={sel} /></th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: C.textSecondary, borderBottom: `1px solid ${C.border}` }}>Team Member</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: C.textSecondary, borderBottom: `1px solid ${C.border}` }}>Phone</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: C.textSecondary, borderBottom: `1px solid ${C.border}` }}>Team Member ID</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: C.textSecondary, borderBottom: `1px solid ${C.border}` }}>Address</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: C.textSecondary, borderBottom: `1px solid ${C.border}` }}>Email</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, color: C.textSecondary, borderBottom: `1px solid ${C.border}` }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {teamMembers.map(member => {
-                  const isChatMember = member.is_chat_bda;
-                  const isSel = !isChatMember && sel.isSelected(member.id);
-                  return (
-                    <tr key={member.id} style={{ background: isSel ? '#FDF6F6' : 'var(--c-cardBg)', borderBottom: `1px solid ${C.border}` }}>
-                      <td style={{ padding: '12px 16px', width: 40 }}>
-                        {!isChatMember && <RowCheckbox sel={sel} id={member.id} label={member.name} />}
-                      </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div style={{
-                            width: 36, height: 36, borderRadius: '50%',
-                            background: member.profile_picture_url ? 'transparent' : (isChatMember ? '#9ca3af' : C.primary),
-                            color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 12, fontWeight: 700, flexShrink: 0,
-                            overflow: 'hidden',
-                          }}>
-                            {member.profile_picture_url ? (
-                              <img src={member.profile_picture_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            ) : (
-                              getInitials(member.name)
-                            )}
-                          </div>
-                          <div>
-                            <span style={{ fontWeight: 600, color: C.text }}>{member.name}</span>
-                            {isChatMember && (
-                              <span style={{
-                                display: 'inline-flex', marginLeft: 6,
-                                padding: '1px 5px', borderRadius: 4,
-                                background: 'var(--c-chatPanel)', color: C.textMuted,
-                                fontSize: 9, fontWeight: 700,
-                                textTransform: 'uppercase', letterSpacing: '0.04em',
-                              }}>Chat</span>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td style={{ padding: '12px 16px', color: C.textSecondary }}>
-                        {member.phone_number ? (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <Phone size={12} /> <MaskedNumber number={member.phone_number} />
-                          </span>
-                        ) : (
-                          <span style={{ color: C.textMuted }}>—</span>
-                        )}
-                      </td>
-                      <td style={{ padding: '12px 16px', color: C.textSecondary }}>
-                        {member.bda_id || <span style={{ color: C.textMuted }}>—</span>}
-                      </td>
-                      <td style={{ padding: '12px 16px', color: C.textSecondary, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {member.address || <span style={{ color: C.textMuted }}>—</span>}
-                      </td>
-                      <td style={{ padding: '12px 16px', color: C.textSecondary }}>
-                        {member.email ? (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <Mail size={12} /> {member.email}
-                          </span>
-                        ) : (
-                          <span style={{ color: C.textMuted }}>—</span>
-                        )}
-                      </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                        {!isChatMember && (
-                          <>
-                            <button onClick={() => openEdit(member)} style={{
-                              border: 'none', background: 'transparent', cursor: 'pointer',
-                              color: C.purple, fontSize: 12, fontWeight: 600, marginRight: 12,
-                            }}>Edit</button>
-                            <button onClick={() => handleDeleteClick(member.id)} style={{
-                              border: 'none', background: 'transparent', cursor: 'pointer',
-                              color: C.primary, fontSize: 12, fontWeight: 600,
-                            }}>Delete</button>
-                          </>
-                        )}
-                        {isChatMember && (
-                          <button onClick={() => openAddFromChat(member)} style={{
-                            border: 'none', background: 'transparent', cursor: 'pointer',
-                            color: C.purple, fontSize: 12, fontWeight: 600,
-                          }}>+ Add as Team Member</button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })},
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      <DeleteConfirmModal
-        open={deleteModal.open}
-        title="Delete Team Member"
-        message="Are you sure you want to remove this team member?"
-        onConfirm={handleDeleteConfirm}
-        onCancel={() => setDeleteModal({ open: false, id: null })}
-      />
-
-      {showAdd && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 200, fontFamily: FONT,
-        }}>
-          <div style={{
-            background: C.cardBg, borderRadius: 14,
-            padding: '24px 24px 20px', width: 460, maxHeight: '85vh',
-            boxShadow: C.shadowLg, overflowY: 'auto',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{editingMember ? 'Edit Team Member' : 'Add Team Member'}</div>
-              <button onClick={() => { setShowAdd(false); setEditingMember(null); }} style={{
-                border: 'none', background: 'transparent', cursor: 'pointer', color: C.textMuted,
-              }}><X size={18} /></button>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Full Name *</label>
-                <input autoFocus value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Rahul Sharma"
-                  onKeyDown={e => e.key === 'Enter' && handleSave()}
-                  style={{
-                    width: '100%', padding: '10px 12px', borderRadius: 8,
-                    border: `1px solid ${C.border}`, fontSize: 14, fontFamily: FONT,
-                    color: C.text, outline: 'none', boxSizing: 'border-box',
-                  }} />
-              </div>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Phone Number</label>
-                  <input value={form.phone_number} onChange={e => setForm({ ...form, phone_number: e.target.value })} placeholder="+91 98765 43210"
-                    style={{
-                      width: '100%', padding: '10px 12px', borderRadius: 8,
-                      border: `1px solid ${C.border}`, fontSize: 14, fontFamily: FONT,
-                      color: C.text, outline: 'none', boxSizing: 'border-box',
-                    }} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Team Member ID</label>
-                  <input value={form.bda_id} onChange={e => setForm({ ...form, bda_id: e.target.value })} placeholder="e.g. TM-001"
-                    style={{
-                      width: '100%', padding: '10px 12px', borderRadius: 8,
-                      border: `1px solid ${C.border}`, fontSize: 14, fontFamily: FONT,
-                      color: C.text, outline: 'none', boxSizing: 'border-box',
-                    }} />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Email Address</label>
-                <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="rahul@example.com" type="email"
-                  style={{
-                    width: '100%', padding: '10px 12px', borderRadius: 8,
-                    border: `1px solid ${C.border}`, fontSize: 14, fontFamily: FONT,
-                    color: C.text, outline: 'none', boxSizing: 'border-box',
-                  }} />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Address</label>
-                <textarea value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Full address..."
-                  rows={2}
-                  style={{
-                    width: '100%', padding: '10px 12px', borderRadius: 8,
-                    border: `1px solid ${C.border}`, fontSize: 14, fontFamily: FONT,
-                    color: C.text, outline: 'none', boxSizing: 'border-box', resize: 'vertical',
-                  }} />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Profile Picture</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  {previewUrl && (
-                    <div style={{
-                      width: 48, height: 48, borderRadius: '50%',
-                      overflow: 'hidden', flexShrink: 0,
-                      border: `1px solid ${C.border}`,
-                    }}>
-                      <img src={previewUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    </div>
-                  )}
-                  <label style={{
-                    flex: 1, display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '10px 12px', borderRadius: 8,
-                    border: `1.5px dashed ${C.border}`, cursor: 'pointer',
-                    fontSize: 13, fontFamily: FONT, color: C.textSecondary,
-                  }}>
-                    <Plus size={14} />
-                    {selectedFile ? selectedFile.name : 'Choose JPG or PNG…'}
-                    <input
-                      type="file"
-                      accept=".jpg,.jpeg,.png"
-                      onChange={handleFileChange}
-                      style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
-                    />
-                  </label>
-                  {previewUrl && (
-                    <button onClick={() => { setPreviewUrl(null); setSelectedFile(null); setForm({ ...form, profile_picture_url: '' }); }} style={{
-                      border: 'none', background: 'transparent', cursor: 'pointer',
-                      color: C.primary, padding: 4,
-                    }}>
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-              <button onClick={() => { setShowAdd(false); setEditingMember(null); setPreviewUrl(null); setSelectedFile(null); }} style={{
-                padding: '8px 16px', borderRadius: 8, border: `1px solid ${C.border}`,
-                background: 'transparent', cursor: 'pointer', fontSize: 13,
-                fontWeight: 600, color: C.textSecondary, fontFamily: FONT,
-              }}>Cancel</button>
-              <button onClick={handleSave} disabled={uploading} style={{
-                padding: '8px 16px', borderRadius: 8, border: 'none',
-                background: C.primary, color: '#fff', cursor: uploading ? 'not-allowed' : 'pointer',
-                fontSize: 13, fontWeight: 600, fontFamily: FONT,
-                opacity: uploading ? 0.6 : 1,
-                display: 'flex', alignItems: 'center', gap: 6,
-              }}>
-                {uploading && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
-                {uploading ? 'Uploading…' : 'Save'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Fields                                                             */
-/* ------------------------------------------------------------------ */
-const FIELD_TYPES = [
-  { key: 'text', label: 'Text' },
-  { key: 'number', label: 'Number' },
-  { key: 'phone', label: 'Phone' },
-  { key: 'email', label: 'Email' },
-  { key: 'date', label: 'Date' },
-  { key: 'url', label: 'URL' },
-  { key: 'textarea', label: 'Textarea' },
-];
-
-function FieldsTab({ contactFields, onRefresh }) {
-  // Which table's fields are being managed: Chats contacts (the original
-  // contact_field_definitions CRUD below) or the entity-field registry behind
-  // the Leads table / Sales Log / Transactions (migration 097).
-  const [section, setSection] = useState('contacts');
-  const [showAdd, setShowAdd] = useState(false);
-  const [editingField, setEditingField] = useState(null);
-  const [form, setForm] = useState({ name: '', description: '', field_type: 'text', sort_order: 0 });
-  const [deleteModal, setDeleteModal] = useState({ open: false, id: null });
-
-  const sel = useTableSelection(contactFields);
-  const handleBulkDelete = async (ids) => {
-    await runBulkDelete(ids, (id) => api.contactFields.delete(id), {
-      label: 'field',
-      onSuccess: () => onRefresh(),
-    });
-  };
-
-  const openAdd = () => {
-    setEditingField(null);
-    setForm({ name: '', description: '', field_type: 'text', sort_order: 0 });
-    setShowAdd(true);
-  };
-
-  const openEdit = (field) => {
-    setEditingField(field);
-    setForm({
-      name: field.name || '',
-      description: field.description || '',
-      field_type: field.field_type || 'text',
-      sort_order: field.sort_order || 0,
-    });
-    setShowAdd(true);
-  };
-
-  const handleSave = async () => {
-    const trimmed = form.name.trim();
-    if (!trimmed) { notify('Field name is required'); return; }
-    try {
-      if (editingField) {
-        await api.contactFields.update(editingField.id, form);
-      } else {
-        await api.contactFields.create(form);
-      }
-      onRefresh();
-      setShowAdd(false);
-      setEditingField(null);
-      setForm({ name: '', description: '', field_type: 'text', sort_order: 0 });
-    } catch (err) {
-      notify('Failed to save: ' + err.message);
-    }
-  };
-
-  const handleDeleteClick = (id) => {
-    setDeleteModal({ open: true, id });
-  };
-
-  const handleDeleteConfirm = async () => {
-    try {
-      await api.contactFields.delete(deleteModal.id);
-      onRefresh();
-      setDeleteModal({ open: false, id: null });
-    } catch (err) {
-      notify('Failed to delete: ' + err.message);
-    }
-  };
-
-  const getTypeLabel = (type) => FIELD_TYPES.find(t => t.key === type)?.label || type;
-
-  const typeColors = {
-    text: '#6b7280',
-    number: '#2563eb',
-    phone: '#0891b2',
-    email: '#7c3aed',
-    date: '#d97706',
-    url: '#16a34a',
-    textarea: '#db2777',
-  };
-
+  // One section per TABLE. "Contacts (Chats)" is gone: a contact is no longer a
+  // record you manage — it is the row a WhatsApp thread hangs off — and the
+  // lead is the source of truth for everything about a person.
+  //
+  // Leads and Sales Log read the same `entity='lead'` registry rows but own one
+  // visibility flag each, so each gets its own section with its own switch
+  // rather than one section with two switch columns per row.
+  // The Transactions section was removed 2026-08-12: an installment's columns
+  // are fixed by what a payment IS, so there was nothing useful to configure.
+  // The `entity='transaction'` registry rows still exist and still drive the
+  // transactions table — they are simply no longer editable here.
   const FIELD_SECTIONS = [
-    { key: 'contacts', label: 'Contacts (Chats)' },
-    { key: 'lead', label: 'Leads & Sales Log' },
-    { key: 'transaction', label: 'Transactions' },
+    { key: 'lead', surface: 'leads', label: 'Leads' },
+    { key: 'lead', surface: 'sales', label: 'Sales Log' },
   ];
+  const sectionId = (s) => (s.surface ? `${s.key}:${s.surface}` : s.key);
+  const activeSection = FIELD_SECTIONS.find(s => sectionId(s) === section) || FIELD_SECTIONS[0];
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -698,183 +229,28 @@ function FieldsTab({ contactFields, onRefresh }) {
         borderBottom: `1px solid ${C.border}`,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>Fields</h1>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>Fields</h1>
           <div style={{ display: 'inline-flex', background: 'var(--c-hover, #F1F1EE)', borderRadius: 9, padding: 3, gap: 2 }}>
-            {FIELD_SECTIONS.map(s => (
-              <button key={s.key} onClick={() => setSection(s.key)} style={{
-                padding: '6px 12px', borderRadius: 7, border: 'none', cursor: 'pointer',
-                fontFamily: FONT, fontSize: 12.5, fontWeight: 600,
-                background: section === s.key ? C.cardBg : 'transparent',
-                color: section === s.key ? C.text : C.textSecondary,
-                boxShadow: section === s.key ? '0 1px 2px rgba(0,0,0,.08)' : 'none',
-              }}>{s.label}</button>
-            ))}
+            {FIELD_SECTIONS.map(s => {
+              const id = sectionId(s);
+              const on = sectionId(activeSection) === id;
+              return (
+                <button key={id} onClick={() => setSection(id)} style={{
+                  padding: '6px 12px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                  fontFamily: FONT, fontSize: 14, fontWeight: 600,
+                  background: on ? C.cardBg : 'transparent',
+                  color: on ? C.text : C.textSecondary,
+                  boxShadow: on ? '0 1px 2px rgba(0,0,0,.08)' : 'none',
+                }}>{s.label}</button>
+              );
+            })}
           </div>
         </div>
-        {section === 'contacts' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <BulkDeleteButton sel={sel} label="field" onConfirm={handleBulkDelete} />
-            <button onClick={openAdd} style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '8px 14px', borderRadius: 8, border: 'none',
-              background: C.primary, color: '#fff', cursor: 'pointer',
-              fontFamily: FONT, fontSize: 13, fontWeight: 600,
-            }}>
-              <Plus size={14} /> Add field
-            </button>
-          </div>
-        )}
       </div>
 
-      {section !== 'contacts' ? (
-        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 32px' }}>
-          <EntityFieldsManager entity={section} />
-        </div>
-      ) : (
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 32px' }}>
-        {contactFields.length === 0 ? (
-          <div style={{ textAlign: 'center', color: C.textMuted, fontSize: 14, marginTop: 60 }}>
-            No custom fields yet. Click "Add field" to create one.
-          </div>
-        ) : (
-          <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT, fontSize: 13 }}>
-              <thead>
-                <tr style={{ background: 'var(--c-hover)' }}>
-                  <th style={{ padding: '12px 16px', width: 40, borderBottom: `1px solid ${C.border}` }}><SelectAllCheckbox sel={sel} /></th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: C.textSecondary, borderBottom: `1px solid ${C.border}` }}>Field Name</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: C.textSecondary, borderBottom: `1px solid ${C.border}` }}>Type</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: C.textSecondary, borderBottom: `1px solid ${C.border}` }}>Description</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600, color: C.textSecondary, borderBottom: `1px solid ${C.border}` }}>Order</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, color: C.textSecondary, borderBottom: `1px solid ${C.border}` }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {contactFields.map(field => (
-                  <tr key={field.id} style={{ background: sel.isSelected(field.id) ? '#FDF6F6' : 'var(--c-cardBg)', borderBottom: `1px solid ${C.border}` }}>
-                    <td style={{ padding: '12px 16px', width: 40 }}><RowCheckbox sel={sel} id={field.id} label={field.name} /></td>
-                    <td style={{ padding: '12px 16px', fontWeight: 600, color: C.text }}>{field.name}</td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 4,
-                        padding: '3px 8px', borderRadius: 4,
-                        background: (typeColors[field.field_type] || '#6b7280') + '18',
-                        color: typeColors[field.field_type] || '#6b7280',
-                        border: `1px solid ${(typeColors[field.field_type] || '#6b7280')}33`,
-                        fontSize: 11, fontWeight: 700, fontFamily: FONT,
-                        textTransform: 'uppercase', letterSpacing: '0.04em',
-                      }}>
-                        {getTypeLabel(field.field_type)}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px 16px', color: C.textSecondary, maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {field.description || <span style={{ color: C.textMuted }}>—</span>}
-                    </td>
-                    <td style={{ padding: '12px 16px', color: C.textSecondary }}>{field.sort_order}</td>
-                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                      <button onClick={() => openEdit(field)} style={{
-                        border: 'none', background: 'transparent', cursor: 'pointer',
-                        color: C.purple, fontSize: 12, fontWeight: 600, marginRight: 12,
-                      }}>Edit</button>
-                      <button onClick={() => handleDeleteClick(field.id)} style={{
-                        border: 'none', background: 'transparent', cursor: 'pointer',
-                        color: C.primary, fontSize: 12, fontWeight: 600,
-                      }}>Delete</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <EntityFieldsManager entity={activeSection.key} surface={activeSection.surface} />
       </div>
-      )}
-
-      <DeleteConfirmModal
-        open={deleteModal.open}
-        title="Delete Field"
-        message="Are you sure you want to delete this field? Its data will be removed from all contacts."
-        onConfirm={handleDeleteConfirm}
-        onCancel={() => setDeleteModal({ open: false, id: null })}
-      />
-
-      {showAdd && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 200, fontFamily: FONT,
-        }}>
-          <div style={{
-            background: C.cardBg, borderRadius: 14,
-            padding: '24px 24px 20px', width: 420, boxShadow: C.shadowLg,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{editingField ? 'Edit Field' : 'Add Field'}</div>
-              <button onClick={() => { setShowAdd(false); setEditingField(null); }} style={{
-                border: 'none', background: 'transparent', cursor: 'pointer', color: C.textMuted,
-              }}><X size={18} /></button>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Field Name *</label>
-                <input autoFocus value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Date of Birth"
-                  onKeyDown={e => e.key === 'Enter' && handleSave()}
-                  style={{
-                    width: '100%', padding: '10px 12px', borderRadius: 8,
-                    border: `1px solid ${C.border}`, fontSize: 14, fontFamily: FONT,
-                    color: C.text, outline: 'none', boxSizing: 'border-box',
-                  }} />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Field Type *</label>
-                <SearchableSelect
-                  value={form.field_type}
-                  onChange={v => setForm({ ...form, field_type: v })}
-                  options={FIELD_TYPES.map(t => ({ value: t.key, label: t.label }))}
-                  searchPlaceholder="Search types…"
-                  style={{ width: '100%' }}
-                  triggerStyle={{ padding: '10px 32px 10px 12px', fontSize: 14 }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Description</label>
-                <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Short description..."
-                  style={{
-                    width: '100%', padding: '10px 12px', borderRadius: 8,
-                    border: `1px solid ${C.border}`, fontSize: 14, fontFamily: FONT,
-                    color: C.text, outline: 'none', boxSizing: 'border-box',
-                  }} />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Sort Order</label>
-                <input type="number" value={form.sort_order} onChange={e => setForm({ ...form, sort_order: parseInt(e.target.value, 10) || 0 })} placeholder="0"
-                  style={{
-                    width: '100%', padding: '10px 12px', borderRadius: 8,
-                    border: `1px solid ${C.border}`, fontSize: 14, fontFamily: FONT,
-                    color: C.text, outline: 'none', boxSizing: 'border-box',
-                  }} />
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-              <button onClick={() => { setShowAdd(false); setEditingField(null); }} style={{
-                padding: '8px 16px', borderRadius: 8, border: `1px solid ${C.border}`,
-                background: 'transparent', cursor: 'pointer', fontSize: 13,
-                fontWeight: 600, color: C.textSecondary, fontFamily: FONT,
-              }}>Cancel</button>
-              <button onClick={handleSave} style={{
-                padding: '8px 16px', borderRadius: 8, border: 'none',
-                background: C.primary, color: '#fff', cursor: 'pointer',
-                fontSize: 13, fontWeight: 600, fontFamily: FONT,
-              }}>Save</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -964,7 +340,7 @@ function TagsTab({ categories, tags, onRefresh }) {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         borderBottom: `1px solid ${C.border}`,
       }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>Tags</h1>
+        <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>Tags</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <SearchableSelect
             value={filterCategoryId}
@@ -980,7 +356,7 @@ function TagsTab({ categories, tags, onRefresh }) {
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '8px 14px', borderRadius: 8, border: 'none',
             background: C.primary, color: '#fff', cursor: 'pointer',
-            fontFamily: FONT, fontSize: 13, fontWeight: 600,
+            fontFamily: FONT, fontSize: 15, fontWeight: 600,
           }}>
             <Plus size={14} /> Add tag
           </button>
@@ -989,16 +365,16 @@ function TagsTab({ categories, tags, onRefresh }) {
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 32px' }}>
         {tags.length === 0 ? (
-          <div style={{ textAlign: 'center', color: C.textMuted, fontSize: 14, marginTop: 60 }}>
+          <div style={{ textAlign: 'center', color: C.textMuted, fontSize: 15, marginTop: 60 }}>
             No tags yet. Click "Add tag" to create one.
           </div>
         ) : filteredTags.length === 0 ? (
-          <div style={{ textAlign: 'center', color: C.textMuted, fontSize: 14, marginTop: 60 }}>
+          <div style={{ textAlign: 'center', color: C.textMuted, fontSize: 15, marginTop: 60 }}>
             No tags in <strong>{getCategoryName(filterCategoryId)}</strong>.
           </div>
         ) : (
           <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT, fontSize: 13 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT, fontSize: 15 }}>
               <thead>
                 <tr style={{ background: 'var(--c-hover)' }}>
                   <th style={{ padding: '12px 16px', width: 40, borderBottom: `1px solid ${C.border}` }}><SelectAllCheckbox sel={sel} /></th>
@@ -1010,7 +386,7 @@ function TagsTab({ categories, tags, onRefresh }) {
               </thead>
               <tbody>
                 {filteredTags.map(tag => (
-                  <tr key={tag.id} style={{ background: sel.isSelected(tag.id) ? '#FDF6F6' : 'var(--c-cardBg)', borderBottom: `1px solid ${C.border}` }}>
+                  <tr key={tag.id} style={{ background: sel.isSelected(tag.id) ? 'var(--c-xfdf6f6, #FDF6F6)' : 'var(--c-cardBg)', borderBottom: `1px solid ${C.border}` }}>
                     <td style={{ padding: '12px 16px', width: 40 }}><RowCheckbox sel={sel} id={tag.id} label={tag.name} /></td>
                     <td style={{ padding: '12px 16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1027,11 +403,11 @@ function TagsTab({ categories, tags, onRefresh }) {
                     <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                       <button onClick={() => openEdit(tag)} style={{
                         border: 'none', background: 'transparent', cursor: 'pointer',
-                        color: C.purple, fontSize: 12, fontWeight: 600, marginRight: 12,
+                        color: C.purple, fontSize: 14, fontWeight: 600, marginRight: 12,
                       }}>Edit</button>
                       <button onClick={() => handleDeleteClick(tag.id)} style={{
                         border: 'none', background: 'transparent', cursor: 'pointer',
-                        color: C.primary, fontSize: 12, fontWeight: 600,
+                        color: C.primary, fontSize: 14, fontWeight: 600,
                       }}>Delete</button>
                     </td>
                   </tr>
@@ -1061,25 +437,25 @@ function TagsTab({ categories, tags, onRefresh }) {
             padding: '24px 24px 20px', width: 420, boxShadow: C.shadowLg,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{editingTag ? 'Edit Tag' : 'Add Tag'}</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>{editingTag ? 'Edit Tag' : 'Add Tag'}</div>
               <button onClick={() => { setShowAdd(false); setEditingTag(null); }} style={{
                 border: 'none', background: 'transparent', cursor: 'pointer', color: C.textMuted,
               }}><X size={18} /></button>
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Tag Name</label>
+              <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Tag Name</label>
               <input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Follow-up"
                 onKeyDown={e => e.key === 'Enter' && handleSave()}
                 style={{
                   width: '100%', padding: '10px 12px', borderRadius: 8,
-                  border: `1px solid ${C.border}`, fontSize: 14, fontFamily: FONT,
+                  border: `1px solid ${C.border}`, fontSize: 15, fontFamily: FONT,
                   color: C.text, outline: 'none', boxSizing: 'border-box',
                 }} />
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Color</label>
+              <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Color</label>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {COLOR_PRESETS.map(c => (
                   <button key={c} onClick={() => setColor(c)} style={{
@@ -1100,11 +476,11 @@ function TagsTab({ categories, tags, onRefresh }) {
                   <input type="color" value={color} onChange={e => setColor(e.target.value)} style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }} />
                 </label>
               </div>
-              <div style={{ marginTop: 6, fontSize: 12, color: C.textMuted }}>Selected: {color}</div>
+              <div style={{ marginTop: 6, fontSize: 14, color: C.textMuted }}>Selected: {color}</div>
             </div>
 
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Category</label>
+              <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Category</label>
               <SearchableSelect
                 value={categoryId}
                 onChange={v => setCategoryId(v)}
@@ -1112,20 +488,20 @@ function TagsTab({ categories, tags, onRefresh }) {
                 placeholder="Select category…"
                 searchPlaceholder="Search categories…"
                 style={{ width: '100%' }}
-                triggerStyle={{ padding: '10px 32px 10px 12px', fontSize: 14 }}
+                triggerStyle={{ padding: '10px 32px 10px 12px', fontSize: 15 }}
               />
             </div>
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button onClick={() => { setShowAdd(false); setEditingTag(null); }} style={{
                 padding: '8px 16px', borderRadius: 8, border: `1px solid ${C.border}`,
-                background: 'transparent', cursor: 'pointer', fontSize: 13,
+                background: 'transparent', cursor: 'pointer', fontSize: 15,
                 fontWeight: 600, color: C.textSecondary, fontFamily: FONT,
               }}>Cancel</button>
               <button onClick={handleSave} style={{
                 padding: '8px 16px', borderRadius: 8, border: 'none',
                 background: C.primary, color: '#fff', cursor: 'pointer',
-                fontSize: 13, fontWeight: 600, fontFamily: FONT,
+                fontSize: 15, fontWeight: 600, fontFamily: FONT,
               }}>Save</button>
             </div>
           </div>
@@ -1162,25 +538,25 @@ function CategoryDetail({ category, tags, onBack, onDeleteTag, onRefresh }) {
         <button onClick={onBack} style={{
           display: 'flex', alignItems: 'center', gap: 6,
           border: 'none', background: 'transparent', cursor: 'pointer',
-          color: C.textSecondary, fontFamily: FONT, fontSize: 13,
+          color: C.textSecondary, fontFamily: FONT, fontSize: 15,
           fontWeight: 600, marginBottom: 12,
         }}>
           <ChevronLeft size={16} /> Back to categories
         </button>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>
+        <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>
           {category.name}
         </h1>
-        <div style={{ fontSize: 13, color: C.textSecondary, marginTop: 4, fontFamily: FONT }}>
+        <div style={{ fontSize: 15, color: C.textSecondary, marginTop: 4, fontFamily: FONT }}>
           {category.description || 'No description'}
         </div>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 32px' }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: C.textSecondary, marginBottom: 12, fontFamily: FONT }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: C.textSecondary, marginBottom: 12, fontFamily: FONT }}>
           Tags under this category ({categoryTags.length})
         </div>
         {categoryTags.length === 0 ? (
-          <div style={{ color: C.textMuted, fontSize: 13 }}>No tags assigned to this category yet.</div>
+          <div style={{ color: C.textMuted, fontSize: 15 }}>No tags assigned to this category yet.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {categoryTags.map(tag => (
@@ -1195,11 +571,11 @@ function CategoryDetail({ category, tags, onBack, onDeleteTag, onRefresh }) {
                     background: tag.color, display: 'inline-block',
                     border: '1px solid rgba(0,0,0,0.1)',
                   }} />
-                  <span style={{ fontWeight: 600, color: C.text, fontSize: 14 }}>{tag.name}</span>
+                  <span style={{ fontWeight: 600, color: C.text, fontSize: 15 }}>{tag.name}</span>
                 </div>
                 <button onClick={() => handleDeleteClick(tag.id)} style={{
                   border: 'none', background: 'transparent', cursor: 'pointer',
-                  color: C.primary, fontSize: 12, fontWeight: 600,
+                  color: C.primary, fontSize: 14, fontWeight: 600,
                 }}>Delete</button>
               </div>
             ))}
@@ -1310,14 +686,14 @@ function CategoryTab({ categories, tags, onRefresh, detailId, onViewDetail, onBa
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         borderBottom: `1px solid ${C.border}`,
       }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>Categories</h1>
+        <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>Categories</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <BulkDeleteButton sel={sel} label="category" onConfirm={handleBulkDelete} />
           <button onClick={openAdd} style={{
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '8px 14px', borderRadius: 8, border: 'none',
             background: C.primary, color: '#fff', cursor: 'pointer',
-            fontFamily: FONT, fontSize: 13, fontWeight: 600,
+            fontFamily: FONT, fontSize: 15, fontWeight: 600,
           }}>
             <Plus size={14} /> Add category
           </button>
@@ -1326,12 +702,12 @@ function CategoryTab({ categories, tags, onRefresh, detailId, onViewDetail, onBa
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 32px' }}>
         {categories.length === 0 ? (
-          <div style={{ textAlign: 'center', color: C.textMuted, fontSize: 14, marginTop: 60 }}>
+          <div style={{ textAlign: 'center', color: C.textMuted, fontSize: 15, marginTop: 60 }}>
             No categories yet. Click "Add category" to create one.
           </div>
         ) : (
           <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT, fontSize: 13 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT, fontSize: 15 }}>
               <thead>
                 <tr style={{ background: 'var(--c-hover)' }}>
                   <th style={{ padding: '12px 16px', width: 40, borderBottom: `1px solid ${C.border}` }}><SelectAllCheckbox sel={sel} /></th>
@@ -1345,10 +721,10 @@ function CategoryTab({ categories, tags, onRefresh, detailId, onViewDetail, onBa
                 {categories.map(cat => {
                   const tagCount = tags.filter(t => t.category_id === cat.id).length;
                   return (
-                    <tr key={cat.id} style={{ background: sel.isSelected(cat.id) ? '#FDF6F6' : 'var(--c-cardBg)', borderBottom: `1px solid ${C.border}`, cursor: 'pointer' }}
+                    <tr key={cat.id} style={{ background: sel.isSelected(cat.id) ? 'var(--c-xfdf6f6, #FDF6F6)' : 'var(--c-cardBg)', borderBottom: `1px solid ${C.border}`, cursor: 'pointer' }}
                       onClick={() => onViewDetail(cat.id)}
-                      onMouseEnter={e => { if (!sel.isSelected(cat.id)) e.currentTarget.style.background = '#f9fafb'; }}
-                      onMouseLeave={e => { if (!sel.isSelected(cat.id)) e.currentTarget.style.background = '#fff'; }}
+                      onMouseEnter={e => { if (!sel.isSelected(cat.id)) e.currentTarget.style.background = 'var(--c-xf9fafb, #f9fafb)'; }}
+                      onMouseLeave={e => { if (!sel.isSelected(cat.id)) e.currentTarget.style.background = 'var(--c-cardBg)'; }}
                     >
                       <td style={{ padding: '12px 16px', width: 40 }} onClick={(e) => e.stopPropagation()}><RowCheckbox sel={sel} id={cat.id} label={cat.name} /></td>
                       <td style={{ padding: '12px 16px', fontWeight: 600, color: C.text }}>{cat.name}</td>
@@ -1357,15 +733,15 @@ function CategoryTab({ categories, tags, onRefresh, detailId, onViewDetail, onBa
                       <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                         <button onClick={(e) => { e.stopPropagation(); onViewDetail(cat.id); }} style={{
                           border: 'none', background: 'transparent', cursor: 'pointer',
-                          color: C.purple, fontSize: 12, fontWeight: 600, marginRight: 12,
+                          color: C.purple, fontSize: 14, fontWeight: 600, marginRight: 12,
                         }}><Eye size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />View</button>
                         <button onClick={(e) => { e.stopPropagation(); openEdit(cat); }} style={{
                           border: 'none', background: 'transparent', cursor: 'pointer',
-                          color: '#2563eb', fontSize: 12, fontWeight: 600, marginRight: 12,
+                          color: 'var(--c-infoBright, #2563eb)', fontSize: 14, fontWeight: 600, marginRight: 12,
                         }}>Edit</button>
                         <button onClick={(e) => { e.stopPropagation(); handleDeleteClick(cat.id); }} style={{
                           border: 'none', background: 'transparent', cursor: 'pointer',
-                          color: C.primary, fontSize: 12, fontWeight: 600,
+                          color: C.primary, fontSize: 14, fontWeight: 600,
                         }}>Delete</button>
                       </td>
                     </tr>
@@ -1396,30 +772,30 @@ function CategoryTab({ categories, tags, onRefresh, detailId, onViewDetail, onBa
             padding: '24px 24px 20px', width: 420, boxShadow: C.shadowLg,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{editingCategory ? 'Edit Category' : 'Add Category'}</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>{editingCategory ? 'Edit Category' : 'Add Category'}</div>
               <button onClick={() => { setShowAdd(false); setEditingCategory(null); onAddFormShown(); }} style={{
                 border: 'none', background: 'transparent', cursor: 'pointer', color: C.textMuted,
               }}><X size={18} /></button>
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Category Name</label>
+              <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Category Name</label>
               <input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Admission"
                 onKeyDown={e => e.key === 'Enter' && handleSave()}
                 style={{
                   width: '100%', padding: '10px 12px', borderRadius: 8,
-                  border: `1px solid ${C.border}`, fontSize: 14, fontFamily: FONT,
+                  border: `1px solid ${C.border}`, fontSize: 15, fontFamily: FONT,
                   color: C.text, outline: 'none', boxSizing: 'border-box',
                 }} />
             </div>
 
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Description</label>
+              <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Description</label>
               <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Short description..."
                 rows={3}
                 style={{
                   width: '100%', padding: '10px 12px', borderRadius: 8,
-                  border: `1px solid ${C.border}`, fontSize: 14, fontFamily: FONT,
+                  border: `1px solid ${C.border}`, fontSize: 15, fontFamily: FONT,
                   color: C.text, outline: 'none', boxSizing: 'border-box', resize: 'vertical',
                 }} />
             </div>
@@ -1427,13 +803,13 @@ function CategoryTab({ categories, tags, onRefresh, detailId, onViewDetail, onBa
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button onClick={() => { setShowAdd(false); setEditingCategory(null); onAddFormShown(); }} style={{
                 padding: '8px 16px', borderRadius: 8, border: `1px solid ${C.border}`,
-                background: 'transparent', cursor: 'pointer', fontSize: 13,
+                background: 'transparent', cursor: 'pointer', fontSize: 15,
                 fontWeight: 600, color: C.textSecondary, fontFamily: FONT,
               }}>Cancel</button>
               <button onClick={handleSave} style={{
                 padding: '8px 16px', borderRadius: 8, border: 'none',
                 background: C.primary, color: '#fff', cursor: 'pointer',
-                fontSize: 13, fontWeight: 600, fontFamily: FONT,
+                fontSize: 15, fontWeight: 600, fontFamily: FONT,
               }}>Save</button>
             </div>
           </div>
@@ -1567,23 +943,23 @@ function WhatsappAccountsTab() {
     }
   };
 
-  const inpStyle = { width: '100%', padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', background: 'var(--c-cardBg)', color: C.text };
-  const labelStyle = { display: 'block', fontSize: 11, fontWeight: 600, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6, fontFamily: FONT };
+  const inpStyle = { width: '100%', padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 15, fontFamily: FONT, outline: 'none', background: 'var(--c-cardBg)', color: C.text };
+  const labelStyle = { display: 'block', fontSize: 13, fontWeight: 600, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6, fontFamily: FONT };
 
   return (
     <div style={{ flex: 1, padding: 24, overflow: 'auto', fontFamily: FONT }}>
       <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}.spin{animation:spin 1s linear infinite}`}</style>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
         <div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0 }}>WhatsApp Accounts</h2>
-          <p style={{ fontSize: 12, color: C.textMuted, margin: '4px 0 0' }}>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0 }}>WhatsApp Accounts</h2>
+          <p style={{ fontSize: 14, color: C.textMuted, margin: '4px 0 0' }}>
             Business accounts (WABAs) used to send templates, broadcasts and automation messages.
           </p>
         </div>
         <button onClick={startCreate} style={{
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '8px 14px', background: C.primary, color: '#fff', border: 'none',
-          borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
+          borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
         }}>
           <Plus size={15} /> Add account
         </button>
@@ -1594,7 +970,7 @@ function WhatsappAccountsTab() {
       ) : accounts.length === 0 ? (
         <div style={{
           padding: '48px 32px', textAlign: 'center', background: C.cardBg,
-          border: `1px dashed ${C.border}`, borderRadius: 12, color: C.textMuted, fontSize: 13,
+          border: `1px dashed ${C.border}`, borderRadius: 12, color: C.textMuted, fontSize: 15,
         }}>
           <MessageSquare size={36} style={{ opacity: 0.5, marginBottom: 12 }} />
           <div style={{ marginBottom: 6, color: C.textSecondary, fontWeight: 600 }}>No WhatsApp accounts yet</div>
@@ -1622,29 +998,29 @@ function WhatsappAccountsTab() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ fontWeight: 600 }}>{acc.displayName}</span>
                       {acc.isDefault && (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, padding: '2px 7px', background: '#FFF3E0', color: '#E65100', borderRadius: 99, fontWeight: 700 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 12, padding: '2px 7px', background: 'var(--c-orangeBg, #FFF3E0)', color: 'var(--c-orangeText, #E65100)', borderRadius: 99, fontWeight: 700 }}>
                           <Star size={9} fill="currentColor" /> DEFAULT
                         </span>
                       )}
                     </div>
                   </td>
                   <td style={tdStyle}><MaskedNumber number={acc.displayPhoneNumber} /></td>
-                  <td style={{ ...tdStyle, fontFamily: 'DM Mono, monospace', fontSize: 11 }}>{acc.phoneNumberId}</td>
-                  <td style={{ ...tdStyle, fontFamily: 'DM Mono, monospace', fontSize: 11 }}>{acc.wabaId}</td>
-                  <td style={{ ...tdStyle, fontFamily: 'DM Mono, monospace', fontSize: 11, color: C.textMuted }}>{acc.accessTokenMasked}</td>
+                  <td style={{ ...tdStyle, fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{acc.phoneNumberId}</td>
+                  <td style={{ ...tdStyle, fontFamily: 'DM Mono, monospace', fontSize: 13 }}>{acc.wabaId}</td>
+                  <td style={{ ...tdStyle, fontFamily: 'DM Mono, monospace', fontSize: 13, color: C.textMuted }}>{acc.accessTokenMasked}</td>
                   <td style={tdStyle}>
                     {(() => {
                       const h = acc.healthStatus || 'unknown';
                       const styles = {
-                        healthy: { bg: '#E1F5EE', fg: '#0F6E56', label: 'Healthy' },
-                        invalid_token: { bg: '#FCEBEB', fg: '#A32D2D', label: 'Token expired' },
-                        rate_limited: { bg: '#FFF3E0', fg: '#E65100', label: 'Rate limited' },
-                        unknown_error: { bg: '#FCEBEB', fg: '#A32D2D', label: 'Error' },
-                        unknown: { bg: '#EEEDE8', fg: C.textMuted, label: 'Not checked' },
+                        healthy: { bg: 'var(--c-successBg, #E1F5EE)', fg: 'var(--c-successText, #0F6E56)', label: 'Healthy' },
+                        invalid_token: { bg: 'var(--c-dangerBg, #FCEBEB)', fg: 'var(--c-dangerText, #A32D2D)', label: 'Token expired' },
+                        rate_limited: { bg: 'var(--c-orangeBg, #FFF3E0)', fg: 'var(--c-orangeText, #E65100)', label: 'Rate limited' },
+                        unknown_error: { bg: 'var(--c-dangerBg, #FCEBEB)', fg: 'var(--c-dangerText, #A32D2D)', label: 'Error' },
+                        unknown: { bg: 'var(--c-surfaceSubtle, #EEEDE8)', fg: C.textMuted, label: 'Not checked' },
                       };
                       const s = styles[h] || styles.unknown;
                       return (
-                        <span title={acc.lastErrorMessage || ''} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 99, fontWeight: 600, background: s.bg, color: s.fg }}>
+                        <span title={acc.lastErrorMessage || ''} style={{ fontSize: 13, padding: '3px 8px', borderRadius: 99, fontWeight: 600, background: s.bg, color: s.fg }}>
                           {s.label}
                         </span>
                       );
@@ -1652,9 +1028,9 @@ function WhatsappAccountsTab() {
                   </td>
                   <td style={tdStyle}>
                     <span style={{
-                      fontSize: 11, padding: '3px 8px', borderRadius: 99, fontWeight: 600,
-                      background: acc.isActive ? '#E1F5EE' : '#EEEDE8',
-                      color: acc.isActive ? '#0F6E56' : C.textMuted,
+                      fontSize: 13, padding: '3px 8px', borderRadius: 99, fontWeight: 600,
+                      background: acc.isActive ? 'var(--c-successBg, #E1F5EE)' : 'var(--c-surfaceSubtle, #EEEDE8)',
+                      color: acc.isActive ? 'var(--c-successText, #0F6E56)' : C.textMuted,
                     }}>
                       {acc.isActive ? 'Active' : 'Inactive'}
                     </span>
@@ -1663,7 +1039,7 @@ function WhatsappAccountsTab() {
                     <button onClick={() => startEdit(acc)} style={iconBtnStyle} title="Edit">
                       <Eye size={14} />
                     </button>
-                    <button onClick={() => setDeleteTarget(acc)} style={{ ...iconBtnStyle, color: '#A32D2D' }} title="Delete">
+                    <button onClick={() => setDeleteTarget(acc)} style={{ ...iconBtnStyle, color: 'var(--c-dangerText, #A32D2D)' }} title="Delete">
                       <Trash2 size={14} />
                     </button>
                   </td>
@@ -1679,7 +1055,7 @@ function WhatsappAccountsTab() {
         <div onClick={() => setShowForm(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, width: 520, maxHeight: '90vh', overflow: 'auto', boxShadow: C.shadowLg, padding: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-              <h3 style={{ fontSize: 18, fontWeight: 700, color: C.text, margin: 0 }}>
+              <h3 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0 }}>
                 {editing ? 'Edit WhatsApp account' : 'New WhatsApp account'}
               </h3>
               <button onClick={() => setShowForm(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: C.textMuted }}><X size={20} /></button>
@@ -1712,7 +1088,7 @@ function WhatsappAccountsTab() {
                 </label>
                 <div style={{ position: 'relative' }}>
                   <input
-                    style={{ ...inpStyle, paddingRight: 38, fontFamily: 'DM Mono, monospace', fontSize: 11 }}
+                    style={{ ...inpStyle, paddingRight: 38, fontFamily: 'DM Mono, monospace', fontSize: 13 }}
                     type={showToken ? 'text' : 'password'}
                     value={form.accessToken}
                     onChange={e => setForm({ ...form, accessToken: e.target.value })}
@@ -1724,29 +1100,29 @@ function WhatsappAccountsTab() {
                     {revealingToken ? <Loader2 size={14} className="spin" /> : showToken ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
                 </div>
-                <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
                   <Key size={10} /> Encrypted at rest with AES-256-GCM.
                 </div>
               </div>
               <div>
                 <label style={labelStyle}>Webhook verify token <span style={{ color: C.textMuted, fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(optional)</span></label>
                 <input style={inpStyle} value={form.verifyToken} onChange={e => setForm({ ...form, verifyToken: e.target.value })} placeholder="Create a custom verify token" autoComplete="off" name="wa-verify-token" />
-                <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>
+                <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
                   A custom string you choose. Must match the <strong>Verify token</strong> you enter in Meta → App → WhatsApp → Configuration. Leave blank to use the server's default token.
                 </div>
               </div>
 
               {/* Webhook Configuration */}
               <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
-                <h4 style={{ fontSize: 13, fontWeight: 700, color: C.text, margin: '0 0 2px' }}>Webhook configuration</h4>
-                <p style={{ fontSize: 12, color: C.textMuted, margin: '0 0 10px' }}>Use this URL as the <strong>Callback URL</strong> in the Meta App Dashboard, with the verify token above.</p>
+                <h4 style={{ fontSize: 15, fontWeight: 700, color: C.text, margin: '0 0 2px' }}>Webhook configuration</h4>
+                <p style={{ fontSize: 14, color: C.textMuted, margin: '0 0 10px' }}>Use this URL as the <strong>Callback URL</strong> in the Meta App Dashboard, with the verify token above.</p>
                 <label style={labelStyle}>Webhook callback URL</label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input
                     readOnly
                     value={webhookUrl}
                     onFocus={e => e.target.select()}
-                    style={{ ...inpStyle, fontFamily: 'DM Mono, monospace', fontSize: 12, background: 'var(--c-hover)', color: C.textSecondary }}
+                    style={{ ...inpStyle, fontFamily: 'DM Mono, monospace', fontSize: 14, background: 'var(--c-hover)', color: C.textSecondary }}
                   />
                   <button type="button" onClick={copyWebhookUrl} title={copied ? 'Copied!' : 'Copy URL'} style={{ flexShrink: 0, width: 42, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--c-cardBg)', border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', color: copied ? C.green : C.textSecondary }}>
                     {copied ? <Check size={15} /> : <Copy size={15} />}
@@ -1754,18 +1130,18 @@ function WhatsappAccountsTab() {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.text, cursor: 'pointer' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 15, color: C.text, cursor: 'pointer' }}>
                   <input type="checkbox" checked={form.isDefault} onChange={e => setForm({ ...form, isDefault: e.target.checked })} /> Default account
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.text, cursor: 'pointer' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 15, color: C.text, cursor: 'pointer' }}>
                   <input type="checkbox" checked={form.isActive} onChange={e => setForm({ ...form, isActive: e.target.checked })} /> Active
                 </label>
               </div>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22 }}>
-              <button onClick={() => setShowForm(false)} disabled={saving} style={{ padding: '8px 16px', background: 'var(--c-cardBg)', color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
-              <button onClick={save} disabled={saving} style={{ padding: '8px 16px', background: C.primary, color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: saving ? 'wait' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button onClick={() => setShowForm(false)} disabled={saving} style={{ padding: '8px 16px', background: 'var(--c-cardBg)', color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
+              <button onClick={save} disabled={saving} style={{ padding: '8px 16px', background: C.primary, color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: saving ? 'wait' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6 }}>
                 {saving && <Loader2 size={14} className="spin" />}
                 {editing ? 'Save changes' : 'Create account'}
               </button>
@@ -1785,8 +1161,8 @@ function WhatsappAccountsTab() {
   );
 }
 
-const thStyle = { textAlign: 'left', padding: '12px 16px', fontSize: 11, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.04em' };
-const tdStyle = { padding: '14px 16px', fontSize: 13, color: C.text, verticalAlign: 'middle' };
+const thStyle = { textAlign: 'left', padding: '12px 16px', fontSize: 13, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.04em' };
+const tdStyle = { padding: '14px 16px', fontSize: 15, color: C.text, verticalAlign: 'middle' };
 const iconBtnStyle = { background: 'transparent', border: 'none', cursor: 'pointer', padding: 6, marginLeft: 4, color: C.textSecondary };
 
 /*  Main Page                                                          */
@@ -1811,24 +1187,18 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
   const setActiveTab = (t) => navigate ? navigate('admin-settings', t) : null;
   const [categories, setCategories] = useState([]);
   const [tags, setTags] = useState([]);
-  const [teamMembers, setTeamMembers] = useState([]);
-  const [contactFields, setContactFields] = useState([]);
   const [loading, setLoading] = useState(true);
   const [categoryDetailId, setCategoryDetailId] = useState(null);
   const [showCategoryAddForm, setShowCategoryAddForm] = useState(false);
 
   const refresh = async () => {
     try {
-      const [catRes, tagRes, teamRes, fieldsRes] = await Promise.all([
+      const [catRes, tagRes] = await Promise.all([
         api.categories.list(),
         api.tags.list(),
-        api.teamMembers.list(),
-        api.contactFields.list(),
       ]);
       setCategories(catRes);
       setTags(tagRes);
-      setTeamMembers(teamRes);
-      setContactFields(fieldsRes);
     } catch (err) {
       console.error('Failed to load settings data:', err);
     } finally {
@@ -1853,19 +1223,13 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
   const renderTab = () => {
     if (loading) {
       return (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textMuted, fontSize: 14 }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textMuted, fontSize: 15 }}>
           Loading…
         </div>
       );
     }
     switch (activeTab) {
       case 'general': return <GeneralTab onLogout={onLogout} user={user} />;
-      case 'team': return (
-        <TeamMembersTab
-          teamMembers={teamMembers}
-          onRefresh={refresh}
-        />
-      );
       case 'tags': return (
         <TagsTab
           categories={categories}
@@ -1885,12 +1249,7 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
           onAddFormShown={() => setShowCategoryAddForm(false)}
         />
       );
-      case 'fields': return (
-        <FieldsTab
-          contactFields={contactFields}
-          onRefresh={refresh}
-        />
-      );
+      case 'fields': return <FieldsTab />;
       case 'funnel': return <FunnelSettingsTab navigate={navigate} />;
       case 'whatsapp-accounts': return <WhatsappAccountsTab />;
       case 'ai-models': return <AIModelsTab navigate={navigate} />;
@@ -1916,15 +1275,15 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
             display: 'flex', alignItems: 'center', gap: 8,
             padding: '8px 10px', marginBottom: 16, borderRadius: 8,
             border: 'none', background: 'transparent', cursor: 'pointer',
-            fontFamily: FONT, fontSize: 13, fontWeight: 600,
+            fontFamily: FONT, fontSize: 15, fontWeight: 600,
             color: C.textSecondary, textAlign: 'left',
           }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#f0f2f5'; }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'var(--c-xf0f2f5, #f0f2f5)'; }}
           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
         >
           <ArrowLeft size={16} /> Back to home
         </button>
-        <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12, paddingLeft: 8 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12, paddingLeft: 8 }}>
           Settings
         </div>
         {visibleTabs.map(tab => {
@@ -1937,13 +1296,13 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
               style={{
                 width: '100%', display: 'flex', alignItems: 'center', gap: 10,
                 padding: '9px 10px', borderRadius: 8, border: 'none',
-                background: isActive ? '#f0f2f5' : 'transparent',
-                cursor: 'pointer', fontFamily: FONT, fontSize: 13,
+                background: isActive ? 'var(--c-chatPanel, #f0f2f5)' : 'transparent',
+                cursor: 'pointer', fontFamily: FONT, fontSize: 15,
                 fontWeight: isActive ? 700 : 500,
                 color: isActive ? C.text : C.textSecondary,
                 textAlign: 'left', marginBottom: 2, transition: 'background .1s',
               }}
-              onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#f5f6f6'; }}
+              onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--c-xf5f6f6, #f5f6f6)'; }}
               onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
             >
               <Icon size={16} strokeWidth={isActive ? 2.5 : 2} />
@@ -1965,8 +1324,8 @@ function FunnelSettingsTab({ navigate }) {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 28, overflow: 'auto', fontFamily: FONT }}>
       <div style={{ marginBottom: 18 }}>
-        <h2 style={{ margin: 0, fontSize: 19, fontWeight: 700, color: C.text }}>Funnel</h2>
-        <div style={{ fontSize: 13, color: C.textSecondary, marginTop: 4 }}>
+        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: C.text }}>Funnel</h2>
+        <div style={{ fontSize: 15, color: C.textSecondary, marginTop: 4 }}>
           Configure your funnel stages, lead sources, and products. These drive the Sales → Funnel chart and the Sales Log.
         </div>
       </div>
@@ -1981,21 +1340,21 @@ function FunnelSettingsTab({ navigate }) {
 // reproduce production payloads against local code.
 
 const WEBHOOK_KIND_COLORS = {
-  messages:                  { bg: '#E4F3EE', color: '#0F6E56', label: 'messages' },
-  message_echoes:            { bg: '#DCEDC8', color: '#33691E', label: 'message_echoes' },
-  smb_message_echoes:        { bg: '#C8E6C9', color: '#1B5E20', label: 'smb_echoes' },
-  statuses:                  { bg: '#E3F2FD', color: '#1565C0', label: 'statuses' },
-  template_status_update:    { bg: '#FFF3E0', color: '#E65100', label: 'template_status_update' },
-  account_update:            { bg: '#F3E5F5', color: '#6A1B9A', label: 'account_update' },
-  verify:                    { bg: '#EEEDE8', color: '#666',    label: 'verify' },
-  unknown:                   { bg: '#EEEDE8', color: '#666',    label: 'unknown' },
+  messages:                  { bg: 'var(--c-successBgSoft, #E4F3EE)', color: 'var(--c-successText, #0F6E56)', label: 'messages' },
+  message_echoes:            { bg: 'var(--c-sdcedc8, #DCEDC8)', color: 'var(--c-x33691e, #33691E)', label: 'message_echoes' },
+  smb_message_echoes:        { bg: 'var(--c-sc8e6c9, #C8E6C9)', color: 'var(--c-x1b5e20, #1B5E20)', label: 'smb_echoes' },
+  statuses:                  { bg: 'var(--c-infoBg, #E3F2FD)', color: 'var(--c-infoText, #1565C0)', label: 'statuses' },
+  template_status_update:    { bg: 'var(--c-orangeBg, #FFF3E0)', color: 'var(--c-orangeText, #E65100)', label: 'template_status_update' },
+  account_update:            { bg: 'var(--c-purpleBg, #F3E5F5)', color: 'var(--c-x6a1b9a, #6A1B9A)', label: 'account_update' },
+  verify:                    { bg: 'var(--c-surfaceSubtle, #EEEDE8)', color: 'var(--c-t4, #666)',    label: 'verify' },
+  unknown:                   { bg: 'var(--c-surfaceSubtle, #EEEDE8)', color: 'var(--c-t4, #666)',    label: 'unknown' },
 };
 const WEBHOOK_STATUS_COLORS = {
-  processed: { bg: '#E4F3EE', color: '#0F6E56' },
-  partial:   { bg: '#FFF8E1', color: '#7A5500' },
-  error:     { bg: '#FCEBEB', color: '#A32D2D' },
-  received:  { bg: '#EEEDE8', color: '#666' },
-  verified:  { bg: '#E3F2FD', color: '#1565C0' },
+  processed: { bg: 'var(--c-successBgSoft, #E4F3EE)', color: 'var(--c-successText, #0F6E56)' },
+  partial:   { bg: 'var(--c-warnBgSoft, #FFF8E1)', color: 'var(--c-s7a5500, #7A5500)' },
+  error:     { bg: 'var(--c-dangerBg, #FCEBEB)', color: 'var(--c-dangerText, #A32D2D)' },
+  received:  { bg: 'var(--c-surfaceSubtle, #EEEDE8)', color: 'var(--c-t4, #666)' },
+  verified:  { bg: 'var(--c-infoBg, #E3F2FD)', color: 'var(--c-infoText, #1565C0)' },
 };
 
 // Pretty-print JSON with simple syntax highlighting (string=green, number=blue,
@@ -2054,46 +1413,46 @@ function WebhookDetailDrawer({ id, onClose, onChanged }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 250, display: 'flex', justifyContent: 'flex-end' }}>
       <div onClick={e => e.stopPropagation()} style={{ width: 720, maxWidth: '94vw', height: '100%', background: 'var(--c-cardBg)', boxShadow: C.shadowLg, display: 'flex', flexDirection: 'column', fontFamily: FONT, overflow: 'hidden' }}>
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid #EEEDE8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--c-borderSubtle, #EEEDE8)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--c-text)' }}>Webhook Event #{id}</div>
-            {event && <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{new Date(event.received_at).toLocaleString('en-IN')} · {event.source || 'meta'} · {event.remote_ip || '—'}</div>}
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--c-text)' }}>Webhook Event #{id}</div>
+            {event && <div style={{ fontSize: 13, color: 'var(--c-t6, #888)', marginTop: 2 }}>{new Date(event.received_at).toLocaleString('en-IN')} · {event.source || 'meta'} · {event.remote_ip || '—'}</div>}
           </div>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#666' }}><X size={20} /></button>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--c-t4, #666)' }}><X size={20} /></button>
         </div>
 
-        {loading && <div style={{ padding: 40, textAlign: 'center', color: '#888' }}><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /></div>}
+        {loading && <div style={{ padding: 40, textAlign: 'center', color: 'var(--c-t6, #888)' }}><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /></div>}
 
         {!loading && event && (
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {/* Processing summary */}
-            <div style={{ padding: '12px 20px', borderBottom: '1px solid #EEEDE8', background: 'var(--c-hover)', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, fontSize: 11 }}>
-              <div><div style={{ color: '#888', textTransform: 'uppercase', fontSize: 10, letterSpacing: '.05em', marginBottom: 2 }}>Status</div>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 99, ...(WEBHOOK_STATUS_COLORS[event.processing_status] || WEBHOOK_STATUS_COLORS.received), fontSize: 11, fontWeight: 700 }}>
+            <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--c-borderSubtle, #EEEDE8)', background: 'var(--c-hover)', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, fontSize: 13 }}>
+              <div><div style={{ color: 'var(--c-t6, #888)', textTransform: 'uppercase', fontSize: 12, letterSpacing: '.05em', marginBottom: 2 }}>Status</div>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 99, ...(WEBHOOK_STATUS_COLORS[event.processing_status] || WEBHOOK_STATUS_COLORS.received), fontSize: 13, fontWeight: 700 }}>
                   {event.processing_status === 'error' ? <AlertCircle size={11} /> : event.processing_status === 'processed' || event.processing_status === 'verified' ? <CheckCircle2 size={11} /> : null}
                   {event.processing_status}
                 </span>
               </div>
-              <div><div style={{ color: '#888', textTransform: 'uppercase', fontSize: 10, letterSpacing: '.05em', marginBottom: 2 }}>Records extracted</div>
-                <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 14, fontWeight: 700, color: 'var(--c-text)' }}>{event.records_extracted ?? 0}</div>
+              <div><div style={{ color: 'var(--c-t6, #888)', textTransform: 'uppercase', fontSize: 12, letterSpacing: '.05em', marginBottom: 2 }}>Records extracted</div>
+                <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 15, fontWeight: 700, color: 'var(--c-text)' }}>{event.records_extracted ?? 0}</div>
               </div>
-              <div><div style={{ color: '#888', textTransform: 'uppercase', fontSize: 10, letterSpacing: '.05em', marginBottom: 2 }}>Processing time</div>
-                <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 14, fontWeight: 700, color: 'var(--c-text)' }}>{event.processing_ms != null ? `${event.processing_ms}ms` : '—'}</div>
+              <div><div style={{ color: 'var(--c-t6, #888)', textTransform: 'uppercase', fontSize: 12, letterSpacing: '.05em', marginBottom: 2 }}>Processing time</div>
+                <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 15, fontWeight: 700, color: 'var(--c-text)' }}>{event.processing_ms != null ? `${event.processing_ms}ms` : '—'}</div>
               </div>
             </div>
 
             {event.processing_error && (
-              <div style={{ margin: '12px 20px', padding: '10px 12px', background: 'var(--c-primaryLight)', color: '#A32D2D', borderRadius: 8, fontSize: 12, fontFamily: 'DM Mono, monospace' }}>
+              <div style={{ margin: '12px 20px', padding: '10px 12px', background: 'var(--c-primaryLight)', color: 'var(--c-dangerText, #A32D2D)', borderRadius: 8, fontSize: 14, fontFamily: 'DM Mono, monospace' }}>
                 <strong>Error:</strong> {event.processing_error}
               </div>
             )}
 
             {/* Actions row */}
-            <div style={{ padding: '10px 20px', borderBottom: '1px solid #EEEDE8', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--c-borderSubtle, #EEEDE8)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button onClick={copyJson} style={btnSecondary}>
                 {copied ? <CheckCircle2 size={12} /> : null} {copied ? 'Copied' : 'Copy payload'}
               </button>
-              <button onClick={replay} disabled={replaying} style={{ ...btnSecondary, color: '#dc2626', borderColor: '#FCC' }}>
+              <button onClick={replay} disabled={replaying} style={{ ...btnSecondary, color: 'var(--c-primary, #dc2626)', borderColor: '#FCC' }}>
                 {replaying ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Play size={12} />} Replay
               </button>
               <button onClick={() => setShowHeaders(!showHeaders)} style={btnSecondary}>
@@ -2102,7 +1461,7 @@ function WebhookDetailDrawer({ id, onClose, onChanged }) {
             </div>
 
             {replayResult && (
-              <div style={{ margin: '0 20px 12px', padding: '10px 12px', borderRadius: 8, fontSize: 12, background: replayResult.ok ? '#E4F3EE' : 'var(--c-primaryLight)', color: replayResult.ok ? '#0F6E56' : '#A32D2D' }}>
+              <div style={{ margin: '0 20px 12px', padding: '10px 12px', borderRadius: 8, fontSize: 14, background: replayResult.ok ? 'var(--c-successBgSoft, #E4F3EE)' : 'var(--c-primaryLight)', color: replayResult.ok ? 'var(--c-successText, #0F6E56)' : 'var(--c-dangerText, #A32D2D)' }}>
                 {replayResult.ok ? '✓ ' : '⚠ '} {replayResult.msg}
               </div>
             )}
@@ -2110,19 +1469,19 @@ function WebhookDetailDrawer({ id, onClose, onChanged }) {
             {/* Headers (collapsed by default) */}
             {showHeaders && event.request_headers && (
               <div style={{ padding: '0 20px 12px' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#666', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.05em' }}>Request headers</div>
-                <pre style={{ background: 'var(--c-hover)', border: '1px solid #EEEDE8', borderRadius: 8, padding: 12, fontSize: 11, fontFamily: 'DM Mono, monospace', overflowX: 'auto', margin: 0 }}>{JSON.stringify(event.request_headers, null, 2)}</pre>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c-t4, #666)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.05em' }}>Request headers</div>
+                <pre style={{ background: 'var(--c-hover)', border: '1px solid var(--c-borderSubtle, #EEEDE8)', borderRadius: 8, padding: 12, fontSize: 13, fontFamily: 'DM Mono, monospace', overflowX: 'auto', margin: 0 }}>{JSON.stringify(event.request_headers, null, 2)}</pre>
               </div>
             )}
 
             {/* Payload — pretty-printed with syntax highlighting */}
             <div style={{ padding: '0 20px 20px' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#666', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.05em', display: 'flex', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--c-t4, #666)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.05em', display: 'flex', justifyContent: 'space-between' }}>
                 <span>Payload ({event.payload_kind || 'unknown'})</span>
-                <span style={{ fontFamily: 'DM Mono, monospace', color: '#888', textTransform: 'none', letterSpacing: 0 }}>{JSON.stringify(event.payload).length.toLocaleString()} bytes</span>
+                <span style={{ fontFamily: 'DM Mono, monospace', color: 'var(--c-t6, #888)', textTransform: 'none', letterSpacing: 0 }}>{JSON.stringify(event.payload).length.toLocaleString()} bytes</span>
               </div>
               <pre
-                style={{ background: 'var(--c-hover)', border: '1px solid #EEEDE8', borderRadius: 8, padding: 14, fontSize: 12, fontFamily: 'DM Mono, monospace', lineHeight: 1.5, overflowX: 'auto', margin: 0, color: '#333' }}
+                style={{ background: 'var(--c-hover)', border: '1px solid var(--c-borderSubtle, #EEEDE8)', borderRadius: 8, padding: 14, fontSize: 14, fontFamily: 'DM Mono, monospace', lineHeight: 1.5, overflowX: 'auto', margin: 0, color: 'var(--c-s333333, #333)' }}
                 dangerouslySetInnerHTML={{ __html: syntaxHighlight(JSON.stringify(event.payload, null, 2)) }}
               />
             </div>
@@ -2133,7 +1492,7 @@ function WebhookDetailDrawer({ id, onClose, onChanged }) {
   );
 }
 
-const btnSecondary = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', border: '1px solid #D5D5D0', borderRadius: 6, background: 'var(--c-cardBg)', color: '#333', cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: FONT };
+const btnSecondary = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', border: '1px solid var(--c-borderStrong, #D5D5D0)', borderRadius: 6, background: 'var(--c-cardBg)', color: 'var(--c-s333333, #333)', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: FONT };
 
 /* ------------------------------------------------------------------ */
 /*  AI Models                                                          */
@@ -2141,7 +1500,7 @@ const btnSecondary = { display: 'inline-flex', alignItems: 'center', gap: 6, pad
 const AI_PROVIDER_OPTIONS = [
   { value: 'openai',    label: 'OpenAI',          accent: '#10A37F' },
   { value: 'anthropic', label: 'Anthropic Claude', accent: '#C99B7A' },
-  { value: 'kimi',      label: 'Moonshot / Kimi', accent: '#7E58C6' },
+  { value: 'kimi',      label: 'Moonshot / Kimi', accent: 'var(--c-x7e58c6, #7E58C6)' },
   { value: 'gemini',    label: 'Google Gemini',   accent: '#4285F4' },
 ];
 const providerOpt = (v) => AI_PROVIDER_OPTIONS.find(o => o.value === v) || { label: v, accent: C.textMuted };
@@ -2328,36 +1687,36 @@ function AIModelsTab({ navigate }) {
     try { return new Date(iso).toLocaleString(); } catch { return iso; }
   };
 
-  const inpStyle = { width: '100%', padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', background: 'var(--c-cardBg)', color: C.text };
-  const labelStyle = { display: 'block', fontSize: 11, fontWeight: 600, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6, fontFamily: FONT };
+  const inpStyle = { width: '100%', padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 15, fontFamily: FONT, outline: 'none', background: 'var(--c-cardBg)', color: C.text };
+  const labelStyle = { display: 'block', fontSize: 13, fontWeight: 600, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6, fontFamily: FONT };
 
   return (
     <div style={{ flex: 1, padding: 24, overflow: 'auto', fontFamily: FONT }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
         <div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0 }}>AI Models</h2>
-          <p style={{ fontSize: 12, color: C.textMuted, margin: '4px 0 0' }}>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0 }}>AI Models</h2>
+          <p style={{ fontSize: 14, color: C.textMuted, margin: '4px 0 0' }}>
             Connect AI provider API keys. Available models are discovered automatically on save.
           </p>
         </div>
         <button onClick={openAdd} style={{
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '8px 14px', background: C.primary, color: '#fff', border: 'none',
-          borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
+          borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
         }}>
           <Plus size={15} /> Add AI Model
         </button>
       </div>
 
       {loading ? (
-        <div style={{ padding: 40, textAlign: 'center', color: C.textMuted, fontSize: 13 }}>Loading…</div>
+        <div style={{ padding: 40, textAlign: 'center', color: C.textMuted, fontSize: 15 }}>Loading…</div>
       ) : items.length === 0 ? (
-        <div style={{ padding: 40, textAlign: 'center', background: 'var(--c-cardBg)', border: `1px solid ${C.border}`, borderRadius: 10, color: C.textMuted, fontSize: 13 }}>
+        <div style={{ padding: 40, textAlign: 'center', background: 'var(--c-cardBg)', border: `1px solid ${C.border}`, borderRadius: 10, color: C.textMuted, fontSize: 15 }}>
           No AI models connected yet. Click "Add AI Model" to connect your first provider.
         </div>
       ) : (
         <div style={{ background: 'var(--c-cardBg)', border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15, tableLayout: 'fixed' }}>
             <colgroup>
               <col style={{ width: '18%' }}/>
               <col style={{ width: '22%' }}/>
@@ -2367,11 +1726,11 @@ function AIModelsTab({ navigate }) {
             </colgroup>
             <thead>
               <tr style={{ background: C.pageBg, borderBottom: `1px solid ${C.border}` }}>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Provider</th>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>API Key</th>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Available Models</th>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Created</th>
-                <th style={{ textAlign: 'right', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', width: 130 }}>Actions</th>
+                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Provider</th>
+                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.04em' }}>API Key</th>
+                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Available Models</th>
+                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Created</th>
+                <th style={{ textAlign: 'right', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.04em', width: 130 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -2386,11 +1745,11 @@ function AIModelsTab({ navigate }) {
                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: prov.accent, flexShrink: 0 }}/>
                         <div>
                           <div style={{ fontWeight: 600, color: C.text, textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 3 }}>{prov.label}</div>
-                          {row.label && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{row.label}</div>}
+                          {row.label && <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2 }}>{row.label}</div>}
                         </div>
                       </div>
                     </td>
-                    <td style={{ padding: '12px 16px', verticalAlign: 'top', fontFamily: 'DM Mono, monospace', fontSize: 12 }}>
+                    <td style={{ padding: '12px 16px', verticalAlign: 'top', fontFamily: 'DM Mono, monospace', fontSize: 14 }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, minWidth: 0 }}>
                         <span style={{
                           color: revealed ? C.text : C.textSecondary,
@@ -2408,7 +1767,7 @@ function AIModelsTab({ navigate }) {
                     </td>
                     <td style={{ padding: '12px 16px', verticalAlign: 'top' }}>
                       {models.length === 0 ? (
-                        <span style={{ color: C.textMuted, fontSize: 12, fontStyle: 'italic' }}>none cached</span>
+                        <span style={{ color: C.textMuted, fontSize: 14, fontStyle: 'italic' }}>none cached</span>
                       ) : (() => {
                         const isExpanded = expandedModelsId === row.id;
                         const enabledList = Array.isArray(row.enabledModels)
@@ -2423,7 +1782,7 @@ function AIModelsTab({ navigate }) {
                             {/* Enabled chips (collapsed view shows these) */}
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                               {visibleEnabled.length === 0 && !isExpanded && (
-                                <span style={{ fontSize: 11, color: C.textMuted, fontStyle: 'italic' }}>No models enabled</span>
+                                <span style={{ fontSize: 13, color: C.textMuted, fontStyle: 'italic' }}>No models enabled</span>
                               )}
                               {visibleEnabled.map((m, i) => (
                                 <button
@@ -2432,22 +1791,22 @@ function AIModelsTab({ navigate }) {
                                   onClick={() => toggleModelEnabled(row, m.id)}
                                   title={`Click to disable. ${m.name && m.name !== m.id ? `${m.name} (${m.id})` : m.id}`}
                                   style={{
-                                    fontSize: 11, fontFamily: 'DM Mono, monospace', padding: '2px 8px',
-                                    background: '#E5F2EE', color: '#0F6E56', borderRadius: 999,
-                                    border: '1px solid #B8DCCF', cursor: 'pointer',
+                                    fontSize: 13, fontFamily: 'DM Mono, monospace', padding: '2px 8px',
+                                    background: 'var(--c-successBgSoft, #E5F2EE)', color: 'var(--c-successText, #0F6E56)', borderRadius: 999,
+                                    border: '1px solid var(--c-successBorder, #B8DCCF)', cursor: 'pointer',
                                   }}>
                                   {m.id}
                                 </button>
                               ))}
                               {!isExpanded && enabledModels.length > 6 && (
-                                <span style={{ fontSize: 11, color: C.textMuted, alignSelf: 'center' }}>+{enabledModels.length - 6} more</span>
+                                <span style={{ fontSize: 13, color: C.textMuted, alignSelf: 'center' }}>+{enabledModels.length - 6} more</span>
                               )}
                             </div>
 
                             {/* Expanded: show disabled chips and a counter */}
                             {isExpanded && disabledModels.length > 0 && (
                               <>
-                                <div style={{ fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, marginTop: 8, marginBottom: 4 }}>Disabled — click to enable</div>
+                                <div style={{ fontSize: 12, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, marginTop: 8, marginBottom: 4 }}>Disabled — click to enable</div>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                                   {disabledModels.map((m, i) => (
                                     <button
@@ -2456,8 +1815,8 @@ function AIModelsTab({ navigate }) {
                                       onClick={() => toggleModelEnabled(row, m.id)}
                                       title={`Click to enable. ${m.name && m.name !== m.id ? `${m.name} (${m.id})` : m.id}`}
                                       style={{
-                                        fontSize: 11, fontFamily: 'DM Mono, monospace', padding: '2px 8px',
-                                        background: '#F8F8F4', color: C.textMuted, borderRadius: 999,
+                                        fontSize: 13, fontFamily: 'DM Mono, monospace', padding: '2px 8px',
+                                        background: 'var(--c-surfaceInner, #F8F8F4)', color: C.textMuted, borderRadius: 999,
                                         border: `1px dashed ${C.border}`, cursor: 'pointer',
                                         textDecoration: 'line-through',
                                       }}>
@@ -2472,7 +1831,7 @@ function AIModelsTab({ navigate }) {
                               <button
                                 type="button"
                                 onClick={() => setExpandedModelsId(isExpanded ? null : row.id)}
-                                style={{ background: 'transparent', border: 'none', color: C.primary, fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: 0, fontFamily: FONT }}>
+                                style={{ background: 'transparent', border: 'none', color: C.primary, fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0, fontFamily: FONT }}>
                                 {isExpanded ? 'Done' : `Manage (${enabledModels.length}/${models.length} enabled)`}
                               </button>
                             </div>
@@ -2480,17 +1839,17 @@ function AIModelsTab({ navigate }) {
                         );
                       })()}
                       {row.lastSyncError && (
-                        <div style={{ marginTop: 6, fontSize: 11, color: '#A32D2D' }}>Last sync error: {row.lastSyncError}</div>
+                        <div style={{ marginTop: 6, fontSize: 13, color: 'var(--c-dangerText, #A32D2D)' }}>Last sync error: {row.lastSyncError}</div>
                       )}
                     </td>
-                    <td style={{ padding: '12px 16px', verticalAlign: 'top', color: C.textSecondary, fontSize: 12 }}>{fmtDate(row.createdAt)}</td>
+                    <td style={{ padding: '12px 16px', verticalAlign: 'top', color: C.textSecondary, fontSize: 14 }}>{fmtDate(row.createdAt)}</td>
                     <td style={{ padding: '12px 16px', verticalAlign: 'top' }}>
                       <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'nowrap', gap: 6, justifyContent: 'flex-end' }}>
                         <button onClick={() => syncOne(row)} disabled={syncingId === row.id} title="Refresh available models" style={{ ...btnSecondary, opacity: syncingId === row.id ? 0.6 : 1, whiteSpace: 'nowrap' }}>
                           {syncingId === row.id ? <Loader2 size={12} className="spin"/> : <RefreshCw size={12}/>}
                           {syncingId === row.id ? 'Syncing' : 'Sync'}
                         </button>
-                        <button onClick={() => { setDeleteTarget(row); setDeleteConfirmText(''); }} title="Delete" style={{ ...btnSecondary, color: '#A32D2D', borderColor: '#F3D4D4', whiteSpace: 'nowrap' }}>
+                        <button onClick={() => { setDeleteTarget(row); setDeleteConfirmText(''); }} title="Delete" style={{ ...btnSecondary, color: 'var(--c-dangerText, #A32D2D)', borderColor: '#F3D4D4', whiteSpace: 'nowrap' }}>
                           <Trash2 size={12}/> Delete
                         </button>
                       </div>
@@ -2507,8 +1866,8 @@ function AIModelsTab({ navigate }) {
       {showForm && (
         <div onClick={() => !saving && setShowForm(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, boxShadow: C.shadowLg, width: 460, padding: 24, fontFamily: FONT }}>
-            <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: C.text }}>Add AI Model</h3>
-            <p style={{ margin: '4px 0 18px', fontSize: 12, color: C.textMuted }}>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.text }}>Add AI Model</h3>
+            <p style={{ margin: '4px 0 18px', fontSize: 14, color: C.textMuted }}>
               Your key will be encrypted at rest. We'll call the provider's models endpoint to verify it works.
             </p>
 
@@ -2531,9 +1890,9 @@ function AIModelsTab({ navigate }) {
                   value={form.baseUrl}
                   onChange={e => setForm(f => ({ ...f, baseUrl: e.target.value }))}
                   placeholder="e.g. https://api.moonshot.ai/v1"
-                  style={{ ...inpStyle, fontFamily: 'DM Mono, monospace', fontSize: 12 }}
+                  style={{ ...inpStyle, fontFamily: 'DM Mono, monospace', fontSize: 14 }}
                 />
-                <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, lineHeight: 1.4 }}>
+                <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4, lineHeight: 1.4 }}>
                   Leave blank for Moonshot's own platforms (<code>api.moonshot.ai</code> / <code>api.moonshot.cn</code>).
                   For Kimi Code (<code>sk-kimi-…</code> keys), OpenRouter, or another gateway, paste the API root from that service's docs. We append <code>/models</code> automatically.
                 </div>
@@ -2556,12 +1915,12 @@ function AIModelsTab({ navigate }) {
             </div>
 
             {error && (
-              <div style={{ padding: '8px 12px', background: 'var(--c-primaryLight)', color: '#A32D2D', borderRadius: 8, fontSize: 12, marginBottom: 14 }}>{error}</div>
+              <div style={{ padding: '8px 12px', background: 'var(--c-primaryLight)', color: 'var(--c-dangerText, #A32D2D)', borderRadius: 8, fontSize: 14, marginBottom: 14 }}>{error}</div>
             )}
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowForm(false)} disabled={saving} style={{ ...btnSecondary, padding: '8px 14px', fontSize: 13 }}>Cancel</button>
-              <button onClick={save} disabled={saving} style={{ padding: '8px 14px', background: C.primary, color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: saving ? 'wait' : 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <button onClick={() => setShowForm(false)} disabled={saving} style={{ ...btnSecondary, padding: '8px 14px', fontSize: 15 }}>Cancel</button>
+              <button onClick={save} disabled={saving} style={{ padding: '8px 14px', background: C.primary, color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: saving ? 'wait' : 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 {saving && <Loader2 size={13} className="spin"/>}
                 {saving ? 'Connecting…' : 'Connect'}
               </button>
@@ -2574,21 +1933,21 @@ function AIModelsTab({ navigate }) {
       {deleteTarget && (
         <div onClick={() => setDeleteTarget(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, boxShadow: C.shadowLg, width: 420, padding: 24, fontFamily: FONT }}>
-            <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: C.text }}>Delete AI Model</h3>
-            <p style={{ margin: '8px 0 14px', fontSize: 13, color: C.textSecondary }}>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.text }}>Delete AI Model</h3>
+            <p style={{ margin: '8px 0 14px', fontSize: 15, color: C.textSecondary }}>
               This will remove the connection to <strong>{providerOpt(deleteTarget.provider).label}</strong>
               {deleteTarget.label ? <> ({deleteTarget.label})</> : null}. The encrypted API key will be deleted from the database.
             </p>
             <label style={labelStyle}>Type "delete" to confirm</label>
             <input value={deleteConfirmText} onChange={e => setDeleteConfirmText(e.target.value)} autoFocus style={inpStyle}/>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-              <button onClick={() => { setDeleteTarget(null); setDeleteConfirmText(''); }} style={{ ...btnSecondary, padding: '8px 14px', fontSize: 13 }}>Cancel</button>
+              <button onClick={() => { setDeleteTarget(null); setDeleteConfirmText(''); }} style={{ ...btnSecondary, padding: '8px 14px', fontSize: 15 }}>Cancel</button>
               <button
                 onClick={confirmDelete}
                 disabled={deleteConfirmText.trim().toLowerCase() !== 'delete'}
                 style={{
-                  padding: '8px 14px', background: deleteConfirmText.trim().toLowerCase() === 'delete' ? '#A32D2D' : '#D5D5D0',
-                  color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                  padding: '8px 14px', background: deleteConfirmText.trim().toLowerCase() === 'delete' ? '#A32D2D' : 'var(--c-borderStrong, #D5D5D0)',
+                  color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 600,
                   cursor: deleteConfirmText.trim().toLowerCase() === 'delete' ? 'pointer' : 'not-allowed', fontFamily: FONT,
                 }}>
                 Delete
@@ -2607,8 +1966,8 @@ function AIModelsTab({ navigate }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span style={{ width: 12, height: 12, borderRadius: '50%', background: providerOpt(usageRow.provider).accent }}/>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: C.text }}>{providerOpt(usageRow.provider).label}</h3>
-                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{usageRow.label || 'Usage dashboard'}</div>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.text }}>{providerOpt(usageRow.provider).label}</h3>
+                  <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2 }}>{usageRow.label || 'Usage dashboard'}</div>
                 </div>
               </div>
               <button onClick={closeUsage} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: C.textMuted, padding: 4 }}><X size={18}/></button>
@@ -2617,21 +1976,21 @@ function AIModelsTab({ navigate }) {
             {/* Body */}
             <div style={{ padding: '18px 24px 22px' }}>
               {usageLoading ? (
-                <div style={{ padding: 40, textAlign: 'center', color: C.textMuted, fontSize: 13 }}>
+                <div style={{ padding: 40, textAlign: 'center', color: C.textMuted, fontSize: 15 }}>
                   <Loader2 size={18} className="spin" style={{ verticalAlign: 'middle', marginRight: 8 }}/>
                   Probing live connection and aggregating usage…
                 </div>
               ) : usageError ? (
-                <div style={{ padding: '12px 14px', background: 'var(--c-primaryLight)', color: '#A32D2D', borderRadius: 8, fontSize: 13 }}>{usageError}</div>
+                <div style={{ padding: '12px 14px', background: 'var(--c-primaryLight)', color: 'var(--c-dangerText, #A32D2D)', borderRadius: 8, fontSize: 15 }}>{usageError}</div>
               ) : usageData ? (() => {
                 const c = usageData.connection || {};
                 const u = usageData.usage || {};
                 const successRate = u.totalCalls > 0 ? Math.round((u.successfulCalls / u.totalCalls) * 100) : null;
                 const tile = (label, value, sub) => (
                   <div key={label} style={{ background: C.pageBg, border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 14px' }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.textMuted, marginBottom: 6 }}>{label}</div>
-                    <div style={{ fontSize: 22, fontWeight: 700, color: C.text, fontFamily: 'DM Mono, monospace', lineHeight: 1 }}>{value}</div>
-                    {sub && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>{sub}</div>}
+                    <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.textMuted, marginBottom: 6 }}>{label}</div>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: C.text, fontFamily: 'DM Mono, monospace', lineHeight: 1 }}>{value}</div>
+                    {sub && <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>{sub}</div>}
                   </div>
                 );
                 const fmtNum = (n) => Number(n || 0).toLocaleString();
@@ -2640,20 +1999,20 @@ function AIModelsTab({ navigate }) {
                   try { return new Date(iso).toLocaleString(); } catch { return iso; }
                 };
                 const statusColors = {
-                  healthy: { bg: '#E5F2EE', fg: '#0F6E56', dot: '#0F6E56', label: 'Healthy' },
-                  error:   { bg: '#FCEBEB', fg: '#A32D2D', dot: '#A32D2D', label: 'Error' },
-                  unknown: { bg: '#F4F4EE', fg: '#666',    dot: '#999',    label: 'Unknown' },
+                  healthy: { bg: 'var(--c-successBgSoft, #E5F2EE)', fg: 'var(--c-successText, #0F6E56)', dot: 'var(--c-successText, #0F6E56)', label: 'Healthy' },
+                  error:   { bg: 'var(--c-dangerBg, #FCEBEB)', fg: 'var(--c-dangerText, #A32D2D)', dot: 'var(--c-dangerText, #A32D2D)', label: 'Error' },
+                  unknown: { bg: 'var(--c-surfaceMuted, #F4F4EE)', fg: 'var(--c-t4, #666)',    dot: 'var(--c-t7, #999)',    label: 'Unknown' },
                 };
                 const sc = statusColors[c.status] || statusColors.unknown;
                 return (
                   <>
                     {/* Connection status banner */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: sc.bg, color: sc.fg, borderRadius: 8, fontSize: 12, marginBottom: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: sc.bg, color: sc.fg, borderRadius: 8, fontSize: 14, marginBottom: 16 }}>
                       <span style={{ width: 8, height: 8, borderRadius: '50%', background: sc.dot, flexShrink: 0 }}/>
                       <div style={{ flex: 1 }}>
                         <strong>{sc.label}</strong> — {c.status === 'healthy' ? `Live ping to ${usageRow.provider === 'kimi' ? (usageData.credential.baseUrl || 'Moonshot') : providerOpt(usageRow.provider).label}'s /models endpoint succeeded.` : (c.error || 'No live status available.')}
                       </div>
-                      <span style={{ fontSize: 10, color: sc.fg, opacity: .7 }}>checked {fmtTime(c.checkedAt)}</span>
+                      <span style={{ fontSize: 12, color: sc.fg, opacity: .7 }}>checked {fmtTime(c.checkedAt)}</span>
                     </div>
 
                     {/* Metric tiles */}
@@ -2690,14 +2049,14 @@ function AIModelsTab({ navigate }) {
                       const remaining = Math.max(0, activityTotal - activityItems.length);
                       const modelOptions = (usageData.usage?.byModel || []).map(m => m.modelId).filter(Boolean);
                       const f = activityFilters;
-                      const filterInputStyle = { padding: '5px 9px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11, fontFamily: FONT, background: 'var(--c-cardBg)', color: C.text, outline: 'none' };
+                      const filterInputStyle = { padding: '5px 9px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontFamily: FONT, background: 'var(--c-cardBg)', color: C.text, outline: 'none' };
                       const setF = (patch) => applyActivityFilters({ ...f, ...patch });
                       const filterActive = f.status !== 'all' || f.model || f.from || f.to;
                       return (
                         <>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8, marginTop: 14 }}>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '.04em' }}>Recent activity</div>
-                            <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'DM Mono, monospace' }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '.04em' }}>Recent activity</div>
+                            <div style={{ fontSize: 13, color: C.textMuted, fontFamily: 'DM Mono, monospace' }}>
                               {activityFiltering ? 'filtering…' : `showing ${activityItems.length} of ${activityTotal}`}
                             </div>
                           </div>
@@ -2713,7 +2072,7 @@ function AIModelsTab({ navigate }) {
                                 { value: 'error', label: 'Error' },
                               ]}
                               style={{ minWidth: 130 }}
-                              triggerStyle={{ padding: '5px 28px 5px 9px', fontSize: 11, borderWidth: 1, borderRadius: 6 }}
+                              triggerStyle={{ padding: '5px 28px 5px 9px', fontSize: 13, borderWidth: 1, borderRadius: 6 }}
                             />
                             <SearchableSelect
                               value={f.model}
@@ -2722,20 +2081,20 @@ function AIModelsTab({ navigate }) {
                               placeholder="All models"
                               searchPlaceholder="Search models…"
                               style={{ minWidth: 150 }}
-                              triggerStyle={{ padding: '5px 28px 5px 9px', fontSize: 11, borderWidth: 1, borderRadius: 6 }}
+                              triggerStyle={{ padding: '5px 28px 5px 9px', fontSize: 13, borderWidth: 1, borderRadius: 6 }}
                             />
                             <input type="date" value={f.from} onChange={e => setF({ from: e.target.value })} title="From date" style={filterInputStyle}/>
                             <input type="date" value={f.to}   onChange={e => setF({ to:   e.target.value })} title="To date"   style={filterInputStyle}/>
                             {filterActive && (
                               <button type="button" onClick={() => applyActivityFilters({ status: 'all', model: '', from: '', to: '' })}
-                                style={{ padding: '5px 10px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11, fontWeight: 600, color: C.textSecondary, cursor: 'pointer', fontFamily: FONT }}>
+                                style={{ padding: '5px 10px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13, fontWeight: 600, color: C.textSecondary, cursor: 'pointer', fontFamily: FONT }}>
                                 Clear filters
                               </button>
                             )}
                           </div>
 
                           {activityItems.length === 0 ? (
-                            <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: 24, textAlign: 'center', fontSize: 12, color: C.textMuted }}>
+                            <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: 24, textAlign: 'center', fontSize: 14, color: C.textMuted }}>
                               No calls match the current filters.
                             </div>
                           ) : (
@@ -2751,45 +2110,45 @@ function AIModelsTab({ navigate }) {
                                 title={call.automationId ? `Click to open execution #${call.executionId} in ${call.automationName || 'automation'}` : ''}
                                 style={{
                                   padding: '10px 12px', borderTop: `1px solid ${C.border}`,
-                                  fontSize: 12, lineHeight: 1.45,
+                                  fontSize: 14, lineHeight: 1.45,
                                   cursor: call.automationId ? 'pointer' : 'default',
                                   transition: 'background .12s',
                                 }}
-                                onMouseEnter={e => { if (call.automationId) e.currentTarget.style.background = '#FAFAF7'; }}
+                                onMouseEnter={e => { if (call.automationId) e.currentTarget.style.background = 'var(--c-xfafaf7, #FAFAF7)'; }}
                                 onMouseLeave={e => { e.currentTarget.style.background = ''; }}
                               >
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                                   <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: call.status === 'success' ? '#0F6E56' : call.status === 'error' ? '#A32D2D' : '#999' }}/>
-                                  <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: C.text }}>{call.modelId || '(unknown)'}</span>
+                                  <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, color: C.text }}>{call.modelId || '(unknown)'}</span>
                                   {call.automationName && (
                                     <>
-                                      <span style={{ color: C.textMuted, fontSize: 11 }}>·</span>
-                                      <span style={{ color: C.textSecondary, fontSize: 11 }}>{call.automationName}</span>
+                                      <span style={{ color: C.textMuted, fontSize: 13 }}>·</span>
+                                      <span style={{ color: C.textSecondary, fontSize: 13 }}>{call.automationName}</span>
                                     </>
                                   )}
-                                  <span style={{ color: C.textMuted, fontSize: 11 }}>·</span>
-                                  <span style={{ color: C.textMuted, fontSize: 11 }} title={call.startedAt}>{fmtRel(call.startedAt)}</span>
+                                  <span style={{ color: C.textMuted, fontSize: 13 }}>·</span>
+                                  <span style={{ color: C.textMuted, fontSize: 13 }} title={call.startedAt}>{fmtRel(call.startedAt)}</span>
                                   <span style={{ flex: 1 }}/>
                                   {call.totalTokens != null && (
-                                    <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: C.textSecondary }} title={`${call.promptTokens || 0} prompt + ${call.completionTokens || 0} completion`}>
+                                    <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, color: C.textSecondary }} title={`${call.promptTokens || 0} prompt + ${call.completionTokens || 0} completion`}>
                                       {call.totalTokens.toLocaleString()} tok
                                     </span>
                                   )}
                                   {call.elapsedMs != null && (
-                                    <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: C.textMuted }}>{call.elapsedMs}ms</span>
+                                    <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, color: C.textMuted }}>{call.elapsedMs}ms</span>
                                   )}
                                 </div>
                                 {call.userMessage && (
-                                  <div style={{ marginLeft: 15, color: C.textSecondary, fontSize: 11 }}>
+                                  <div style={{ marginLeft: 15, color: C.textSecondary, fontSize: 13 }}>
                                     <span style={{ color: C.textMuted }}>in: </span>{excerpt(call.userMessage)}
                                   </div>
                                 )}
                                 {call.status === 'error' ? (
-                                  <div style={{ marginLeft: 15, color: '#A32D2D', fontSize: 11 }}>
-                                    <span style={{ color: '#A32D2D', opacity: .7 }}>error: </span>{excerpt(call.errorMessage, 120)}
+                                  <div style={{ marginLeft: 15, color: 'var(--c-dangerText, #A32D2D)', fontSize: 13 }}>
+                                    <span style={{ color: 'var(--c-dangerText, #A32D2D)', opacity: .7 }}>error: </span>{excerpt(call.errorMessage, 120)}
                                   </div>
                                 ) : call.aiResponse ? (
-                                  <div style={{ marginLeft: 15, color: C.text, fontSize: 11, fontFamily: 'DM Mono, monospace' }}>
+                                  <div style={{ marginLeft: 15, color: C.text, fontSize: 13, fontFamily: 'DM Mono, monospace' }}>
                                     <span style={{ color: C.textMuted, fontFamily: 'DM Sans, sans-serif' }}>out: </span>{excerpt(call.aiResponse, 100)}
                                   </div>
                                 ) : null}
@@ -2806,7 +2165,7 @@ function AIModelsTab({ navigate }) {
                                 marginTop: 10, width: '100%',
                                 padding: '8px 12px', background: 'var(--c-cardBg)',
                                 border: `1px solid ${C.border}`, borderRadius: 8,
-                                fontSize: 12, fontWeight: 600, fontFamily: FONT,
+                                fontSize: 14, fontWeight: 600, fontFamily: FONT,
                                 color: C.text, cursor: activityLoadingMore ? 'wait' : 'pointer',
                                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                               }}>
@@ -2821,10 +2180,10 @@ function AIModelsTab({ navigate }) {
                     {/* Per-model breakdown */}
                     {u.byModel && u.byModel.length > 0 && (
                       <>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>Usage by model</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>Usage by model</div>
                         <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }}>
                           {u.byModel.map((m, i) => (
-                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderTop: i === 0 ? 'none' : `1px solid ${C.border}`, fontSize: 12 }}>
+                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderTop: i === 0 ? 'none' : `1px solid ${C.border}`, fontSize: 14 }}>
                               <span style={{ fontFamily: 'DM Mono, monospace', color: C.text }}>{m.modelId || '(unknown)'}</span>
                               <span style={{ color: C.textSecondary }}>
                                 <span style={{ fontFamily: 'DM Mono, monospace' }}>{fmtNum(m.calls)}</span> calls · <span style={{ fontFamily: 'DM Mono, monospace' }}>{fmtNum(m.tokens)}</span> tok
@@ -2850,21 +2209,193 @@ function AIModelsTab({ navigate }) {
 /* ------------------------------------------------------------------ */
 /*  Users                                                              */
 /* ------------------------------------------------------------------ */
-const ROLE_OPTIONS = [
-  { value: 'admin',     label: 'Admin',     description: 'Full access to all pages and settings' },
-  { value: 'bda_sales', label: 'BDA Sales', description: 'Sees chats and contacts on their assigned WhatsApp numbers only' },
-];
-
-function RoleBadge({ role }) {
+// ⚠ Roles are DATA, loaded from /roles. A hardcoded list here would not show a
+// role someone added in this very screen — the drift that makes a control look
+// broken. Admin keeps a distinct colour because it is the one role with
+// unconditional access.
+function RoleBadge({ role, roles = [] }) {
+  const meta = roles.find(r => r.key === role);
   const styles = role === 'admin'
-    ? { bg: '#E5F2EE', fg: '#0F6E56', label: 'Admin' }
-    : role === 'bda_sales'
-      ? { bg: '#FFF3E0', fg: '#B04E0E', label: 'BDA Sales' }
-      : { bg: '#F4F4EE', fg: '#666', label: role };
+    ? { bg: 'var(--c-successBgSoft, #E5F2EE)', fg: 'var(--c-successText, #0F6E56)' }
+    : { bg: 'var(--c-orangeBg, #FFF3E0)', fg: 'var(--c-sb04e0e, #B04E0E)' };
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 999, background: styles.bg, color: styles.fg, fontSize: 11, fontWeight: 700 }}>
-      {styles.label}
+    <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 999, background: styles.bg, color: styles.fg, fontSize: 13, fontWeight: 700 }}>
+      {meta?.label || role}
     </span>
+  );
+}
+
+/**
+ * Role management, in the same screen as the users who hold the roles.
+ *
+ * ⚠ Admin is rendered read-only apart from its name. It is not a UI nicety —
+ * the backend refuses the same edits. This screen is admin-gated, so a role
+ * change that removed admin access would lock everyone out of the only place
+ * that could put it back.
+ */
+function RolesPanel({ roles, allPages, users, onRefresh }) {
+  const [editing, setEditing] = useState(null);   // role key, or '__new__'
+  const [form, setForm] = useState({ key: '', label: '', description: '', pages: [] });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const countFor = (key) => users.filter(u => u.role === key).length;
+
+  const openNew = () => {
+    setErr(''); setEditing('__new__');
+    setForm({ key: '', label: '', description: '', pages: [] });
+  };
+  const openEdit = (r) => {
+    setErr(''); setEditing(r.key);
+    setForm({ key: r.key, label: r.label, description: r.description || '', pages: [...(r.pages || [])] });
+  };
+
+  const togglePage = (p) => setForm(f => ({
+    ...f,
+    pages: f.pages.includes(p) ? f.pages.filter(x => x !== p) : [...f.pages, p],
+  }));
+
+  const save = async () => {
+    setBusy(true); setErr('');
+    try {
+      if (editing === '__new__') {
+        await api.roles.create({ key: form.key, label: form.label, description: form.description, pages: form.pages });
+      } else {
+        const isAdminRole = editing === 'admin';
+        await api.roles.update(editing, isAdminRole
+          ? { label: form.label, description: form.description }
+          : { label: form.label, description: form.description, pages: form.pages });
+      }
+      setEditing(null);
+      await onRefresh();
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+
+  const remove = async (r) => {
+    setBusy(true); setErr('');
+    try { await api.roles.delete(r.key); await onRefresh(); }
+    catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+
+  const inp = { width: '100%', padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 15, fontFamily: FONT, outline: 'none', background: 'var(--c-cardBg)', color: C.text };
+  const lbl = { display: 'block', fontSize: 13, fontWeight: 600, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 };
+
+  return (
+    <div style={{ background: 'var(--c-surfaceAlt)', border: `1px solid ${C.border}`, borderRadius: 10, padding: 16, marginBottom: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>Roles</div>
+          <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2 }}>
+            A role is a named set of pages. Give it to a user above.
+          </div>
+        </div>
+        <button onClick={openNew} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: 'var(--c-cardBg)', color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
+          <Plus size={14} /> Add role
+        </button>
+      </div>
+
+      {err && <div style={{ background: 'var(--c-dangerBg)', color: 'var(--c-dangerText)', padding: '8px 12px', borderRadius: 8, fontSize: 14, marginBottom: 10 }}>{err}</div>}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {roles.map(r => (
+          <div key={r.key} style={{ background: 'var(--c-cardBg)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <RoleBadge role={r.key} roles={roles} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, color: C.textSecondary }}>{r.description || '—'}</div>
+                <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2, fontFamily: MONO }}>
+                  {r.key} · {r.isSystem ? 'all pages' : `${(r.pages || []).length} pages`} · {countFor(r.key)} user{countFor(r.key) === 1 ? '' : 's'}
+                </div>
+              </div>
+              <button onClick={() => openEdit(r)} style={{ padding: '5px 10px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, cursor: 'pointer', color: C.text, fontFamily: FONT }}>Edit</button>
+              {!r.isSystem && (
+                <button onClick={() => remove(r)} disabled={busy} style={{ padding: '5px 10px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, cursor: 'pointer', color: 'var(--c-dangerText)', fontFamily: FONT }}>Delete</button>
+              )}
+            </div>
+
+            {editing === r.key && (
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+                <label style={lbl}>Name</label>
+                <input style={inp} value={form.label} onChange={e => setForm({ ...form, label: e.target.value })} />
+                <label style={{ ...lbl, marginTop: 10 }}>Description</label>
+                <input style={inp} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+                {r.isSystem ? (
+                  <div style={{ fontSize: 13, color: C.textMuted, marginTop: 10 }}>
+                    Admin always has every page. It cannot be switched off or narrowed — otherwise nobody could reach these settings to change it back.
+                  </div>
+                ) : (
+                  <>
+                    <label style={{ ...lbl, marginTop: 12 }}>Pages ({form.pages.length})</label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 220, overflow: 'auto' }}>
+                      {allPages.map(p => (
+                        <button key={p} onClick={() => togglePage(p)}
+                          style={{
+                            padding: '4px 9px', borderRadius: 999, fontSize: 13, fontFamily: MONO, cursor: 'pointer',
+                            border: `1px solid ${form.pages.includes(p) ? 'var(--c-successText)' : C.border}`,
+                            background: form.pages.includes(p) ? 'var(--c-successBg)' : 'transparent',
+                            color: form.pages.includes(p) ? 'var(--c-successText)' : C.textSecondary,
+                          }}>{p}</button>
+                      ))}
+                    </div>
+                  </>
+                )}
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <button onClick={save} disabled={busy} style={{ padding: '7px 14px', background: C.primary, color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>Save</button>
+                  <button onClick={() => setEditing(null)} style={{ padding: '7px 14px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14, cursor: 'pointer', color: C.text, fontFamily: FONT }}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {editing === '__new__' && (
+          <div style={{ background: 'var(--c-cardBg)', border: `1px dashed ${C.border}`, borderRadius: 8, padding: 12 }}>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ flex: 1 }}>
+                <label style={lbl}>Name</label>
+                <input style={inp} autoFocus value={form.label}
+                  onChange={e => setForm({
+                    ...form, label: e.target.value,
+                    // The id is derived while it is untouched, then left alone —
+                    // it is IMMUTABLE once saved, because users store it.
+                    key: form.key || '',
+                  })}
+                  onBlur={() => setForm(f => ({
+                    ...f,
+                    key: f.key || f.label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 30),
+                  }))}
+                  placeholder="e.g. Support" />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={lbl}>Id (permanent)</label>
+                <input style={{ ...inp, fontFamily: MONO }} value={form.key}
+                  onChange={e => setForm({ ...form, key: e.target.value.toLowerCase() })} placeholder="support" />
+              </div>
+            </div>
+            <label style={{ ...lbl, marginTop: 10 }}>Description</label>
+            <input style={inp} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+            <label style={{ ...lbl, marginTop: 12 }}>Pages ({form.pages.length})</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 220, overflow: 'auto' }}>
+              {allPages.map(p => (
+                <button key={p} onClick={() => togglePage(p)}
+                  style={{
+                    padding: '4px 9px', borderRadius: 999, fontSize: 13, fontFamily: MONO, cursor: 'pointer',
+                    border: `1px solid ${form.pages.includes(p) ? 'var(--c-successText)' : C.border}`,
+                    background: form.pages.includes(p) ? 'var(--c-successBg)' : 'transparent',
+                    color: form.pages.includes(p) ? 'var(--c-successText)' : C.textSecondary,
+                  }}>{p}</button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <button onClick={save} disabled={busy || !form.label.trim()} style={{ padding: '7px 14px', background: C.primary, color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>Create role</button>
+              <button onClick={() => setEditing(null)} style={{ padding: '7px 14px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14, cursor: 'pointer', color: C.text, fontFamily: FONT }}>Cancel</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -2874,7 +2405,7 @@ function UsersTab() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ username: '', email: '', displayName: '', password: '', role: 'bda_sales', isActive: true, assignedWaNumbers: [] });
+  const [form, setForm] = useState({ username: '', email: '', displayName: '', password: '', role: 'sales', isActive: true, assignedWaNumbers: [] });
   const [showPw, setShowPw] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -2883,13 +2414,18 @@ function UsersTab() {
   const [resetPwInput, setResetPwInput] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteText, setDeleteText] = useState('');
+  const [roles, setRoles] = useState([]);
+  const [allPages, setAllPages] = useState([]);
+  const [manageRoles, setManageRoles] = useState(false);
 
   const refresh = async () => {
     setLoading(true);
     try {
-      const [u, w] = await Promise.all([api.users.list(), api.whatsappAccounts.list()]);
+      const [u, w, r] = await Promise.all([api.users.list(), api.whatsappAccounts.list(), api.roles.list()]);
       setUsers(u);
       setWaAccounts(w);
+      setRoles(r.roles || []);
+      setAllPages(r.pages || []);
     } catch (err) {
       console.error('[users]', err);
     } finally {
@@ -2898,12 +2434,12 @@ function UsersTab() {
   };
   useEffect(() => { refresh(); }, []);
 
-  const inpStyle = { width: '100%', padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, fontFamily: FONT, outline: 'none', background: 'var(--c-cardBg)', color: C.text };
-  const labelStyle = { display: 'block', fontSize: 11, fontWeight: 600, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6, fontFamily: FONT };
+  const inpStyle = { width: '100%', padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 15, fontFamily: FONT, outline: 'none', background: 'var(--c-cardBg)', color: C.text };
+  const labelStyle = { display: 'block', fontSize: 13, fontWeight: 600, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6, fontFamily: FONT };
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ username: '', email: '', displayName: '', password: '', role: 'bda_sales', isActive: true, assignedWaNumbers: [] });
+    setForm({ username: '', email: '', displayName: '', password: '', role: 'sales', isActive: true, assignedWaNumbers: [] });
     setShowPw(false);
     setError('');
     setShowForm(true);
@@ -2936,7 +2472,7 @@ function UsersTab() {
           email: form.email.trim(),
           role: form.role,
           isActive: form.isActive,
-          assignedWaNumbers: form.role === 'bda_sales' ? form.assignedWaNumbers : [],
+          assignedWaNumbers: form.role !== 'admin' ? form.assignedWaNumbers : [],
         });
         setShowForm(false);
         await refresh();
@@ -2947,7 +2483,7 @@ function UsersTab() {
           displayName: form.displayName.trim(),
           password: form.password.trim() || undefined,
           role: form.role,
-          assignedWaNumbers: form.role === 'bda_sales' ? form.assignedWaNumbers : [],
+          assignedWaNumbers: form.role !== 'admin' ? form.assignedWaNumbers : [],
         });
         setShowForm(false);
         await refresh();
@@ -3001,33 +2537,40 @@ function UsersTab() {
     <div style={{ flex: 1, padding: 24, overflow: 'auto', fontFamily: FONT }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
         <div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0 }}>Users</h2>
-          <p style={{ fontSize: 12, color: C.textMuted, margin: '4px 0 0' }}>
-            Manage admin and BDA Sales accounts. BDA Sales users only see chats and contacts on their assigned WhatsApp numbers.
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0 }}>Users</h2>
+          <p style={{ fontSize: 14, color: C.textMuted, margin: '4px 0 0' }}>
+            The people who sign in. A non-admin only sees chats and contacts on their assigned WhatsApp numbers.
           </p>
         </div>
-        <button onClick={openCreate} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: C.primary, color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
-          <Plus size={15} /> Add user
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setManageRoles(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--c-cardBg)', color: C.text, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
+            <Shield size={15} /> {manageRoles ? 'Hide roles' : 'Manage roles'}
+          </button>
+          <button onClick={openCreate} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: C.primary, color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
+            <Plus size={15} /> Add user
+          </button>
+        </div>
       </div>
 
+      {manageRoles && <RolesPanel roles={roles} allPages={allPages} users={users} onRefresh={refresh} />}
+
       {loading ? (
-        <div style={{ padding: 40, textAlign: 'center', color: C.textMuted, fontSize: 13 }}>Loading…</div>
+        <div style={{ padding: 40, textAlign: 'center', color: C.textMuted, fontSize: 15 }}>Loading…</div>
       ) : users.length === 0 ? (
-        <div style={{ padding: 40, textAlign: 'center', background: 'var(--c-cardBg)', border: `1px solid ${C.border}`, borderRadius: 10, color: C.textMuted, fontSize: 13 }}>
+        <div style={{ padding: 40, textAlign: 'center', background: 'var(--c-cardBg)', border: `1px solid ${C.border}`, borderRadius: 10, color: C.textMuted, fontSize: 15 }}>
           No users yet. Click "Add user" to create one.
         </div>
       ) : (
         <div style={{ background: 'var(--c-cardBg)', border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
             <thead>
               <tr style={{ background: C.pageBg, borderBottom: `1px solid ${C.border}` }}>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>User</th>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Role</th>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Assigned WA</th>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Status</th>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Last login</th>
-                <th style={{ textAlign: 'right', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Actions</th>
+                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.04em' }}>User</th>
+                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Role</th>
+                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Assigned WA</th>
+                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Status</th>
+                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Last login</th>
+                <th style={{ textAlign: 'right', padding: '12px 16px', fontWeight: 600, color: C.textSecondary, fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -3035,27 +2578,27 @@ function UsersTab() {
                 <tr key={u.id} style={{ borderBottom: `1px solid ${C.border}` }}>
                   <td style={{ padding: '12px 16px', verticalAlign: 'top' }}>
                     <div style={{ fontWeight: 600, color: C.text }}>{u.displayName}</div>
-                    <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2, fontFamily: 'DM Mono, monospace' }}>{u.email}</div>
+                    <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2, fontFamily: 'DM Mono, monospace' }}>{u.email}</div>
                   </td>
-                  <td style={{ padding: '12px 16px', verticalAlign: 'top' }}><RoleBadge role={u.role}/></td>
-                  <td style={{ padding: '12px 16px', verticalAlign: 'top', fontSize: 12, fontFamily: 'DM Mono, monospace' }}>
+                  <td style={{ padding: '12px 16px', verticalAlign: 'top' }}><RoleBadge role={u.role} roles={roles}/></td>
+                  <td style={{ padding: '12px 16px', verticalAlign: 'top', fontSize: 14, fontFamily: 'DM Mono, monospace' }}>
                     {u.role === 'admin'
                       ? <span style={{ color: C.textMuted, fontStyle: 'italic' }}>all numbers</span>
                       : (u.assignedWaNumbers && u.assignedWaNumbers.length > 0
                           ? u.assignedWaNumbers.map(w => <div key={w}>{w}</div>)
-                          : <span style={{ color: '#A32D2D', fontStyle: 'italic' }}>none — won't see any chats</span>)}
+                          : <span style={{ color: 'var(--c-dangerText, #A32D2D)', fontStyle: 'italic' }}>none — won't see any chats</span>)}
                   </td>
                   <td style={{ padding: '12px 16px', verticalAlign: 'top' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: u.isActive ? '#0F6E56' : '#A32D2D' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: u.isActive ? 'var(--c-successText, #0F6E56)' : 'var(--c-dangerText, #A32D2D)' }}>
                       <span style={{ width: 7, height: 7, borderRadius: '50%', background: u.isActive ? '#0F6E56' : '#A32D2D' }}/>
                       {u.isActive ? 'Active' : 'Disabled'}
                     </span>
                   </td>
-                  <td style={{ padding: '12px 16px', verticalAlign: 'top', fontSize: 12, color: C.textSecondary }}>{fmtTime(u.lastLoginAt)}</td>
+                  <td style={{ padding: '12px 16px', verticalAlign: 'top', fontSize: 14, color: C.textSecondary }}>{fmtTime(u.lastLoginAt)}</td>
                   <td style={{ padding: '12px 16px', verticalAlign: 'top', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button onClick={() => openEdit(u)} style={{ ...btnSecondary, marginRight: 4 }}>Edit</button>
                     <button onClick={() => { setResetting(u); setResetPwInput(''); }} style={{ ...btnSecondary, marginRight: 4 }} title="Reset password"><Key size={12}/></button>
-                    <button onClick={() => { setDeleteTarget(u); setDeleteText(''); }} style={{ ...btnSecondary, color: '#A32D2D', borderColor: '#F3D4D4' }} title="Delete"><Trash2 size={12}/></button>
+                    <button onClick={() => { setDeleteTarget(u); setDeleteText(''); }} style={{ ...btnSecondary, color: 'var(--c-dangerText, #A32D2D)', borderColor: '#F3D4D4' }} title="Delete"><Trash2 size={12}/></button>
                   </td>
                 </tr>
               ))}
@@ -3068,7 +2611,7 @@ function UsersTab() {
       {showForm && (
         <div onClick={() => !saving && setShowForm(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, boxShadow: C.shadowLg, width: 500, maxHeight: 'calc(100vh - 32px)', overflow: 'auto', padding: 24, fontFamily: FONT }}>
-            <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: C.text }}>{editing ? 'Edit user' : 'Add user'}</h3>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.text }}>{editing ? 'Edit user' : 'Add user'}</h3>
 
             <div style={{ marginTop: 16, marginBottom: 14 }}>
               <label style={labelStyle}>Display name *</label>
@@ -3100,24 +2643,24 @@ function UsersTab() {
               <SearchableSelect
                 value={form.role}
                 onChange={v => setForm(f => ({ ...f, role: v }))}
-                options={ROLE_OPTIONS.map(r => ({ value: r.value, label: r.label }))}
+                options={roles.filter(r => r.active !== false).map(r => ({ value: r.key, label: r.label }))}
                 style={{ width: '100%' }}
                 triggerStyle={{ padding: '8px 32px 8px 12px' }}
               />
-              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>{ROLE_OPTIONS.find(r => r.value === form.role)?.description}</div>
+              <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>{roles.find(r => r.key === form.role)?.description}</div>
             </div>
-            {form.role === 'bda_sales' && (
+            {form.role !== 'admin' && (
               <div style={{ marginBottom: 14 }}>
                 <label style={labelStyle}>Assigned WhatsApp numbers</label>
                 {waAccounts.length === 0 ? (
-                  <div style={{ fontSize: 12, color: C.textMuted, fontStyle: 'italic' }}>No WhatsApp accounts connected yet. Add some in the WhatsApp Accounts tab first.</div>
+                  <div style={{ fontSize: 14, color: C.textMuted, fontStyle: 'italic' }}>No WhatsApp accounts connected yet. Add some in the WhatsApp Accounts tab first.</div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflow: 'auto', border: `1px solid ${C.border}`, borderRadius: 8, padding: 8 }}>
                     {waAccounts.map(a => {
                       const wa = String(a.displayPhoneNumber || '').replace(/\D/g, '');
                       const checked = form.assignedWaNumbers.includes(wa);
                       return (
-                        <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: C.text, cursor: 'pointer', padding: '4px 6px', borderRadius: 6 }}
+                        <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: C.text, cursor: 'pointer', padding: '4px 6px', borderRadius: 6 }}
                           onMouseEnter={e => e.currentTarget.style.background = C.pageBg}
                           onMouseLeave={e => e.currentTarget.style.background = ''}>
                           <input type="checkbox" checked={checked} onChange={() => toggleAssignedWa(wa)}/>
@@ -3128,23 +2671,23 @@ function UsersTab() {
                     })}
                   </div>
                 )}
-                <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>
+                <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
                   BDA Sales users only see chats and contacts on the numbers they're assigned.
                 </div>
               </div>
             )}
             {editing && (
               <div style={{ marginBottom: 14 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: C.text, cursor: 'pointer' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: C.text, cursor: 'pointer' }}>
                   <input type="checkbox" checked={form.isActive} onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))}/>
                   <span>Account is active <span style={{ color: C.textMuted, fontWeight: 400 }}>(disabling blocks login but keeps the row)</span></span>
                 </label>
               </div>
             )}
-            {error && <div style={{ padding: '8px 12px', background: 'var(--c-primaryLight)', color: '#A32D2D', borderRadius: 8, fontSize: 12, marginBottom: 14 }}>{error}</div>}
+            {error && <div style={{ padding: '8px 12px', background: 'var(--c-primaryLight)', color: 'var(--c-dangerText, #A32D2D)', borderRadius: 8, fontSize: 14, marginBottom: 14 }}>{error}</div>}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowForm(false)} disabled={saving} style={{ ...btnSecondary, padding: '8px 14px', fontSize: 13 }}>Cancel</button>
-              <button onClick={save} disabled={saving} style={{ padding: '8px 14px', background: C.primary, color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: saving ? 'wait' : 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <button onClick={() => setShowForm(false)} disabled={saving} style={{ ...btnSecondary, padding: '8px 14px', fontSize: 15 }}>Cancel</button>
+              <button onClick={save} disabled={saving} style={{ padding: '8px 14px', background: C.primary, color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: saving ? 'wait' : 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 {saving && <Loader2 size={13} className="spin"/>}
                 {saving ? 'Saving…' : (editing ? 'Save changes' : 'Create user')}
               </button>
@@ -3157,10 +2700,10 @@ function UsersTab() {
       {credentials && (
         <div onClick={() => setCredentials(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 210, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, boxShadow: C.shadowLg, width: 460, padding: 24, fontFamily: FONT }}>
-            <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: C.text }}>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.text }}>
               {credentials.action === 'created' ? 'User created' : 'Password reset'}
             </h3>
-            <div style={{ padding: 12, background: '#FFF8E1', border: `1px solid #FFE082`, borderRadius: 8, color: '#7A5C00', fontSize: 12, marginTop: 14 }}>
+            <div style={{ padding: 12, background: 'var(--c-warnBgSoft, #FFF8E1)', border: `1px solid #FFE082`, borderRadius: 8, color: 'var(--c-s7a5c00, #7A5C00)', fontSize: 14, marginTop: 14 }}>
               ⚠️ This is the only time the password will be shown. Save it now and share with the user out-of-band (e.g. via WhatsApp).
             </div>
             <div style={{ marginTop: 14 }}>
@@ -3172,8 +2715,8 @@ function UsersTab() {
               <div style={{ ...inpStyle, fontFamily: 'DM Mono, monospace', userSelect: 'all', fontWeight: 600 }}>{credentials.password}</div>
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 18 }}>
-              <button onClick={() => { navigator.clipboard.writeText(`Email: ${credentials.email}\nPassword: ${credentials.password}`); }} style={{ ...btnSecondary, padding: '8px 14px', fontSize: 13 }}>Copy both</button>
-              <button onClick={() => setCredentials(null)} style={{ padding: '8px 14px', background: C.primary, color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>Got it</button>
+              <button onClick={() => { navigator.clipboard.writeText(`Email: ${credentials.email}\nPassword: ${credentials.password}`); }} style={{ ...btnSecondary, padding: '8px 14px', fontSize: 15 }}>Copy both</button>
+              <button onClick={() => setCredentials(null)} style={{ padding: '8px 14px', background: C.primary, color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>Got it</button>
             </div>
           </div>
         </div>
@@ -3183,13 +2726,13 @@ function UsersTab() {
       {resetting && (
         <div onClick={() => setResetting(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, boxShadow: C.shadowLg, width: 420, padding: 24, fontFamily: FONT }}>
-            <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: C.text }}>Reset password</h3>
-            <p style={{ margin: '8px 0 14px', fontSize: 13, color: C.textSecondary }}>Reset password for <strong>{resetting.displayName}</strong> ({resetting.email})?</p>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.text }}>Reset password</h3>
+            <p style={{ margin: '8px 0 14px', fontSize: 15, color: C.textSecondary }}>Reset password for <strong>{resetting.displayName}</strong> ({resetting.email})?</p>
             <label style={labelStyle}>New password (leave blank to auto-generate)</label>
             <input type="text" value={resetPwInput} onChange={e => setResetPwInput(e.target.value)} placeholder="Auto-generate if blank" style={{ ...inpStyle, fontFamily: 'DM Mono, monospace' }}/>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-              <button onClick={() => setResetting(null)} style={{ ...btnSecondary, padding: '8px 14px', fontSize: 13 }}>Cancel</button>
-              <button onClick={doResetPassword} style={{ padding: '8px 14px', background: C.primary, color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>Reset password</button>
+              <button onClick={() => setResetting(null)} style={{ ...btnSecondary, padding: '8px 14px', fontSize: 15 }}>Cancel</button>
+              <button onClick={doResetPassword} style={{ padding: '8px 14px', background: C.primary, color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>Reset password</button>
             </div>
           </div>
         </div>
@@ -3199,13 +2742,13 @@ function UsersTab() {
       {deleteTarget && (
         <div onClick={() => setDeleteTarget(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, boxShadow: C.shadowLg, width: 420, padding: 24, fontFamily: FONT }}>
-            <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: C.text }}>Delete user</h3>
-            <p style={{ margin: '8px 0 14px', fontSize: 13, color: C.textSecondary }}>This will permanently remove <strong>{deleteTarget.displayName}</strong> ({deleteTarget.email}) and their WhatsApp number assignments. The chat history they touched is not affected.</p>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.text }}>Delete user</h3>
+            <p style={{ margin: '8px 0 14px', fontSize: 15, color: C.textSecondary }}>This will permanently remove <strong>{deleteTarget.displayName}</strong> ({deleteTarget.email}) and their WhatsApp number assignments. The chat history they touched is not affected.</p>
             <label style={labelStyle}>Type "delete" to confirm</label>
             <input value={deleteText} onChange={e => setDeleteText(e.target.value)} autoFocus style={inpStyle}/>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-              <button onClick={() => setDeleteTarget(null)} style={{ ...btnSecondary, padding: '8px 14px', fontSize: 13 }}>Cancel</button>
-              <button onClick={doDelete} disabled={deleteText.trim().toLowerCase() !== 'delete'} style={{ padding: '8px 14px', background: deleteText.trim().toLowerCase() === 'delete' ? '#A32D2D' : '#D5D5D0', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: deleteText.trim().toLowerCase() === 'delete' ? 'pointer' : 'not-allowed', fontFamily: FONT }}>Delete</button>
+              <button onClick={() => setDeleteTarget(null)} style={{ ...btnSecondary, padding: '8px 14px', fontSize: 15 }}>Cancel</button>
+              <button onClick={doDelete} disabled={deleteText.trim().toLowerCase() !== 'delete'} style={{ padding: '8px 14px', background: deleteText.trim().toLowerCase() === 'delete' ? '#A32D2D' : 'var(--c-borderStrong, #D5D5D0)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: deleteText.trim().toLowerCase() === 'delete' ? 'pointer' : 'not-allowed', fontFamily: FONT }}>Delete</button>
             </div>
           </div>
         </div>
@@ -3225,7 +2768,7 @@ const PROVIDERS = [
     label: 'Google Sheets',
     icon: FileSpreadsheet,
     blurb: 'Append rows to a spreadsheet from automation Actions.',
-    color: '#0F9D58',
+    color: 'var(--c-x0f9d58, #0F9D58)',
   },
   {
     key: 'google_calendar',
@@ -3267,15 +2810,15 @@ const INTEGRATION_APPS = [
 // Meta logo (single-colour infinity mark) — inline SVG so we don't add an asset.
 const MetaLogo = (size = 28) => (
   <svg width={size} height={size} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <path fill="#0866FF" d="M6.915 4.03c-1.968 0-3.683 1.28-4.871 3.113C.704 9.208 0 11.883 0 14.449c0 .706.07 1.369.21 1.973a6.624 6.624 0 0 0 .265.86 5.297 5.297 0 0 0 .371.761c.696 1.159 1.818 1.927 3.593 1.927 1.497 0 2.633-.671 3.965-2.444.76-1.012 1.144-1.626 2.663-4.32l.756-1.339.186-.325c.061.1.121.196.183.3l2.152 3.595c.724 1.21 1.665 2.556 2.47 3.314 1.046.987 1.992 1.22 3.06 1.22 1.075 0 1.876-.355 2.455-.843a3.743 3.743 0 0 0 .81-.973c.542-.939.861-2.127.861-3.745 0-2.72-.681-5.357-2.084-7.45-1.282-1.912-2.957-2.93-4.716-2.93-1.047 0-2.088.467-3.053 1.308-.652.57-1.257 1.3-1.82 2.05-.69-.875-1.335-1.547-1.958-2.056-1.182-.966-2.315-1.303-3.454-1.303zm10.16 2.053c1.147 0 2.188.758 2.992 1.999 1.132 1.748 1.647 4.195 1.647 6.4 0 1.548-.368 2.9-1.839 2.9-.58 0-1.027-.23-1.664-1.004-.496-.601-1.343-1.878-2.832-4.358l-.617-1.028a44.908 44.908 0 0 0-1.255-1.98c.07-.109.141-.224.211-.327 1.12-1.667 2.118-2.602 3.518-2.602zm-10.201.088c1.055 0 2.006.535 2.844 1.377.784.788 1.463 1.783 2.288 3.13l-.916 1.409c-.83 1.279-1.395 2.099-1.89 2.7-.895 1.09-1.585 1.39-2.288 1.39-.646 0-1.032-.278-1.264-.699-.155-.279-.267-.633-.34-1.043a6.354 6.354 0 0 1-.11-1.184c0-1.831.578-3.786 1.28-4.86.542-.827 1.19-1.22 1.626-1.22.09 0 .18.008.27.024z"/>
+    <path fill="var(--c-x0866ff, #0866FF)" d="M6.915 4.03c-1.968 0-3.683 1.28-4.871 3.113C.704 9.208 0 11.883 0 14.449c0 .706.07 1.369.21 1.973a6.624 6.624 0 0 0 .265.86 5.297 5.297 0 0 0 .371.761c.696 1.159 1.818 1.927 3.593 1.927 1.497 0 2.633-.671 3.965-2.444.76-1.012 1.144-1.626 2.663-4.32l.756-1.339.186-.325c.061.1.121.196.183.3l2.152 3.595c.724 1.21 1.665 2.556 2.47 3.314 1.046.987 1.992 1.22 3.06 1.22 1.075 0 1.876-.355 2.455-.843a3.743 3.743 0 0 0 .81-.973c.542-.939.861-2.127.861-3.745 0-2.72-.681-5.357-2.084-7.45-1.282-1.912-2.957-2.93-4.716-2.93-1.047 0-2.088.467-3.053 1.308-.652.57-1.257 1.3-1.82 2.05-.69-.875-1.335-1.547-1.958-2.056-1.182-.966-2.315-1.303-3.454-1.303zm10.16 2.053c1.147 0 2.188.758 2.992 1.999 1.132 1.748 1.647 4.195 1.647 6.4 0 1.548-.368 2.9-1.839 2.9-.58 0-1.027-.23-1.664-1.004-.496-.601-1.343-1.878-2.832-4.358l-.617-1.028a44.908 44.908 0 0 0-1.255-1.98c.07-.109.141-.224.211-.327 1.12-1.667 2.118-2.602 3.518-2.602zm-10.201.088c1.055 0 2.006.535 2.844 1.377.784.788 1.463 1.783 2.288 3.13l-.916 1.409c-.83 1.279-1.395 2.099-1.89 2.7-.895 1.09-1.585 1.39-2.288 1.39-.646 0-1.032-.278-1.264-.699-.155-.279-.267-.633-.34-1.043a6.354 6.354 0 0 1-.11-1.184c0-1.831.578-3.786 1.28-4.86.542-.827 1.19-1.22 1.626-1.22.09 0 .18.008.27.024z"/>
   </svg>
 );
 
 // Connection-status pill for the Meta Ads / ForgeSocial app cards.
 function connBadge(st) {
-  if (st?.connected) return <span style={{ fontSize: 11, padding: '2px 8px', background: '#dcfce7', color: '#15803d', borderRadius: 6, fontWeight: 600 }}>Connected</span>;
-  if (st?.status === 'error') return <span style={{ fontSize: 11, padding: '2px 8px', background: '#fee2e2', color: '#b91c1c', borderRadius: 6, fontWeight: 600 }}>Connection error</span>;
-  return <span style={{ fontSize: 11, padding: '2px 8px', background: C.sidebarBg, color: C.textMuted, borderRadius: 6, fontWeight: 600 }}>Not connected</span>;
+  if (st?.connected) return <span style={{ fontSize: 13, padding: '2px 8px', background: 'var(--c-sdcfce7, #dcfce7)', color: 'var(--c-s15803d, #15803d)', borderRadius: 6, fontWeight: 600 }}>Connected</span>;
+  if (st?.status === 'error') return <span style={{ fontSize: 13, padding: '2px 8px', background: 'var(--c-dangerBg, #fee2e2)', color: 'var(--c-primaryHover, #b91c1c)', borderRadius: 6, fontWeight: 600 }}>Connection error</span>;
+  return <span style={{ fontSize: 13, padding: '2px 8px', background: C.sidebarBg, color: C.textMuted, borderRadius: 6, fontWeight: 600 }}>Not connected</span>;
 }
 
 // Shared app-card used for every Integrations tile (Google, Meta Ads, ForgeSocial)
@@ -3294,12 +2837,12 @@ function AppCard({ color, logo, label, blurb, badge, onClick }) {
       onMouseEnter={(e) => { e.currentTarget.style.borderColor = color; e.currentTarget.style.boxShadow = C.shadowMd; }}
       onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = 'none'; }}
     >
-      <div style={{ width: 48, height: 48, borderRadius: 12, background: '#fff', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <div style={{ width: 48, height: 48, borderRadius: 12, background: 'var(--c-surface, #fff)', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         {logo}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 15 }}>{label}</div>
-        <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 2 }}>{blurb}</div>
+        <div style={{ fontWeight: 700, fontSize: 16 }}>{label}</div>
+        <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 2 }}>{blurb}</div>
         <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>{badge}</div>
       </div>
       <ChevronRight size={18} color={C.textMuted} />
@@ -3320,7 +2863,7 @@ function AppCard({ color, logo, label, blurb, badge, onClick }) {
 // area switches do only the job they were designed for: scoping which internal
 // API paths the Direct API access tool may reach.
 const MCP_API_AREAS = [
-  { key: 'area_contacts', label: 'Contacts & tags', desc: 'Contacts, saved contacts, tags, categories, custom fields, team members.' },
+  { key: 'area_contacts', label: 'Contacts & tags', desc: 'Contacts, saved contacts, tags and categories.' },
   { key: 'area_messaging', label: 'Messages', desc: 'Chat messages, reactions and mark-read.' },
   { key: 'area_broadcasts', label: 'Broadcasts & content', desc: 'Broadcasts, templates, media library and click-to-chat links.' },
   { key: 'area_automations', label: 'Automations', desc: 'Automation flows, projects, executions and follow-up sequences.' },
@@ -3340,18 +2883,18 @@ const MCP_API_AREAS = [
 // the two things that cost money or reach a real customer, so the eye lands on
 // them first.
 const MCP_TIER_STYLE = {
-  read:        { bg: '#E8F3EF', fg: C.green },
-  build:       { bg: '#EDEBF7', fg: C.purple },
-  send:        { bg: '#FCEBEB', fg: '#A32D2D' },
+  read:        { bg: 'var(--c-successBgSoft, #E8F3EF)', fg: C.green },
+  build:       { bg: 'var(--c-xedebf7, #EDEBF7)', fg: C.purple },
+  send:        { bg: 'var(--c-dangerBg, #FCEBEB)', fg: 'var(--c-dangerText, #A32D2D)' },
   destructive: { bg: '#4A1414', fg: '#FFE8E8' },
-  advanced:    { bg: '#FBF0E4', fg: '#8A5A1B' },
+  advanced:    { bg: 'var(--c-xfbf0e4, #FBF0E4)', fg: 'var(--c-x8a5a1b, #8A5A1B)' },
 };
 
 function TierPill({ tier, label }) {
   const s = MCP_TIER_STYLE[tier] || MCP_TIER_STYLE.read;
   return (
     <span style={{
-      background: s.bg, color: s.fg, fontSize: 10.5, fontWeight: 700,
+      background: s.bg, color: s.fg, fontSize: 12, fontWeight: 700,
       letterSpacing: '.04em', textTransform: 'uppercase',
       padding: '3px 8px', borderRadius: 999, whiteSpace: 'nowrap', flexShrink: 0,
     }}>{label}</span>
@@ -3374,10 +2917,10 @@ function McpCategoryCard({ cat, disabled, saving, onToggle }) {
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '13px 14px' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>{cat.label}</span>
+            <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{cat.label}</span>
             <TierPill tier={cat.tier} label={cat.tierLabel} />
           </div>
-          <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 4, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 4, lineHeight: 1.5 }}>
             {cat.description}
           </div>
           <button
@@ -3386,7 +2929,7 @@ function McpCategoryCard({ cat, disabled, saving, onToggle }) {
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8,
               background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-              fontFamily: FONT, fontSize: 11.5, fontWeight: 600, color: C.textSecondary,
+              fontFamily: FONT, fontSize: 13, fontWeight: 600, color: C.textSecondary,
             }}
           >
             <Chevron size={13} strokeWidth={2.5} />
@@ -3402,10 +2945,10 @@ function McpCategoryCard({ cat, disabled, saving, onToggle }) {
           {cat.tools.map(t => (
             <div key={t.name} style={{ display: 'flex', gap: 10, padding: '5px 0', alignItems: 'baseline' }}>
               <code style={{
-                fontFamily: MONO, fontSize: 11.5, color: cat.enabled ? C.text : C.textMuted,
+                fontFamily: MONO, fontSize: 13, color: cat.enabled ? C.text : C.textMuted,
                 whiteSpace: 'nowrap',
               }}>{t.name}</code>
-              <span style={{ fontSize: 11.5, color: C.textSecondary, lineHeight: 1.45 }}>{t.summary}</span>
+              <span style={{ fontSize: 13, color: C.textSecondary, lineHeight: 1.45 }}>{t.summary}</span>
             </div>
           ))}
         </div>
@@ -3428,13 +2971,13 @@ function Toggle({ checked, onChange, disabled }) {
         position: 'relative', flexShrink: 0,
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.45 : 1,
-        background: checked ? C.green : '#cfcfca',
+        background: checked ? C.green : 'var(--c-borderStrong, #cfcfca)',
         transition: 'background .15s',
       }}
     >
       <span style={{
         position: 'absolute', top: 2, left: checked ? 18 : 2,
-        width: 18, height: 18, borderRadius: '50%', background: '#fff',
+        width: 18, height: 18, borderRadius: '50%', background: 'var(--c-surface, #fff)',
         boxShadow: '0 1px 2px rgba(0,0,0,.25)', transition: 'left .15s',
       }} />
     </button>
@@ -3561,8 +3104,8 @@ function McpToolsTab() {
 
   const master = settings.masterEnabled;
   const card = { background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, marginBottom: 18 };
-  const h2 = { fontSize: 15, fontWeight: 700, color: C.text, margin: '0 0 4px' };
-  const sub = { fontSize: 12.5, color: C.textSecondary, margin: '0 0 16px', lineHeight: 1.5 };
+  const h2 = { fontSize: 16, fontWeight: 700, color: C.text, margin: '0 0 4px' };
+  const sub = { fontSize: 14, color: C.textSecondary, margin: '0 0 16px', lineHeight: 1.5 };
 
   // The category list, tool counts and per-tool summaries all come from the
   // backend catalog (services/mcpCatalog.js) — this screen deliberately keeps
@@ -3574,7 +3117,7 @@ function McpToolsTab() {
   const enabledTools = enabledCats.reduce((n, c) => n + c.toolCount, 0);
   const directApiOn = cats.some(c => c.key === 'direct_api' && c.enabled);
   const codeBox = {
-    background: '#0F0F10', color: '#E5E5E2', fontFamily: MONO, fontSize: 12,
+    background: '#0F0F10', color: '#E5E5E2', fontFamily: MONO, fontSize: 14,
     borderRadius: 8, padding: 14, overflowX: 'auto', whiteSpace: 'pre', lineHeight: 1.5,
   };
 
@@ -3584,9 +3127,9 @@ function McpToolsTab() {
     <div style={{ flex: 1, padding: 24, overflow: 'auto', fontFamily: FONT, maxWidth: 1320 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
         <PlugZap size={20} color={C.primary} />
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0 }}>MCP Tools</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0 }}>MCP Tools</h1>
       </div>
-      <p style={{ fontSize: 13, color: C.textSecondary, margin: '0 0 22px', lineHeight: 1.6, maxWidth: 720 }}>
+      <p style={{ fontSize: 15, color: C.textSecondary, margin: '0 0 22px', lineHeight: 1.6, maxWidth: 720 }}>
         Connect Claude.ai to Forge Growth as a custom connector, so it can read and act on your leads, campaigns,
         payments and BDA activity — and build or manage WhatsApp AI agents — over a secure API key.
         Turn capabilities on or off here; changes apply instantly to every connected client.
@@ -3608,13 +3151,13 @@ function McpToolsTab() {
               <Package size={17} strokeWidth={2} color={C.headerText} />
               <h2 style={{ ...h2, color: C.headerText, margin: 0 }}>Claude plugin</h2>
             </div>
-            <p style={{ fontSize: 12.5, color: '#B9B9B4', margin: '8px 0 0', lineHeight: 1.55 }}>
+            <p style={{ fontSize: 14, color: '#B9B9B4', margin: '8px 0 0', lineHeight: 1.55 }}>
               Everything Claude needs to run Forge Growth: the connector plus a set of skills
               covering the funnel, follow-ups, templates, messaging, automations, agents, ads
               and revenue. The download is already pointed at <strong style={{ color: C.headerText }}>this</strong> instance,
               so there is nothing to edit.
             </p>
-            <p style={{ fontSize: 11.5, color: '#8E8E89', margin: '10px 0 0', lineHeight: 1.5 }}>
+            <p style={{ fontSize: 13, color: '#8E8E89', margin: '10px 0 0', lineHeight: 1.5 }}>
               Unzip it, then add the folder to Claude Code as a plugin — or paste the connector
               URL into Claude&nbsp;&rarr;&nbsp;Settings&nbsp;&rarr;&nbsp;Connectors. Signing in
               uses OAuth, so no key is stored in the file.
@@ -3626,7 +3169,7 @@ function McpToolsTab() {
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px',
               background: C.primary, color: '#fff', borderRadius: 10, textDecoration: 'none',
-              fontSize: 13.5, fontWeight: 700, fontFamily: FONT, flexShrink: 0,
+              fontSize: 15, fontWeight: 700, fontFamily: FONT, flexShrink: 0,
             }}
           >
             <Download size={16} strokeWidth={2.5} /> Download plugin
@@ -3648,7 +3191,7 @@ function McpToolsTab() {
         {!master && (
           <div style={{
             marginTop: 14, padding: '10px 12px', borderRadius: 8,
-            background: '#FCEBEB', color: '#A32D2D', fontSize: 12.5, fontWeight: 500,
+            background: 'var(--c-dangerBg, #FCEBEB)', color: 'var(--c-dangerText, #A32D2D)', fontSize: 14, fontWeight: 500,
           }}>
             MCP access is currently disabled.
           </div>
@@ -3671,13 +3214,13 @@ function McpToolsTab() {
           padding: '11px 14px', marginBottom: 16,
         }}>
           <Wrench size={15} strokeWidth={2} color={C.textSecondary} />
-          <span style={{ fontSize: 12.5, color: C.text, fontWeight: 600 }}>
+          <span style={{ fontSize: 14, color: C.text, fontWeight: 600 }}>
             <span style={{ fontFamily: MONO }}>{enabledTools}</span>
             {' of '}
             <span style={{ fontFamily: MONO }}>{totalTools}</span>
             {' tools available to Claude'}
           </span>
-          <span style={{ fontSize: 12, color: C.textSecondary }}>
+          <span style={{ fontSize: 14, color: C.textSecondary }}>
             · <span style={{ fontFamily: MONO }}>{enabledCats.length}</span>
             {' of '}
             <span style={{ fontFamily: MONO }}>{cats.length}</span>
@@ -3686,7 +3229,7 @@ function McpToolsTab() {
         </div>
 
         {cats.length === 0 ? (
-          <div style={{ fontSize: 12.5, color: C.textSecondary }}>
+          <div style={{ fontSize: 14, color: C.textSecondary }}>
             No tool catalog was returned by the server. Rebuild the backend to pick up the
             category catalog.
           </div>
@@ -3708,7 +3251,7 @@ function McpToolsTab() {
           <TierPill tier="advanced" label="Full API access" />
         </div>
         <p style={sub}>
-          These scope the <code style={{ fontFamily: MONO, fontSize: 11.5 }}>forgechat_request</code> tool
+          These scope the <code style={{ fontFamily: MONO, fontSize: 13 }}>forgechat_request</code> tool
           in <strong>Direct API access</strong> — which internal endpoints it may call.
           {' '}
           {directApiOn
@@ -3723,9 +3266,9 @@ function McpToolsTab() {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 {a.sensitive && <ShieldAlert size={13} strokeWidth={2.5} color={C.primary} />}
-                <span style={{ fontSize: 13.5, fontWeight: 600, color: C.text }}>{a.label}</span>
+                <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{a.label}</span>
               </div>
-              <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 2, lineHeight: 1.45 }}>{a.desc}</div>
+              <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 2, lineHeight: 1.45 }}>{a.desc}</div>
             </div>
             <Toggle
               checked={!!settings.capabilities[a.key]}
@@ -3752,7 +3295,7 @@ function McpToolsTab() {
             placeholder="Key label (e.g. My MacBook — Claude Desktop)"
             style={{
               flex: 1, padding: '9px 12px', borderRadius: 8, border: `1px solid ${C.border}`,
-              fontSize: 13, fontFamily: FONT, background: C.cardBg, color: C.text,
+              fontSize: 15, fontFamily: FONT, background: C.cardBg, color: C.text,
             }}
           />
           <button
@@ -3761,7 +3304,7 @@ function McpToolsTab() {
             style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px',
               background: C.primary, color: '#fff', border: 'none', borderRadius: 8,
-              fontSize: 13, fontWeight: 600, cursor: creating ? 'wait' : 'pointer', fontFamily: FONT,
+              fontSize: 15, fontWeight: 600, cursor: creating ? 'wait' : 'pointer', fontFamily: FONT,
             }}
           >
             <Plus size={15} /> Generate key
@@ -3769,12 +3312,12 @@ function McpToolsTab() {
         </div>
 
         {keys.length === 0 ? (
-          <div style={{ padding: 24, textAlign: 'center', color: C.textMuted, fontSize: 13, border: `1px dashed ${C.border}`, borderRadius: 8 }}>
+          <div style={{ padding: 24, textAlign: 'center', color: C.textMuted, fontSize: 15, border: `1px dashed ${C.border}`, borderRadius: 8 }}>
             No API keys yet.
           </div>
         ) : (
           <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
               <thead>
                 <tr style={{ background: 'var(--c-hover, #f7f7f3)', textAlign: 'left' }}>
                   <th style={{ padding: '10px 14px', fontWeight: 600, color: C.textSecondary }}>Label</th>
@@ -3788,7 +3331,7 @@ function McpToolsTab() {
                 {keys.map(k => (
                   <tr key={k.id} style={{ borderTop: `1px solid ${C.border}` }}>
                     <td style={{ padding: '10px 14px', color: C.text }}>{k.label}</td>
-                    <td style={{ padding: '10px 14px', color: C.textSecondary, fontFamily: MONO, fontSize: 12 }}>
+                    <td style={{ padding: '10px 14px', color: C.textSecondary, fontFamily: MONO, fontSize: 14 }}>
                       {k.keyPrefix}…{k.keyLast4}
                     </td>
                     <td style={{ padding: '10px 14px', color: C.textSecondary }}>
@@ -3817,7 +3360,7 @@ function McpToolsTab() {
       {/* OAuth clients — what Claude's connector dialog actually asks for. */}
       <div style={card}>
         <h2 style={h2}>OAuth clients</h2>
-        <p style={{ fontSize: 12.5, color: C.textSecondary, margin: '0 0 14px', lineHeight: 1.6 }}>
+        <p style={{ fontSize: 14, color: C.textSecondary, margin: '0 0 14px', lineHeight: 1.6 }}>
           Claude connects with a <strong>Client ID + Client Secret</strong> and signs you in through a browser
           window — nothing secret ends up in the URL. Create one per connector, paste both values into Claude&apos;s
           <em> Advanced settings</em>, and revoke here to cut it off instantly.
@@ -3844,7 +3387,7 @@ function McpToolsTab() {
             }}
             style={{
               display: 'flex', alignItems: 'center', gap: 6, background: C.primary, color: '#fff',
-              border: 'none', borderRadius: 8, padding: '0 16px', fontSize: 13, fontWeight: 600,
+              border: 'none', borderRadius: 8, padding: '0 16px', fontSize: 15, fontWeight: 600,
               cursor: creatingOauth || !oauthName.trim() ? 'not-allowed' : 'pointer',
               opacity: creatingOauth || !oauthName.trim() ? 0.55 : 1, fontFamily: FONT,
             }}>
@@ -3853,7 +3396,7 @@ function McpToolsTab() {
         </div>
 
         {oauthClients.length === 0 ? (
-          <div style={{ fontSize: 13, color: C.textMuted, padding: '10px 0' }}>
+          <div style={{ fontSize: 15, color: C.textMuted, padding: '10px 0' }}>
             No OAuth clients yet.
           </div>
         ) : (
@@ -3862,7 +3405,7 @@ function McpToolsTab() {
               <tr>
                 {['Name', 'Client ID', 'Connections', 'Enabled', ''].map((h, i) => (
                   <th key={i} style={{ textAlign: i > 1 && i < 4 ? 'center' : 'left', padding: '8px 10px',
-                    fontSize: 11, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase',
+                    fontSize: 13, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase',
                     color: C.textMuted, borderBottom: `1px solid ${C.border}` }}>{h}</th>
                 ))}
               </tr>
@@ -3870,16 +3413,16 @@ function McpToolsTab() {
             <tbody>
               {oauthClients.map(c => (
                 <tr key={c.id}>
-                  <td style={{ padding: '10px', fontSize: 13, borderBottom: `1px solid ${C.border}` }}>
+                  <td style={{ padding: '10px', fontSize: 15, borderBottom: `1px solid ${C.border}` }}>
                     {c.name}
                     {c.dynamic && (
-                      <span style={{ marginLeft: 7, fontSize: 10.5, color: C.textMuted,
+                      <span style={{ marginLeft: 7, fontSize: 12, color: C.textMuted,
                         border: `1px solid ${C.border}`, borderRadius: 5, padding: '1px 5px' }}>AUTO</span>
                     )}
                   </td>
-                  <td style={{ padding: '10px', fontSize: 12, fontFamily: MONO, color: C.textSecondary,
+                  <td style={{ padding: '10px', fontSize: 14, fontFamily: MONO, color: C.textSecondary,
                     borderBottom: `1px solid ${C.border}` }}>{c.clientId}</td>
-                  <td style={{ padding: '10px', fontSize: 12.5, textAlign: 'center', color: C.textSecondary,
+                  <td style={{ padding: '10px', fontSize: 14, textAlign: 'center', color: C.textSecondary,
                     borderBottom: `1px solid ${C.border}` }}>{c.activeTokens || 0}</td>
                   <td style={{ padding: '10px', textAlign: 'center', borderBottom: `1px solid ${C.border}` }}>
                     <Toggle
@@ -3910,7 +3453,7 @@ function McpToolsTab() {
           style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: FONT }}
         >
           <Terminal size={16} color={C.textSecondary} />
-          <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>Install in Claude.ai — Custom Connectors</span>
+          <span style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Install in Claude.ai — Custom Connectors</span>
           <ChevronRight size={16} color={C.textMuted} style={{ transform: showInstall ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />
         </button>
 
@@ -3920,10 +3463,10 @@ function McpToolsTab() {
                 Forge Growth's MCP is hosted here and speaks Streamable HTTP, so
                 there is nothing to install on the user's machine: it is one URL
                 pasted into Claude's own Connectors settings. */}
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, margin: '0 0 6px' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.text, margin: '0 0 6px' }}>
               Recommended — OAuth (works on web, desktop and mobile)
             </div>
-            <ol style={{ fontSize: 13, color: C.text, lineHeight: 1.8, paddingLeft: 18, margin: '0 0 10px' }}>
+            <ol style={{ fontSize: 15, color: C.text, lineHeight: 1.8, paddingLeft: 18, margin: '0 0 10px' }}>
               <li>Turn on the master switch and the capabilities you want above.</li>
               <li>Create an <b>OAuth client</b> in the panel above and copy the Client ID + Client Secret (the secret is shown once).</li>
               <li>In Claude, open <b>Settings → Connectors → Add custom connector</b>.</li>
@@ -3937,7 +3480,7 @@ function McpToolsTab() {
                 </code>
                 <button
                   onClick={() => copy(install.remoteUrl.replace(/\/http\/<YOUR_KEY>$/, ''), 'oauthurl')}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1px solid ${C.border}`, borderRadius: 7, padding: '8px 10px', fontSize: 12, cursor: 'pointer', color: C.text, fontFamily: FONT }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1px solid ${C.border}`, borderRadius: 7, padding: '8px 10px', fontSize: 14, cursor: 'pointer', color: C.text, fontFamily: FONT }}
                 >
                   {copied === 'oauthurl' ? <Check size={13} /> : <Copy size={13} />}
                   {copied === 'oauthurl' ? 'Copied' : 'Copy'}
@@ -3945,7 +3488,7 @@ function McpToolsTab() {
               </div>
             )}
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '9px 12px', marginBottom: 16,
-              background: '#F1F6FF', border: '1px solid #C8DAF5', borderRadius: 8, fontSize: 12.5, color: '#254C87' }}>
+              background: 'var(--c-xf1f6ff, #F1F6FF)', border: '1px solid #C8DAF5', borderRadius: 8, fontSize: 14, color: 'var(--c-x254c87, #254C87)' }}>
               <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
               <span>
                 Turning a capability off above applies <b>immediately</b>, even to a connector that is already
@@ -3957,7 +3500,7 @@ function McpToolsTab() {
                 <code style={{ flex: 1, ...codeBox, whiteSpace: 'nowrap', overflowX: 'auto', padding: '10px 12px' }}>{install.remoteUrl}</code>
                 <button
                   onClick={() => copy(install.remoteUrl, 'remoteurl')}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1px solid ${C.border}`, borderRadius: 7, padding: '8px 10px', fontSize: 12, cursor: 'pointer', color: C.text, fontFamily: FONT }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1px solid ${C.border}`, borderRadius: 7, padding: '8px 10px', fontSize: 14, cursor: 'pointer', color: C.text, fontFamily: FONT }}
                 >
                   {copied === 'remoteurl' ? <Check size={13} /> : <Copy size={13} />}
                   {copied === 'remoteurl' ? 'Copied' : 'Copy'}
@@ -3967,12 +3510,12 @@ function McpToolsTab() {
 
             {/* Legacy key-in-URL. Kept because existing connectors use it, but
                 demoted below OAuth: it puts a long-lived credential in a URL. */}
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: C.textSecondary, margin: '18px 0 6px' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.textSecondary, margin: '18px 0 6px' }}>
               Legacy — key in the URL (no OAuth)
             </div>
-            <p style={{ fontSize: 12.5, color: C.textSecondary, lineHeight: 1.7, margin: '0 0 12px' }}>
+            <p style={{ fontSize: 14, color: C.textSecondary, lineHeight: 1.7, margin: '0 0 12px' }}>
               Still supported so already-installed connectors keep working. Generate an API key above and paste
-              <code style={{ fontFamily: MONO, fontSize: 12 }}> {install?.remoteUrl || '…/api/mcp/http/<key>'}</code> as
+              <code style={{ fontFamily: MONO, fontSize: 14 }}> {install?.remoteUrl || '…/api/mcp/http/<key>'}</code> as
               the server URL with no OAuth fields. Prefer OAuth for anything new — here the whole URL is the password,
               so it ends up in browser history and logs.
             </p>
@@ -3980,21 +3523,21 @@ function McpToolsTab() {
             {/* Local stdio — kept, but demoted. It needs this repo checked out
                 on the user's own machine, so it is for development only, not
                 the normal way anyone connects. */}
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: C.textSecondary, margin: '18px 0 6px' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.textSecondary, margin: '18px 0 6px' }}>
               Advanced — local stdio server (development only)
             </div>
-            <ol style={{ fontSize: 12.5, color: C.textSecondary, lineHeight: 1.8, paddingLeft: 18, margin: '0 0 16px' }}>
-              <li>Only needed if you are running the MCP server from source. Requires this repo checked out locally: <code style={{ fontFamily: MONO, fontSize: 12 }}>cd {install?.serverPath?.replace('/src/index.js', '') || '/root/ForgeGrowth/mcp-server'} && npm install</code></li>
+            <ol style={{ fontSize: 14, color: C.textSecondary, lineHeight: 1.8, paddingLeft: 18, margin: '0 0 16px' }}>
+              <li>Only needed if you are running the MCP server from source. Requires this repo checked out locally: <code style={{ fontFamily: MONO, fontSize: 14 }}>cd {install?.serverPath?.replace('/src/index.js', '') || '/root/ForgeGrowth/mcp-server'} && npm install</code></li>
               <li>Claude Desktop → <b>Settings → Developer → Edit Config</b>, add the block below, then fully quit and reopen.</li>
             </ol>
 
             {install && (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <span style={{ fontSize: 12, color: C.textSecondary }}>MCP API URL: <code style={{ fontFamily: MONO }}>{install.apiUrl}</code></span>
+                  <span style={{ fontSize: 14, color: C.textSecondary }}>MCP API URL: <code style={{ fontFamily: MONO }}>{install.apiUrl}</code></span>
                   <button
                     onClick={() => copy(snippet, 'snippet')}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1px solid ${C.border}`, borderRadius: 7, padding: '5px 10px', fontSize: 12, cursor: 'pointer', color: C.text, fontFamily: FONT }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1px solid ${C.border}`, borderRadius: 7, padding: '5px 10px', fontSize: 14, cursor: 'pointer', color: C.text, fontFamily: FONT }}
                   >
                     {copied === 'snippet' ? <Check size={13} /> : <Copy size={13} />}
                     {copied === 'snippet' ? 'Copied' : 'Copy config'}
@@ -4018,20 +3561,20 @@ function McpToolsTab() {
           <div style={{ background: C.cardBg, borderRadius: 14, padding: 24, width: 520, boxShadow: C.shadowLg }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
               <Key size={18} color={C.green} />
-              <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>OAuth client created</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>OAuth client created</div>
             </div>
-            <div style={{ fontSize: 13, color: C.textSecondary, marginBottom: 14, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 15, color: C.textSecondary, marginBottom: 14, lineHeight: 1.6 }}>
               Paste both values into Claude → <b>Settings → Connectors → Add custom connector → Advanced settings</b>.
               The secret is shown <b>once</b> — only a hash is stored, so it cannot be shown again.
             </div>
 
             {[['Client ID', freshClient.clientId, 'cid'], ['Client Secret', freshClient.clientSecret, 'csec']].map(([label, val, k]) => (
               <div key={k} style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.textMuted, marginBottom: 5 }}>{label}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.textMuted, marginBottom: 5 }}>{label}</div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <code style={{ flex: 1, ...codeBox, whiteSpace: 'nowrap', overflowX: 'auto', padding: '11px 13px' }}>{val}</code>
                   <button onClick={() => copy(val, k)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, background: C.primary, color: '#fff', border: 'none', borderRadius: 8, padding: '0 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, background: C.primary, color: '#fff', border: 'none', borderRadius: 8, padding: '0 14px', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
                     {copied === k ? <Check size={14} /> : <Copy size={14} />}
                   </button>
                 </div>
@@ -4039,13 +3582,13 @@ function McpToolsTab() {
             ))}
 
             <div style={{ marginTop: 6, marginBottom: 16 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.textMuted, marginBottom: 5 }}>Remote MCP server URL</div>
+              <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.textMuted, marginBottom: 5 }}>Remote MCP server URL</div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <code style={{ flex: 1, ...codeBox, whiteSpace: 'nowrap', overflowX: 'auto', padding: '11px 13px' }}>
                   {`${window.location.origin}/api/mcp`}
                 </code>
                 <button onClick={() => copy(`${window.location.origin}/api/mcp`, 'curl')}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, padding: '0 14px', fontSize: 13, cursor: 'pointer', color: C.text, fontFamily: FONT }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, padding: '0 14px', fontSize: 15, cursor: 'pointer', color: C.text, fontFamily: FONT }}>
                   {copied === 'curl' ? <Check size={14} /> : <Copy size={14} />}
                 </button>
               </div>
@@ -4053,7 +3596,7 @@ function McpToolsTab() {
 
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button onClick={() => setFreshClient(null)}
-                style={{ background: C.text, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
+                style={{ background: C.text, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
                 Done
               </button>
             </div>
@@ -4081,9 +3624,9 @@ function McpToolsTab() {
           <div style={{ background: C.cardBg, borderRadius: 14, padding: 24, width: 480, boxShadow: C.shadowLg }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
               <Key size={18} color={C.green} />
-              <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>API key created</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>API key created</div>
             </div>
-            <div style={{ fontSize: 13, color: C.textSecondary, marginBottom: 12, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 15, color: C.textSecondary, marginBottom: 12, lineHeight: 1.6 }}>
               Copy this key now — it won’t be shown again. For Claude.ai, use the ready-made connector URL below:
               paste it into <b>Settings → Connectors → Add custom connector</b>.
             </div>
@@ -4091,13 +3634,13 @@ function McpToolsTab() {
               <code style={{ flex: 1, ...codeBox, whiteSpace: 'nowrap', overflowX: 'auto', padding: '12px 14px' }}>{freshKey.key}</code>
               <button
                 onClick={() => copy(freshKey.key, 'fresh')}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, background: C.primary, color: '#fff', border: 'none', borderRadius: 8, padding: '0 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, background: C.primary, color: '#fff', border: 'none', borderRadius: 8, padding: '0 14px', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}
               >
                 {copied === 'fresh' ? <Check size={14} /> : <Copy size={14} />}
                 {copied === 'fresh' ? 'Copied' : 'Copy'}
               </button>
             </div>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: C.text, margin: '0 0 6px' }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: '0 0 6px' }}>
               Remote connector URL <span style={{ fontWeight: 400, color: C.textSecondary }}>— paste into Claude → Add custom connector (works on web, desktop, mobile)</span>
             </div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
@@ -4106,7 +3649,7 @@ function McpToolsTab() {
               </code>
               <button
                 onClick={() => copy(`${window.location.origin}/api/mcp/http/${freshKey.key}`, 'freshurl')}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, background: C.text, color: '#fff', border: 'none', borderRadius: 8, padding: '0 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, background: C.text, color: '#fff', border: 'none', borderRadius: 8, padding: '0 14px', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}
               >
                 {copied === 'freshurl' ? <Check size={14} /> : <Copy size={14} />}
                 {copied === 'freshurl' ? 'Copied' : 'Copy'}
@@ -4115,7 +3658,7 @@ function McpToolsTab() {
             <div style={{ textAlign: 'right' }}>
               <button
                 onClick={() => setFreshKey(null)}
-                style={{ background: C.text, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}
+                style={{ background: C.text, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}
               >
                 Done
               </button>
@@ -4296,7 +3839,7 @@ function IntegrationsTab() {
 
   if (loading) {
     return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textMuted, fontSize: 14, fontFamily: FONT }}>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textMuted, fontSize: 15, fontFamily: FONT }}>
         <Loader2 size={16} style={{ marginRight: 8, animation: 'spin 1s linear infinite' }} /> Loading…
       </div>
     );
@@ -4310,8 +3853,8 @@ function IntegrationsTab() {
   const renderAppsView = () => (
     <div>
       <div style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0 }}>Integrations</h2>
-        <div style={{ fontSize: 13, color: C.textSecondary, marginTop: 4 }}>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0 }}>Integrations</h2>
+        <div style={{ fontSize: 15, color: C.textSecondary, marginTop: 4 }}>
           Connect third-party apps so your automations can read and write data outside of WhatsApp.
         </div>
       </div>
@@ -4324,17 +3867,17 @@ function IntegrationsTab() {
           blurb={googleApp.blurb}
           onClick={() => setView('google')}
           badge={googleConnCount > 0 ? (
-            <span style={{ fontSize: 11, padding: '2px 8px', background: '#dcfce7', color: '#15803d', borderRadius: 6, fontWeight: 600 }}>
+            <span style={{ fontSize: 13, padding: '2px 8px', background: 'var(--c-sdcfce7, #dcfce7)', color: 'var(--c-s15803d, #15803d)', borderRadius: 6, fontWeight: 600 }}>
               {googleConnCount} of {googleApp.providers.length} connected
             </span>
           ) : credentials?.configured ? (
-            <span style={{ fontSize: 11, padding: '2px 8px', background: '#fef9c3', color: '#854d0e', borderRadius: 6, fontWeight: 600 }}>Credentials saved · not connected</span>
+            <span style={{ fontSize: 13, padding: '2px 8px', background: 'var(--c-sfef9c3, #fef9c3)', color: 'var(--c-warnText, #854d0e)', borderRadius: 6, fontWeight: 600 }}>Credentials saved · not connected</span>
           ) : (
-            <span style={{ fontSize: 11, padding: '2px 8px', background: C.sidebarBg, color: C.textMuted, borderRadius: 6, fontWeight: 600 }}>Not configured</span>
+            <span style={{ fontSize: 13, padding: '2px 8px', background: C.sidebarBg, color: C.textMuted, borderRadius: 6, fontWeight: 600 }}>Not configured</span>
           )}
         />
         <AppCard
-          color="#0866FF"
+          color="var(--c-x0866ff, #0866FF)"
           logo={MetaLogo(28)}
           label="Meta Ads Manager"
           blurb="Pull live campaign spend & results from your ad accounts."
@@ -4343,7 +3886,7 @@ function IntegrationsTab() {
         />
       </div>
 
-      <div style={{ marginTop: 24, padding: 14, background: C.sidebarBg, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, color: C.textSecondary, lineHeight: 1.7 }}>
+      <div style={{ marginTop: 24, padding: 14, background: C.sidebarBg, border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 14, color: C.textSecondary, lineHeight: 1.7 }}>
         <div style={{ fontWeight: 600, color: C.text, marginBottom: 4 }}>How automations use these</div>
         Once an app is connected, your automation Actions can call into it:
         <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
@@ -4361,12 +3904,12 @@ function IntegrationsTab() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Key size={16} color={C.primary} />
-          <div style={{ fontWeight: 600, fontSize: 14, color: C.text }}>Google API credentials</div>
+          <div style={{ fontWeight: 600, fontSize: 15, color: C.text }}>Google API credentials</div>
           {credentials?.configured && !showCredForm && (
-            <span style={{ fontSize: 11, padding: '2px 8px', background: '#16a34a22', color: '#15803d', borderRadius: 6, fontWeight: 600 }}>SAVED</span>
+            <span style={{ fontSize: 13, padding: '2px 8px', background: '#16a34a22', color: 'var(--c-s15803d, #15803d)', borderRadius: 6, fontWeight: 600 }}>SAVED</span>
           )}
           {!credentials?.configured && !showCredForm && (
-            <span style={{ fontSize: 11, padding: '2px 8px', background: '#fef9c3', color: '#854d0e', borderRadius: 6, fontWeight: 600 }}>REQUIRED</span>
+            <span style={{ fontSize: 13, padding: '2px 8px', background: 'var(--c-sfef9c3, #fef9c3)', color: 'var(--c-warnText, #854d0e)', borderRadius: 6, fontWeight: 600 }}>REQUIRED</span>
           )}
         </div>
         {!showCredForm && (
@@ -4376,7 +3919,7 @@ function IntegrationsTab() {
         )}
       </div>
 
-      <div style={{ fontSize: 12, color: C.textSecondary, marginBottom: 14, lineHeight: 1.6 }}>
+      <div style={{ fontSize: 14, color: C.textSecondary, marginBottom: 14, lineHeight: 1.6 }}>
         Create an OAuth 2.0 Client ID at <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" style={{ color: C.primary }}>console.cloud.google.com/apis/credentials</a>{' '}
         → choose <b>Web application</b> → add the redirect URI below to <b>Authorized redirect URIs</b> → enable the <b>Sheets</b>, <b>Drive</b>, <b>Calendar</b>, and <b>Gmail</b> APIs in the same project.
       </div>
@@ -4384,7 +3927,7 @@ function IntegrationsTab() {
       <div style={{ marginBottom: showCredForm ? 14 : 0 }}>
         <div style={igLabelStyle()}>Authorized redirect URI (use this in Google Cloud)</div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <input value={defaultRedirect} readOnly style={{ ...igInputStyle(), background: C.sidebarBg, fontFamily: "'DM Mono', monospace", fontSize: 12 }} />
+          <input value={defaultRedirect} readOnly style={{ ...igInputStyle(), background: C.sidebarBg, fontFamily: "'DM Mono', monospace", fontSize: 14 }} />
           <button onClick={copyRedirect} style={igBtnSecondary()}><Copy size={13} /> Copy</button>
         </div>
       </div>
@@ -4417,7 +3960,7 @@ function IntegrationsTab() {
           <div style={{ marginBottom: 14 }}>
             <div style={igLabelStyle()}>Redirect URI (must match Google Cloud exactly)</div>
             <input value={credForm.redirectUri} onChange={e => setCredForm({ ...credForm, redirectUri: e.target.value })}
-              style={{ ...igInputStyle(), fontFamily: "'DM Mono', monospace", fontSize: 12 }} />
+              style={{ ...igInputStyle(), fontFamily: "'DM Mono', monospace", fontSize: 14 }} />
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={saveCreds} disabled={savingCreds} style={igBtnPrimary(savingCreds)}>
@@ -4429,7 +3972,7 @@ function IntegrationsTab() {
       )}
 
       {!showCredForm && credentials?.configured && (
-        <div style={{ marginTop: 14, fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono', monospace" }}>
+        <div style={{ marginTop: 14, fontSize: 14, color: C.textMuted, fontFamily: "'DM Mono', monospace" }}>
           Client ID: {credentials.clientId ? `${credentials.clientId.slice(0, 40)}${credentials.clientId.length > 40 ? '…' : ''}` : '—'}
         </div>
       )}
@@ -4441,24 +3984,24 @@ function IntegrationsTab() {
       {/* Breadcrumb */}
       <button onClick={() => setView('apps')} style={{
         display: 'inline-flex', alignItems: 'center', gap: 6, background: 'transparent', border: 0, cursor: 'pointer',
-        color: C.textSecondary, fontSize: 13, fontFamily: FONT, padding: '4px 0', marginBottom: 16,
+        color: C.textSecondary, fontSize: 15, fontFamily: FONT, padding: '4px 0', marginBottom: 16,
       }}>
         <ChevronLeft size={14} /> Apps
       </button>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 24 }}>
-        <div style={{ width: 56, height: 56, borderRadius: 14, background: '#fff', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 56, height: 56, borderRadius: 14, background: 'var(--c-surface, #fff)', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {googleApp.logo(34)}
         </div>
         <div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0 }}>Google</h2>
-          <div style={{ fontSize: 13, color: C.textSecondary, marginTop: 2 }}>{googleApp.blurb}</div>
+          <h2 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0 }}>Google</h2>
+          <div style={{ fontSize: 15, color: C.textSecondary, marginTop: 2 }}>{googleApp.blurb}</div>
         </div>
       </div>
 
       {renderCredentialsCard()}
 
-      <div style={{ fontSize: 11, fontWeight: 600, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
         Google services
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
@@ -4478,35 +4021,35 @@ function IntegrationsTab() {
                   <Icon size={20} color={p.color} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: C.text }}>{p.label}</div>
-                  <div style={{ fontSize: 11, color: C.textSecondary }}>{p.blurb}</div>
+                  <div style={{ fontWeight: 600, fontSize: 15, color: C.text }}>{p.label}</div>
+                  <div style={{ fontSize: 13, color: C.textSecondary }}>{p.blurb}</div>
                 </div>
                 {isConnected && <CheckCircle2 size={16} color="#16a34a" />}
-                {isError && <AlertCircle size={16} color="#dc2626" />}
+                {isError && <AlertCircle size={16} color="var(--c-primary, #dc2626)" />}
               </div>
 
               {conn ? (
-                <div style={{ fontSize: 12, color: C.textSecondary, padding: '8px 10px', background: C.sidebarBg, borderRadius: 8, border: `1px solid ${C.border}` }}>
+                <div style={{ fontSize: 14, color: C.textSecondary, padding: '8px 10px', background: C.sidebarBg, borderRadius: 8, border: `1px solid ${C.border}` }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <User size={12} />
                     <span style={{ color: C.text, fontWeight: 500 }}>{conn.accountEmail || '(unknown)'}</span>
                   </div>
                   {conn.accountName && (
-                    <div style={{ marginTop: 2, fontSize: 11 }}>{conn.accountName}</div>
+                    <div style={{ marginTop: 2, fontSize: 13 }}>{conn.accountName}</div>
                   )}
                   {conn.lastUsedAt && (
-                    <div style={{ marginTop: 4, fontSize: 11, color: C.textMuted }}>
+                    <div style={{ marginTop: 4, fontSize: 13, color: C.textMuted }}>
                       Last used {new Date(conn.lastUsedAt).toLocaleString()}
                     </div>
                   )}
                   {isError && conn.lastError && (
-                    <div style={{ marginTop: 6, fontSize: 11, color: '#A32D2D' }}>
+                    <div style={{ marginTop: 6, fontSize: 13, color: 'var(--c-dangerText, #A32D2D)' }}>
                       {conn.lastError}
                     </div>
                   )}
                 </div>
               ) : (
-                <div style={{ fontSize: 12, color: C.textMuted, fontStyle: 'italic' }}>Not connected</div>
+                <div style={{ fontSize: 14, color: C.textMuted, fontStyle: 'italic' }}>Not connected</div>
               )}
 
               <div style={{ display: 'flex', gap: 8, marginTop: 'auto', flexWrap: 'wrap' }}>
@@ -4546,29 +4089,29 @@ function IntegrationsTab() {
       <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
 
       {error && (
-        <div style={{ padding: '10px 14px', background: '#FCEBEB', color: '#A32D2D', border: '1px solid #f5c2c2', borderRadius: 8, marginBottom: 16, fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <div style={{ padding: '10px 14px', background: 'var(--c-dangerBg, #FCEBEB)', color: 'var(--c-dangerText, #A32D2D)', border: '1px solid #f5c2c2', borderRadius: 8, marginBottom: 16, fontSize: 15, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
           <span>{error}</span>
-          <button onClick={() => setError('')} style={{ background: 'transparent', border: 0, cursor: 'pointer', color: '#A32D2D' }}><X size={14} /></button>
+          <button onClick={() => setError('')} style={{ background: 'transparent', border: 0, cursor: 'pointer', color: 'var(--c-dangerText, #A32D2D)' }}><X size={14} /></button>
         </div>
       )}
       {toast && (
-        <div style={{ position: 'fixed', bottom: 24, right: 24, padding: '10px 14px', background: C.text, color: '#fff', borderRadius: 8, fontSize: 13, boxShadow: C.shadowLg, zIndex: 200 }}>{toast}</div>
+        <div style={{ position: 'fixed', bottom: 24, right: 24, padding: '10px 14px', background: C.text, color: '#fff', borderRadius: 8, fontSize: 15, boxShadow: C.shadowLg, zIndex: 200 }}>{toast}</div>
       )}
 
       {view === 'apps' && renderAppsView()}
       {view === 'google' && renderGoogleView()}
       {view === 'meta_ads' && (
         <div>
-          <button onClick={() => { setView('apps'); loadMkt(); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'transparent', border: 0, cursor: 'pointer', color: C.textSecondary, fontSize: 13, fontFamily: FONT, padding: '4px 0', marginBottom: 16 }}>
+          <button onClick={() => { setView('apps'); loadMkt(); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'transparent', border: 0, cursor: 'pointer', color: C.textSecondary, fontSize: 15, fontFamily: FONT, padding: '4px 0', marginBottom: 16 }}>
             <ChevronLeft size={14} /> <span>Apps</span>
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
-            <div style={{ width: 48, height: 48, borderRadius: 12, background: '#fff', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <div style={{ width: 48, height: 48, borderRadius: 12, background: 'var(--c-surface, #fff)', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               {MetaLogo(28)}
             </div>
             <div>
-              <h2 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0 }}>Meta Ads Manager</h2>
-              <div style={{ fontSize: 13, color: C.textSecondary, marginTop: 2 }}>
+              <h2 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0 }}>Meta Ads Manager</h2>
+              <div style={{ fontSize: 15, color: C.textSecondary, marginTop: 2 }}>
                 Pull live campaign spend &amp; results from your ad accounts.
               </div>
             </div>
@@ -4595,7 +4138,7 @@ function ServiceBrowser({ provider, connections, onBack, onError }) {
   if (!conn || conn.status !== 'connected') {
     return (
       <div>
-        <button onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'transparent', border: 0, cursor: 'pointer', color: C.textSecondary, fontSize: 13, fontFamily: FONT, padding: '4px 0', marginBottom: 16 }}>
+        <button onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'transparent', border: 0, cursor: 'pointer', color: C.textSecondary, fontSize: 15, fontFamily: FONT, padding: '4px 0', marginBottom: 16 }}>
           <ChevronLeft size={14} /> Google
         </button>
         <div style={{ padding: 24, background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 12, color: C.textMuted, textAlign: 'center' }}>
@@ -4607,7 +4150,7 @@ function ServiceBrowser({ provider, connections, onBack, onError }) {
 
   return (
     <div>
-      <button onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'transparent', border: 0, cursor: 'pointer', color: C.textSecondary, fontSize: 13, fontFamily: FONT, padding: '4px 0', marginBottom: 16 }}>
+      <button onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'transparent', border: 0, cursor: 'pointer', color: C.textSecondary, fontSize: 15, fontFamily: FONT, padding: '4px 0', marginBottom: 16 }}>
         <ChevronLeft size={14} /> <span>Apps</span> <ChevronRight size={12} /> <span>Google</span>
       </button>
 
@@ -4620,8 +4163,8 @@ function ServiceBrowser({ provider, connections, onBack, onError }) {
           })()}
         </div>
         <div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0 }}>{PROVIDERS.find(p => p.key === provider)?.label || provider}</h2>
-          <div style={{ fontSize: 13, color: C.textSecondary, marginTop: 2 }}>
+          <h2 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0 }}>{PROVIDERS.find(p => p.key === provider)?.label || provider}</h2>
+          <div style={{ fontSize: 15, color: C.textSecondary, marginTop: 2 }}>
             Connected as <b>{conn.accountEmail}</b>
           </div>
         </div>
@@ -4712,12 +4255,12 @@ function SheetsBrowser({ onError }) {
         {/* Left: spreadsheet list */}
         <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 10, maxHeight: 520, overflowY: 'auto' }}>
           {loadingList && (
-            <div style={{ padding: 18, textAlign: 'center', color: C.textMuted, fontSize: 13 }}>
+            <div style={{ padding: 18, textAlign: 'center', color: C.textMuted, fontSize: 15 }}>
               <Loader2 size={14} style={{ animation: 'spin 1s linear infinite', marginRight: 6 }} /> Loading…
             </div>
           )}
           {!loadingList && spreadsheets && spreadsheets.length === 0 && (
-            <div style={{ padding: 18, textAlign: 'center', color: C.textMuted, fontSize: 13 }}>
+            <div style={{ padding: 18, textAlign: 'center', color: C.textMuted, fontSize: 15 }}>
               No spreadsheets found.
             </div>
           )}
@@ -4733,10 +4276,10 @@ function SheetsBrowser({ onError }) {
                 display: 'flex', alignItems: 'center', gap: 10,
               }}
             >
-              <FileSpreadsheet size={16} color="#0F9D58" />
+              <FileSpreadsheet size={16} color="var(--c-x0f9d58, #0F9D58)" />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</div>
-                <div style={{ fontSize: 11, color: C.textMuted }}>
+                <div style={{ fontSize: 15, fontWeight: 500, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</div>
+                <div style={{ fontSize: 13, color: C.textMuted }}>
                   Edited {s.modifiedTime ? new Date(s.modifiedTime).toLocaleDateString() : '—'}
                   {s.ownerEmail && ` · ${s.ownerEmail}`}
                 </div>
@@ -4750,7 +4293,7 @@ function SheetsBrowser({ onError }) {
         {selectedId && (
           <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 14, maxHeight: 520, overflowY: 'auto' }}>
             {loadingDetail && (
-              <div style={{ color: C.textMuted, fontSize: 13, textAlign: 'center', padding: 14 }}>
+              <div style={{ color: C.textMuted, fontSize: 15, textAlign: 'center', padding: 14 }}>
                 <Loader2 size={14} style={{ animation: 'spin 1s linear infinite', marginRight: 6 }} /> Loading spreadsheet…
               </div>
             )}
@@ -4758,7 +4301,7 @@ function SheetsBrowser({ onError }) {
               <>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <div style={{ fontWeight: 600, fontSize: 15, color: C.text }}>{selectedSheet.title}</div>
+                    <div style={{ fontWeight: 600, fontSize: 16, color: C.text }}>{selectedSheet.title}</div>
                     <a
                       href={`https://docs.google.com/spreadsheets/d/${selectedSheet.id}`}
                       target="_blank" rel="noreferrer"
@@ -4768,7 +4311,7 @@ function SheetsBrowser({ onError }) {
                       <ExternalLink size={13} />
                     </a>
                   </div>
-                  <div style={{ fontSize: 11, color: C.textMuted, fontFamily: "'DM Mono', monospace" }}>
+                  <div style={{ fontSize: 13, color: C.textMuted, fontFamily: "'DM Mono', monospace" }}>
                     ID: {selectedSheet.id}
                   </div>
                 </div>
@@ -4782,7 +4325,7 @@ function SheetsBrowser({ onError }) {
                         onClick={() => openTab(selectedSheet.id, t.title)}
                         style={{
                           cursor: 'pointer', fontFamily: FONT,
-                          padding: '5px 10px', borderRadius: 6, fontSize: 12,
+                          padding: '5px 10px', borderRadius: 6, fontSize: 14,
                           background: selectedTab === t.title ? C.primary : C.cardBg,
                           color: selectedTab === t.title ? '#fff' : C.text,
                           border: `1px solid ${selectedTab === t.title ? C.primary : C.border}`,
@@ -4790,7 +4333,7 @@ function SheetsBrowser({ onError }) {
                         }}
                       >
                         <Table2 size={11} /> {t.title}
-                        <span style={{ opacity: 0.7, fontSize: 10 }}>· {t.rowCount}×{t.columnCount}</span>
+                        <span style={{ opacity: 0.7, fontSize: 12 }}>· {t.rowCount}×{t.columnCount}</span>
                       </button>
                     ))}
                   </div>
@@ -4800,13 +4343,13 @@ function SheetsBrowser({ onError }) {
                   <div>
                     <div style={igLabelStyle()}>Preview · {selectedTab}</div>
                     {loadingPreview && (
-                      <div style={{ color: C.textMuted, fontSize: 12, padding: 10 }}>
+                      <div style={{ color: C.textMuted, fontSize: 14, padding: 10 }}>
                         <Loader2 size={12} style={{ animation: 'spin 1s linear infinite', marginRight: 6 }} /> Loading…
                       </div>
                     )}
                     {!loadingPreview && preview && (
                       <div style={{ overflowX: 'auto', border: `1px solid ${C.border}`, borderRadius: 8 }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: FONT }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, fontFamily: FONT }}>
                           <thead>
                             <tr style={{ background: C.sidebarBg }}>
                               {(preview.headers.length ? preview.headers : ['(empty)']).map((h, i) => (
@@ -4835,7 +4378,7 @@ function SheetsBrowser({ onError }) {
                         </table>
                       </div>
                     )}
-                    <div style={{ marginTop: 8, fontSize: 11, color: C.textMuted, fontFamily: "'DM Mono', monospace" }}>
+                    <div style={{ marginTop: 8, fontSize: 13, color: C.textMuted, fontFamily: "'DM Mono', monospace" }}>
                       Use in automation: <code>{selectedSheet.id} | {selectedTab}!A:Z | val1, val2, …</code>
                     </div>
                   </div>
@@ -4864,13 +4407,13 @@ function CalendarBrowser({ onError }) {
     return () => { cancelled = true; };
   }, [onError]);
 
-  if (loading) return <div style={{ color: C.textMuted, fontSize: 13, padding: 20, textAlign: 'center' }}><Loader2 size={14} style={{ animation: 'spin 1s linear infinite', marginRight: 6 }} /> Loading calendars…</div>;
+  if (loading) return <div style={{ color: C.textMuted, fontSize: 15, padding: 20, textAlign: 'center' }}><Loader2 size={14} style={{ animation: 'spin 1s linear infinite', marginRight: 6 }} /> Loading calendars…</div>;
 
   return (
     <div>
       <div style={igLabelStyle()}>Your calendars ({calendars.length})</div>
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, fontFamily: FONT }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15, fontFamily: FONT }}>
           <thead>
             <tr style={{ background: C.sidebarBg }}>
               <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: C.text, borderBottom: `1px solid ${C.border}` }}>Name</th>
@@ -4889,19 +4432,19 @@ function CalendarBrowser({ onError }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ width: 12, height: 12, borderRadius: 3, background: c.color || '#4285F4', display: 'inline-block' }} />
                     <span style={{ fontWeight: 500 }}>{c.summary}</span>
-                    {c.primary && <span style={{ fontSize: 10, padding: '1px 6px', background: '#dbeafe', color: '#1d4ed8', borderRadius: 4, fontWeight: 600 }}>PRIMARY</span>}
+                    {c.primary && <span style={{ fontSize: 12, padding: '1px 6px', background: 'var(--c-sdbeafe, #dbeafe)', color: 'var(--c-s1d4ed8, #1d4ed8)', borderRadius: 4, fontWeight: 600 }}>PRIMARY</span>}
                   </div>
-                  {c.description && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{c.description}</div>}
+                  {c.description && <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2 }}>{c.description}</div>}
                 </td>
-                <td style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, color: C.textMuted, fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{c.id}</td>
-                <td style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, color: C.text, fontSize: 12 }}>{c.accessRole}</td>
-                <td style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, color: C.text, fontSize: 12 }}>{c.timeZone}</td>
+                <td style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, color: C.textMuted, fontFamily: "'DM Mono', monospace", fontSize: 13 }}>{c.id}</td>
+                <td style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, color: C.text, fontSize: 14 }}>{c.accessRole}</td>
+                <td style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, color: C.text, fontSize: 14 }}>{c.timeZone}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <div style={{ marginTop: 12, fontSize: 11, color: C.textMuted, fontFamily: "'DM Mono', monospace" }}>
+      <div style={{ marginTop: 12, fontSize: 13, color: C.textMuted, fontFamily: "'DM Mono', monospace" }}>
         Use in automation: <code>&lt;calendarId&gt; | Title | startISO | endISO | description</code>
       </div>
     </div>
@@ -4924,7 +4467,7 @@ function GmailBrowser({ onError }) {
     return () => { cancelled = true; };
   }, [onError]);
 
-  if (loading) return <div style={{ color: C.textMuted, fontSize: 13, padding: 20, textAlign: 'center' }}><Loader2 size={14} style={{ animation: 'spin 1s linear infinite', marginRight: 6 }} /> Loading Gmail…</div>;
+  if (loading) return <div style={{ color: C.textMuted, fontSize: 15, padding: 20, textAlign: 'center' }}><Loader2 size={14} style={{ animation: 'spin 1s linear infinite', marginRight: 6 }} /> Loading Gmail…</div>;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -4939,20 +4482,20 @@ function GmailBrowser({ onError }) {
         <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
           {labels && labels.map(l => (
             <span key={l.id} style={{
-              fontSize: 12, padding: '4px 10px', borderRadius: 6,
-              background: l.type === 'system' ? C.sidebarBg : '#fef3c7',
-              color: l.type === 'system' ? C.text : '#854d0e',
+              fontSize: 14, padding: '4px 10px', borderRadius: 6,
+              background: l.type === 'system' ? C.sidebarBg : 'var(--c-sfef3c7, #fef3c7)',
+              color: l.type === 'system' ? C.text : 'var(--c-warnText, #854d0e)',
               border: `1px solid ${l.type === 'system' ? C.border : '#fde68a'}`,
               display: 'inline-flex', alignItems: 'center', gap: 5,
             }}>
               <Inbox size={11} /> {l.name}
             </span>
           ))}
-          {labels && labels.length === 0 && <span style={{ color: C.textMuted, fontSize: 12, fontStyle: 'italic' }}>No labels.</span>}
+          {labels && labels.length === 0 && <span style={{ color: C.textMuted, fontSize: 14, fontStyle: 'italic' }}>No labels.</span>}
         </div>
       </div>
 
-      <div style={{ fontSize: 11, color: C.textMuted, fontFamily: "'DM Mono', monospace" }}>
+      <div style={{ fontSize: 13, color: C.textMuted, fontFamily: "'DM Mono', monospace" }}>
         Use in automation: <code>to@example.com | Subject | Body</code>
       </div>
     </div>
@@ -4962,15 +4505,15 @@ function GmailBrowser({ onError }) {
 function KpiCard({ label, value }) {
   return (
     <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 10, padding: 14 }}>
-      <div style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: "'DM Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</div>
+      <div style={{ fontSize: 13, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: "'DM Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</div>
     </div>
   );
 }
 
 function igLabelStyle() {
   return {
-    display: 'block', fontSize: 11, fontWeight: 600,
+    display: 'block', fontSize: 13, fontWeight: 600,
     color: C.textSecondary, textTransform: 'uppercase',
     letterSpacing: '0.04em', marginBottom: 6,
   };
@@ -4979,7 +4522,7 @@ function igInputStyle() {
   return {
     width: '100%', padding: '9px 11px',
     border: `1px solid ${C.border}`, borderRadius: 8,
-    fontSize: 13, fontFamily: FONT, color: C.text, background: C.cardBg,
+    fontSize: 15, fontFamily: FONT, color: C.text, background: C.cardBg,
     outline: 'none', boxSizing: 'border-box',
   };
 }
@@ -4987,7 +4530,7 @@ function igBtnPrimary(disabled) {
   return {
     display: 'inline-flex', alignItems: 'center', gap: 6,
     padding: '8px 14px', background: disabled ? '#999' : C.primary,
-    color: '#fff', border: 0, borderRadius: 8, fontSize: 13, fontWeight: 600,
+    color: '#fff', border: 0, borderRadius: 8, fontSize: 15, fontWeight: 600,
     fontFamily: FONT, cursor: disabled ? 'not-allowed' : 'pointer',
   };
 }
@@ -4995,7 +4538,7 @@ function igBtnSecondary(disabled) {
   return {
     display: 'inline-flex', alignItems: 'center', gap: 6,
     padding: '8px 12px', background: C.cardBg, color: C.text,
-    border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, fontWeight: 500,
+    border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 15, fontWeight: 500,
     fontFamily: FONT, cursor: disabled ? 'not-allowed' : 'pointer',
     opacity: disabled ? 0.6 : 1,
   };
@@ -5003,8 +4546,8 @@ function igBtnSecondary(disabled) {
 function igBtnDanger() {
   return {
     display: 'inline-flex', alignItems: 'center', gap: 6,
-    padding: '8px 12px', background: '#fff', color: C.primary,
-    border: `1px solid #fecaca`, borderRadius: 8, fontSize: 13, fontWeight: 500,
+    padding: '8px 12px', background: 'var(--c-surface, #fff)', color: C.primary,
+    border: `1px solid #fecaca`, borderRadius: 8, fontSize: 15, fontWeight: 500,
     fontFamily: FONT, cursor: 'pointer',
   };
 }
@@ -5020,8 +4563,8 @@ function WebhooksTab() {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 28, overflow: 'auto', fontFamily: FONT }}>
       <div style={{ marginBottom: 18 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em' }}>Webhooks</h2>
-        <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 4 }}>
+        <h2 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em' }}>Webhooks</h2>
+        <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 4 }}>
           Inbound webhook endpoints. Open a provider to edit its configuration and view recent activity.
         </div>
       </div>
@@ -5133,22 +4676,22 @@ function WhatsAppWebhookPanel({ mode, onOpen, onBack }) {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const tokenSet = !!(defaultAccount && (defaultAccount.verifyToken || '').trim());
 
-  const labelStyle = { display: 'block', fontSize: 11, fontWeight: 700, color: '#666', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6, fontFamily: FONT };
-  const roStyle = { ...inputStyle, background: 'var(--c-hover)', color: '#555', fontFamily: 'DM Mono, monospace' };
+  const labelStyle = { display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--c-t4, #666)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6, fontFamily: FONT };
+  const roStyle = { ...inputStyle, background: 'var(--c-hover)', color: 'var(--c-s555555, #555)', fontFamily: 'DM Mono, monospace' };
 
   // ── Header (shared by both views) ────────────────────────────────────────────
   const header = (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
       <div>
-        <h2 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em' }}>Webhooks</h2>
-        <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 4 }}>
+        <h2 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em' }}>Webhooks</h2>
+        <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 4 }}>
           {view === 'card'
             ? 'Your WhatsApp Cloud API webhook endpoint. Open it to edit the config and view recent activity.'
             : 'Callback URL + verify token, and the most recent inbound payloads. Retention: 30 days.'}
         </div>
       </div>
       <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={() => setTestOpen(true)} style={{ ...btnSecondary, color: '#dc2626', borderColor: '#FCC', fontWeight: 700 }}>
+        <button onClick={() => setTestOpen(true)} style={{ ...btnSecondary, color: 'var(--c-primary, #dc2626)', borderColor: '#FCC', fontWeight: 700 }}>
           <Play size={12} /> Send Test Webhook
         </button>
         <button onClick={() => { loadSummary(); if (view === 'detail') load(); }} style={btnSecondary}>
@@ -5164,27 +4707,27 @@ function WhatsAppWebhookPanel({ mode, onOpen, onBack }) {
           <button
             onClick={onOpen}
             style={{ textAlign: 'left', background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18, cursor: 'pointer', fontFamily: FONT, display: 'flex', flexDirection: 'column', gap: 14 }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = '#dc2626'; e.currentTarget.style.boxShadow = C.shadowMd; }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = C.primary; e.currentTarget.style.boxShadow = C.shadowMd; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = 'none'; }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 42, height: 42, borderRadius: 10, background: 'var(--c-primaryLight)', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <div style={{ width: 42, height: 42, borderRadius: 10, background: 'var(--c-primaryLight)', color: 'var(--c-primary, #dc2626)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <Webhook size={20} />
               </div>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>WhatsApp Cloud API Webhook</div>
-                <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'DM Mono, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{webhookUrl}</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>WhatsApp Cloud API Webhook</div>
+                <div style={{ fontSize: 13, color: C.textMuted, fontFamily: 'DM Mono, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{webhookUrl}</div>
               </div>
-              <ChevronRight size={18} style={{ color: '#999', flexShrink: 0 }} />
+              <ChevronRight size={18} style={{ color: 'var(--c-t7, #999)', flexShrink: 0 }} />
             </div>
 
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, ...(tokenSet ? { background: '#E4F3EE', color: '#0F6E56' } : { background: '#EEEDE8', color: '#666' }) }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 99, fontSize: 13, fontWeight: 700, ...(tokenSet ? { background: 'var(--c-successBgSoft, #E4F3EE)', color: 'var(--c-successText, #0F6E56)' } : { background: 'var(--c-surfaceSubtle, #EEEDE8)', color: 'var(--c-t4, #666)' }) }}>
                 {tokenSet ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
                 {tokenSet ? 'Verify token set' : 'Using env fallback'}
               </span>
               {defaultAccount && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: 'var(--c-hover)', color: '#555' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 99, fontSize: 13, fontWeight: 700, background: 'var(--c-hover)', color: 'var(--c-s555555, #555)' }}>
                   <Phone size={11} /> {maskPhone(String(defaultAccount.displayPhoneNumber || '').replace(/\D/g, ''))}
                 </span>
               )}
@@ -5192,12 +4735,12 @@ function WhatsAppWebhookPanel({ mode, onOpen, onBack }) {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
               <div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em' }}>Total events</div>
-                <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 20, fontWeight: 700, color: C.text, marginTop: 2 }}>{(summary.total || 0).toLocaleString()}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--c-t6, #888)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Total events</div>
+                <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 22, fontWeight: 700, color: C.text, marginTop: 2 }}>{(summary.total || 0).toLocaleString()}</div>
               </div>
               <div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em' }}>Last received</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginTop: 4 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--c-t6, #888)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Last received</div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginTop: 4 }}>
                   {summary.lastReceivedAt ? new Date(summary.lastReceivedAt).toLocaleString('en-IN', { hour12: false }) : <span style={{ color: C.textMuted, fontWeight: 400 }}>No events yet</span>}
                 </div>
               </div>
@@ -5217,7 +4760,7 @@ function WhatsAppWebhookPanel({ mode, onOpen, onBack }) {
 
       {/* Configuration panel */}
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18, marginBottom: 18 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: '0 0 14px' }}>Configuration</h3>
+        <h3 style={{ fontSize: 15, fontWeight: 700, color: C.text, margin: '0 0 14px' }}>Configuration</h3>
 
         {/* Callback URL */}
         <div style={{ marginBottom: 16 }}>
@@ -5228,7 +4771,7 @@ function WhatsAppWebhookPanel({ mode, onOpen, onBack }) {
               {copied ? <Check size={15} /> : <Copy size={15} />}
             </button>
           </div>
-          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 5 }}>Register this in Meta App Dashboard → WhatsApp → Configuration.</div>
+          <div style={{ fontSize: 13, color: C.textMuted, marginTop: 5 }}>Register this in Meta App Dashboard → WhatsApp → Configuration.</div>
         </div>
 
         {/* Verify token — editable, saved to the default account */}
@@ -5257,7 +4800,7 @@ function WhatsAppWebhookPanel({ mode, onOpen, onBack }) {
               {savingToken ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={12} />} Save
             </button>
           </div>
-          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 5 }}>
+          <div style={{ fontSize: 13, color: C.textMuted, marginTop: 5 }}>
             {defaultAccount
               ? <>Meta echoes this during the webhook handshake. Saved to the default number ({defaultAccount.displayName}). Leave blank to fall back to the server env token.</>
               : <>No WhatsApp account configured yet — add one under WhatsApp Accounts, then set the verify token here.</>}
@@ -5269,15 +4812,15 @@ function WhatsAppWebhookPanel({ mode, onOpen, onBack }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
             <div>
               <div style={labelStyle}>Default number</div>
-              <MaskedNumber number={String(defaultAccount.displayPhoneNumber || '').replace(/\D/g, '')} prefix="+" style={{ fontSize: 13, color: C.text, fontFamily: 'DM Mono, monospace' }} />
+              <MaskedNumber number={String(defaultAccount.displayPhoneNumber || '').replace(/\D/g, '')} prefix="+" style={{ fontSize: 15, color: C.text, fontFamily: 'DM Mono, monospace' }} />
             </div>
             <div>
               <div style={labelStyle}>Phone number ID</div>
-              <div style={{ fontSize: 13, color: C.text, fontFamily: 'DM Mono, monospace', wordBreak: 'break-all' }}>{defaultAccount.phoneNumberId || '—'}</div>
+              <div style={{ fontSize: 15, color: C.text, fontFamily: 'DM Mono, monospace', wordBreak: 'break-all' }}>{defaultAccount.phoneNumberId || '—'}</div>
             </div>
             <div>
               <div style={labelStyle}>WABA ID</div>
-              <div style={{ fontSize: 13, color: C.text, fontFamily: 'DM Mono, monospace', wordBreak: 'break-all' }}>{defaultAccount.wabaId || '—'}</div>
+              <div style={{ fontSize: 15, color: C.text, fontFamily: 'DM Mono, monospace', wordBreak: 'break-all' }}>{defaultAccount.wabaId || '—'}</div>
             </div>
           </div>
         )}
@@ -5285,17 +4828,17 @@ function WhatsAppWebhookPanel({ mode, onOpen, onBack }) {
 
       {/* Recent webhook history */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 10 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0 }}>Recent webhook events</h3>
+        <h3 style={{ fontSize: 15, fontWeight: 700, color: C.text, margin: 0 }}>Recent webhook events</h3>
         <div style={{ position: 'relative', width: 260, maxWidth: '100%' }}>
           <Search size={12} style={{ position: 'absolute', left: 8, top: 9, color: 'var(--c-textMuted)' }} />
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search payload…" style={{ ...inputStyle, paddingLeft: 26 }} />
         </div>
       </div>
 
-      {error && <div style={{ background: 'var(--c-primaryLight)', color: '#A32D2D', padding: '10px 12px', borderRadius: 8, fontSize: 12, marginBottom: 14 }}>{error}</div>}
+      {error && <div style={{ background: 'var(--c-primaryLight)', color: 'var(--c-dangerText, #A32D2D)', padding: '10px 12px', borderRadius: 8, fontSize: 14, marginBottom: 14 }}>{error}</div>}
 
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
           <thead>
             <tr style={{ background: 'var(--c-hover)', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>
               <th style={th}>Received</th>
@@ -5309,10 +4852,10 @@ function WhatsAppWebhookPanel({ mode, onOpen, onBack }) {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={7} style={{ padding: 40, textAlign: 'center', color: '#888' }}><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /></td></tr>
+              <tr><td colSpan={7} style={{ padding: 40, textAlign: 'center', color: 'var(--c-t6, #888)' }}><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /></td></tr>
             )}
             {!loading && events.length === 0 && (
-              <tr><td colSpan={7} style={{ padding: 40, textAlign: 'center', color: '#888' }}>No webhook events yet.</td></tr>
+              <tr><td colSpan={7} style={{ padding: 40, textAlign: 'center', color: 'var(--c-t6, #888)' }}>No webhook events yet.</td></tr>
             )}
             {!loading && events.map(e => {
               const kc = WEBHOOK_KIND_COLORS[e.payload_kind] || WEBHOOK_KIND_COLORS.unknown;
@@ -5320,26 +4863,26 @@ function WhatsAppWebhookPanel({ mode, onOpen, onBack }) {
               const previewShort = preview.length > 80 ? preview.slice(0, 80) + '…' : preview;
               return (
                 <tr key={e.id} onClick={() => setDetailId(e.id)} style={{ borderBottom: `1px solid ${C.border}`, cursor: 'pointer' }}
-                    onMouseEnter={ev => ev.currentTarget.style.background = '#FDF6F6'}
+                    onMouseEnter={ev => ev.currentTarget.style.background = 'var(--c-xfdf6f6, #FDF6F6)'}
                     onMouseLeave={ev => ev.currentTarget.style.background = 'transparent'}>
                   <td style={td}>{new Date(e.received_at).toLocaleString('en-IN', { hour12: false })}</td>
                   <td style={td}><span style={{ ...pillStyle, background: kc.bg, color: kc.color }}>{kc.label}</span></td>
                   <td style={td}>{e.payload_subtype
-                    ? <span style={{ ...pillStyle, background: 'var(--c-cardBg)', border: '1px solid #D5D5D0', color: '#333' }}>{e.payload_subtype}</span>
+                    ? <span style={{ ...pillStyle, background: 'var(--c-cardBg)', border: '1px solid var(--c-borderStrong, #D5D5D0)', color: 'var(--c-s333333, #333)' }}>{e.payload_subtype}</span>
                     : <span style={{ color: 'var(--c-textMuted)' }}>—</span>}
                   </td>
-                  <td style={{ ...td, color: '#333', maxWidth: 360 }} title={preview}>
+                  <td style={{ ...td, color: 'var(--c-s333333, #333)', maxWidth: 360 }} title={preview}>
                     {preview ? previewShort : <span style={{ color: 'var(--c-textMuted)' }}>—</span>}
                   </td>
-                  <td style={{ ...td, fontFamily: 'DM Mono, monospace', color: '#666' }} title={e.phone_number_id ? `phone_number_id: ${e.phone_number_id}` : ''}>
+                  <td style={{ ...td, fontFamily: 'DM Mono, monospace', color: 'var(--c-t4, #666)' }} title={e.phone_number_id ? `phone_number_id: ${e.phone_number_id}` : ''}>
                     {e.display_phone_number
                       ? <MaskedNumber number={String(e.display_phone_number).replace(/\D/g, '')} />
                       : (e.phone_number_id ? <span style={{ color: 'var(--c-textMuted)' }}>id:{String(e.phone_number_id).slice(-6)}</span> : '—')}
                   </td>
-                  <td style={{ ...td, fontFamily: 'DM Mono, monospace', color: '#666' }}>
+                  <td style={{ ...td, fontFamily: 'DM Mono, monospace', color: 'var(--c-t4, #666)' }}>
                     {e.contact_phone ? <MaskedNumber number={String(e.contact_phone).replace(/\D/g, '')} /> : <span style={{ color: 'var(--c-textMuted)' }}>—</span>}
                   </td>
-                  <td style={td}><Eye size={14} style={{ color: '#666' }} /></td>
+                  <td style={td}><Eye size={14} style={{ color: 'var(--c-t4, #666)' }} /></td>
                 </tr>
               );
             })}
@@ -5349,7 +4892,7 @@ function WhatsAppWebhookPanel({ mode, onOpen, onBack }) {
 
       {/* Pagination — recent 10 per page */}
       {total > PAGE_SIZE && (
-        <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, fontSize: 12, color: '#666' }}>
+        <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, fontSize: 14, color: 'var(--c-t4, #666)' }}>
           <span>Page {page + 1} of {totalPages} ({total.toLocaleString()} total)</span>
           <button disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))} style={{ ...btnSecondary, opacity: page === 0 ? 0.5 : 1 }}><ChevronLeft size={12} /> Prev</button>
           <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} style={{ ...btnSecondary, opacity: page >= totalPages - 1 ? 0.5 : 1 }}>Next <ChevronRight size={12} /></button>
@@ -5373,12 +4916,12 @@ function WhatsAppWebhookPanel({ mode, onOpen, onBack }) {
 // lead/contact. See the step-by-step setup guide handed over after deploy.
 const RZP_ACCENT = '#3395FF';                 // Razorpay blue
 const RZP_STATUS_COLORS = {
-  captured:   { bg: '#E4F3EE', color: '#0F6E56' },
-  authorized: { bg: '#E3F2FD', color: '#1565C0' },
-  created:    { bg: '#EEEDE8', color: '#666' },
-  failed:     { bg: '#FCEBEB', color: '#A32D2D' },
-  refunded:   { bg: '#FFF3E0', color: '#E65100' },
-  processed:  { bg: '#FFF3E0', color: '#E65100' },
+  captured:   { bg: 'var(--c-successBgSoft, #E4F3EE)', color: 'var(--c-successText, #0F6E56)' },
+  authorized: { bg: 'var(--c-infoBg, #E3F2FD)', color: 'var(--c-infoText, #1565C0)' },
+  created:    { bg: 'var(--c-surfaceSubtle, #EEEDE8)', color: 'var(--c-t4, #666)' },
+  failed:     { bg: 'var(--c-dangerBg, #FCEBEB)', color: 'var(--c-dangerText, #A32D2D)' },
+  refunded:   { bg: 'var(--c-orangeBg, #FFF3E0)', color: 'var(--c-orangeText, #E65100)' },
+  processed:  { bg: 'var(--c-orangeBg, #FFF3E0)', color: 'var(--c-orangeText, #E65100)' },
 };
 function rzpAmount(paise, currency) {
   if (paise == null) return '—';
@@ -5481,20 +5024,20 @@ function RazorpayWebhookPanel({ mode, onOpen, onBack }) {
   };
 
   const apiPill = cfg.apiStatus === 'connected'
-    ? { bg: '#E4F3EE', color: '#0F6E56', label: `API ready · ${cfg.keyMode === 'live' ? 'LIVE' : 'Test'}`, icon: <CheckCircle2 size={12} /> }
+    ? { bg: 'var(--c-successBgSoft, #E4F3EE)', color: 'var(--c-successText, #0F6E56)', label: `API ready · ${cfg.keyMode === 'live' ? 'LIVE' : 'Test'}`, icon: <CheckCircle2 size={12} /> }
     : cfg.apiStatus === 'error'
-      ? { bg: '#FCEBEB', color: '#A32D2D', label: 'API error', icon: <AlertCircle size={12} /> }
-      : { bg: '#EEEDE8', color: '#666', label: 'API not set up', icon: <AlertCircle size={12} /> };
+      ? { bg: 'var(--c-dangerBg, #FCEBEB)', color: 'var(--c-dangerText, #A32D2D)', label: 'API error', icon: <AlertCircle size={12} /> }
+      : { bg: 'var(--c-surfaceSubtle, #EEEDE8)', color: 'var(--c-t4, #666)', label: 'API not set up', icon: <AlertCircle size={12} /> };
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const statusPill = cfg.status === 'connected'
-    ? { bg: '#E4F3EE', color: '#0F6E56', label: 'Connected', icon: <CheckCircle2 size={12} /> }
+    ? { bg: 'var(--c-successBgSoft, #E4F3EE)', color: 'var(--c-successText, #0F6E56)', label: 'Connected', icon: <CheckCircle2 size={12} /> }
     : cfg.status === 'error'
-      ? { bg: '#FCEBEB', color: '#A32D2D', label: 'Attention', icon: <AlertCircle size={12} /> }
-      : { bg: '#EEEDE8', color: '#666', label: 'Not configured', icon: <AlertCircle size={12} /> };
+      ? { bg: 'var(--c-dangerBg, #FCEBEB)', color: 'var(--c-dangerText, #A32D2D)', label: 'Attention', icon: <AlertCircle size={12} /> }
+      : { bg: 'var(--c-surfaceSubtle, #EEEDE8)', color: 'var(--c-t4, #666)', label: 'Not configured', icon: <AlertCircle size={12} /> };
 
-  const labelStyle = { display: 'block', fontSize: 11, fontWeight: 700, color: '#666', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6, fontFamily: FONT };
-  const roStyle = { ...inputStyle, background: 'var(--c-hover)', color: '#555', fontFamily: 'DM Mono, monospace' };
+  const labelStyle = { display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--c-t4, #666)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6, fontFamily: FONT };
+  const roStyle = { ...inputStyle, background: 'var(--c-hover)', color: 'var(--c-s555555, #555)', fontFamily: 'DM Mono, monospace' };
 
   // ── Card ─────────────────────────────────────────────────────────────────────
   if (view === 'card') {
@@ -5510,29 +5053,29 @@ function RazorpayWebhookPanel({ mode, onOpen, onBack }) {
             <CreditCard size={20} />
           </div>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>Razorpay Payments</div>
-            <div style={{ fontSize: 11, color: C.textMuted, fontFamily: 'DM Mono, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{webhookUrl}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Razorpay Payments</div>
+            <div style={{ fontSize: 13, color: C.textMuted, fontFamily: 'DM Mono, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{webhookUrl}</div>
           </div>
-          <ChevronRight size={18} style={{ color: '#999', flexShrink: 0 }} />
+          <ChevronRight size={18} style={{ color: 'var(--c-t7, #999)', flexShrink: 0 }} />
         </div>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: statusPill.bg, color: statusPill.color }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 99, fontSize: 13, fontWeight: 700, background: statusPill.bg, color: statusPill.color }}>
             {statusPill.icon} {statusPill.label}
           </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: 'var(--c-hover)', color: '#555' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 99, fontSize: 13, fontWeight: 700, background: 'var(--c-hover)', color: 'var(--c-s555555, #555)' }}>
             <LinkIcon size={11} /> {cfg.matchedEvents || 0} linked
           </span>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em' }}>Total events</div>
-            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 20, fontWeight: 700, color: C.text, marginTop: 2 }}>{(cfg.totalEvents || 0).toLocaleString()}</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--c-t6, #888)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Total events</div>
+            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 22, fontWeight: 700, color: C.text, marginTop: 2 }}>{(cfg.totalEvents || 0).toLocaleString()}</div>
           </div>
           <div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '.05em' }}>Last received</div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginTop: 4 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--c-t6, #888)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Last received</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginTop: 4 }}>
               {cfg.lastEventAt ? new Date(cfg.lastEventAt).toLocaleString('en-IN', { hour12: false }) : <span style={{ color: C.textMuted, fontWeight: 400 }}>No events yet</span>}
             </div>
           </div>
@@ -5550,8 +5093,8 @@ function RazorpayWebhookPanel({ mode, onOpen, onBack }) {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em' }}>Razorpay Payments</h2>
-          <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 4 }}>
+          <h2 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em' }}>Razorpay Payments</h2>
+          <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 4 }}>
             Verify course payments and link them to leads/contacts. Paste the callback URL + secret into Razorpay → Settings → Webhooks.
           </div>
         </div>
@@ -5560,7 +5103,7 @@ function RazorpayWebhookPanel({ mode, onOpen, onBack }) {
 
       {/* Configuration */}
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18, marginBottom: 18 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: '0 0 14px' }}>Configuration</h3>
+        <h3 style={{ fontSize: 15, fontWeight: 700, color: C.text, margin: '0 0 14px' }}>Configuration</h3>
 
         <div style={{ marginBottom: 16 }}>
           <label style={labelStyle}>Webhook (Callback) URL</label>
@@ -5570,7 +5113,7 @@ function RazorpayWebhookPanel({ mode, onOpen, onBack }) {
               {copied ? <Check size={15} /> : <Copy size={15} />}
             </button>
           </div>
-          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 5 }}>Paste this into Razorpay Dashboard → Settings → Webhooks → Add New Webhook.</div>
+          <div style={{ fontSize: 13, color: C.textMuted, marginTop: 5 }}>Paste this into Razorpay Dashboard → Settings → Webhooks → Add New Webhook.</div>
         </div>
 
         <div style={{ marginBottom: 16 }}>
@@ -5589,7 +5132,7 @@ function RazorpayWebhookPanel({ mode, onOpen, onBack }) {
               </button>
             </div>
           </div>
-          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 5 }}>Must EXACTLY match the secret entered in Razorpay — it's the key used to verify each event's signature.</div>
+          <div style={{ fontSize: 13, color: C.textMuted, marginTop: 5 }}>Must EXACTLY match the secret entered in Razorpay — it's the key used to verify each event's signature.</div>
         </div>
 
         {/* ── API access (outbound) ───────────────────────────────────────
@@ -5599,18 +5142,18 @@ function RazorpayWebhookPanel({ mode, onOpen, onBack }) {
             working API access. */}
         <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 20, paddingTop: 18 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0 }}>API access</h3>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: apiPill.bg, color: apiPill.color }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: C.text, margin: 0 }}>API access</h3>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 99, fontSize: 13, fontWeight: 700, background: apiPill.bg, color: apiPill.color }}>
               {apiPill.icon} {apiPill.label}
             </span>
           </div>
-          <div style={{ fontSize: 11.5, color: C.textSecondary, marginBottom: 14, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 13, color: C.textSecondary, marginBottom: 14, lineHeight: 1.5 }}>
             Needed to <strong>create</strong> payment links from Sales → Payments. Razorpay Dashboard → Account &amp; Settings → API Keys.
             Razorpay keys are account-wide, so this grants ForgeGrowth write access to the gateway — start with a <strong>test</strong> key.
           </div>
 
           {cfg.keyMode === 'live' && cfg.hasApiKeys && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: '#FFF8E1', color: '#7A5500', border: '1px solid #F0E0B0', borderRadius: 8, padding: '9px 12px', marginBottom: 14, fontSize: 11.5 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: 'var(--c-warnBgSoft, #FFF8E1)', color: 'var(--c-s7a5500, #7A5500)', border: '1px solid #F0E0B0', borderRadius: 8, padding: '9px 12px', marginBottom: 14, fontSize: 13 }}>
               <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
               <span>These are <strong>live</strong> keys. Links created in Sales → Payments will take real money.</span>
             </div>
@@ -5619,7 +5162,7 @@ function RazorpayWebhookPanel({ mode, onOpen, onBack }) {
           <div style={{ marginBottom: 14 }}>
             <label style={labelStyle}>Key ID</label>
             <input value={keyId} onChange={e => setKeyId(e.target.value)} placeholder="rzp_test_… or rzp_live_…" style={{ ...inputStyle, fontFamily: 'DM Mono, monospace' }} />
-            <div style={{ fontSize: 11, color: C.textMuted, marginTop: 5 }}>
+            <div style={{ fontSize: 13, color: C.textMuted, marginTop: 5 }}>
               Test or live mode is read from this id — there is no separate switch to get out of step with it.
             </div>
           </div>
@@ -5638,7 +5181,7 @@ function RazorpayWebhookPanel({ mode, onOpen, onBack }) {
                 {showKeySecret ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
             </div>
-            <div style={{ fontSize: 11, color: C.textMuted, marginTop: 5 }}>Stored encrypted and never shown again. Different from the webhook secret above.</div>
+            <div style={{ fontSize: 13, color: C.textMuted, marginTop: 5 }}>Stored encrypted and never shown again. Different from the webhook secret above.</div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -5651,9 +5194,9 @@ function RazorpayWebhookPanel({ mode, onOpen, onBack }) {
             >
               {testingApi ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={12} />} Test API access
             </button>
-            {cfg.apiLastError && <span style={{ fontSize: 11, color: '#A32D2D', flex: 1, minWidth: 180 }}>{cfg.apiLastError}</span>}
+            {cfg.apiLastError && <span style={{ fontSize: 13, color: 'var(--c-dangerText, #A32D2D)', flex: 1, minWidth: 180 }}>{cfg.apiLastError}</span>}
             {cfg.apiCheckedAt && !cfg.apiLastError && (
-              <span style={{ fontSize: 11, color: C.textMuted }}>Last checked {new Date(cfg.apiCheckedAt).toLocaleString('en-IN', { hour12: false })}</span>
+              <span style={{ fontSize: 13, color: C.textMuted }}>Last checked {new Date(cfg.apiCheckedAt).toLocaleString('en-IN', { hour12: false })}</span>
             )}
           </div>
         </div>
@@ -5667,26 +5210,26 @@ function RazorpayWebhookPanel({ mode, onOpen, onBack }) {
           >
             {saving ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={12} />} Save configuration
           </button>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: statusPill.bg, color: statusPill.color }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 99, fontSize: 13, fontWeight: 700, background: statusPill.bg, color: statusPill.color }}>
             {statusPill.icon} {statusPill.label}
           </span>
-          {cfg.lastError && <span style={{ fontSize: 11, color: '#A32D2D' }}>{cfg.lastError}</span>}
+          {cfg.lastError && <span style={{ fontSize: 13, color: 'var(--c-dangerText, #A32D2D)' }}>{cfg.lastError}</span>}
         </div>
       </div>
 
       {/* Recent events */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 10 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: C.text, margin: 0 }}>Recent payment events</h3>
+        <h3 style={{ fontSize: 15, fontWeight: 700, color: C.text, margin: 0 }}>Recent payment events</h3>
         <div style={{ position: 'relative', width: 260, maxWidth: '100%' }}>
           <Search size={12} style={{ position: 'absolute', left: 8, top: 9, color: 'var(--c-textMuted)' }} />
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search id, email, phone, lead…" style={{ ...inputStyle, paddingLeft: 26 }} />
         </div>
       </div>
 
-      {error && <div style={{ background: 'var(--c-primaryLight)', color: '#A32D2D', padding: '10px 12px', borderRadius: 8, fontSize: 12, marginBottom: 14 }}>{error}</div>}
+      {error && <div style={{ background: 'var(--c-primaryLight)', color: 'var(--c-dangerText, #A32D2D)', padding: '10px 12px', borderRadius: 8, fontSize: 14, marginBottom: 14 }}>{error}</div>}
 
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 760 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, minWidth: 760 }}>
           <thead>
             <tr style={{ background: 'var(--c-hover)', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>
               <th style={th}>Received</th>
@@ -5700,36 +5243,36 @@ function RazorpayWebhookPanel({ mode, onOpen, onBack }) {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={7} style={{ padding: 40, textAlign: 'center', color: '#888' }}><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /></td></tr>
+              <tr><td colSpan={7} style={{ padding: 40, textAlign: 'center', color: 'var(--c-t6, #888)' }}><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /></td></tr>
             )}
             {!loading && events.length === 0 && (
-              <tr><td colSpan={7} style={{ padding: 40, textAlign: 'center', color: '#888' }}>No Razorpay events yet.</td></tr>
+              <tr><td colSpan={7} style={{ padding: 40, textAlign: 'center', color: 'var(--c-t6, #888)' }}>No Razorpay events yet.</td></tr>
             )}
             {!loading && events.map(e => {
               const sc = RZP_STATUS_COLORS[e.status] || RZP_STATUS_COLORS.created;
               const linked = e.matched_lead_name || e.matched_contact_name;
               return (
                 <tr key={e.id} onClick={() => setDrawerId(e.id)} style={{ borderBottom: `1px solid ${C.border}`, cursor: 'pointer' }}
-                    onMouseEnter={ev => ev.currentTarget.style.background = '#F4F8FF'}
+                    onMouseEnter={ev => ev.currentTarget.style.background = 'var(--c-xf4f8ff, #F4F8FF)'}
                     onMouseLeave={ev => ev.currentTarget.style.background = 'transparent'}>
                   <td style={td}>{new Date(e.received_at).toLocaleString('en-IN', { hour12: false })}</td>
                   <td style={td}>
-                    <span style={{ ...pillStyle, background: 'var(--c-cardBg)', border: '1px solid #D5D5D0', color: '#333' }}>{e.event_type || '—'}</span>
-                    {!e.signature_valid && <span title="Signature not verified" style={{ marginLeft: 6, color: '#A32D2D' }}><AlertCircle size={12} style={{ verticalAlign: 'middle' }} /></span>}
+                    <span style={{ ...pillStyle, background: 'var(--c-cardBg)', border: '1px solid var(--c-borderStrong, #D5D5D0)', color: 'var(--c-s333333, #333)' }}>{e.event_type || '—'}</span>
+                    {!e.signature_valid && <span title="Signature not verified" style={{ marginLeft: 6, color: 'var(--c-dangerText, #A32D2D)' }}><AlertCircle size={12} style={{ verticalAlign: 'middle' }} /></span>}
                   </td>
                   <td style={{ ...td, fontFamily: 'DM Mono, monospace', fontWeight: 700, color: C.text }}>{rzpAmount(e.amount_paise, e.currency)}</td>
                   <td style={td}>{e.status ? <span style={{ ...pillStyle, background: sc.bg, color: sc.color }}>{e.status}</span> : <span style={{ color: 'var(--c-textMuted)' }}>—</span>}</td>
-                  <td style={{ ...td, color: '#555' }}>
+                  <td style={{ ...td, color: 'var(--c-s555555, #555)' }}>
                     {e.payer_email
                       ? <span title={e.payer_email} style={{ display: 'inline-block', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>{e.payer_email}</span>
                       : (e.payer_contact ? <MaskedNumber number={String(e.payer_contact).replace(/\D/g, '')} /> : <span style={{ color: 'var(--c-textMuted)' }}>—</span>)}
                   </td>
                   <td style={td}>
                     {linked
-                      ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#0F6E56', fontWeight: 600 }}><LinkIcon size={12} /> {linked}</span>
+                      ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--c-successText, #0F6E56)', fontWeight: 600 }}><LinkIcon size={12} /> {linked}</span>
                       : <span style={{ color: 'var(--c-textMuted)' }}>Unmatched</span>}
                   </td>
-                  <td style={td}><Eye size={14} style={{ color: '#666' }} /></td>
+                  <td style={td}><Eye size={14} style={{ color: 'var(--c-t4, #666)' }} /></td>
                 </tr>
               );
             })}
@@ -5738,7 +5281,7 @@ function RazorpayWebhookPanel({ mode, onOpen, onBack }) {
       </div>
 
       {total > PAGE_SIZE && (
-        <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, fontSize: 12, color: '#666' }}>
+        <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, fontSize: 14, color: 'var(--c-t4, #666)' }}>
           <span>Page {page + 1} of {totalPages} ({total.toLocaleString()} total)</span>
           <button disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))} style={{ ...btnSecondary, opacity: page === 0 ? 0.5 : 1 }}><ChevronLeft size={12} /> Prev</button>
           <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} style={{ ...btnSecondary, opacity: page >= totalPages - 1 ? 0.5 : 1 }}>Next <ChevronRight size={12} /></button>
@@ -5767,37 +5310,37 @@ function RazorpayEventDrawer({ id, onClose }) {
   };
 
   const Field = ({ label, children }) => (
-    <div><div style={{ color: '#888', textTransform: 'uppercase', fontSize: 10, letterSpacing: '.05em', marginBottom: 2 }}>{label}</div>
-      <div style={{ fontSize: 13, color: 'var(--c-text)', fontFamily: 'DM Mono, monospace', wordBreak: 'break-all' }}>{children}</div></div>
+    <div><div style={{ color: 'var(--c-t6, #888)', textTransform: 'uppercase', fontSize: 12, letterSpacing: '.05em', marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 15, color: 'var(--c-text)', fontFamily: 'DM Mono, monospace', wordBreak: 'break-all' }}>{children}</div></div>
   );
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 250, display: 'flex', justifyContent: 'flex-end' }}>
       <div onClick={e => e.stopPropagation()} style={{ width: 640, maxWidth: '94vw', height: '100%', background: 'var(--c-cardBg)', boxShadow: C.shadowLg, display: 'flex', flexDirection: 'column', fontFamily: FONT, overflow: 'hidden' }}>
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid #EEEDE8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--c-borderSubtle, #EEEDE8)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--c-text)' }}>Razorpay Event #{id}</div>
-            {ev && <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{new Date(ev.received_at).toLocaleString('en-IN')} · {ev.event_type}</div>}
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--c-text)' }}>Razorpay Event #{id}</div>
+            {ev && <div style={{ fontSize: 13, color: 'var(--c-t6, #888)', marginTop: 2 }}>{new Date(ev.received_at).toLocaleString('en-IN')} · {ev.event_type}</div>}
           </div>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#666' }}><X size={20} /></button>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--c-t4, #666)' }}><X size={20} /></button>
         </div>
 
-        {loading && <div style={{ padding: 40, textAlign: 'center', color: '#888' }}><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /></div>}
+        {loading && <div style={{ padding: 40, textAlign: 'center', color: 'var(--c-t6, #888)' }}><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /></div>}
 
         {!loading && ev && (
           <div style={{ flex: 1, overflowY: 'auto' }}>
-            <div style={{ padding: '12px 20px', borderBottom: '1px solid #EEEDE8', background: 'var(--c-hover)', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-              <div><div style={{ color: '#888', textTransform: 'uppercase', fontSize: 10, letterSpacing: '.05em', marginBottom: 2 }}>Signature</div>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 700, ...(ev.signature_valid ? { background: '#E4F3EE', color: '#0F6E56' } : { background: '#FCEBEB', color: '#A32D2D' }) }}>
+            <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--c-borderSubtle, #EEEDE8)', background: 'var(--c-hover)', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+              <div><div style={{ color: 'var(--c-t6, #888)', textTransform: 'uppercase', fontSize: 12, letterSpacing: '.05em', marginBottom: 2 }}>Signature</div>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 99, fontSize: 13, fontWeight: 700, ...(ev.signature_valid ? { background: 'var(--c-successBgSoft, #E4F3EE)', color: 'var(--c-successText, #0F6E56)' } : { background: 'var(--c-dangerBg, #FCEBEB)', color: 'var(--c-dangerText, #A32D2D)' }) }}>
                   {ev.signature_valid ? <CheckCircle2 size={11} /> : <AlertCircle size={11} />} {ev.signature_valid ? 'Verified' : 'Not verified'}
                 </span>
               </div>
-              <div><div style={{ color: '#888', textTransform: 'uppercase', fontSize: 10, letterSpacing: '.05em', marginBottom: 2 }}>Amount</div>
-                <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 16, fontWeight: 700, color: 'var(--c-text)' }}>{rzpAmount(ev.amount_paise, ev.currency)} <span style={{ fontSize: 11, fontWeight: 400, color: '#888' }}>{ev.status || ''}</span></div>
+              <div><div style={{ color: 'var(--c-t6, #888)', textTransform: 'uppercase', fontSize: 12, letterSpacing: '.05em', marginBottom: 2 }}>Amount</div>
+                <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 18, fontWeight: 700, color: 'var(--c-text)' }}>{rzpAmount(ev.amount_paise, ev.currency)} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--c-t6, #888)' }}>{ev.status || ''}</span></div>
               </div>
             </div>
 
-            <div style={{ padding: '14px 20px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14, borderBottom: '1px solid #EEEDE8' }}>
+            <div style={{ padding: '14px 20px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14, borderBottom: '1px solid var(--c-borderSubtle, #EEEDE8)' }}>
               <Field label="Payment ID">{ev.payment_id || '—'}</Field>
               <Field label="Order ID">{ev.order_id || '—'}</Field>
               <Field label="Method">{ev.method || '—'}</Field>
@@ -5807,23 +5350,23 @@ function RazorpayEventDrawer({ id, onClose }) {
             </div>
 
             {/* Linkage */}
-            <div style={{ padding: '14px 20px', borderBottom: '1px solid #EEEDE8' }}>
-              <div style={{ color: '#888', textTransform: 'uppercase', fontSize: 10, letterSpacing: '.05em', marginBottom: 8 }}>Linked CRM records</div>
+            <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--c-borderSubtle, #EEEDE8)' }}>
+              <div style={{ color: 'var(--c-t6, #888)', textTransform: 'uppercase', fontSize: 12, letterSpacing: '.05em', marginBottom: 8 }}>Linked CRM records</div>
               {(ev.matched_lead_name || ev.matched_contact_name) ? (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {ev.matched_lead_name && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, background: '#E4F3EE', color: '#0F6E56', fontSize: 12, fontWeight: 700 }}><LinkIcon size={13} /> Lead: {ev.matched_lead_name}</span>}
-                  {ev.matched_contact_name && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, background: '#E3F2FD', color: '#1565C0', fontSize: 12, fontWeight: 700 }}><User size={13} /> Contact: {ev.matched_contact_name}</span>}
-                  {ev.match_method && <span style={{ display: 'inline-flex', alignItems: 'center', padding: '5px 10px', borderRadius: 8, background: 'var(--c-hover)', color: '#555', fontSize: 11, fontWeight: 600 }}>matched by {ev.match_method}</span>}
+                  {ev.matched_lead_name && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, background: 'var(--c-successBgSoft, #E4F3EE)', color: 'var(--c-successText, #0F6E56)', fontSize: 14, fontWeight: 700 }}><LinkIcon size={13} /> Lead: {ev.matched_lead_name}</span>}
+                  {ev.matched_contact_name && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, background: 'var(--c-infoBg, #E3F2FD)', color: 'var(--c-infoText, #1565C0)', fontSize: 14, fontWeight: 700 }}><User size={13} /> Contact: {ev.matched_contact_name}</span>}
+                  {ev.match_method && <span style={{ display: 'inline-flex', alignItems: 'center', padding: '5px 10px', borderRadius: 8, background: 'var(--c-hover)', color: 'var(--c-s555555, #555)', fontSize: 13, fontWeight: 600 }}>matched by {ev.match_method}</span>}
                 </div>
               ) : (
-                <div style={{ fontSize: 12, color: '#888' }}>No matching lead or contact found for this payer (phone/email didn't match any CRM record).</div>
+                <div style={{ fontSize: 14, color: 'var(--c-t6, #888)' }}>No matching lead or contact found for this payer (phone/email didn't match any CRM record).</div>
               )}
             </div>
 
             <div style={{ padding: '10px 20px', display: 'flex', gap: 8 }}>
               <button onClick={copyJson} style={btnSecondary}>{copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Copied' : 'Copy payload'}</button>
             </div>
-            <pre style={{ margin: '0 20px 20px', padding: 14, background: 'var(--c-hover)', borderRadius: 8, fontSize: 11.5, fontFamily: 'DM Mono, monospace', overflowX: 'auto', color: 'var(--c-text)' }}
+            <pre style={{ margin: '0 20px 20px', padding: 14, background: 'var(--c-hover)', borderRadius: 8, fontSize: 13, fontFamily: 'DM Mono, monospace', overflowX: 'auto', color: 'var(--c-text)' }}
                  dangerouslySetInnerHTML={{ __html: syntaxHighlight(ev.payload || {}) }} />
           </div>
         )}
@@ -6002,10 +5545,10 @@ function TestWebhookModal({ onClose, onSent }) {
       <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, width: 620, maxWidth: '94vw', maxHeight: '90vh', overflowY: 'auto', padding: 22, boxShadow: C.shadowLg, fontFamily: FONT }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
           <div>
-            <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--c-text)' }}>Send Test Webhook</div>
-            <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>Posts a synthetic Meta payload through the live <code style={{ fontFamily: 'DM Mono, monospace' }}>/api/webhook/whatsapp</code> handler</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--c-text)' }}>Send Test Webhook</div>
+            <div style={{ fontSize: 13, color: 'var(--c-t6, #888)', marginTop: 2 }}>Posts a synthetic Meta payload through the live <code style={{ fontFamily: 'DM Mono, monospace' }}>/api/webhook/whatsapp</code> handler</div>
           </div>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#666' }}><X size={18} /></button>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--c-t4, #666)' }}><X size={18} /></button>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 14 }}>
@@ -6016,7 +5559,7 @@ function TestWebhookModal({ onClose, onSent }) {
               options={TEST_TEMPLATES.map(t => ({ value: t.key, label: t.label }))}
               searchPlaceholder="Search payload types…"
               style={{ width: '100%' }}
-              triggerStyle={{ padding: '7px 28px 7px 10px', fontSize: 12, borderWidth: 1, borderRadius: 6 }}
+              triggerStyle={{ padding: '7px 28px 7px 10px', fontSize: 14, borderWidth: 1, borderRadius: 6 }}
             />
           </FilterField>
           <FilterField label="Phone Number ID (your WABA)">
@@ -6037,9 +5580,9 @@ function TestWebhookModal({ onClose, onSent }) {
           </FilterField>
         </div>
 
-        <div style={{ marginTop: 14, padding: '10px 12px', background: 'var(--c-hover)', border: '1px solid #EEEDE8', borderRadius: 8 }}>
+        <div style={{ marginTop: 14, padding: '10px 12px', background: 'var(--c-hover)', border: '1px solid var(--c-borderSubtle, #EEEDE8)', borderRadius: 8 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <div style={{ fontSize: 11, color: '#666', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+            <div style={{ fontSize: 13, color: 'var(--c-t4, #666)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em' }}>
               Payload preview <span style={{ marginLeft: 6, fontFamily: 'DM Mono, monospace', color: 'var(--c-textMuted)', textTransform: 'none', letterSpacing: 0 }}>· kind={selectedTpl?.kind} · subtype={selectedTpl?.subtype || '—'}</span>
             </div>
             <button onClick={() => setShowPreview(!showPreview)} style={btnSecondary}>
@@ -6048,14 +5591,14 @@ function TestWebhookModal({ onClose, onSent }) {
           </div>
           {showPreview && (
             <pre
-              style={{ background: 'var(--c-cardBg)', border: '1px solid #EEEDE8', borderRadius: 6, padding: 10, fontSize: 11, fontFamily: 'DM Mono, monospace', overflow: 'auto', maxHeight: 240, margin: 0 }}
+              style={{ background: 'var(--c-cardBg)', border: '1px solid var(--c-borderSubtle, #EEEDE8)', borderRadius: 6, padding: 10, fontSize: 13, fontFamily: 'DM Mono, monospace', overflow: 'auto', maxHeight: 240, margin: 0 }}
               dangerouslySetInnerHTML={{ __html: syntaxHighlight(JSON.stringify(payload, null, 2)) }}
             />
           )}
         </div>
 
         {result && (
-          <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, fontSize: 12, background: result.ok ? '#E4F3EE' : 'var(--c-primaryLight)', color: result.ok ? '#0F6E56' : '#A32D2D' }}>
+          <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, fontSize: 14, background: result.ok ? 'var(--c-successBgSoft, #E4F3EE)' : 'var(--c-primaryLight)', color: result.ok ? 'var(--c-successText, #0F6E56)' : 'var(--c-dangerText, #A32D2D)' }}>
             {result.ok ? '✓ Sent' : '⚠ Failed'} · HTTP {result.status} · {JSON.stringify(result.response).slice(0, 200)}
           </div>
         )}
@@ -6071,15 +5614,15 @@ function TestWebhookModal({ onClose, onSent }) {
   );
 }
 
-const inputStyle = { width: '100%', padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, fontFamily: FONT, outline: 'none', background: 'var(--c-cardBg)', boxSizing: 'border-box' };
-const pillStyle = { display: 'inline-block', padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 700, fontFamily: 'DM Mono, monospace', textTransform: 'uppercase' };
-const th = { padding: '10px 14px', fontSize: 10, fontWeight: 700, color: '#666', textTransform: 'uppercase', letterSpacing: '.05em' };
-const td = { padding: '10px 14px', color: '#333', verticalAlign: 'middle' };
+const inputStyle = { width: '100%', padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, fontFamily: FONT, outline: 'none', background: 'var(--c-cardBg)', boxSizing: 'border-box' };
+const pillStyle = { display: 'inline-block', padding: '2px 8px', borderRadius: 99, fontSize: 12, fontWeight: 700, fontFamily: 'DM Mono, monospace', textTransform: 'uppercase' };
+const th = { padding: '10px 14px', fontSize: 12, fontWeight: 700, color: 'var(--c-t4, #666)', textTransform: 'uppercase', letterSpacing: '.05em' };
+const td = { padding: '10px 14px', color: 'var(--c-s333333, #333)', verticalAlign: 'middle' };
 
 function FilterField({ label, children }) {
   return (
     <div>
-      <div style={{ fontSize: 10, fontWeight: 700, color: '#666', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--c-t4, #666)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>{label}</div>
       {children}
     </div>
   );

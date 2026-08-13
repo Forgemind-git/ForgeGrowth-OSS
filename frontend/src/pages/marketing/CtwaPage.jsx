@@ -69,7 +69,7 @@ function PlatformBadge({ platform, all }) {
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
       <Badge label={platform || '—'} color={color} bg={`${color}18`} />
       {extra && extra.length > 0 && (
-        <span title={`Also ran on ${extra.join(', ')}`} style={{ fontSize: 11, color: C.textMuted, fontFamily: MONO }}>
+        <span title={`Also ran on ${extra.join(', ')}`} style={{ fontSize: 13, color: C.textMuted, fontFamily: MONO }}>
           +{extra.length}
         </span>
       )}
@@ -124,7 +124,7 @@ export default function CtwaPage({ navigate }) {
               rather than a second, unrelated set of tabs next to placements. */}
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 4px 4px 11px',
             border: `1.5px solid ${C.border}`, borderRadius: 11, background: C.cardBg }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11,
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13,
               fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.textMuted, fontFamily: FONT }}>
               <CalendarDays size={14} /> Period
             </span>
@@ -140,16 +140,16 @@ export default function CtwaPage({ navigate }) {
             info="One row per click-to-WhatsApp click that opened a conversation. Clicks without a click ID (organic post CTAs) can be measured but not sent to Meta." />
           <KpiCard label="People" value={num(k.people)} icon={Users} sub={`${num(k.ads)} ads`} />
           <KpiCard label="Leads" value={num(k.leads)} sub="in the funnel" />
-          <KpiCard label="Enrolled" value={num(k.enrolled)} accent="#0F6E56" icon={Target}
+          <KpiCard label="Enrolled" value={num(k.enrolled)} accent="var(--c-successText, #0F6E56)" icon={Target}
             sub={k.leadToEnrolPct != null ? `${k.leadToEnrolPct.toFixed(1)}% of leads` : '—'} />
-          <KpiCard label="Revenue" value={fmtINR(k.revenue)} accent="#0F6E56" icon={TrendingUp}
+          <KpiCard label="Revenue" value={fmtINR(k.revenue)} accent="var(--c-successText, #0F6E56)" icon={TrendingUp}
             info="Gateway payments (deduped) plus manually logged sales, for leads that came from these ads." />
           <KpiCard label="Spend" value={fmtINR(k.spend)} icon={Wallet}
             sub={data.spendIsLifetime ? 'lifetime, from Meta' : undefined}
             info="Comes from the Meta Ads sync and is LIFETIME spend per ad — it does not shrink when you narrow the date range above." />
           <KpiCard label="Cost / lead" value={k.costPerLead != null ? fmtINR(k.costPerLead) : '—'} />
           <KpiCard label="ROAS" value={k.roas != null ? `${k.roas.toFixed(2)}x` : '—'}
-            accent={k.roas >= 1 ? '#0F6E56' : C.text}
+            accent={k.roas >= 1 ? 'var(--c-successText, #0F6E56)' : C.text}
             sub={k.costPerEnrolment != null ? `${fmtINR(k.costPerEnrolment)} / enrolment` : undefined} />
         </div>
       )}
@@ -167,11 +167,11 @@ export default function CtwaPage({ navigate }) {
               <Donut data={data.platforms.map(p => ({ label: p.platform, value: p.clicks, color: PLATFORM_COLOR[p.platform] || PLATFORM_COLOR.Other }))} />
               <div style={{ marginTop: 14, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
                 {data.platforms.map(p => (
-                  <div key={p.platform} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', fontFamily: FONT, fontSize: 12.5 }}>
+                  <div key={p.platform} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', fontFamily: FONT, fontSize: 14 }}>
                     <span style={{ width: 9, height: 9, borderRadius: 3, background: PLATFORM_COLOR[p.platform] || PLATFORM_COLOR.Other, flexShrink: 0 }} />
                     <span style={{ flex: 1, color: C.textSecondary }}>{p.platform}</span>
                     <span style={{ fontFamily: MONO, color: C.text }}>{num(p.leads)} leads</span>
-                    <span style={{ fontFamily: MONO, color: p.enrolled ? '#0F6E56' : C.textMuted, minWidth: 70, textAlign: 'right' }}>{num(p.enrolled)} enrolled</span>
+                    <span style={{ fontFamily: MONO, color: p.enrolled ? 'var(--c-successText, #0F6E56)' : C.textMuted, minWidth: 70, textAlign: 'right' }}>{num(p.enrolled)} enrolled</span>
                   </div>
                 ))}
               </div>
@@ -189,7 +189,7 @@ export default function CtwaPage({ navigate }) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                       <StageBadge stage={s.stage} />
                       <span style={{ flex: 1 }} />
-                      <span style={{ fontFamily: MONO, fontSize: 12.5, color: C.textSecondary }}>{num(s.count)} · {pct.toFixed(0)}%</span>
+                      <span style={{ fontFamily: MONO, fontSize: 14, color: C.textSecondary }}>{num(s.count)} · {pct.toFixed(0)}%</span>
                     </div>
                     <div style={{ height: 6, background: C.hover, borderRadius: 99 }}>
                       <div style={{ width: `${pct}%`, height: '100%', background: C.primary, borderRadius: 99 }} />
@@ -204,7 +204,7 @@ export default function CtwaPage({ navigate }) {
 
       {data?.spendIsLifetime && ads.some(a => a.spend != null) && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 13px', marginBottom: 12,
-          background: '#FFF8E6', border: '1px solid #F0DCA8', borderRadius: 9, fontFamily: FONT, fontSize: 12.5, color: '#6B5312' }}>
+          background: 'var(--c-warnBgSoft, #FFF8E6)', border: '1px solid var(--c-warnBorder, #F0DCA8)', borderRadius: 9, fontFamily: FONT, fontSize: 14, color: 'var(--c-warnDeep, #6B5312)' }}>
           <Info size={15} style={{ flexShrink: 0, marginTop: 1 }} />
           <span>
             Clicks, leads and revenue respect the date range. <strong>Spend, impressions and Meta&apos;s own lead count are lifetime
@@ -238,7 +238,7 @@ export default function CtwaPage({ navigate }) {
                       <div style={{ fontWeight: 600, color: C.text }}>
                         {a.adName || (a.sourceType === 'post' ? 'Organic post CTA' : 'Unmatched ad')}
                       </div>
-                      <div style={{ fontSize: 11.5, color: C.textMuted, fontFamily: MONO, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }}>
+                      <div style={{ fontSize: 13, color: C.textMuted, fontFamily: MONO, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }}>
                         {a.campaignName || a.sourceId}
                         {a.creativeVariants > 1 && ` · ${a.creativeVariants} creatives`}
                       </div>
@@ -248,11 +248,11 @@ export default function CtwaPage({ navigate }) {
                 <Td><PlatformBadge platform={a.platform} all={a.platforms} /></Td>
                 <Td mono align="right" bold>{num(a.clicks)}</Td>
                 <Td mono align="right">{num(a.leads)}</Td>
-                <Td mono align="right" color={a.enrolled ? '#0F6E56' : C.textMuted}>{num(a.enrolled)}</Td>
-                <Td mono align="right" color={a.revenue ? '#0F6E56' : C.textMuted}>{a.revenue ? fmtINR(a.revenue) : '—'}</Td>
+                <Td mono align="right" color={a.enrolled ? 'var(--c-successText, #0F6E56)' : C.textMuted}>{num(a.enrolled)}</Td>
+                <Td mono align="right" color={a.revenue ? 'var(--c-successText, #0F6E56)' : C.textMuted}>{a.revenue ? fmtINR(a.revenue) : '—'}</Td>
                 <Td mono align="right">{a.spend != null ? fmtINR(a.spend) : '—'}</Td>
                 <Td mono align="right">{cpl != null ? fmtINR(cpl) : '—'}</Td>
-                <Td mono align="right" color={roas != null && roas >= 1 ? '#0F6E56' : C.textSecondary}>
+                <Td mono align="right" color={roas != null && roas >= 1 ? 'var(--c-successText, #0F6E56)' : C.textSecondary}>
                   {roas != null ? `${roas.toFixed(2)}x` : '—'}
                 </Td>
                 <Td color={C.textSecondary}>{fmtDate(a.lastClick)}</Td>
@@ -354,16 +354,16 @@ function AdPopup({ ad, onClose, onOpenChat }) {
           <Thumb src={ad.thumbnailUrl} mediaType={ad.mediaType} size={38} />
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 15.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 16, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {ad.adName || 'Click-to-WhatsApp ad'}
               </span>
               {ad.adStatus && (
                 <Badge label={ad.adStatus.toUpperCase()}
-                  color={ad.adStatus === 'active' ? '#0F6E56' : C.headerMuted}
+                  color={ad.adStatus === 'active' ? 'var(--c-successText, #0F6E56)' : C.headerMuted}
                   bg={ad.adStatus === 'active' ? '#0F6E5622' : 'rgba(255,255,255,.1)'} />
               )}
             </div>
-            <div style={{ fontSize: 11.5, color: C.headerMuted, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 13, color: C.headerMuted, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {[ad.campaignName, ad.adsetName || syncedAd?.adsetName].filter(Boolean).join('  ›  ') || 'No campaign linked'}
               <span style={{ fontFamily: MONO, marginLeft: 8, opacity: .75 }}>{ad.sourceId}</span>
             </div>
@@ -392,16 +392,16 @@ function AdPopup({ ad, onClose, onOpenChat }) {
                   sub={`${num(ad.people)} people`} />
                 <KpiCard label="Leads" value={num(ad.leads)}
                   sub={clickToLead != null ? `${clickToLead.toFixed(0)}% of clicks` : undefined} />
-                <KpiCard label="Enrolled" value={num(ad.enrolled)} accent="#0F6E56" icon={Target}
+                <KpiCard label="Enrolled" value={num(ad.enrolled)} accent="var(--c-successText, #0F6E56)" icon={Target}
                   sub={leadToEnrol != null ? `${leadToEnrol.toFixed(1)}% of leads` : undefined} />
-                <KpiCard label="Revenue" value={fmtINR(ad.revenue)} accent="#0F6E56" icon={TrendingUp} />
+                <KpiCard label="Revenue" value={fmtINR(ad.revenue)} accent="var(--c-successText, #0F6E56)" icon={TrendingUp} />
                 <KpiCard label="Spend" value={ad.spend != null ? fmtINR(ad.spend) : '—'} icon={Wallet}
                   sub="lifetime"
                   info="Lifetime spend for this ad, from the Meta Ads sync. It does not shrink when the date range on the page is narrowed, so cost-per-lead is conservative on short ranges." />
                 <KpiCard label="Cost / lead" value={cpl != null ? fmtINR(cpl) : '—'}
                   sub={cpEnrol != null ? `${fmtINR(cpEnrol)} / enrolment` : undefined} />
                 <KpiCard label="ROAS" value={roas != null ? `${roas.toFixed(2)}x` : '—'}
-                  accent={roas != null && roas >= 1 ? '#0F6E56' : C.text} />
+                  accent={roas != null && roas >= 1 ? 'var(--c-successText, #0F6E56)' : C.text} />
                 <KpiCard label="Impressions" value={ad.impressions != null ? num(ad.impressions) : '—'}
                   sub={ad.metaLeads != null ? `${num(ad.metaLeads)} Meta leads` : undefined}
                   info="Meta's own count of messaging conversations started by this ad — usually a little higher than ours, since it counts taps we never saw a message from." />
@@ -444,11 +444,11 @@ function AdPopup({ ad, onClose, onOpenChat }) {
                 <>
                   <Td>
                     <div style={{ fontWeight: 600 }}>{l.name || 'Unnamed'}</div>
-                    <div style={{ fontSize: 11.5, fontFamily: MONO, color: C.textMuted }}>{l.whatsappNumber}</div>
+                    <div style={{ fontSize: 13, fontFamily: MONO, color: C.textMuted }}>{l.whatsappNumber}</div>
                   </Td>
                   <Td><StageBadge stage={l.stage} /></Td>
                   <Td><PlatformBadge platform={l.platform} /></Td>
-                  <Td mono align="right" color={l.paid ? '#0F6E56' : C.textMuted}>{l.paid ? fmtINR(l.paid) : '—'}</Td>
+                  <Td mono align="right" color={l.paid ? 'var(--c-successText, #0F6E56)' : C.textMuted}>{l.paid ? fmtINR(l.paid) : '—'}</Td>
                   <Td color={C.textSecondary}>{fmtDate(l.clickedAt)}</Td>
                   <Td align="right">
                     {/* Only rendered when a thread actually exists, so the link
@@ -459,10 +459,10 @@ function AdPopup({ ad, onClose, onOpenChat }) {
                         title="Open this conversation"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none',
                           border: `1px solid ${C.border}`, borderRadius: 7, padding: '4px 9px',
-                          color: C.primary, cursor: 'pointer', fontFamily: FONT, fontSize: 12, fontWeight: 600 }}>
+                          color: C.primary, cursor: 'pointer', fontFamily: FONT, fontSize: 14, fontWeight: 600 }}>
                         <MessageSquare size={13} /> Chat
                       </button>
-                    ) : <span style={{ fontSize: 11.5, color: C.textMuted }}>No thread</span>}
+                    ) : <span style={{ fontSize: 13, color: C.textMuted }}>No thread</span>}
                   </Td>
                 </>
               )}
@@ -497,7 +497,7 @@ function PopTab({ active, onClick, label, Icon }) {
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 'none',
         borderBottom: `2px solid ${active ? C.primary : 'transparent'}`, cursor: 'pointer',
-        padding: '8px 12px', marginBottom: -1, fontFamily: FONT, fontSize: 13,
+        padding: '8px 12px', marginBottom: -1, fontFamily: FONT, fontSize: 15,
         fontWeight: active ? 700 : 500, color: active ? C.text : C.textSecondary,
       }}>
       <Icon size={14} /> {label}
@@ -516,7 +516,7 @@ function StageBars({ stages }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               <StageBadge stage={s.stage} />
               <span style={{ flex: 1 }} />
-              <span style={{ fontFamily: MONO, fontSize: 12.5, color: C.textSecondary }}>
+              <span style={{ fontFamily: MONO, fontSize: 14, color: C.textSecondary }}>
                 {s.count} · {pct.toFixed(0)}%
               </span>
             </div>
@@ -551,22 +551,22 @@ function HeroCreative({ ad, syncedAd, creative, variants }) {
       />
       <div style={{ padding: '12px 14px' }}>
         {(creative?.headline || syncedAd?.title) && (
-          <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 5 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 5 }}>
             {creative?.headline || syncedAd?.title}
           </div>
         )}
-        <div style={{ fontSize: 12.5, color: C.textSecondary, whiteSpace: 'pre-wrap', lineHeight: 1.5,
+        <div style={{ fontSize: 14, color: C.textSecondary, whiteSpace: 'pre-wrap', lineHeight: 1.5,
           maxHeight: 132, overflowY: 'auto' }}>
           {creative?.body || syncedAd?.body || 'No ad copy recorded.'}
         </div>
         {creative?.welcomeMessage && (
           <div style={{ marginTop: 10, padding: '8px 10px', background: C.surfaceAlt, borderRadius: 8,
-            fontSize: 12, color: C.textMuted, fontStyle: 'italic' }}>
+            fontSize: 14, color: C.textMuted, fontStyle: 'italic' }}>
             Opens WhatsApp with: “{creative.welcomeMessage}”
           </div>
         )}
         {variants > 1 && (
-          <div style={{ marginTop: 10, fontSize: 11.5, color: C.textMuted }}>
+          <div style={{ marginTop: 10, fontSize: 13, color: C.textMuted }}>
             Showing the most-seen of {variants} creatives — the rest are under the Creatives tab.
           </div>
         )}
@@ -577,7 +577,7 @@ function HeroCreative({ ad, syncedAd, creative, variants }) {
 
 function SectionLabel({ children }) {
   return (
-    <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase',
+    <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase',
       color: C.textMuted, marginBottom: 10 }}>
       {children}
     </div>
@@ -602,19 +602,19 @@ function CreativeCard({ creative: c, fullResImage, smallThumb, watchUrl }) {
       <div style={{ padding: '12px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
           <Badge label={c.mediaType === 'video' ? 'VIDEO' : 'IMAGE'} color={C.textSecondary} bg={C.hover} />
-          <span style={{ fontFamily: MONO, fontSize: 12, color: C.textSecondary }}>{c.clicks} clicks</span>
+          <span style={{ fontFamily: MONO, fontSize: 14, color: C.textSecondary }}>{c.clicks} clicks</span>
           {c.sourceUrl && (
             <a href={c.sourceUrl} target="_blank" rel="noreferrer"
-              style={{ marginLeft: 'auto', color: C.primary, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, textDecoration: 'none', fontWeight: 600 }}>
+              style={{ marginLeft: 'auto', color: C.primary, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 14, textDecoration: 'none', fontWeight: 600 }}>
               Open on Meta <ExternalLink size={12} />
             </a>
           )}
         </div>
-        {c.headline && <div style={{ fontSize: 13.5, fontWeight: 600, color: C.text, marginBottom: 4 }}>{c.headline}</div>}
-        <div style={{ fontSize: 12.5, color: C.textSecondary, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{c.body || '—'}</div>
+        {c.headline && <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 4 }}>{c.headline}</div>}
+        <div style={{ fontSize: 14, color: C.textSecondary, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{c.body || '—'}</div>
         {c.welcomeMessage && (
           <div style={{ marginTop: 9, padding: '8px 10px', background: C.surfaceAlt, borderRadius: 8,
-            fontSize: 12, color: C.textMuted, fontStyle: 'italic' }}>
+            fontSize: 14, color: C.textMuted, fontStyle: 'italic' }}>
             Opens WhatsApp with: “{c.welcomeMessage}”
           </div>
         )}
@@ -666,7 +666,7 @@ function CreativeMedia({ imageUrls = [], mediaType, watchUrl, isVideo, maxHeight
         title="Meta doesn't allow the video to be embedded — this opens it on Facebook"
         style={{ position: 'absolute', left: 10, bottom: 10, display: 'inline-flex', alignItems: 'center',
           gap: 6, padding: '7px 12px', borderRadius: 99, background: 'rgba(0,0,0,.68)', color: '#fff',
-          fontSize: 12.5, fontWeight: 600, textDecoration: 'none', backdropFilter: 'blur(3px)' }}>
+          fontSize: 14, fontWeight: 600, textDecoration: 'none', backdropFilter: 'blur(3px)' }}>
         <PlayCircle size={15} /> Watch on Facebook
       </a>
     ) : null
@@ -686,7 +686,7 @@ function CreativeMedia({ imageUrls = [], mediaType, watchUrl, isVideo, maxHeight
   return (
     <div style={{ ...frame, background: C.hover, flexDirection: 'column', gap: 10 }}>
       <Icon size={30} color={C.textMuted} strokeWidth={1.5} />
-      <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'center', padding: '0 20px' }}>
+      <div style={{ fontSize: 14, color: C.textMuted, textAlign: 'center', padding: '0 20px' }}>
         {exhausted
           ? "Meta's link to this creative has expired."
           : 'No creative was captured for this click.'}
@@ -694,7 +694,7 @@ function CreativeMedia({ imageUrls = [], mediaType, watchUrl, isVideo, maxHeight
       {watchUrl && (
         <a href={watchUrl} target="_blank" rel="noreferrer"
           style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: C.primary,
-            fontSize: 12.5, fontWeight: 600, textDecoration: 'none' }}>
+            fontSize: 14, fontWeight: 600, textDecoration: 'none' }}>
           {isVideo ? 'Watch on Facebook' : 'Open on Meta'} <ExternalLink size={12} />
         </a>
       )}

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   Users, UserPlus, Inbox, Send, Activity, Zap, MessageCircle,
   Megaphone, AlertTriangle, Info, ArrowUpRight, ArrowDownRight,
-  FileText, Trophy, RefreshCw, X,
+  FileText, Trophy, RefreshCw, X, Receipt, IndianRupee,
 } from 'lucide-react';
 import { C, FONT, MONO } from '../constants.js';
 import { api } from '../api.js';
@@ -15,7 +15,8 @@ const RANGES = [
 ];
 
 const KPI_ICONS = {
-  contacts: Users, newLeads: UserPlus, open: Inbox, sent: Send,
+  leads: Users, newLeads: UserPlus, sales: Receipt, revenue: IndianRupee,
+  open: Inbox, sent: Send,
   response: Activity, automations: Zap, convos: MessageCircle,
 };
 
@@ -35,7 +36,7 @@ function InfoIcon({ text }) {
       {show && (
         <span style={{
           position: 'absolute', bottom: '150%', left: '50%', transform: 'translateX(-50%)',
-          background: C.headerBg, color: '#fff', fontSize: 11, lineHeight: 1.45,
+          background: C.headerBg, color: '#fff', fontSize: 13, lineHeight: 1.45,
           padding: '7px 9px', borderRadius: 7, width: 210, zIndex: 60,
           boxShadow: C.shadowMd, fontFamily: FONT, fontWeight: 500,
           pointerEvents: 'none', textAlign: 'left',
@@ -59,7 +60,7 @@ function SectionTitle({ icon: Icon, children, right }) {
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {Icon && <Icon size={16} strokeWidth={2.2} style={{ color: C.textSecondary }} />}
-        <span style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: FONT }}>{children}</span>
+        <span style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: FONT }}>{children}</span>
       </div>
       {right}
     </div>
@@ -69,21 +70,28 @@ function SectionTitle({ icon: Icon, children, right }) {
 // ── KPI card (number is a clickable drill-down) ─────────────────────────
 function KpiCard({ tile, onSelect }) {
   const Icon = KPI_ICONS[tile.key] || Activity;
-  const value = tile.unit === '%' ? `${tile.value}%` : fmt(tile.value);
+  const value = tile.unit === '%' ? `${tile.value}%`
+    : tile.unit === '₹' ? `₹${fmt(tile.value)}`
+    : fmt(tile.value);
   const hasDelta = tile.delta != null;
   const up = hasDelta && tile.delta >= 0;
   return (
-    <Card style={{ padding: 16 }}>
+    <Card style={{ padding: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', fontSize: 12, fontWeight: 600, color: C.textSecondary, fontFamily: FONT }}>
+        {/* An eyebrow label: uppercase and letterspaced so it reads as the
+            CATEGORY of the number below it rather than as a sentence competing
+            with it. The number is the point of the card; everything else is
+            annotation. */}
+        <div style={{ display: 'flex', alignItems: 'center', fontSize: 12, fontWeight: 700,
+          letterSpacing: '.07em', textTransform: 'uppercase', color: C.t5, fontFamily: FONT }}>
           {tile.label}
           {tile.tooltip && <InfoIcon text={tile.tooltip} />}
         </div>
         <span style={{
-          width: 28, height: 28, borderRadius: 8, background: C.pageBg,
+          width: 32, height: 32, borderRadius: 9, background: C.pageBg,
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <Icon size={15} strokeWidth={2.2} style={{ color: C.primary }} />
+          <Icon size={17} strokeWidth={2.2} style={{ color: C.primary }} />
         </span>
       </div>
       <button
@@ -91,8 +99,9 @@ function KpiCard({ tile, onSelect }) {
         title={`View ${tile.label.toLowerCase()} details`}
         style={{
           border: 'none', background: 'none', padding: 0, cursor: 'pointer',
-          fontSize: 27, fontWeight: 600, color: C.text, fontFamily: MONO,
-          margin: '10px 0 6px', letterSpacing: '-.01em', display: 'inline-block',
+          fontSize: 40, fontWeight: 700, color: C.text, fontFamily: MONO,
+          margin: '12px 0 8px', letterSpacing: '-.02em', display: 'inline-block',
+          lineHeight: 1.1,
           textDecorationColor: C.border, textUnderlineOffset: 4,
         }}
         onMouseEnter={e => { e.currentTarget.style.color = C.primary; e.currentTarget.style.textDecoration = 'underline'; }}
@@ -104,14 +113,14 @@ function KpiCard({ tile, onSelect }) {
         {hasDelta && (
           <span style={{
             display: 'inline-flex', alignItems: 'center', gap: 2,
-            fontSize: 11.5, fontWeight: 700, fontFamily: MONO,
+            fontSize: 13, fontWeight: 700, fontFamily: MONO,
             color: up ? C.green : C.primary,
           }}>
             {up ? <ArrowUpRight size={13} strokeWidth={2.5} /> : <ArrowDownRight size={13} strokeWidth={2.5} />}
             {Math.abs(tile.delta)}%
           </span>
         )}
-        {tile.sub && <span style={{ fontSize: 11.5, color: C.textMuted, fontFamily: FONT }}>{tile.sub}</span>}
+        {tile.sub && <span style={{ fontSize: 14, color: C.t4, fontFamily: FONT }}>{tile.sub}</span>}
       </div>
     </Card>
   );
@@ -143,8 +152,8 @@ function KpiDetailModal({ tile, range, onClose }) {
         {/* header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', borderBottom: `1px solid ${C.border}` }}>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{data?.title || tile.label}</div>
-            <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{data?.title || tile.label}</div>
+            <div style={{ fontSize: 14, color: C.textMuted, marginTop: 2 }}>
               {loading ? 'Loading…' : `${fmt(data?.count ?? 0)} ${data?.count === 1 ? 'item' : 'items'}`}
             </div>
           </div>
@@ -162,20 +171,20 @@ function KpiDetailModal({ tile, range, onClose }) {
             </div>
           )}
           {!loading && error && (
-            <div style={{ margin: 18, background: C.primaryLight, color: '#A32D2D', border: '1px solid #F3C9C9', borderRadius: 10, padding: '12px 14px', fontSize: 13 }}>{error}</div>
+            <div style={{ margin: 18, background: C.primaryLight, color: 'var(--c-dangerText, #A32D2D)', border: '1px solid #F3C9C9', borderRadius: 10, padding: '12px 14px', fontSize: 15 }}>{error}</div>
           )}
           {!loading && !error && items.length === 0 && (
-            <div style={{ padding: '32px 18px', textAlign: 'center', fontSize: 13, color: C.textMuted }}>No items to show.</div>
+            <div style={{ padding: '32px 18px', textAlign: 'center', fontSize: 15, color: C.textMuted }}>No items to show.</div>
           )}
           {!loading && !error && items.map((it, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px', borderTop: i === 0 ? 'none' : `1px solid ${C.border}` }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.primary || '—'}</div>
-                {it.secondary && <div style={{ fontSize: 11.5, color: C.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.secondary}</div>}
+                <div style={{ fontSize: 15, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.primary || '—'}</div>
+                {it.secondary && <div style={{ fontSize: 13, color: C.textMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.secondary}</div>}
               </div>
               {it.meta && (
                 <div style={{
-                  fontSize: 11.5, fontFamily: MONO, flexShrink: 0,
+                  fontSize: 13, fontFamily: MONO, flexShrink: 0,
                   color: it.meta === 'No reply' ? C.primary : it.meta === 'Replied' || it.meta === 'active' ? C.green : C.textSecondary,
                   fontWeight: it.meta === 'No reply' || it.meta === 'active' ? 700 : 500,
                 }}>{it.meta}</div>
@@ -197,7 +206,7 @@ function FunnelBars({ funnel }) {
   // like they disagreed when they were measuring different things.
   const unit = funnel.source === 'tags' ? 'contacts' : 'leads';
   if (stages.length === 0) {
-    return <div style={{ fontSize: 12.5, color: C.textMuted, fontFamily: FONT, padding: '20px 0' }}>
+    return <div style={{ fontSize: 14, color: C.textMuted, fontFamily: FONT, padding: '20px 0' }}>
       No leads yet. They appear here as soon as conversations start.
     </div>;
   }
@@ -205,14 +214,14 @@ function FunnelBars({ funnel }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
       {stages.map((s, i) => (
         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 120, fontSize: 12, color: C.textSecondary, fontFamily: FONT, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={s.name}>{s.name}</div>
+          <div style={{ width: 120, fontSize: 14, color: C.textSecondary, fontFamily: FONT, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={s.name}>{s.name}</div>
           <div style={{ flex: 1, height: 22, background: C.pageBg, borderRadius: 6, overflow: 'hidden' }}>
             <div title={`${s.name}: ${fmt(s.count)} ${unit}`} style={{
               width: `${(s.count / max) * 100}%`, height: '100%', background: s.color || C.primary,
               borderRadius: 6, minWidth: s.count > 0 ? 4 : 0, transition: 'width .3s ease',
             }} />
           </div>
-          <div style={{ width: 44, textAlign: 'right', fontSize: 13, fontWeight: 600, fontFamily: MONO, color: C.text }}>{fmt(s.count)}</div>
+          <div style={{ width: 44, textAlign: 'right', fontSize: 15, fontWeight: 600, fontFamily: MONO, color: C.text }}>{fmt(s.count)}</div>
         </div>
       ))}
     </div>
@@ -227,11 +236,44 @@ function arcPath(cx, cy, R, r, a0, a1) {
   const [x2, y2] = polar(cx, cy, r, a1), [x3, y3] = polar(cx, cy, r, a0);
   return `M${x0},${y0} A${R},${R} 0 ${large} 1 ${x1},${y1} L${x2},${y2} A${r},${r} 0 ${large} 0 ${x3},${y3} Z`;
 }
+// The latest sales, straight from the Sales Log's own numbers.
+//
+// Amount comes as PAISE — the storage unit everywhere in this codebase — and is
+// converted here at the render boundary, never stored or compared as rupees.
+function RecentSales({ rows }) {
+  if (!rows || rows.length === 0) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {rows.map((r, i) => (
+        <div key={r.leadId ?? i} style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          padding: '9px 0',
+          borderTop: i === 0 ? 'none' : `1px solid ${C.border}`,
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: C.text, fontFamily: FONT,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {r.name || r.whatsappNumber}
+            </div>
+            <div style={{ fontSize: 13, color: C.textMuted, fontFamily: FONT,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {r.product || 'No product set'}
+            </div>
+          </div>
+          <div style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: C.text, whiteSpace: 'nowrap' }}>
+            ₹{Math.round((r.amountPaise || 0) / 100).toLocaleString('en-IN')}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function TagDonut({ data }) {
   const [hover, setHover] = useState(-1);
   const total = data.reduce((s, d) => s + d.count, 0);
   if (total === 0) {
-    return <div style={{ fontSize: 12.5, color: C.textMuted, fontFamily: FONT, padding: '20px 0' }}>No tags applied yet.</div>;
+    return <div style={{ fontSize: 14, color: C.textMuted, fontFamily: FONT, padding: '20px 0' }}>No tags applied yet.</div>;
   }
   const cx = 80, cy = 80, R = 74, r = 48;
   let acc = 0;
@@ -255,13 +297,13 @@ function TagDonut({ data }) {
             <title>{`${s.name}: ${fmt(s.count)} (${Math.round((s.count / total) * 100)}%)`}</title>
           </path>
         ))}
-        <text x={cx} y={cy - 4} textAnchor="middle" fontSize="22" fontWeight="600" fill={C.text} fontFamily="DM Mono">{fmt(total)}</text>
-        <text x={cx} y={cy + 14} textAnchor="middle" fontSize="10" fill={C.textMuted} fontFamily="DM Sans">tagged</text>
+        <text x={cx} y={cy - 4} textAnchor="middle" fontSize="24" fontWeight="600" fill={C.text} fontFamily="DM Mono">{fmt(total)}</text>
+        <text x={cx} y={cy + 14} textAnchor="middle" fontSize="12" fill={C.textMuted} fontFamily="DM Sans">tagged</text>
       </svg>
       <div style={{ flex: 1, minWidth: 140, display: 'flex', flexDirection: 'column', gap: 7 }}>
         {data.map((d, i) => (
           <div key={i} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(-1)}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontFamily: FONT, opacity: hover === -1 || hover === i ? 1 : 0.5, transition: 'opacity .15s' }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontFamily: FONT, opacity: hover === -1 || hover === i ? 1 : 0.5, transition: 'opacity .15s' }}>
             <span style={{ width: 10, height: 10, borderRadius: 3, background: d.color || C.primary, flexShrink: 0 }} />
             <span style={{ color: C.textSecondary, fontWeight: 600, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={d.name}>{d.name}</span>
             <span style={{ color: C.text, fontFamily: MONO, fontWeight: 600 }}>{fmt(d.count)}</span>
@@ -276,17 +318,20 @@ function TagDonut({ data }) {
 function AutomationStat({ label, value, color }) {
   return (
     <div style={{ flex: 1, textAlign: 'center', padding: '4px 0' }}>
-      <div style={{ fontSize: 20, fontWeight: 600, fontFamily: MONO, color: color || C.text }}>{value}</div>
-      <div style={{ fontSize: 10.5, color: C.textMuted, fontFamily: FONT, fontWeight: 600, marginTop: 2 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 600, fontFamily: MONO, color: color || C.text }}>{value}</div>
+      <div style={{ fontSize: 12, color: C.textMuted, fontFamily: FONT, fontWeight: 600, marginTop: 2 }}>{label}</div>
     </div>
   );
 }
 
-const ROLE_CHIP = {
-  admin: { bg: '#EEEAFB', fg: C.purple, label: 'Admin' },
-  bda_sales: { bg: '#E3F2EC', fg: C.green, label: 'BDA Sales' },
-  viewer: { bg: C.pageBg, fg: C.textMuted, label: 'Viewer' },
-};
+// Roles are user-defined (user_roles), so this cannot be a fixed map — a role
+// added in Settings would render with no chip at all. Admin keeps its own
+// colour because it is the one role with unconditional access; everything else
+// shares one, labelled from the role key itself.
+const ROLE_CHIP_DEFAULT = { bg: 'var(--c-successBgSoft, #E3F2EC)', fg: C.green };
+const roleChip = (role) => (role === 'admin'
+  ? { bg: 'var(--c-xeeeafb, #EEEAFB)', fg: C.purple, label: 'Admin' }
+  : { ...ROLE_CHIP_DEFAULT, label: String(role || '—').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) });
 
 // ── Page ───────────────────────────────────────────────────────────────
 export default function HomePage({ user, onPageChange }) {
@@ -306,7 +351,10 @@ export default function HomePage({ user, onPageChange }) {
       ]
     : [
         { label: 'Open Chats', icon: MessageCircle, page: 'chats', primary: true },
-        { label: 'Contacts', icon: Users, page: 'contacts' },
+        // Was 'contacts' — that page is gone, and a quick-action pointing at a
+        // removed page silently falls back to Home (anti-pattern #43). Leads is
+        // where a BDA works their people now.
+        { label: 'My Leads', icon: Users, page: 'leads' },
       ];
 
   return (
@@ -314,10 +362,10 @@ export default function HomePage({ user, onPageChange }) {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 20, flexWrap: 'wrap', gap: 14 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>
             Welcome back, {greeting}
           </h1>
-          <p style={{ fontSize: 12.5, color: C.textMuted, margin: '4px 0 0', fontFamily: FONT }}>
+          <p style={{ fontSize: 14, color: C.textMuted, margin: '4px 0 0', fontFamily: FONT }}>
             {isAdmin ? 'Org-wide overview' : 'Your activity overview'} · last {RANGES.find(r => r.key === range)?.label}
           </p>
         </div>
@@ -328,7 +376,7 @@ export default function HomePage({ user, onPageChange }) {
               const active = r.key === range;
               return (
                 <button key={r.key} onClick={() => setRange(r.key)} style={{
-                  border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 12, fontWeight: 600,
+                  border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 14, fontWeight: 600,
                   padding: '5px 11px', borderRadius: 7,
                   background: active ? C.primary : 'transparent', color: active ? '#fff' : C.textSecondary,
                   transition: 'background .15s',
@@ -340,7 +388,7 @@ export default function HomePage({ user, onPageChange }) {
           {quickActions.map(a => (
             <button key={a.label} onClick={() => go(a.page)} style={{
               display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontFamily: FONT,
-              fontSize: 12.5, fontWeight: 600, padding: '7px 12px', borderRadius: 9,
+              fontSize: 14, fontWeight: 600, padding: '7px 12px', borderRadius: 9,
               border: a.primary ? 'none' : `1px solid ${C.border}`,
               background: a.primary ? C.primary : C.cardBg,
               color: a.primary ? '#fff' : C.text,
@@ -353,7 +401,7 @@ export default function HomePage({ user, onPageChange }) {
 
       {/* Error */}
       {error && (
-        <div style={{ background: C.primaryLight, color: '#A32D2D', border: '1px solid #F3C9C9', borderRadius: 10, padding: '12px 14px', fontSize: 13, fontFamily: FONT, marginBottom: 16 }}>
+        <div style={{ background: C.primaryLight, color: 'var(--c-dangerText, #A32D2D)', border: '1px solid #F3C9C9', borderRadius: 10, padding: '12px 14px', fontSize: 15, fontFamily: FONT, marginBottom: 16 }}>
           Couldn’t load the dashboard. Please try again in a moment.
         </div>
       )}
@@ -380,10 +428,10 @@ export default function HomePage({ user, onPageChange }) {
                 return (
                   <button key={i} onClick={() => go(al.page)} style={{
                     display: 'inline-flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontFamily: FONT,
-                    fontSize: 12.5, fontWeight: 600, padding: '7px 12px', borderRadius: 9,
+                    fontSize: 14, fontWeight: 600, padding: '7px 12px', borderRadius: 9,
                     border: `1px solid ${warn ? '#F3C9C9' : C.border}`,
                     background: warn ? C.primaryLight : C.cardBg,
-                    color: warn ? '#A32D2D' : C.textSecondary,
+                    color: warn ? 'var(--c-dangerText, #A32D2D)' : C.textSecondary,
                   }}>
                     <AlertTriangle size={13} strokeWidth={2.4} style={{ color: warn ? C.primary : C.textMuted }} />
                     {al.label}
@@ -408,10 +456,26 @@ export default function HomePage({ user, onPageChange }) {
               <FunnelBars funnel={data.funnel || { stages: [] }} />
             </Card>
             <Card>
-              <SectionTitle icon={Trophy}>Contacts by tag</SectionTitle>
+              <SectionTitle icon={Trophy}>Where leads came from</SectionTitle>
               <TagDonut data={data.tagDistribution || []} />
             </Card>
           </div>
+
+          {/* Sales log — the money behind the funnel above. Rendered whenever
+              there is a sale to show; an empty strip on a workspace that has
+              never sold anything would be a permanent blank card. */}
+          {(data.sales?.recent || []).length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <Card>
+                <SectionTitle icon={Receipt} right={
+                  <button onClick={() => go('onboarding')} style={{ border: 'none', background: 'none', color: C.primary, cursor: 'pointer', fontSize: 14, fontWeight: 600, fontFamily: FONT }}>Sales Log →</button>
+                }>
+                  Latest sales
+                </SectionTitle>
+                <RecentSales rows={data.sales.recent} />
+              </Card>
+            </div>
+          )}
 
           {/* Automation + Broadcasts (admin) */}
           {(data.automations || data.broadcasts) && (
@@ -419,11 +483,11 @@ export default function HomePage({ user, onPageChange }) {
               {data.automations && (
                 <Card>
                   <SectionTitle icon={Zap} right={
-                    <button onClick={() => go('chatbot-builder')} style={{ border: 'none', background: 'none', color: C.primary, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: FONT }}>View all →</button>
+                    <button onClick={() => go('chatbot-builder')} style={{ border: 'none', background: 'none', color: C.primary, cursor: 'pointer', fontSize: 14, fontWeight: 600, fontFamily: FONT }}>View all →</button>
                   }>Automation performance</SectionTitle>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 14 }}>
-                    <span style={{ fontSize: 28, fontWeight: 600, fontFamily: MONO, color: C.text }}>{data.automations.active}</span>
-                    <span style={{ fontSize: 13, color: C.textMuted, fontFamily: FONT }}>of {data.automations.total} active</span>
+                    <span style={{ fontSize: 30, fontWeight: 600, fontFamily: MONO, color: C.text }}>{data.automations.active}</span>
+                    <span style={{ fontSize: 15, color: C.textMuted, fontFamily: FONT }}>of {data.automations.total} active</span>
                   </div>
                   <div style={{ display: 'flex', borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
                     <AutomationStat label={`runs · ${range}`} value={fmt(data.automations.runs.total)} />
@@ -436,19 +500,19 @@ export default function HomePage({ user, onPageChange }) {
               {data.broadcasts && (
                 <Card>
                   <SectionTitle icon={Megaphone} right={
-                    <button onClick={() => go('bulk-message')} style={{ border: 'none', background: 'none', color: C.primary, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: FONT }}>View all →</button>
+                    <button onClick={() => go('bulk-message')} style={{ border: 'none', background: 'none', color: C.primary, cursor: 'pointer', fontSize: 14, fontWeight: 600, fontFamily: FONT }}>View all →</button>
                   }>Recent broadcasts</SectionTitle>
                   {data.broadcasts.recent.length === 0 ? (
-                    <div style={{ fontSize: 12.5, color: C.textMuted, fontFamily: FONT, padding: '14px 0' }}>No broadcasts yet.</div>
+                    <div style={{ fontSize: 14, color: C.textMuted, fontFamily: FONT, padding: '14px 0' }}>No broadcasts yet.</div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
                       {data.broadcasts.recent.map(b => (
-                        <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, fontFamily: FONT }}>
+                        <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, fontFamily: FONT }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.name || `Broadcast #${b.id}`}</div>
-                            <div style={{ fontSize: 11, color: C.textMuted }}>{shortDate(b.createdAt)} · {b.messageType}</div>
+                            <div style={{ fontSize: 13, color: C.textMuted }}>{shortDate(b.createdAt)} · {b.messageType}</div>
                           </div>
-                          <div style={{ textAlign: 'right', fontFamily: MONO, fontSize: 12 }}>
+                          <div style={{ textAlign: 'right', fontFamily: MONO, fontSize: 14 }}>
                             <span style={{ color: C.green, fontWeight: 600 }}>{fmt(b.sent)}</span>
                             <span style={{ color: C.textMuted }}> / {fmt(b.recipients)}</span>
                             {b.failed > 0 && <span style={{ color: C.primary, fontWeight: 600 }}> · {fmt(b.failed)}✕</span>}
@@ -466,12 +530,12 @@ export default function HomePage({ user, onPageChange }) {
           {data.leaderboard && data.leaderboard.length > 0 && (
             <Card style={{ marginBottom: 16 }}>
               <SectionTitle icon={Trophy} right={
-                <button onClick={() => go('admin-settings')} style={{ border: 'none', background: 'none', color: C.primary, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: FONT }}>Manage team →</button>
+                <button onClick={() => go('admin-settings')} style={{ border: 'none', background: 'none', color: C.primary, cursor: 'pointer', fontSize: 14, fontWeight: 600, fontFamily: FONT }}>Manage team →</button>
               }>Team leaderboard</SectionTitle>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT }}>
                   <thead>
-                    <tr style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.04em', textAlign: 'left' }}>
+                    <tr style={{ fontSize: 13, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.04em', textAlign: 'left' }}>
                       <th style={{ padding: '6px 8px', fontWeight: 600 }}>#</th>
                       <th style={{ padding: '6px 8px', fontWeight: 600 }}>Member</th>
                       <th style={{ padding: '6px 8px', fontWeight: 600 }}>Role</th>
@@ -483,13 +547,13 @@ export default function HomePage({ user, onPageChange }) {
                     {(() => {
                       const maxSent = Math.max(1, ...data.leaderboard.map(m => m.messagesSent));
                       return data.leaderboard.map((m, i) => {
-                        const chip = ROLE_CHIP[m.role] || ROLE_CHIP.viewer;
+                        const chip = roleChip(m.role);
                         return (
-                          <tr key={m.id} style={{ borderTop: `1px solid ${C.border}`, fontSize: 13 }}>
+                          <tr key={m.id} style={{ borderTop: `1px solid ${C.border}`, fontSize: 15 }}>
                             <td style={{ padding: '9px 8px', color: C.textMuted, fontFamily: MONO }}>{i + 1}</td>
                             <td style={{ padding: '9px 8px', fontWeight: 600, color: C.text }}>{m.name || '—'}</td>
                             <td style={{ padding: '9px 8px' }}>
-                              <span style={{ background: chip.bg, color: chip.fg, fontSize: 10.5, fontWeight: 700, padding: '3px 8px', borderRadius: 20 }}>{chip.label}</span>
+                              <span style={{ background: chip.bg, color: chip.fg, fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 20 }}>{chip.label}</span>
                             </td>
                             <td style={{ padding: '9px 8px', textAlign: 'right', fontFamily: MONO, color: C.text }}>{fmt(m.contacts)}</td>
                             <td style={{ padding: '9px 8px', textAlign: 'right' }}>
@@ -511,7 +575,7 @@ export default function HomePage({ user, onPageChange }) {
           )}
 
           {/* footer note */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: C.textMuted, fontFamily: FONT, marginTop: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.textMuted, fontFamily: FONT, marginTop: 4 }}>
             <RefreshCw size={11} strokeWidth={2.2} /> Auto-refreshes every 60s · updated {new Date(data.generatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
           </div>
         </>

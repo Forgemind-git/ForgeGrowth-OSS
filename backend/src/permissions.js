@@ -1,5 +1,10 @@
-// Centralised role → page-access map. Extend by adding new roles here
-// (and updating the CHECK constraint on forgecrm_users.role).
+// The page catalog, and the role → page resolution built on it.
+//
+// ⚠ ROLES ARE ROWS, NOT CODE (2026-08-12). They live in coexistence.user_roles
+// and are edited in Admin Settings → Users; services/roleConfig.js owns the
+// cache. Adding a role is an insert, not an edit here plus a migration.
+// `admin` remains the one hardcoded role — isAdmin() short-circuits every
+// check — so it can be relabelled but never deleted or narrowed.
 //
 // Page keys are stable strings used in three places:
 //   - this map
@@ -10,28 +15,36 @@
 // Use 'admin-settings:*' to grant access to the whole settings page.
 
 const PAGES = [
-  'home', 'chats', 'contacts', 'bulk-message', 'template-builder',
+  'home', 'chats', 'bulk-message', 'template-builder',
   'chatbot-builder', 'media-library', 'wa-links', 'pipelines', 'ai-agent-builder',
-  'follow-up-sequence',
   // Chats — additive AI Academy surfaces.
   // 'wa-links' is the route key for what the UI now calls Message Formats. The
   // key is deliberately unchanged: renaming a page key silently drops any
   // stored per-user override that granted it.
-  'team-members', 'lead-forms', 'projects',
+  // 'follow-up-sequence' and 'team-members' removed 2026-08-12 with their pages.
+  // Both were safe to drop: 0 users had a stored override.
+  'lead-forms', 'projects',
   // Marketing section — Lead Sources folded into mkt-overview; Content Library,
   // Webinars and Organic/Social removed along with the ForgeSocial integration.
   'mkt-overview', 'campaigns', 'ctwa-ads', 'conversion-api',
   // Sales section
-  // 'products' was 'courses' until the rename — no user had a stored override
-  // for the old key, so nothing needed migrating.
-  'sales-pipeline', 'leads', 'bda-performance', 'onboarding', 'products',
+  // 'products' was removed 2026-08-12 — the editor moved into Admin Settings →
+  // Funnel → Products. Safe to drop: 0 users had a stored override.
+  // 'bda-performance' removed 2026-08-11 with its page. 'contacts' removed the
+  // same day: the Contacts PAGE is gone (Leads is the one people-table) while the
+  // contacts TABLE stays — it is the chat thread, the RBAC scope and the funnel
+  // tag mirror. Both keys were safe to drop: 0 users had a stored override.
+  'sales-pipeline', 'leads', 'onboarding',
   'sales-funnel', 'sales-log',
   // Payments — create + track Razorpay links raised from ForgeGrowth.
   'payments',
   // Message costs — billing data. Lives in the Chats section; admin-only by
   // default (deliberately absent from every other role's defaults below).
   'message-costs',
-  'admin-settings:general', 'admin-settings:team', 'admin-settings:tags',
+  // 'admin-settings:team' removed 2026-08-12 with the Team members tab: a
+  // WhatsApp account is named in its own tab, and the only people in the system
+  // are users.
+  'admin-settings:general', 'admin-settings:tags',
   'admin-settings:category', 'admin-settings:fields',
   'admin-settings:whatsapp-accounts', 'admin-settings:ai-models',
   'admin-settings:users', 'admin-settings:webhooks',
@@ -39,24 +52,20 @@ const PAGES = [
   'admin-settings:funnel',
 ];
 
-const ROLE_PAGE_DEFAULTS = {
-  admin: PAGES.slice(),           // everything
-  bda_sales: [
-    'home', 'chats', 'contacts', 'pipelines',
-    // Sales working surfaces (scoped to their own leads server-side)
-    'sales-pipeline', 'leads', 'onboarding', 'products',
-    'sales-funnel', 'sales-log',  // BDAs view the funnel + log their own sales; funnel config lives in Admin Settings → Funnel (admin-only)
-    'payments',                   // raise a link for their own lead; the list is scoped server-side
-    'admin-settings:general',     // only the General tab in user settings
-  ],
-  viewer: ['home', 'pipelines', 'mkt-overview', 'ctwa-ads', 'sales-pipeline', 'leads', 'sales-funnel'],  // read-only dashboards
-};
+// The role's page list now comes from the user_roles table via roleConfig.
+// Required lazily: roleConfig requires this module back for PAGES, and a
+// top-level require either direction is a cycle.
+function rolePages(roleKey) {
+  if (roleKey === 'admin') return PAGES;
+  try { return require('./services/roleConfig').pagesForRole(roleKey); }
+  catch { return []; }
+}
 
 // Returns the set of pages a user can access given their role plus any
 // per-user grant/revoke overrides stored in users.permissions JSONB.
 //   permissions = { grant: ["templates","media-library"], revoke: ["admin-settings:general"] }
 function effectivePages(user) {
-  const base = ROLE_PAGE_DEFAULTS[user.role] || [];
+  const base = rolePages(user.role) || [];
   const overrides = user.permissions || {};
   const grant = Array.isArray(overrides.grant) ? overrides.grant : [];
   const revoke = new Set(Array.isArray(overrides.revoke) ? overrides.revoke : []);
@@ -78,7 +87,7 @@ function isAdmin(user) {
 
 module.exports = {
   PAGES,
-  ROLE_PAGE_DEFAULTS,
+  rolePages,
   effectivePages,
   hasPermission,
   isAdmin,

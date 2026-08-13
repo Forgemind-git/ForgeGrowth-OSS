@@ -7,9 +7,9 @@ import { C, FONT } from '../constants.js';
 import { _subscribe } from '../lib/feedback.js';
 
 const VARIANTS = {
-  error:   { color: '#A32D2D', bg: '#FCEBEB', Icon: AlertCircle,  title: 'Something went wrong' },
-  success: { color: '#0F6E56', bg: '#E1F5EE', Icon: CheckCircle2, title: 'Done' },
-  info:    { color: '#1D4ED8', bg: '#E8F0FE', Icon: Info,         title: 'Notice' },
+  error:   { color: 'var(--c-dangerText, #A32D2D)', bg: 'var(--c-dangerBg, #FCEBEB)', Icon: AlertCircle,  title: 'Something went wrong' },
+  success: { color: 'var(--c-successText, #0F6E56)', bg: 'var(--c-successBg, #E1F5EE)', Icon: CheckCircle2, title: 'Done' },
+  info:    { color: 'var(--c-s1d4ed8, #1D4ED8)', bg: 'var(--c-infoBg, #E8F0FE)', Icon: Info,         title: 'Notice' },
 };
 
 export default function FeedbackModal() {
@@ -54,10 +54,10 @@ export default function FeedbackModal() {
             <Icon size={20} color={v.color} strokeWidth={2.2} />
           </div>
           <div style={{ flex: 1, minWidth: 0, paddingTop: 1 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 5 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 5 }}>
               {entry.title || v.title}
             </div>
-            <div style={{ fontSize: 13, color: C.textSecondary, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            <div style={{ fontSize: 15, color: C.textSecondary, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
               {entry.message}
             </div>
           </div>
@@ -75,7 +75,7 @@ export default function FeedbackModal() {
             autoFocus
             style={{
               padding: '9px 22px', borderRadius: 9, border: 'none', cursor: 'pointer',
-              fontFamily: FONT, fontSize: 13, fontWeight: 700, background: v.color, color: '#fff',
+              fontFamily: FONT, fontSize: 15, fontWeight: 700, background: v.color, color: '#fff',
             }}
           >
             OK

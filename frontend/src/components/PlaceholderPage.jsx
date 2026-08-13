@@ -12,10 +12,10 @@ export default function PlaceholderPage({ title, subtitle, icon: Icon }) {
       {/* Page header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>
             {title}
           </h1>
-          <p style={{ fontSize: 12, color: C.textMuted, margin: '4px 0 0', fontFamily: FONT }}>
+          <p style={{ fontSize: 14, color: C.textMuted, margin: '4px 0 0', fontFamily: FONT }}>
             {subtitle || `${title} — Coming Soon`}
           </p>
         </div>
@@ -40,7 +40,7 @@ export default function PlaceholderPage({ title, subtitle, icon: Icon }) {
             width: 64,
             height: 64,
             borderRadius: 16,
-            background: '#F0F0EA',
+            background: 'var(--c-divider, #F0F0EA)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -49,7 +49,7 @@ export default function PlaceholderPage({ title, subtitle, icon: Icon }) {
           </div>
         )}
         <div style={{
-          fontSize: 16,
+          fontSize: 18,
           fontWeight: 600,
           color: C.textSecondary,
           fontFamily: FONT,
@@ -57,7 +57,7 @@ export default function PlaceholderPage({ title, subtitle, icon: Icon }) {
           {title} — Coming Soon
         </div>
         <div style={{
-          fontSize: 14,
+          fontSize: 15,
           color: C.textMuted,
           fontFamily: FONT,
           textAlign: 'center',

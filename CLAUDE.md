@@ -121,7 +121,7 @@ cd frontend && npm run lint
 docker compose logs -f frontend
 ```
 
-**A green `npm test` without a database means less than it looks like.** 92 of the 255 backend tests
+**A green `npm test` without a database means less than it looks like.** 129 of the 334 backend tests
 are DB-backed and skip when Postgres is unreachable. CI sets `REQUIRE_DB=1`, which turns that skip
 into a failure — set it locally too when you want the real answer.
 

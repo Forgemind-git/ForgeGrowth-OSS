@@ -21,17 +21,17 @@ const C = {
   t5: 'var(--c-textMuted)',
   t6: 'var(--c-textMuted)',
   muted: 'var(--c-textMuted)',
-  green: '#0F6E56',
-  greenBg: '#E1F5EE',
-  greenBright: '#1D9E75',
-  red: '#A32D2D',
-  redBg: '#FCEBEB',
-  orange: '#E65100',
-  orangeBg: '#FFF3E0',
-  blue: '#1565C0',
-  blueBg: '#E3F2FD',
-  purple: '#534AB7',
-  purpleBg: '#EEEDFE',
+  green: 'var(--c-successText)',
+  greenBg: 'var(--c-successBg)',
+  greenBright: 'var(--c-successBright)',
+  red: 'var(--c-dangerText)',
+  redBg: 'var(--c-dangerBg)',
+  orange: 'var(--c-orangeText)',
+  orangeBg: 'var(--c-orangeBg)',
+  blue: 'var(--c-infoText)',
+  blueBg: 'var(--c-infoBg)',
+  purple: 'var(--c-purple)',
+  purpleBg: 'var(--c-purpleBg)',
 };
 
 /* ── Status helpers ─────────────────────────────────────────────────────────── */
@@ -66,7 +66,7 @@ function StatusBadge({ status, size = 'sm' }) {
       display: 'inline-flex', alignItems: 'center', gap: 5,
       padding: isSmall ? '2px 8px' : '4px 12px', borderRadius: 99,
       background: meta.bg, color: meta.color,
-      fontSize: isSmall ? 10 : 12, fontWeight: 700, fontFamily: FONT, whiteSpace: 'nowrap',
+      fontSize: isSmall ? 12 : 14, fontWeight: 700, fontFamily: FONT, whiteSpace: 'nowrap',
     }}>
       <Icon size={isSmall ? 11 : 14} />
       {meta.label}
@@ -81,7 +81,7 @@ function MessageStatusBadge({ status }) {
       display: 'inline-flex', alignItems: 'center', gap: 4,
       padding: '1px 7px', borderRadius: 99,
       background: meta.bg, color: meta.color,
-      fontSize: 10, fontWeight: 700, fontFamily: FONT, whiteSpace: 'nowrap',
+      fontSize: 12, fontWeight: 700, fontFamily: FONT, whiteSpace: 'nowrap',
       border: `1px solid ${meta.color}22`,
     }}>
       {meta.label}
@@ -121,8 +121,8 @@ function formatDateForInput(ts) {
 function DataRow({ label, value, mono = false }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: `1px solid ${C.rowSep}`, fontFamily: FONT }}>
-      <span style={{ fontSize: 11, color: C.t5, fontWeight: 500 }}>{label}</span>
-      <span style={{ fontSize: 11, color: C.t2, fontWeight: 600, fontFamily: mono ? MONO : FONT, maxWidth: '60%', textAlign: 'right', wordBreak: 'break-all' }}>
+      <span style={{ fontSize: 13, color: C.t5, fontWeight: 500 }}>{label}</span>
+      <span style={{ fontSize: 13, color: C.t2, fontWeight: 600, fontFamily: mono ? MONO : FONT, maxWidth: '60%', textAlign: 'right', wordBreak: 'break-all' }}>
         {value !== undefined && value !== null && value !== '' ? String(value) : '—'}
       </span>
     </div>
@@ -134,7 +134,7 @@ function ApiDataBlock({ title, data, mono = false }) {
   if (!data || (typeof data === 'object' && Object.keys(data).length === 0)) return null;
   return (
     <div style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: 10, fontWeight: 700, color: C.t6, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>{title}</div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: C.t6, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>{title}</div>
       <div style={{ background: C.innerBg, borderRadius: 10, padding: '10px 12px' }}>
         {typeof data === 'object' && !Array.isArray(data)
           ? Object.entries(data).map(([k, v]) => {
@@ -142,8 +142,8 @@ function ApiDataBlock({ title, data, mono = false }) {
               if (typeof v === 'object') {
                 return (
                   <div key={k} style={{ marginBottom: 6 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: C.t4, marginBottom: 2, textTransform: 'capitalize' }}>{k.replace(/_/g, ' ')}</div>
-                    <pre style={{ margin: 0, padding: 6, background: '#fff', borderRadius: 6, border: `1px solid ${C.innerBorder}`, fontSize: 9, fontFamily: MONO, color: C.t3, lineHeight: 1.4, overflow: 'auto', maxHeight: 120 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: C.t4, marginBottom: 2, textTransform: 'capitalize' }}>{k.replace(/_/g, ' ')}</div>
+                    <pre style={{ margin: 0, padding: 6, background: 'var(--c-surface, #fff)', borderRadius: 6, border: `1px solid ${C.innerBorder}`, fontSize: 11, fontFamily: MONO, color: C.t3, lineHeight: 1.4, overflow: 'auto', maxHeight: 120 }}>
                       {JSON.stringify(v, null, 2)}
                     </pre>
                   </div>
@@ -187,10 +187,10 @@ function NodeDetailPanel({ step, onClose }) {
       {/* Header */}
       <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.cardBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: C.t1, fontFamily: FONT }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.t1, fontFamily: FONT }}>
             {step.node_name || `${step.node_type} node`}
           </div>
-          <div style={{ fontSize: 11, color: C.t5, fontFamily: FONT, marginTop: 2, textTransform: 'capitalize' }}>
+          <div style={{ fontSize: 13, color: C.t5, fontFamily: FONT, marginTop: 2, textTransform: 'capitalize' }}>
             {step.node_type} · {step.node_id}
           </div>
         </div>
@@ -210,13 +210,13 @@ function NodeDetailPanel({ step, onClose }) {
         {(isTrigger || isMessage) && waStatus && (
           <div style={{ background: C.greenBg, border: `1px solid ${C.green}33`, borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: C.green, textTransform: 'uppercase', letterSpacing: '.08em' }}>WhatsApp Status</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: C.green, textTransform: 'uppercase', letterSpacing: '.08em' }}>WhatsApp Status</span>
               <MessageStatusBadge status={waStatus} />
             </div>
             {waMessageId && (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 11, color: C.t4, fontWeight: 500 }}>Message ID</span>
-                <span style={{ fontSize: 10, fontFamily: MONO, color: C.t2, wordBreak: 'break-all', maxWidth: '55%', textAlign: 'right' }}>{waMessageId}</span>
+                <span style={{ fontSize: 13, color: C.t4, fontWeight: 500 }}>Message ID</span>
+                <span style={{ fontSize: 12, fontFamily: MONO, color: C.t2, wordBreak: 'break-all', maxWidth: '55%', textAlign: 'right' }}>{waMessageId}</span>
               </div>
             )}
           </div>
@@ -242,7 +242,7 @@ function NodeDetailPanel({ step, onClose }) {
         {/* Message-specific */}
         {isMessage && (
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: C.t6, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Message Details</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.t6, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Message Details</div>
             <div style={{ background: C.innerBg, borderRadius: 10, padding: '10px 12px' }}>
               <DataRow label="Mode" value={output.mode} />
               {output.templateName && <DataRow label="Template" value={output.templateName} />}
@@ -250,8 +250,8 @@ function NodeDetailPanel({ step, onClose }) {
               {output.directType && <DataRow label="Direct Type" value={output.directType} />}
               {output.resolvedBody && (
                 <div style={{ marginTop: 8 }}>
-                  <div style={{ fontSize: 11, color: C.t5, fontWeight: 500, marginBottom: 4 }}>Resolved Body</div>
-                  <div style={{ fontSize: 11, color: C.t2, fontFamily: FONT, background: '#fff', borderRadius: 6, padding: 8, border: `1px solid ${C.innerBorder}`, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                  <div style={{ fontSize: 13, color: C.t5, fontWeight: 500, marginBottom: 4 }}>Resolved Body</div>
+                  <div style={{ fontSize: 13, color: C.t2, fontFamily: FONT, background: 'var(--c-surface, #fff)', borderRadius: 6, padding: 8, border: `1px solid ${C.innerBorder}`, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                     {output.resolvedBody}
                   </div>
                 </div>
@@ -273,7 +273,7 @@ function NodeDetailPanel({ step, onClose }) {
         {/* Condition result */}
         {step.node_type === 'condition' && (
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: C.t6, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Condition Result</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.t6, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Condition Result</div>
             <div style={{ background: C.innerBg, borderRadius: 10, padding: '10px 12px' }}>
               <DataRow label="Matched" value={output.matched ? 'Yes' : 'No'} />
               <DataRow label="Match Mode" value={output.matchMode} />
@@ -285,7 +285,7 @@ function NodeDetailPanel({ step, onClose }) {
         {/* Action results */}
         {step.node_type === 'action' && output.results && (
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: C.t6, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Actions</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.t6, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Actions</div>
             <div style={{ background: C.innerBg, borderRadius: 10, padding: '10px 12px' }}>
               {output.results.map((r, i) => (
                 <DataRow key={i} label={r.kind} value={r.value || r.status} />
@@ -297,18 +297,18 @@ function NodeDetailPanel({ step, onClose }) {
         {/* Error */}
         {step.error_message && (
           <div style={{ background: C.redBg, border: `1px solid #F4C9C9`, borderRadius: 10, padding: 10, marginBottom: 14 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.red, marginBottom: 4 }}>Error</div>
-            <div style={{ fontSize: 11, color: C.red, fontFamily: FONT }}>{step.error_message}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.red, marginBottom: 4 }}>Error</div>
+            <div style={{ fontSize: 13, color: C.red, fontFamily: FONT }}>{step.error_message}</div>
           </div>
         )}
 
         {/* Raw Output JSON */}
         <div style={{ marginBottom: 14 }}>
           <details>
-            <summary style={{ fontSize: 11, fontWeight: 700, color: C.t5, cursor: 'pointer', fontFamily: FONT }}>Raw Output JSON</summary>
+            <summary style={{ fontSize: 13, fontWeight: 700, color: C.t5, cursor: 'pointer', fontFamily: FONT }}>Raw Output JSON</summary>
             <pre style={{
               margin: '8px 0 0', padding: 10, background: C.innerBg, borderRadius: 8,
-              fontSize: 10, fontFamily: MONO, color: C.t3, lineHeight: 1.5, overflow: 'auto', maxHeight: 200,
+              fontSize: 12, fontFamily: MONO, color: C.t3, lineHeight: 1.5, overflow: 'auto', maxHeight: 200,
             }}>
               {JSON.stringify(output, null, 2)}
             </pre>
@@ -318,10 +318,10 @@ function NodeDetailPanel({ step, onClose }) {
         {/* Raw Input JSON */}
         <div style={{ marginBottom: 14 }}>
           <details>
-            <summary style={{ fontSize: 11, fontWeight: 700, color: C.t5, cursor: 'pointer', fontFamily: FONT }}>Raw Input JSON</summary>
+            <summary style={{ fontSize: 13, fontWeight: 700, color: C.t5, cursor: 'pointer', fontFamily: FONT }}>Raw Input JSON</summary>
             <pre style={{
               margin: '8px 0 0', padding: 10, background: C.innerBg, borderRadius: 8,
-              fontSize: 10, fontFamily: MONO, color: C.t3, lineHeight: 1.5, overflow: 'auto', maxHeight: 200,
+              fontSize: 12, fontFamily: MONO, color: C.t3, lineHeight: 1.5, overflow: 'auto', maxHeight: 200,
             }}>
               {JSON.stringify(input, null, 2)}
             </pre>
@@ -347,10 +347,10 @@ function FilterBar({ filters, onChange, onApply, onReset }) {
         }}
       >
         <Filter size={13} color={C.t4} />
-        <span style={{ fontSize: 12, fontWeight: 600, color: C.t3 }}>Filters</span>
+        <span style={{ fontSize: 14, fontWeight: 600, color: C.t3 }}>Filters</span>
         <ChevronDown size={13} color={C.t5} style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
         {(status !== 'all' || startDate || endDate || messageStatus !== 'all') && (
-          <span style={{ marginLeft: 'auto', fontSize: 10, color: C.green, fontWeight: 700 }}>Active</span>
+          <span style={{ marginLeft: 'auto', fontSize: 12, color: C.green, fontWeight: 700 }}>Active</span>
         )}
       </div>
 
@@ -359,28 +359,28 @@ function FilterBar({ filters, onChange, onApply, onReset }) {
           {/* Date range */}
           <div style={{ display: 'flex', gap: 8 }}>
             <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: C.t5, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.06em' }}>Start</label>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.t5, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.06em' }}>Start</label>
               <input
                 type="datetime-local"
                 value={startDate}
                 onChange={e => onChange({ ...filters, startDate: e.target.value })}
                 style={{
                   width: '100%', padding: '6px 8px', borderRadius: 8,
-                  border: `1.5px solid ${C.cardBorder}`, fontSize: 11, fontFamily: FONT,
-                  background: '#fff', color: C.t2, outline: 'none',
+                  border: `1.5px solid ${C.cardBorder}`, fontSize: 13, fontFamily: FONT,
+                  background: 'var(--c-surface, #fff)', color: C.t2, outline: 'none',
                 }}
               />
             </div>
             <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: C.t5, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.06em' }}>End</label>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.t5, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.06em' }}>End</label>
               <input
                 type="datetime-local"
                 value={endDate}
                 onChange={e => onChange({ ...filters, endDate: e.target.value })}
                 style={{
                   width: '100%', padding: '6px 8px', borderRadius: 8,
-                  border: `1.5px solid ${C.cardBorder}`, fontSize: 11, fontFamily: FONT,
-                  background: '#fff', color: C.t2, outline: 'none',
+                  border: `1.5px solid ${C.cardBorder}`, fontSize: 13, fontFamily: FONT,
+                  background: 'var(--c-surface, #fff)', color: C.t2, outline: 'none',
                 }}
               />
             </div>
@@ -389,7 +389,7 @@ function FilterBar({ filters, onChange, onApply, onReset }) {
           {/* Status filters */}
           <div style={{ display: 'flex', gap: 8 }}>
             <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: C.t5, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.06em' }}>Flow Status</label>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.t5, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.06em' }}>Flow Status</label>
               <SearchableSelect
                 value={status}
                 onChange={val => onChange({ ...filters, status: val })}
@@ -405,11 +405,11 @@ function FilterBar({ filters, onChange, onApply, onReset }) {
                 placeholder="All statuses"
                 searchPlaceholder="Search…"
                 style={{ width: '100%' }}
-                triggerStyle={{ padding: '6px 28px 6px 8px', fontSize: 11 }}
+                triggerStyle={{ padding: '6px 28px 6px 8px', fontSize: 13 }}
               />
             </div>
             <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: C.t5, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.06em' }}>Message Status</label>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.t5, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.06em' }}>Message Status</label>
               <SearchableSelect
                 value={messageStatus}
                 onChange={val => onChange({ ...filters, messageStatus: val })}
@@ -425,7 +425,7 @@ function FilterBar({ filters, onChange, onApply, onReset }) {
                 placeholder="All messages"
                 searchPlaceholder="Search…"
                 style={{ width: '100%' }}
-                triggerStyle={{ padding: '6px 28px 6px 8px', fontSize: 11 }}
+                triggerStyle={{ padding: '6px 28px 6px 8px', fontSize: 13 }}
               />
             </div>
           </div>
@@ -437,7 +437,7 @@ function FilterBar({ filters, onChange, onApply, onReset }) {
               style={{
                 flex: 1, padding: '7px 0', borderRadius: 8,
                 background: C.t1, color: '#fff', border: 'none',
-                fontSize: 12, fontWeight: 700, fontFamily: FONT, cursor: 'pointer',
+                fontSize: 14, fontWeight: 700, fontFamily: FONT, cursor: 'pointer',
               }}
             >
               Apply Filters
@@ -446,8 +446,8 @@ function FilterBar({ filters, onChange, onApply, onReset }) {
               onClick={onReset}
               style={{
                 flex: 1, padding: '7px 0', borderRadius: 8,
-                background: '#fff', color: C.t3, border: `1.5px solid ${C.cardBorder}`,
-                fontSize: 12, fontWeight: 700, fontFamily: FONT, cursor: 'pointer',
+                background: 'var(--c-surface, #fff)', color: C.t3, border: `1.5px solid ${C.cardBorder}`,
+                fontSize: 14, fontWeight: 700, fontFamily: FONT, cursor: 'pointer',
               }}
             >
               Reset
@@ -479,7 +479,7 @@ function ExecutionListItem({ ex, isSelected, onClick, onCancel, cancelling }) {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <Icon size={14} color={meta.color} />
-        <span style={{ fontSize: 12, fontWeight: 700, color: meta.color, fontFamily: FONT }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: meta.color, fontFamily: FONT }}>
           {meta.label}
         </span>
         <span style={{ flex: 1 }} />
@@ -491,8 +491,8 @@ function ExecutionListItem({ ex, isSelected, onClick, onCancel, cancelling }) {
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 4,
               padding: '2px 8px', borderRadius: 6,
-              border: `1px solid ${C.red}`, background: '#fff', color: C.red,
-              cursor: cancelling ? 'wait' : 'pointer', fontSize: 10, fontWeight: 700, fontFamily: FONT,
+              border: `1px solid ${C.red}`, background: 'var(--c-surface, #fff)', color: C.red,
+              cursor: cancelling ? 'wait' : 'pointer', fontSize: 12, fontWeight: 700, fontFamily: FONT,
             }}
           >
             {cancelling
@@ -500,16 +500,16 @@ function ExecutionListItem({ ex, isSelected, onClick, onCancel, cancelling }) {
               : <Square size={9} fill={C.red} />} Stop
           </button>
         )}
-        <span style={{ fontSize: 10, color: C.t6, fontFamily: FONT }}>
+        <span style={{ fontSize: 12, color: C.t6, fontFamily: FONT }}>
           {formatDuration(ex.started_at, ex.completed_at)}
         </span>
       </div>
-      <div style={{ fontSize: 12, fontWeight: 600, color: C.t2, fontFamily: FONT, marginBottom: 2 }}>
+      <div style={{ fontSize: 14, fontWeight: 600, color: C.t2, fontFamily: FONT, marginBottom: 2 }}>
         {new Date(ex.started_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
         {' · '}
         {formatTime(ex.started_at)}
       </div>
-      <div style={{ fontSize: 11, color: C.t5, fontFamily: FONT }}>
+      <div style={{ fontSize: 13, color: C.t5, fontFamily: FONT }}>
         {ex.trigger_type} {ex.contact_number && `· ${maskPhone(ex.contact_number)}`}
       </div>
     </div>
@@ -649,7 +649,7 @@ export default function AutomationExecutions({ automation, onBack, hideTopBar, i
               style={{
                 display: 'flex', alignItems: 'center', gap: 5,
                 background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: 13, fontWeight: 600, fontFamily: FONT, color: C.t4,
+                fontSize: 15, fontWeight: 600, fontFamily: FONT, color: C.t4,
               }}
             >
               <ArrowLeft size={14} /> {selectedExecution ? 'Back to list' : 'Back to automations'}
@@ -657,7 +657,7 @@ export default function AutomationExecutions({ automation, onBack, hideTopBar, i
             {selectedExecution && (
               <>
                 <div style={{ width: 1, height: 20, background: C.cardBorder }} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: C.t1 }}>
+                <span style={{ fontSize: 15, fontWeight: 700, color: C.t1 }}>
                   Execution #{selectedExecution.id}
                 </span>
                 <StatusBadge status={selectedExecution.status} size="sm" />
@@ -674,9 +674,9 @@ export default function AutomationExecutions({ automation, onBack, hideTopBar, i
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6,
                   padding: '6px 12px', borderRadius: 8,
-                  border: `1.5px solid ${C.red}`, background: '#fff', color: C.red,
+                  border: `1.5px solid ${C.red}`, background: 'var(--c-surface, #fff)', color: C.red,
                   cursor: cancellingId === selectedExecution.id ? 'wait' : 'pointer',
-                  fontSize: 12, fontWeight: 700, fontFamily: FONT,
+                  fontSize: 14, fontWeight: 700, fontFamily: FONT,
                 }}
               >
                 {cancellingId === selectedExecution.id
@@ -690,7 +690,7 @@ export default function AutomationExecutions({ automation, onBack, hideTopBar, i
                   onClick={loadExecutions}
                   style={{
                     width: 30, height: 30, borderRadius: 8,
-                    border: `1.5px solid ${C.cardBorder}`, background: '#fff',
+                    border: `1.5px solid ${C.cardBorder}`, background: 'var(--c-surface, #fff)',
                     cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     color: C.t4,
                   }}
@@ -720,7 +720,7 @@ export default function AutomationExecutions({ automation, onBack, hideTopBar, i
             onReset={resetFilters}
           />
 
-          <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.cardBorder}`, fontSize: 11, fontWeight: 700, color: C.t4, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+          <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.cardBorder}`, fontSize: 13, fontWeight: 700, color: C.t4, textTransform: 'uppercase', letterSpacing: '.06em' }}>
             Executions ({executions.length})
           </div>
 
@@ -728,10 +728,10 @@ export default function AutomationExecutions({ automation, onBack, hideTopBar, i
             {loading ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40, gap: 8 }}>
                 <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                <span style={{ fontSize: 12, color: C.t5 }}>Loading…</span>
+                <span style={{ fontSize: 14, color: C.t5 }}>Loading…</span>
               </div>
             ) : executions.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 40, color: C.t5, fontSize: 12 }}>
+              <div style={{ textAlign: 'center', padding: 40, color: C.t5, fontSize: 14 }}>
                 No executions yet
               </div>
             ) : (
@@ -756,13 +756,13 @@ export default function AutomationExecutions({ automation, onBack, hideTopBar, i
                 disabled={page <= 1}
                 style={{
                   padding: '4px 10px', borderRadius: 6, border: `1.5px solid ${C.cardBorder}`,
-                  background: '#fff', fontSize: 11, fontFamily: FONT, fontWeight: 600,
+                  background: 'var(--c-surface, #fff)', fontSize: 13, fontFamily: FONT, fontWeight: 600,
                   color: page <= 1 ? C.t6 : C.t2, cursor: page <= 1 ? 'not-allowed' : 'pointer',
                 }}
               >
                 Prev
               </button>
-              <span style={{ padding: '4px 10px', fontSize: 11, fontFamily: FONT, color: C.t4 }}>
+              <span style={{ padding: '4px 10px', fontSize: 13, fontFamily: FONT, color: C.t4 }}>
                 {page}/{totalPages}
               </span>
               <button
@@ -770,7 +770,7 @@ export default function AutomationExecutions({ automation, onBack, hideTopBar, i
                 disabled={page >= totalPages}
                 style={{
                   padding: '4px 10px', borderRadius: 6, border: `1.5px solid ${C.cardBorder}`,
-                  background: '#fff', fontSize: 11, fontFamily: FONT, fontWeight: 600,
+                  background: 'var(--c-surface, #fff)', fontSize: 13, fontFamily: FONT, fontWeight: 600,
                   color: page >= totalPages ? C.t6 : C.t2, cursor: page >= totalPages ? 'not-allowed' : 'pointer',
                 }}
               >
@@ -786,7 +786,7 @@ export default function AutomationExecutions({ automation, onBack, hideTopBar, i
             {detailLoading ? (
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
-                <span style={{ fontSize: 13, color: C.t5, fontFamily: FONT }}>Loading execution…</span>
+                <span style={{ fontSize: 15, color: C.t5, fontFamily: FONT }}>Loading execution…</span>
               </div>
             ) : (
               <>
@@ -808,10 +808,10 @@ export default function AutomationExecutions({ automation, onBack, hideTopBar, i
           </>
         ) : (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: C.t3, fontFamily: FONT }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: C.t3, fontFamily: FONT }}>
               Select an execution to view its flow
             </div>
-            <div style={{ fontSize: 12, color: C.t5, fontFamily: FONT }}>
+            <div style={{ fontSize: 14, color: C.t5, fontFamily: FONT }}>
               Click any execution in the left sidebar to see the node-by-node flow
             </div>
           </div>

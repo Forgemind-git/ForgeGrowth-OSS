@@ -61,18 +61,18 @@ export function MetaAdsPanel({ onSynced }) {
 
   return (
     <div style={{
-      marginBottom: 16, border: `1px solid ${connected ? '#CFE3FB' : err ? '#F3C9C9' : C.border}`,
-      background: connected ? '#F5F9FF' : err ? '#FDF3F3' : C.cardBg, borderRadius: 12, padding: '16px 18px', boxShadow: C.shadowSm,
+      marginBottom: 16, border: `1px solid ${connected ? 'var(--c-scfe3fb, #CFE3FB)' : err ? 'var(--c-sf3c9c9, #F3C9C9)' : C.border}`,
+      background: connected ? 'var(--c-sf5f9ff, #F5F9FF)' : err ? 'var(--c-sfdf3f3, #FDF3F3)' : C.cardBg, borderRadius: 12, padding: '16px 18px', boxShadow: C.shadowSm,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <span style={{ width: 34, height: 34, borderRadius: 8, background: connected ? '#E7F0FE' : C.hover, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <span style={{ width: 34, height: 34, borderRadius: 8, background: connected ? 'var(--c-infoBg, #E7F0FE)' : C.hover, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           {connected ? <CheckCircle2 size={18} color="#1877F2" /> : err ? <AlertTriangle size={18} color={C.primary} /> : <Plug size={18} color={C.textSecondary} />}
         </span>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: FONT }}>
-            Meta Ads Manager {connected && <span style={{ fontSize: 11, color: '#1877F2', fontWeight: 600 }}>· Connected</span>}
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: FONT }}>
+            Meta Ads Manager {connected && <span style={{ fontSize: 13, color: '#1877F2', fontWeight: 600 }}>· Connected</span>}
           </div>
-          <div style={{ fontSize: 12, color: C.textSecondary, fontFamily: MONO, marginTop: 2 }}>
+          <div style={{ fontSize: 14, color: C.textSecondary, fontFamily: MONO, marginTop: 2 }}>
             {connected
               ? <>{meta.appName || 'App'} · {st.tokenType} token{st.lastSyncedAt ? ` · synced ${fmtDate(st.lastSyncedAt)}` : ' · not synced yet'}</>
               : err ? <span style={{ color: C.primary }}>{st.lastError || 'Connection error'}</span>
@@ -92,27 +92,27 @@ export function MetaAdsPanel({ onSynced }) {
       </div>
 
       {connected && dataExpires && (
-        <div style={{ marginTop: 10, fontSize: 11.5, color: C.textMuted, fontFamily: MONO }}>
+        <div style={{ marginTop: 10, fontSize: 13, color: C.textMuted, fontFamily: MONO }}>
           Token data-access expires {fmtDate(dataExpires)} — regenerate a System User token before then for uninterrupted sync.
         </div>
       )}
 
       {connected && accounts.length > 0 && (
         <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.textMuted, marginBottom: 8 }}>Ad accounts to sync</div>
+          <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.textMuted, marginBottom: 8 }}>Ad accounts to sync</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {accounts.map(a => {
               const on = chosen.includes(a.id);
               return (
                 <button key={a.id} onClick={() => toggleAccount(a.id)} style={{
                   display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 11px', borderRadius: 8, cursor: 'pointer',
-                  border: `1px solid ${on ? '#1877F2' : C.border}`, background: on ? '#E7F0FE' : C.cardBg, fontFamily: FONT, fontSize: 12.5,
+                  border: `1px solid ${on ? '#1877F2' : C.border}`, background: on ? 'var(--c-infoBg, #E7F0FE)' : C.cardBg, fontFamily: FONT, fontSize: 14,
                   color: on ? '#1877F2' : C.textSecondary, fontWeight: on ? 600 : 500,
                 }}>
                   <span style={{ width: 14, height: 14, borderRadius: 4, border: `1.5px solid ${on ? '#1877F2' : C.borderDark}`, background: on ? '#1877F2' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {on && <CheckCircle2 size={10} color="#fff" />}
                   </span>
-                  {a.name} <span style={{ fontFamily: MONO, color: C.textMuted, fontSize: 11 }}>{a.currency} {a.amountSpent.toLocaleString('en-IN')}</span>
+                  {a.name} <span style={{ fontFamily: MONO, color: C.textMuted, fontSize: 13 }}>{a.currency} {a.amountSpent.toLocaleString('en-IN')}</span>
                 </button>
               );
             })}
@@ -141,13 +141,13 @@ function MetaConnectModal({ onClose, onConnected }) {
   return (
     <Modal title="Connect Meta Ads Manager" onClose={onClose}
       footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button variant="primary" onClick={submit} disabled={busy}>{busy ? 'Connecting…' : 'Connect'}</Button></>}>
-      <div style={{ fontSize: 13, color: C.textSecondary, lineHeight: 1.55, marginBottom: 14, fontFamily: FONT }}>
+      <div style={{ fontSize: 15, color: C.textSecondary, lineHeight: 1.55, marginBottom: 14, fontFamily: FONT }}>
         Paste a Meta access token with the <b>ads_read</b> permission. Generate one from your app’s
         Marketing API → Tools, or (recommended for production) a <b>System User</b> token in Business Settings.
         The token is stored encrypted and used only to read campaign spend & results.
       </div>
       <Field label="Access token">
-        <textarea style={{ ...inputStyle, minHeight: 92, resize: 'vertical', fontFamily: MONO, fontSize: 12 }}
+        <textarea style={{ ...inputStyle, minHeight: 92, resize: 'vertical', fontFamily: MONO, fontSize: 14 }}
           value={token} onChange={e => setToken(e.target.value)} placeholder="EAAG…" autoFocus />
       </Field>
     </Modal>

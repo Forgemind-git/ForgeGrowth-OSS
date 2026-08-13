@@ -23,7 +23,21 @@
 const { Router } = require('express');
 const pool = require('../db');
 const bus = require('../events');
-const { requirePermission } = require('../middleware/access');
+const { adminOnly } = require('../middleware/access');
+const productTags = require('./../services/productTags');
+
+// ⚠ The 'products' PAGE KEY is gone (2026-08-12) — the editor moved into Admin
+// Settings → Funnel, which is admin-gated. So these routes can no longer gate
+// on adminOnly: that key matches no page, and every
+// non-admin would be refused a product list the Sales Log needs to render.
+//
+// READS are open to any signed-in user (a product name and price are not
+// sensitive, and the Sales Log, Payments and the funnel all need them).
+// WRITES are adminOnly, matching the one screen that can reach them.
+// A product's sales/payments/revenue come from the SALES LOG, not from
+// amount-matched gateway events — see the header comment in that file for why
+// the two used to disagree.
+const { productTotals, unattributedTotals } = require('../services/productSales');
 
 const router = Router();
 
@@ -176,9 +190,12 @@ function priceToPaise(v) {
 }
 
 // ── CRUD: products (each with its price-variant links + live revenue) ─────────
-router.get(P(), requirePermission('products'), async (req, res) => {
+router.get(P(), async (req, res) => {
   try {
     const { rows: courses } = await pool.query(`SELECT id, name, description, thumbnail_url, active, default_price_paise, created_at FROM coexistence.courses ORDER BY name`);
+    // Per-LINK counts stay amount-matched on purpose: "how many payments came
+    // through this exact price" is a genuine question about a link, and it is
+    // NOT the product's sales total — which is why the card no longer sums it.
     const { rows: links } = await pool.query(
       `SELECT pl.id, pl.course_id, pl.label, pl.amount_paise, pl.match_text, pl.url, pl.active,
               COALESCE(SUM(e.amount_paise) FILTER (WHERE e.event_type = 'payment.captured'), 0)::bigint AS revenue_paise,
@@ -187,9 +204,21 @@ router.get(P(), requirePermission('products'), async (req, res) => {
          LEFT JOIN coexistence.razorpay_events e ON e.payment_link_id = pl.id
         GROUP BY pl.id ORDER BY pl.amount_paise DESC`
     );
+    const totals = await productTotals();
     const byCourse = {};
     links.forEach(l => { (byCourse[l.course_id] = byCourse[l.course_id] || []).push(l); });
-    const products = courses.map(c => ({ ...c, links: byCourse[c.id] || [] }));
+    const byId = {};
+    totals.forEach(t => { byId[t.id] = t; });
+    const products = courses.map(c => {
+      const t = byId[c.id] || { sales_count: 0, payment_count: 0, revenue_paise: 0 };
+      return {
+        ...c,
+        links: byCourse[c.id] || [],
+        sales_count: t.sales_count,
+        payment_count: t.payment_count,
+        revenue_paise: t.revenue_paise,
+      };
+    });
     // `courses` is a deprecated alias of the same array — an MCP client calling
     // the old path through the generic proxy still reads the key it expects.
     res.json({ products, courses: products });
@@ -199,7 +228,7 @@ router.get(P(), requirePermission('products'), async (req, res) => {
   }
 });
 
-router.post(P(), requirePermission('products'), async (req, res) => {
+router.post(P(), adminOnly, async (req, res) => {
   try {
     const { name, description, thumbnailUrl, defaultPrice } = req.body || {};
     if (!name || !name.trim()) return res.status(400).json({ error: 'Product name is required' });
@@ -210,6 +239,8 @@ router.post(P(), requirePermission('products'), async (req, res) => {
        VALUES ($1, $2, $3, $4) RETURNING id, name, description, thumbnail_url, active, default_price_paise, created_at`,
       [name.trim(), description?.trim() || null, thumbnailUrl?.trim() || null, paise ?? null]
     );
+    // Mint this product's tag now, so it is usable the moment it exists.
+    await productTags.syncProductTagCatalog().catch(e => console.error('[product-tags]', e.message));
     res.status(201).json({ ...rows[0], links: [] });
   } catch (err) {
     console.error('[products] create error:', err.message);
@@ -217,7 +248,7 @@ router.post(P(), requirePermission('products'), async (req, res) => {
   }
 });
 
-router.put(P('/:id'), requirePermission('products'), async (req, res) => {
+router.put(P('/:id'), adminOnly, async (req, res) => {
   try {
     const { name, description, thumbnailUrl, active, defaultPrice } = req.body || {};
     const sets = ['updated_at = NOW()']; const params = []; let i = 1;
@@ -232,6 +263,10 @@ router.put(P('/:id'), requirePermission('products'), async (req, res) => {
     }
     params.push(req.params.id);
     const { rows } = await pool.query(`UPDATE coexistence.courses SET ${sets.join(', ')} WHERE id = $${i} RETURNING id, name, description, thumbnail_url, active, default_price_paise`, params);
+    // ⚠ The tag's name is DENORMALISED into every contacts.tags blob, so a
+    // rename has to rewrite them. syncProductTagCatalog does that; skipping it
+    // would leave contacts showing the product's old name forever.
+    await productTags.syncProductTagCatalog().catch(e => console.error('[product-tags]', e.message));
     if (rows.length === 0) return res.status(404).json({ error: 'Product not found' });
     res.json(rows[0]);
   } catch (err) {
@@ -240,12 +275,14 @@ router.put(P('/:id'), requirePermission('products'), async (req, res) => {
   }
 });
 
-router.delete(P('/:id'), requirePermission('products'), async (req, res) => {
+router.delete(P('/:id'), adminOnly, async (req, res) => {
   try {
     // Detach attributed events first (FK-less columns) so history keeps its rows.
     await pool.query(`UPDATE coexistence.razorpay_events SET course_id = NULL, payment_link_id = NULL WHERE course_id = $1`, [req.params.id]);
     const { rowCount } = await pool.query(`DELETE FROM coexistence.courses WHERE id = $1`, [req.params.id]);
     if (rowCount === 0) return res.status(404).json({ error: 'Product not found' });
+    // The product is gone; its tag must leave every contact carrying it.
+    await productTags.syncProductTagCatalog().catch(e => console.error('[product-tags]', e.message));
     res.json({ ok: true });
   } catch (err) {
     console.error('[products] delete error:', err.message);
@@ -254,7 +291,7 @@ router.delete(P('/:id'), requirePermission('products'), async (req, res) => {
 });
 
 // ── CRUD: payment links (price variants) ──────────────────────────────────────
-router.post(P('/:id/links'), requirePermission('products'), async (req, res) => {
+router.post(P('/:id/links'), adminOnly, async (req, res) => {
   try {
     const { label, amountRupees, matchText, url } = req.body || {};
     const amountPaise = Math.round(Number(amountRupees) * 100);
@@ -275,7 +312,7 @@ router.post(P('/:id/links'), requirePermission('products'), async (req, res) => 
   }
 });
 
-router.put('/payment-links/:id', requirePermission('products'), async (req, res) => {
+router.put('/payment-links/:id', adminOnly, async (req, res) => {
   try {
     const { label, amountRupees, matchText, url, active } = req.body || {};
     const sets = ['updated_at = NOW()']; const params = []; let i = 1;
@@ -295,7 +332,7 @@ router.put('/payment-links/:id', requirePermission('products'), async (req, res)
   }
 });
 
-router.delete('/payment-links/:id', requirePermission('products'), async (req, res) => {
+router.delete('/payment-links/:id', adminOnly, async (req, res) => {
   try {
     await pool.query(`UPDATE coexistence.razorpay_events SET payment_link_id = NULL WHERE payment_link_id = $1`, [req.params.id]);
     const { rowCount } = await pool.query(`DELETE FROM coexistence.payment_links WHERE id = $1`, [req.params.id]);
@@ -307,27 +344,15 @@ router.delete('/payment-links/:id', requirePermission('products'), async (req, r
   }
 });
 
-// ── Per-product revenue ───────────────────────────────────────────────────────
-router.get(P('/revenue'), requirePermission('products'), async (req, res) => {
+// ── Per-product revenue (from the Sales Log) ──────────────────────────────────
+router.get(P('/revenue'), async (req, res) => {
   try {
-    const { rows } = await pool.query(
-      `SELECT c.id, c.name, c.active,
-              COALESCE(SUM(e.amount_paise) FILTER (WHERE e.event_type = 'payment.captured'), 0)::bigint AS revenue_paise,
-              COUNT(DISTINCT e.payment_id) FILTER (WHERE e.status = 'captured')::int AS paid_count,
-              COUNT(DISTINCT e.payment_id) FILTER (WHERE e.status = 'failed')::int   AS failed_count
-         FROM coexistence.courses c
-         LEFT JOIN coexistence.razorpay_events e ON e.course_id = c.id
-        GROUP BY c.id ORDER BY revenue_paise DESC, c.name`
-    );
-    const { rows: [unattr] } = await pool.query(
-      `SELECT COALESCE(SUM(amount_paise) FILTER (WHERE event_type = 'payment.captured'), 0)::bigint AS revenue_paise,
-              COUNT(DISTINCT payment_id) FILTER (WHERE status = 'captured')::int AS paid_count
-         FROM coexistence.razorpay_events WHERE course_id IS NULL`
-    );
-    const products = rows.map(r => ({ ...r, revenue_paise: Number(r.revenue_paise) }));
+    const products = await productTotals();
+    const { unattributed, outsideSalesLog } = await unattributedTotals();
     res.json({
       products, courses: products,   // `courses` = deprecated alias, see the list route
-      unattributed: { revenue_paise: Number(unattr.revenue_paise), paid_count: unattr.paid_count },
+      unattributed,                  // in the Sales Log, but no Product set on the sale
+      outsideSalesLog,               // captured payments that belong to no sale at all
     });
   } catch (err) {
     console.error('[products] revenue error:', err.message);

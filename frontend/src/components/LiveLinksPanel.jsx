@@ -40,19 +40,19 @@ export default function LiveLinksPanel() {
             <Radio size={16} color={C.primary} />
           </span>
           <div>
-            <div style={{ fontSize: 14.5, fontWeight: 700, color: C.text }}>Live Links</div>
-            <div style={{ fontSize: 12, color: C.textMuted, marginTop: 1 }}>Batch-specific links — edited once, read live by every trigger & bot reply.</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>Live Links</div>
+            <div style={{ fontSize: 14, color: C.textMuted, marginTop: 1 }}>Batch-specific links — edited once, read live by every trigger & bot reply.</div>
           </div>
         </div>
-        <button onClick={() => setAdding(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 13px', borderRadius: 8, border: 'none', background: C.primary, color: '#fff', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, fontFamily: FONT }}>
+        <button onClick={() => setAdding(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 13px', borderRadius: 8, border: 'none', background: C.primary, color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 600, fontFamily: FONT }}>
           <Plus size={14} /> Add link
         </button>
       </div>
 
       <div style={{ padding: 14, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
-        {links == null && <div style={{ color: C.textMuted, fontSize: 13, padding: 8 }}>Loading…</div>}
+        {links == null && <div style={{ color: C.textMuted, fontSize: 15, padding: 8 }}>Loading…</div>}
         {links && links.length === 0 && !adding && (
-          <div style={{ color: C.textMuted, fontSize: 13, padding: 8 }}>No live links yet — add your current webinar, payment, and batch-group links.</div>
+          <div style={{ color: C.textMuted, fontSize: 15, padding: 8 }}>No live links yet — add your current webinar, payment, and batch-group links.</div>
         )}
         {adding && <LinkEditor onCancel={() => setAdding(false)} onSaved={() => { setAdding(false); load(); }} />}
         {(links || []).map(l => (
@@ -72,23 +72,23 @@ function LinkCard({ link, onEdit, onDelete }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
           <Link2 size={14} color={C.primary} style={{ flexShrink: 0 }} />
-          <span style={{ fontSize: 13.5, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{link.title}</span>
+          <span style={{ fontSize: 15, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{link.title}</span>
         </div>
         <span style={{ display: 'inline-flex', gap: 3, flexShrink: 0 }}>
           <button onClick={onEdit} style={iconBtn}><Pencil size={13} /></button>
           <button onClick={onDelete} style={iconBtn}><Trash2 size={13} /></button>
         </span>
       </div>
-      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.textMuted, marginTop: 8 }}>{link.type}</div>
+      <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.textMuted, marginTop: 8 }}>{link.type}</div>
       {link.fileUrl && (
-        <a href={link.fileUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 4, fontSize: 12, color: C.primary, fontFamily: MONO, textDecoration: 'none', wordBreak: 'break-all' }}>
+        <a href={link.fileUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 4, fontSize: 14, color: C.primary, fontFamily: MONO, textDecoration: 'none', wordBreak: 'break-all' }}>
           {link.fileUrl.length > 40 ? link.fileUrl.slice(0, 40) + '…' : link.fileUrl} <ExternalLink size={11} />
         </a>
       )}
       {(link.triggerPhrases || []).length > 0 && (
         <div style={{ marginTop: 8, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           {link.triggerPhrases.map((p, i) => (
-            <span key={i} style={{ fontSize: 10.5, color: C.textSecondary, background: C.hover, padding: '2px 7px', borderRadius: 99, fontFamily: MONO }}>{p}</span>
+            <span key={i} style={{ fontSize: 12, color: C.textSecondary, background: C.hover, padding: '2px 7px', borderRadius: 99, fontFamily: MONO }}>{p}</span>
           ))}
         </div>
       )}
@@ -115,18 +115,18 @@ function LinkEditor({ link, onCancel, onSaved }) {
       showSuccess(isNew ? 'Live link added.' : 'Live link updated.'); onSaved();
     } catch (e) { showError(e.message); setSaving(false); }
   }
-  const inp = { width: '100%', padding: '7px 9px', borderRadius: 7, border: `1.5px solid ${C.border}`, fontSize: 12.5, fontFamily: FONT, color: C.text, outline: 'none', boxSizing: 'border-box', background: C.cardBg, marginBottom: 7 };
+  const inp = { width: '100%', padding: '7px 9px', borderRadius: 7, border: `1.5px solid ${C.border}`, fontSize: 14, fontFamily: FONT, color: C.text, outline: 'none', boxSizing: 'border-box', background: C.cardBg, marginBottom: 7 };
   return (
     <div style={{ border: `1.5px solid ${C.primary}`, borderRadius: 10, padding: 13, background: C.cardBg }}>
       <input style={inp} placeholder="Title (e.g. Current Payment Link)" value={f.title} onChange={e => setF(s => ({ ...s, title: e.target.value }))} autoFocus />
       <div style={{ marginBottom: 7 }}>
-        <SearchableSelect value={f.type} onChange={v => setF(s => ({ ...s, type: v }))} options={TYPES.map(t => ({ value: t, label: t }))} triggerStyle={{ padding: '7px 28px 7px 9px', fontSize: 12.5 }} />
+        <SearchableSelect value={f.type} onChange={v => setF(s => ({ ...s, type: v }))} options={TYPES.map(t => ({ value: t, label: t }))} triggerStyle={{ padding: '7px 28px 7px 9px', fontSize: 14 }} />
       </div>
       <input style={inp} placeholder="URL" value={f.fileUrl} onChange={e => setF(s => ({ ...s, fileUrl: e.target.value }))} />
       <input style={inp} placeholder="Trigger phrases (comma-separated)" value={f.triggerPhrases} onChange={e => setF(s => ({ ...s, triggerPhrases: e.target.value }))} />
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 2 }}>
-        <button onClick={onCancel} style={{ ...iconBtn, padding: '6px 10px', fontSize: 12, color: C.textSecondary }}><X size={13} /> Cancel</button>
-        <button onClick={save} disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 7, border: 'none', background: C.primary, color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: FONT }}>
+        <button onClick={onCancel} style={{ ...iconBtn, padding: '6px 10px', fontSize: 14, color: C.textSecondary }}><X size={13} /> Cancel</button>
+        <button onClick={save} disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 7, border: 'none', background: C.primary, color: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 600, fontFamily: FONT }}>
           <Check size={13} /> {saving ? 'Saving…' : 'Save'}
         </button>
       </div>

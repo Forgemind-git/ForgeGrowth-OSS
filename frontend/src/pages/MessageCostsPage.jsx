@@ -35,11 +35,11 @@ function rs(v, dp = 2) {
 const rate = v => `₹${Number(v || 0).toFixed(4)}`;
 
 const CATEGORY_COLOR = {
-  marketing: { color: '#dc2626', bg: '#FCEBEB' },
-  utility: { color: '#2563eb', bg: '#E7F0FE' },
-  authentication: { color: '#534AB7', bg: '#EEEDFE' },
-  service: { color: '#0F6E56', bg: '#E1F5EE' },
-  referral_conversion: { color: '#E8A317', bg: '#FAEEDA' },
+  marketing: { color: 'var(--c-primary, #dc2626)', bg: 'var(--c-dangerBg, #FCEBEB)' },
+  utility: { color: 'var(--c-infoBright, #2563eb)', bg: 'var(--c-infoBg, #E7F0FE)' },
+  authentication: { color: 'var(--c-purple, #534AB7)', bg: 'var(--c-purpleBg, #EEEDFE)' },
+  service: { color: 'var(--c-successText, #0F6E56)', bg: 'var(--c-successBg, #E1F5EE)' },
+  referral_conversion: { color: '#E8A317', bg: 'var(--c-warnBg, #FAEEDA)' },
 };
 
 const RATE_SOURCE_LABEL = {
@@ -127,7 +127,7 @@ export default function MessageCostsPage({ user, navigate }) {
             <KpiCard label="Charged messages" value={(o.billable ?? 0).toLocaleString('en-IN')} icon={MessageSquare}
               sub={`of ${(o.messages ?? 0).toLocaleString('en-IN')} delivered`} />
             <KpiCard label="Free messages" value={(o.free ?? 0).toLocaleString('en-IN')} icon={Gift}
-              sub="service window & ad clicks" accent="#0F6E56" />
+              sub="service window & ad clicks" accent="var(--c-successText, #0F6E56)" />
             <KpiCard label="Average per charged message" value={rate(o.avgPerBillable)}
               sub={o.messages ? `${rate(o.avgPerMessage)} across all messages` : undefined} />
             <KpiCard label="Templates used" value={o.templatesUsed ?? 0} icon={LayoutTemplate}
@@ -165,7 +165,7 @@ export default function MessageCostsPage({ user, navigate }) {
       <div style={{ marginTop: 18 }}>
         <Card
           title="Cost by template"
-          right={<span style={{ fontSize: 11.5, color: C.textMuted }}>
+          right={<span style={{ fontSize: 13, color: C.textMuted }}>
             Runs = messages delivered. A template inside the 24-hour window is free.
           </span>}
         >
@@ -191,7 +191,7 @@ export default function MessageCostsPage({ user, navigate }) {
                     <Td>
                       <div style={{ fontWeight: 600, color: t.templateId ? C.text : C.textMuted }}>{t.name}</div>
                       {t.templateStatus && t.templateStatus !== 'APPROVED' && (
-                        <div style={{ fontSize: 11, color: C.textMuted }}>{t.templateStatus}</div>
+                        <div style={{ fontSize: 13, color: C.textMuted }}>{t.templateStatus}</div>
                       )}
                     </Td>
                     <Td>
@@ -203,7 +203,7 @@ export default function MessageCostsPage({ user, navigate }) {
                     <Td align="right" color={t.billableRuns ? C.text : C.textMuted}>
                       {t.billableRuns.toLocaleString('en-IN')}
                       {t.runs > 0 && t.billableRuns < t.runs && (
-                        <span style={{ fontSize: 11, color: C.textMuted }}> ({Math.round((1 - t.billableRuns / t.runs) * 100)}% free)</span>
+                        <span style={{ fontSize: 13, color: C.textMuted }}> ({Math.round((1 - t.billableRuns / t.runs) * 100)}% free)</span>
                       )}
                     </Td>
                     <Td align="right" color={C.textSecondary}>{t.recipients.toLocaleString('en-IN')}</Td>
@@ -339,10 +339,10 @@ function CostSettingsModal({ onClose, onChanged }) {
               <div key={w.wabaId} style={{ display: 'flex', justifyContent: 'space-between', gap: 12,
                 alignItems: 'center', padding: '9px 0', borderBottom: `1px solid ${C.border}` }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, color: C.text, fontWeight: 600 }}>{w.numbers || 'Unlinked account'}</div>
-                  <div style={{ fontFamily: MONO, fontSize: 11.5, color: C.textMuted }}>{w.wabaId}</div>
+                  <div style={{ fontSize: 15, color: C.text, fontWeight: 600 }}>{w.numbers || 'Unlinked account'}</div>
+                  <div style={{ fontFamily: MONO, fontSize: 13, color: C.textMuted }}>{w.wabaId}</div>
                   {w.status === 'unauthorized' && (
-                    <div style={{ fontSize: 11.5, color: '#7A5A12', marginTop: 3, lineHeight: 1.5 }}>
+                    <div style={{ fontSize: 13, color: 'var(--c-s7a5a12, #7A5A12)', marginTop: 3, lineHeight: 1.5 }}>
                       The stored Meta token cannot read this account&rsquo;s spend, so its cost is unknown rather
                       than zero. Reconnect Meta with a token that covers it to include it.
                     </div>
@@ -350,8 +350,8 @@ function CostSettingsModal({ onClose, onChanged }) {
                 </div>
                 <Badge
                   label={w.status === 'ok' ? 'Reading' : w.status === 'unauthorized' ? 'No permission' : w.status}
-                  color={w.status === 'ok' ? '#0F6E56' : '#A32D2D'}
-                  bg={w.status === 'ok' ? '#E1F5EE' : '#FCEBEB'} />
+                  color={w.status === 'ok' ? 'var(--c-successText, #0F6E56)' : 'var(--c-dangerText, #A32D2D)'}
+                  bg={w.status === 'ok' ? 'var(--c-successBg, #E1F5EE)' : 'var(--c-dangerBg, #FCEBEB)'} />
               </div>
             ))}
           </Section>
@@ -378,13 +378,13 @@ function CostSettingsModal({ onClose, onChanged }) {
             </p>
             {(data.rates || []).map(r => (
               <div key={r.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '6px 0' }}>
-                <span style={{ fontSize: 12.5, color: C.textSecondary, width: 190 }}>
+                <span style={{ fontSize: 14, color: C.textSecondary, width: 190 }}>
                   {r.country} · {String(r.category).replace(/_/g, ' ')}
                 </span>
                 <input value={rates[r.id] ?? ''} onChange={e => setRates(s2 => ({ ...s2, [r.id]: e.target.value }))}
                   type="number" min="0" step="0.0001"
                   style={{ ...inputStyle, width: 130, fontFamily: MONO }} />
-                <span style={{ fontSize: 11.5, color: C.textMuted }}>{r.currency} per message</span>
+                <span style={{ fontSize: 13, color: C.textMuted }}>{r.currency} per message</span>
                 {String(rates[r.id]) !== String(r.rate) && (
                   <Button onClick={() => saveRate(r.id)} disabled={busy === `rate-${r.id}`}>
                     {busy === `rate-${r.id}` ? 'Saving…' : 'Save'}
@@ -402,14 +402,14 @@ function CostSettingsModal({ onClose, onChanged }) {
 function Section({ title, children, last }) {
   return (
     <div style={{ paddingBottom: 16, marginBottom: last ? 0 : 16, borderBottom: last ? 'none' : `1px solid ${C.border}` }}>
-      <div style={{ fontSize: 14.5, fontWeight: 700, color: C.text, marginBottom: 8 }}>{title}</div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 8 }}>{title}</div>
       {children}
     </div>
   );
 }
 
-const para = { fontSize: 12.5, color: C.textSecondary, lineHeight: 1.6, margin: '0 0 12px' };
-const miniLabel = { fontSize: 11, fontWeight: 600, letterSpacing: '.04em', textTransform: 'uppercase', color: C.textSecondary, marginBottom: 5 };
+const para = { fontSize: 14, color: C.textSecondary, lineHeight: 1.6, margin: '0 0 12px' };
+const miniLabel = { fontSize: 13, fontWeight: 600, letterSpacing: '.04em', textTransform: 'uppercase', color: C.textSecondary, marginBottom: 5 };
 
 // Our attributed total against Meta's own, with the reasons they differ. Both
 // reasons below are real on this instance and neither is a defect.
@@ -423,23 +423,23 @@ function Reconciliation({ o }) {
     <Card title="Checked against Meta">
       <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', alignItems: 'start' }}>
         <div>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.textMuted }}>Attributed here</div>
-          <div style={{ fontSize: 24, fontWeight: 700, color: C.text, marginTop: 4 }}>{rs(o.cost)}</div>
-          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 3 }}>broken down by template below</div>
+          <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.textMuted }}>Attributed here</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: C.text, marginTop: 4 }}>{rs(o.cost)}</div>
+          <div style={{ fontSize: 14, color: C.textMuted, marginTop: 3 }}>broken down by template below</div>
         </div>
         <div>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.textMuted }}>Meta reports</div>
-          <div style={{ fontSize: 24, fontWeight: 700, color: C.text, marginTop: 4 }}>{rs(o.metaReportedCost)}</div>
-          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 3 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.textMuted }}>Meta reports</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: C.text, marginTop: 4 }}>{rs(o.metaReportedCost)}</div>
+          <div style={{ fontSize: 14, color: C.textMuted, marginTop: 3 }}>
             {(o.metaReportedVolume ?? 0).toLocaleString('en-IN')} charged messages across every number on your accounts
           </div>
         </div>
         <div>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.textMuted }}>Difference</div>
-          <div style={{ fontSize: 24, fontWeight: 700, color: Math.abs(gap) < 0.01 ? '#0F6E56' : C.textSecondary, marginTop: 4 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.textMuted }}>Difference</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: Math.abs(gap) < 0.01 ? 'var(--c-successText, #0F6E56)' : C.textSecondary, marginTop: 4 }}>
             {Math.abs(gap) < 0.01 ? 'None' : rs(gap)}
           </div>
-          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 3 }}>
+          <div style={{ fontSize: 14, color: C.textMuted, marginTop: 3 }}>
             {Math.abs(gap) < 0.01 ? 'every charged message is accounted for' : explained ? 'explained below' : 'unexplained'}
           </div>
         </div>
@@ -469,12 +469,12 @@ function Reconciliation({ o }) {
       {(o.wabaSync || []).length > 0 && (
         <div style={{ marginTop: 14, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
           {o.wabaSync.map(w => (
-            <div key={w.wabaId} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', padding: '5px 0', fontSize: 12.5 }}>
+            <div key={w.wabaId} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', padding: '5px 0', fontSize: 14 }}>
               <span style={{ fontFamily: MONO, color: C.textSecondary }}>{w.numbers || w.wabaId}</span>
               <Badge
                 label={w.status === 'ok' ? 'Reading' : w.status === 'unauthorized' ? 'No permission' : w.status}
-                color={w.status === 'ok' ? '#0F6E56' : '#A32D2D'}
-                bg={w.status === 'ok' ? '#E1F5EE' : '#FCEBEB'}
+                color={w.status === 'ok' ? 'var(--c-successText, #0F6E56)' : 'var(--c-dangerText, #A32D2D)'}
+                bg={w.status === 'ok' ? 'var(--c-successBg, #E1F5EE)' : 'var(--c-dangerBg, #FCEBEB)'}
               />
             </div>
           ))}
@@ -486,14 +486,14 @@ function Reconciliation({ o }) {
 
 function Note({ children, tone = 'info' }) {
   const tones = {
-    info: { bg: '#EEF4FF', border: '#C7D9F7', color: '#1E3A6B', Icon: Info },
-    warn: { bg: '#FDF6E3', border: '#EDD9A3', color: '#7A5A12', Icon: AlertTriangle },
+    info: { bg: 'var(--c-infoBg, #EEF4FF)', border: '#C7D9F7', color: 'var(--c-s1e3a6b, #1E3A6B)', Icon: Info },
+    warn: { bg: 'var(--c-warnBgSoft, #FDF6E3)', border: '#EDD9A3', color: 'var(--c-s7a5a12, #7A5A12)', Icon: AlertTriangle },
   };
   const t = tones[tone] || tones.info;
   return (
     <div style={{
       display: 'flex', gap: 9, alignItems: 'flex-start', background: t.bg, border: `1px solid ${t.border}`,
-      color: t.color, borderRadius: 9, padding: '10px 13px', fontSize: 12.5, lineHeight: 1.55, fontFamily: FONT,
+      color: t.color, borderRadius: 9, padding: '10px 13px', fontSize: 14, lineHeight: 1.55, fontFamily: FONT,
     }}>
       <t.Icon size={15} style={{ flexShrink: 0, marginTop: 1 }} />
       <div>{children}</div>

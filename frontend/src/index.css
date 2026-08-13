@@ -40,7 +40,7 @@ input, button, textarea, select {
   --c-borderDark: #d1d7db;
   --c-text: #111111;
   --c-textSecondary: #6B7280;
-  --c-textMuted: #8696a0;
+  --c-textMuted: #667180;      /* was #8696a0 — 2.9:1 on the page bg, i.e. unreadable as text */
   --c-primary: #dc2626;
   --c-primaryHover: #b91c1c;
   --c-primaryLight: #FCEBEB;
@@ -67,52 +67,554 @@ input, button, textarea, select {
   --c-hover: #EFEEE6;
   --c-chatPanel: #f0f2f5;
   --c-chatWall: #efeae2;
+  --c-chatIncoming: #ffffff;   /* an inbound WhatsApp bubble */
+
+  /* ── Surfaces: page < alt < card < inner-panel ─────────────────────────
+     Elevation ramp. Every value below is the EXACT literal it replaced in
+     the JSX, so light mode renders byte-identical to before the theme work. */
+  --c-surfaceInner: #FAFAF7;    /* boxed panel nested inside a card */
+  --c-surfaceSection: #F8F7F2;  /* grouped section band */
+  --c-surfaceMuted: #F1F1EE;    /* muted chip / inactive fill */
+  --c-surfaceSubtle: #EEEDE8;   /* subtle tinted fill */
+  --c-borderSubtle: #EEEEE8;
+  --c-borderStrong: #D5D5D0;
+  /* Canvas-only. A flow node's edge and the lines between nodes are STRUCTURE,
+     not the hairline that separates a table row — borderStrong (#D5D5D0) is
+     right for a divider and disappears on a tinted canvas at arm's length.
+     edgeLine deliberately reads darker than nodeBorder so a connector wins
+     against the card it lands on. */
+  --c-nodeBorder: #B4B3AA;
+  --c-edgeLine: #8A897F;
+  --c-divider: #F0F0EA;
+  --c-rowSep: #F5F5F0;
+
+  /* ── Text ramp (t1 strongest → t7 faintest) ───────────────────────── */
+  --c-t1: #111111;
+  --c-t2: #222222;
+  --c-t3: #444444;
+  --c-t4: #666666;
+  --c-t5: #737373;
+  --c-t6: #7B7B7B;
+  --c-t7: #878787;
+  --c-t8: #9A9A9A;              /* faintest — dividers-as-text, disabled glyphs. Was #cccccc, which measured 1.5:1: invisible, not subtle. */
+
+  /* ── Semantic pairs: <name>Text always legible on <name>Bg ────────── */
+  --c-dangerText: #A32D2D;
+  --c-dangerStrong: #991b1b;
+  --c-dangerBg: #FCEBEB;
+  --c-dangerBgSoft: #FDF6F6;
+  --c-dangerBorder: #F8C8C8;
+
+  --c-successText: #0F6E56;
+  --c-successBright: #1D9E75;
+  --c-successBg: #E1F5EE;
+  --c-successBgSoft: #E4F3EE;
+  --c-successBorder: #B8DCCF;
+
+  --c-warnText: #854F0B;
+  --c-warnDeep: #6B5312;
+  --c-warnBg: #FAEEDA;
+  --c-warnBgSoft: #FFF8E1;
+  --c-warnBorder: #F0DCA8;
+
+  --c-orangeText: #E65100;
+  --c-orangeBg: #FFF3E0;
+  --c-orangeBorder: #FFB74D;
+
+  --c-infoText: #1565C0;
+  --c-infoBright: #2563eb;
+  --c-infoBg: #E3F2FD;
+  --c-infoBorder: #BBDEFB;
+
+  /* ── Chat surfaces ────────────────────────────────────────────────── */
+  --c-chatHeaderBg: #008069;    /* WhatsApp green header */
+  --c-chatHeaderText: #ffffff;
+  --c-rowActive: #f0f2f5;
+  --c-rowHover: #f5f6f6;
+  --c-avatarBg: #dfe5e7;
+  --c-avatarText: #54656f;
+  --c-waGreen: #25D366;
+  /* Wallpaper is a data-URI SVG, so var() cannot reach INSIDE it — the whole
+     url() must be the token, swapped per theme. */
+  --c-chatPattern: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h50v50H0z' fill='%23d1d7db' fill-opacity='0.12'/%3E%3C/svg%3E");
+
+  --c-purpleBg: #EEEDFE;
+  --c-navy: #1B2A4E;
+  --c-navyBg: #E5EAF2;
+  --c-teal: #00796B;
+  --c-tealBg: #DDF1EE;
+  --c-pink: #9C2153;
+  --c-pinkBg: #FBE5EE;
+  --c-successTint: #F0FAF6;
+  --c-selectedTint: #FFF7F7;
+  --c-watermark: #dddddd;
+  --c-scrollThumb: #d4d4cd;
+  --c-scrollTrack: transparent;
+
+
+  /* Per-shade tokens. Light values are the EXACT original literals,
+     so consolidating near-neighbour colours never moved light mode. */
+  --c-s3c6678: #3C6678;
+  --c-s7c3aed: #7C3AED;
+  --c-s6d28d9: #6D28D9;
+  --c-s1d4ed8: #1D4ED8;
+  --c-s0891b2: #0891B2;
+  --c-s1e3a6b: #1E3A6B;
+  --c-s8b5cf6: #8B5CF6;
+  --c-s15803d: #15803D;
+  --c-s5b21b6: #5B21B6;
+  --c-sb04e0e: #B04E0E;
+  --c-s027eb5: #027EB5;
+  --c-s1e40af: #1E40AF;
+  --c-sb45309: #B45309;
+  --c-s3b82f6: #3B82F6;
+  --c-s8b3a3a: #8B3A3A;
+  --c-s791f1f: #791F1F;
+  --c-sdcedc8: #DCEDC8;
+  --c-sfef9c3: #FEF9C3;
+  --c-s92400e: #92400E;
+  --c-s7a5c00: #7A5C00;
+  --c-sc8e6c9: #C8E6C9;
+  --c-s92680b: #92680B;
+  --c-s3c6656: #3C6656;
+  --c-s667781: #667781;
+  --c-s7a5a12: #7A5A12;
+  --c-sfef3c7: #FEF3C7;
+  --c-sef4444: #EF4444;
+  --c-sd1fae5: #D1FAE5;
+  --c-sbfbfc5: #BFBFC5;
+  --c-s6a3faf: #6A3FAF;
+  --c-s7a5500: #7A5500;
+  --c-s7a5510: #7A5510;
+  --c-s8a1f1f: #8A1F1F;
+  --c-sdcfce7: #DCFCE7;
+  --c-s333333: #333333;
+  --c-s555555: #555555;
+  --c-s5b5851: #5B5851;
+  --c-s065f46: #065F46;
+  --c-sd8d8de: #D8D8DE;
+  --c-se8e0f8: #E8E0F8;
+  --c-sdbeafe: #DBEAFE;
+  --c-se0f7fa: #E0F7FA;
+  --c-sdcf8c6: #DCF8C6;
+
+  /* Catch-all one-off shades: light = exact original literal. */
+  --c-x0866ff: #0866FF;
+  --c-x0f7a38: #0F7A38;
+  --c-x0f9d58: #0F9D58;
+  --c-x1b5e20: #1B5E20;
+  --c-x1e4b8f: #1E4B8F;
+  --c-x1f3c2e: #1F3C2E;
+  --c-x215d4c: #215D4C;
+  --c-x254c87: #254C87;
+  --c-x33691e: #33691E;
+  --c-x444444: #444444;
+  --c-x4a2d7a: #4A2D7A;
+  --c-x52525b: #52525B;
+  --c-x5b6b73: #5B6B73;
+  --c-x6a1b9a: #6A1B9A;
+  --c-x6a2a2a: #6A2A2A;
+  --c-x7a2a2a: #7A2A2A;
+  --c-x7a2e2e: #7A2E2E;
+  --c-x7a6200: #7A6200;
+  --c-x7e58c6: #7E58C6;
+  --c-x8a5a1b: #8A5A1B;
+  --c-x8a6d00: #8A6D00;
+  --c-xa05040: #A05040;
+  --c-xa32d2d: #A32D2D;
+  --c-xb04040: #B04040;
+  --c-xb53d3d: #B53D3D;
+  --c-xb7791f: #B7791F;
+  --c-xc44a4a: #C44A4A;
+  --c-xe6f4ea: #E6F4EA;
+  --c-xe8e8e2: #E8E8E2;
+  --c-xe94235: #E94235;
+  --c-xeaf1fb: #EAF1FB;
+  --c-xedebf7: #EDEBF7;
+  --c-xeeeafb: #EEEAFB;
+  --c-xf0b6b6: #F0B6B6;
+  --c-xf0e8e8: #F0E8E8;
+  --c-xf0f0f0: #F0F0F0;
+  --c-xf0f2f5: #F0F2F5;
+  --c-xf1f0eb: #F1F0EB;
+  --c-xf1f6ff: #F1F6FF;
+  --c-xf2f2ec: #F2F2EC;
+  --c-xf3f4f6: #F3F4F6;
+  --c-xf4ecec: #F4ECEC;
+  --c-xf4f8ff: #F4F8FF;
+  --c-xf5ecec: #F5ECEC;
+  --c-xf5f5f0: #F5F5F0;
+  --c-xf5f6f6: #F5F6F6;
+  --c-xf5fbf8: #F5FBF8;
+  --c-xf5fbff: #F5FBFF;
+  --c-xf8f0f0: #F8F0F0;
+  --c-xf8f7f2: #F8F7F2;
+  --c-xf9fafb: #F9FAFB;
+  --c-xfaf0f0: #FAF0F0;
+  --c-xfafaf7: #FAFAF7;
+  --c-xfafaf9: #FAFAF9;
+  --c-xfbf0e4: #FBF0E4;
+  --c-xfcebeb: #FCEBEB;
+  --c-xfdf0f0: #FDF0F0;
+  --c-xfdf2f2: #FDF2F2;
+  --c-xfdf6f6: #FDF6F6;
+  --c-xfdf8f5: #FDF8F5;
+  --c-xfff5f5: #FFF5F5;
+  --c-xfff6e8: #FFF6E8;
+
+  /* ── Second pass (2026-08-11) ──────────────────────────────────────────
+     These literals survived the first sweep because they were never written
+     as a plain `prop: '#hex'`: they sat in the TRUE branch of a ternary whose
+     false branch was already tokenised, or inside a hover handler. Light
+     values below are the exact literals they replace. */
+  --c-sd3e7ff: #D3E7FF;   /* outbound bubble, trigger preview */
+  --c-sfff6d6: #FFF6D6;   /* action-header band */
+  --c-sf0e0a8: #F0E0A8;   /* action-header border */
+  --c-sc8881f: #C8881F;   /* action-header glyph */
+  --c-sf0efea: #F0EFEA;   /* picker :active */
+  --c-seef2ff: #EEF2FF;   /* link-type chip */
+  --c-sf5f9ff: #F5F9FF;   /* connected-integration card */
+  --c-scfe3fb: #CFE3FB;   /* connected-integration border */
+  --c-sfdf3f3: #FDF3F3;   /* errored-integration card */
+  --c-sf3c9c9: #F3C9C9;   /* errored-integration border */
+  --c-secfdf5: #ECFDF5;   /* auto-resync chip */
+  --c-s059669: #059669;   /* auto-resync chip text */
+  --c-sa7f3d0: #A7F3D0;   /* auto-resync chip border */
+  --c-se5e7eb: #E5E7EB;   /* neutral hairline */
+  --c-s6055cc: #6055CC;   /* selected-category description */
+  --c-se48a8a: #E48A8A;   /* danger hairline */
+  --c-sffd54f: #FFD54F;   /* warn hairline */
+  /* A SOLID danger fill that must stay dark enough to carry white text in
+     BOTH themes — so it is deliberately NOT --c-xa32d2d, whose dark variant
+     is a light salmon that would drop white text to ~2:1. */
+  --c-dangerSolid: #A32D2D;
+  --c-toastBg: #111111;      /* inverted toast surface */
+  --c-toastText: #ffffff;
+  /* Translucent white chip over a tinted band. Cannot be a solid colour:
+     it has to let the band's own tint through in both themes. */
+  --c-overlaySoft: rgba(255,255,255,0.50);
+
+  /* Execution-flow node hairlines. Minted rather than folded into
+     --c-dangerBorder because these nine are 20-45 deltaE apart from it, and a
+     merge that large visibly repaints light mode. */
+  --c-se8a0a0: #E8A0A0;
+  --c-se8b0b0: #E8B0B0;
+  --c-sf0c0c0: #F0C0C0;
+  --c-sd8b0b0: #D8B0B0;
+  --c-se0c8b8: #E0C8B8;
+  --c-sc8a0a0: #C8A0A0;
+  --c-se0b8b8: #E0B8B8;
+  --c-sd0b0b0: #D0B0B0;
+  --c-sc0a0a0: #C0A0A0;
+  --c-sf4c9c9: #F4C9C9;
+  --c-sbbdfd1: #BBDFD1;
+  --c-s4338ca: #4338CA;   /* link-type chip text — pairs with --c-seef2ff */
+
+  --c-selectionBg: #dc262633;
 }
 
+/* ── Dark: neutral charcoal ────────────────────────────────────────────
+   Elevation rises with lightness: header #0D0D0D < page #131313 <
+   sidebar #171717 < card #1C1C1C < nested panel #222222. Kept neutral
+   (no blue cast) to match the warm-neutral light theme. */
 :root[data-theme="dark"] {
-  --c-pageBg: #0e1318;
-  --c-sidebarBg: #11171d;
-  --c-sidebarBorder: #232a31;
-  --c-headerBg: #0b0f13;
-  --c-headerText: #e9edef;
-  --c-headerMuted: #8a929c;
+  --c-pageBg: #131313;
+  --c-sidebarBg: #171717;
+  --c-sidebarBorder: #2A2A2A;
+  --c-headerBg: #0D0D0D;
+  --c-headerText: #F2F2F2;
+  --c-headerMuted: #9C9C9C;
   --c-headerBorder: rgba(255,255,255,.10);
-  --c-headerSurface: rgba(255,255,255,.06);
-  --c-cardBg: #1a2027;
-  --c-border: #2a323b;
-  --c-borderDark: #313a44;
-  --c-text: #e6e9ec;
-  --c-textSecondary: #9aa4af;
-  --c-textMuted: #7a838d;
-  --c-primary: #ef4444;
-  --c-primaryHover: #f87171;
-  --c-primaryLight: #3a1518;
-  --c-primaryText: #e9edef;
-  --c-purple: #9a90ef;
-  --c-green: #2ecc9a;
-  --c-amber: #f0b73f;
-  --c-shadowSm: 0 1px 2px rgba(0,0,0,.4);
-  --c-shadowMd: 0 8px 24px rgba(0,0,0,.45);
-  --c-shadowLg: 0 20px 60px rgba(0,0,0,.6);
-  --c-waBg: #0b141a;
+  --c-headerSurface: rgba(255,255,255,.07);
+  --c-cardBg: #1C1C1C;
+  --c-border: #2E2E2E;
+  --c-borderDark: #3A3A3A;
+  --c-text: #ECECEC;
+  --c-textSecondary: #A8A8A8;
+  --c-textMuted: #9BA3AC;      /* was #808080 — same 3:1 failure, mirrored */
+  --c-primary: #EF4444;
+  --c-primaryHover: #F87171;
+  --c-primaryLight: #3A1A1A;
+  --c-primaryText: #ECECEC;
+  --c-purple: #A99BF5;
+  --c-green: #35D0A0;
+  --c-amber: #F0B84A;
+  /* Shadows carry far less signal on dark — borders do the separating,
+     so these stay deep rather than trying to imitate the light theme. */
+  --c-shadowSm: 0 1px 2px rgba(0,0,0,.5);
+  --c-shadowMd: 0 8px 24px rgba(0,0,0,.55);
+  --c-shadowLg: 0 20px 60px rgba(0,0,0,.7);
+  --c-waBg: #0B141A;
   /* chat (WhatsApp dark) */
-  --c-incomingBg: #202c33;
-  --c-incomingText: #e9edef;
-  --c-outgoingBg: #005c4b;
-  --c-outgoingText: #e9edef;
-  --c-chatBg: #0b141a;
-  --c-statusDelivered: #53bdeb;
-  --c-statusRead: #53bdeb;
-  --c-statusSent: #8696a0;
-  --c-surface: #1a2027;
-  --c-surfaceAlt: #11171d;
-  --c-hover: #232a31;
-  --c-chatPanel: #202c33;
-  --c-chatWall: #0b141a;
+  --c-incomingBg: #202C33;
+  --c-incomingText: #E9EDEF;
+  --c-outgoingBg: #005C4B;
+  --c-outgoingText: #E9EDEF;
+  --c-chatBg: #0B141A;
+  --c-statusDelivered: #53BDEB;
+  --c-statusRead: #53BDEB;
+  --c-statusSent: #8696A0;
+  --c-surface: #1C1C1C;
+  --c-surfaceAlt: #161616;
+  --c-hover: #262626;
+  --c-chatPanel: #1F2C33;
+  --c-chatWall: #0B141A;
+  --c-chatIncoming: #202C33;   /* an inbound WhatsApp bubble */
+
+  /* ── Surfaces ─────────────────────────────────────────────────────── */
+  --c-surfaceInner: #222222;
+  --c-surfaceSection: #202020;
+  --c-surfaceMuted: #262626;
+  --c-surfaceSubtle: #242424;
+  --c-borderSubtle: #272727;
+  --c-borderStrong: #3A3A3A;
+  --c-nodeBorder: #4E4E4E;
+  --c-edgeLine: #8A8A8A;
+  --c-divider: #242424;
+  --c-rowSep: #232323;
+
+  /* ── Text ramp — mirrors light monotonically (t1 strongest) ───────── */
+  --c-t1: #F2F2F2;
+  --c-t2: #E4E4E4;
+  --c-t3: #C9C9C9;
+  --c-t4: #ADADAD;
+  --c-t5: #9C9C9C;
+  --c-t6: #949494;
+  --c-t7: #8A8A8A;
+  --c-t8: #7E7E7E;
+
+  /* ── Semantic pairs — tint background, light readable text ────────── */
+  --c-dangerText: #F98C8C;
+  --c-dangerStrong: #FCA5A5;
+  --c-dangerBg: #3A1A1A;
+  --c-dangerBgSoft: #2A1616;
+  --c-dangerBorder: #5A2626;
+
+  --c-successText: #4ADE9F;
+  --c-successBright: #34D399;
+  --c-successBg: #123026;
+  --c-successBgSoft: #142A23;
+  --c-successBorder: #1E5245;
+
+  --c-warnText: #F0B84A;
+  --c-warnDeep: #E8C46A;
+  --c-warnBg: #33270F;
+  --c-warnBgSoft: #2C230F;
+  --c-warnBorder: #4D3B15;
+
+  --c-orangeText: #FFA657;
+  --c-orangeBg: #35220F;
+  --c-orangeBorder: #5A3A18;
+
+  --c-infoText: #7AB4F5;
+  --c-infoBright: #8FC0F7;
+  --c-infoBg: #14263A;
+  --c-infoBorder: #23405F;
+
+  /* ── Chat surfaces ────────────────────────────────────────────────── */
+  --c-chatHeaderBg: #1F2C33;
+  --c-chatHeaderText: #E9EDEF;
+  --c-rowActive: #2A2A2A;
+  --c-rowHover: #212121;
+  --c-avatarBg: #33383D;
+  --c-avatarText: #C3CBD1;
+  --c-waGreen: #25D366;
+  /* A DIFFERENT geometry, not just a darker version of the light one. The
+     light theme's 50px checkerboard reads as visible blocks on a near-black
+     wall no matter how low the opacity goes — the tile is simply too big. A
+     fine 22px dot grid reads as texture at any opacity and never as squares. */
+  --c-chatPattern: url("data:image/svg+xml,%3Csvg width='22' height='22' viewBox='0 0 22 22' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='2' cy='2' r='1' fill='%23ffffff' fill-opacity='0.055'/%3E%3Ccircle cx='13' cy='13' r='1' fill='%23ffffff' fill-opacity='0.035'/%3E%3C/svg%3E");
+
+  --c-purpleBg: #221F3D;
+  --c-navy: #9FB4DC;
+  --c-navyBg: #1A2233;
+  --c-teal: #3FC8B4;
+  --c-tealBg: #0F2B28;
+  --c-pink: #F2789F;
+  --c-pinkBg: #331722;
+  --c-successTint: #14231F;
+  --c-selectedTint: #2A1A1A;
+  --c-watermark: #3F3F3F;
+  --c-scrollThumb: #3A3A3A;
+  --c-scrollTrack: transparent;
+
+
+  /* Per-shade dark variants: original hue + saturation, lightness
+     retargeted to the canonical token so hues stay distinguishable. */
+  --c-s3c6678: #A0C1CF;   /* #3C6678 retinted via infotext */
+  --c-s7c3aed: #BC9BF5;   /* #7C3AED retinted via purple */
+  --c-s6d28d9: #C0A2EE;   /* #6D28D9 retinted via purple */
+  --c-s1d4ed8: #819EEE;   /* #1D4ED8 retinted via infotext */
+  --c-s0891b2: #24BEE3;   /* #0891B2 retinted via teal */
+  --c-s1e3a6b: #8FADE0;   /* #1E3A6B retinted via infotext */
+  --c-s8b5cf6: #B69BF5;   /* #8B5CF6 retinted via purple */
+  --c-s15803d: #4ADE81;   /* #15803D retinted via successtext */
+  --c-s5b21b6: #C0A2EE;   /* #5B21B6 retinted via purple */
+  --c-sb04e0e: #F39C63;   /* #B04E0E retinted via orangetext */
+  --c-s027eb5: #4FBEEF;   /* #027EB5 retinted via statusdelivered */
+  --c-s1e40af: #859DEA;   /* #1E40AF retinted via infotext */
+  --c-sb45309: #F0924A;   /* #B45309 retinted via warntext */
+  --c-s3b82f6: #8FB6F7;   /* #3B82F6 retinted via infobright */
+  --c-s8b3a3a: #DBAAAA;   /* #8B3A3A retinted via dangertext */
+  --c-s791f1f: #ECB5B5;   /* #791F1F retinted via dangerstrong */
+  --c-sdcedc8: #223012;   /* #DCEDC8 retinted via successbg */
+  --c-sfef9c3: #363205;   /* #FEF9C3 retinted via warnbgsoft */
+  --c-s92400e: #EE894C;   /* #92400E retinted via warntext */
+  --c-s7a5c00: #F0C74A;   /* #7A5C00 retinted via warntext */
+  --c-sc8e6c9: #152D15;   /* #C8E6C9 retinted via successbg */
+  --c-s92680b: #F0BC4A;   /* #92680B retinted via warntext */
+  --c-s3c6656: #78B09B;   /* #3C6656 retinted via successtext */
+  --c-s667781: #73838D;   /* #667781 retinted via textmuted */
+  --c-s7a5a12: #E6B954;   /* #7A5A12 retinted via warntext */
+  --c-sfef3c7: #362C05;   /* #FEF3C7 retinted via warnbgsoft */
+  --c-sef4444: #EF4444;   /* #EF4444 retinted via primary */
+  --c-sd1fae5: #0A3820;   /* #D1FAE5 retinted via successbg */
+  --c-sbfbfc5: #38383C;   /* #BFBFC5 retinted via borderstrong */
+  --c-s6a3faf: #C2AEE2;   /* #6A3FAF retinted via purple */
+  --c-s7a5500: #F0BE4A;   /* #7A5500 retinted via warntext */
+  --c-s7a5510: #E8B452;   /* #7A5510 retinted via warntext */
+  --c-s8a1f1f: #EEB3B3;   /* #8A1F1F retinted via dangerstrong */
+  --c-sdcfce7: #09391A;   /* #DCFCE7 retinted via successbg */
+  --c-s333333: #C9C9C9;   /* #333333 retinted via t3 */
+  --c-s555555: #C9C9C9;   /* #555555 retinted via t3 */
+  --c-s5b5851: #B1AFA9;   /* #5B5851 retinted via t4 */
+  --c-s065f46: #44E4B7;   /* #065F46 retinted via successtext */
+  --c-sd8d8de: #36363E;   /* #D8D8DE retinted via borderstrong */
+  --c-se8e0f8: #261547;   /* #E8E0F8 retinted via purplebg */
+  --c-sdbeafe: #082346;   /* #DBEAFE retinted via infobg */
+  --c-se0f7fa: #0F393F;   /* #E0F7FA retinted via infobg */
+  --c-sdcf8c6: #2A520A;   /* #DCF8C6 retinted via outgoingbg */
+
+  /* Catch-all one-off shades: hue kept, lightness retargeted for dark. */
+  --c-x0866ff: #90AEDF;
+  --c-x0f7a38: #90DFAE;
+  --c-x0f9d58: #90DFB9;
+  --c-x1b5e20: #90DF96;
+  --c-x1e4b8f: #90B0DF;
+  --c-x1f3c2e: #A1CEB8;
+  --c-x215d4c: #96DAC6;
+  --c-x254c87: #90B0DF;
+  --c-x33691e: #A6DF90;
+  --c-x444444: #B8B8B8;
+  --c-x4a2d7a: #AF97D9;
+  --c-x52525b: #B4B4BB;
+  --c-x5b6b73: #AFBAC0;
+  --c-x6a1b9a: #C190DF;
+  --c-x6a2a2a: #D69999;
+  --c-x7a2a2a: #DA9595;
+  --c-x7a2e2e: #D89797;
+  --c-x7a6200: #DFCF90;
+  --c-x7e58c6: #AD95DB;
+  --c-x8a5a1b: #DFBD90;
+  --c-x8a6d00: #DFCE90;
+  --c-xa05040: #D6A399;
+  --c-xa32d2d: #DF9090;
+  --c-xb04040: #D99696;
+  --c-xb53d3d: #DB9494;
+  --c-xb7791f: #DFBF90;
+  --c-xc44a4a: #DC9393;
+  --c-xe6f4ea: #182D1E;
+  --c-xe8e8e2: #26261E;
+  --c-xe94235: #DF9690;
+  --c-xeaf1fb: #18212D;
+  --c-xedebf7: #1C182D;
+  --c-xeeeafb: #1D182D;
+  --c-xf0b6b6: #2D1818;
+  --c-xf0e8e8: #2A1B1B;
+  --c-xf0f0f0: #222222;
+  --c-xf0f2f5: #1C2129;
+  --c-xf1f0eb: #29261C;
+  --c-xf1f6ff: #181F2D;
+  --c-xf2f2ec: #29291C;
+  --c-xf3f4f6: #1E2127;
+  --c-xf4ecec: #2C1919;
+  --c-xf4f8ff: #18202D;
+  --c-xf5ecec: #2D1818;
+  --c-xf5f5f0: #29291C;
+  --c-xf5f6f6: #212424;
+  --c-xf5fbf8: #182D22;
+  --c-xf5fbff: #18242D;
+  --c-xf8f0f0: #2D1818;
+  --c-xf8f7f2: #2D2918;
+  --c-xf9fafb: #1C2229;
+  --c-xfaf0f0: #2D1818;
+  --c-xfafaf7: #2A2A1A;
+  --c-xfafaf9: #26261F;
+  --c-xfbf0e4: #2D2318;
+  --c-xfcebeb: #2D1818;
+  --c-xfdf0f0: #2D1818;
+  --c-xfdf2f2: #2D1818;
+  --c-xfdf6f6: #2D1818;
+  --c-xfdf8f5: #2D2018;
+  --c-xfff5f5: #2D1818;
+  --c-xfff6e8: #2D2518;
+
+  /* ── Second pass (2026-08-11) — hue kept, lightness retargeted ───────── */
+  --c-sd3e7ff: #17364F;
+  --c-sfff6d6: #33290F;
+  --c-sf0e0a8: #4D3D15;
+  --c-sc8881f: #F0B84A;
+  --c-sf0efea: #2C2C2C;
+  --c-seef2ff: #1B2038;
+  --c-sf5f9ff: #16202B;
+  --c-scfe3fb: #26405C;
+  --c-sfdf3f3: #2B1717;
+  --c-sf3c9c9: #5A2626;
+  --c-secfdf5: #102C22;
+  --c-s059669: #34D399;
+  --c-sa7f3d0: #1E5245;
+  --c-se5e7eb: #2E2E2E;
+  --c-s6055cc: #B0A6F0;
+  --c-se48a8a: #5A2626;
+  --c-sffd54f: #4D3B15;
+  /* Lightened just enough to read as a red fill on charcoal while keeping
+     white text at ~5.7:1 (a mid-red here would fail it). */
+  --c-dangerSolid: #B3403E;
+  /* On dark the toast must be LIGHTER than the page, not darker — #111 on a
+     #131313 page is a surface you cannot see the edge of. */
+  --c-toastBg: #2E2E2E;
+  --c-toastText: #F2F2F2;
+  --c-overlaySoft: rgba(255,255,255,0.08);
+
+  /* Hairlines on a dark tinted node body: light enough to separate, dark
+     enough not to read as the node's fill. */
+  --c-se8a0a0: #5E3232;
+  --c-se8b0b0: #5E3838;
+  --c-sf0c0c0: #63403F;
+  --c-sd8b0b0: #57393A;
+  --c-se0c8b8: #5A4A40;
+  --c-sc8a0a0: #513636;
+  --c-se0b8b8: #5B3C3C;
+  --c-sd0b0b0: #553B3B;
+  --c-sc0a0a0: #4E3636;
+  --c-sf4c9c9: #5A2A2A;
+  --c-sbbdfd1: #1E5245;
+  --c-s4338ca: #A5B4FC;   /* 8.2:1 on --c-seef2ff's dark value */
+
+  --c-selectionBg: #ef444455;
 }
 
 input, textarea, select { color: var(--c-text); }
 ::placeholder { color: var(--c-textMuted); opacity: 1; }
+
+/* Text selection — the browser default blue is jarring against the dark
+   charcoal and washes out light text. */
+::selection { background: var(--c-selectionBg); color: var(--c-text); }
+
+/* Scrollbars. theme.jsx also sets `color-scheme` on <html>, which handles
+   native form controls and the Firefox scrollbar; these rules cover the
+   WebKit/Blink track so it doesn't render as a light strip on dark. */
+* { scrollbar-color: var(--c-scrollThumb) var(--c-scrollTrack); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--c-scrollTrack); }
+::-webkit-scrollbar-thumb {
+  background: var(--c-scrollThumb);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--c-textMuted); background-clip: content-box; }
+::-webkit-scrollbar-corner { background: transparent; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }

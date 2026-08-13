@@ -56,7 +56,7 @@ describe('projects over HTTP', () => {
     for (const kind of Object.keys(KINDS)) {
       assert.ok(body.includes(kind) || detail.json.counts, `detail mentions kind ${kind}`);
     }
-    // All five kinds start empty on a fresh project.
+    // Every kind starts empty on a fresh project.
     const counts = detail.json.counts || detail.json.project?.counts || {};
     for (const k of Object.keys(counts)) {
       assert.equal(Number(counts[k]), 0, `${k} starts at 0`);
@@ -96,18 +96,18 @@ describe('projects over HTTP', () => {
     const c = await req(admin, 'POST', '/api/projects', { name: `Guard ${h.SEED}` });
     const id = c.json?.project?.id ?? c.json?.id;
 
-    // File a follow-up sequence into it, straight through SQL — the guard must
-    // hold regardless of which door put the item there.
+    // File a form into it, straight through SQL — the guard must hold
+    // regardless of which door put the item there.
     await h.pool.query(
-      `INSERT INTO coexistence.follow_up_sequences (name, project_id, active)
-       VALUES ($1, $2, FALSE)`, [`Seq ${h.SEED}`, id]);
+      `INSERT INTO coexistence.lead_forms (name, slug, project_id)
+       VALUES ($1, $2, $3)`, [`Form ${h.SEED}`, `guard-${h.SEED}`, id]);
 
     const blocked = await req(admin, 'DELETE', `/api/projects/${id}`);
-    assert.equal(blocked.status, 409, `holding a sequence must 409, got ${blocked.status}`);
-    assert.match(String(blocked.json?.error || ''), /follow|sequence/i,
+    assert.equal(blocked.status, 409, `holding a form must 409, got ${blocked.status}`);
+    assert.match(String(blocked.json?.error || ''), /form/i,
       'the refusal names what is inside');
 
-    await h.pool.query(`DELETE FROM coexistence.follow_up_sequences WHERE project_id = $1`, [id]);
+    await h.pool.query(`DELETE FROM coexistence.lead_forms WHERE project_id = $1`, [id]);
     const ok = await req(admin, 'DELETE', `/api/projects/${id}`);
     assert.equal(ok.status, 200, 'deletes once emptied');
   });
@@ -116,22 +116,22 @@ describe('projects over HTTP', () => {
     if (h.skipNoDb(t)) return;
     const c = await req(admin, 'POST', '/api/projects', { name: `Assign ${h.SEED}` });
     const id = c.json?.project?.id ?? c.json?.id;
-    const { rows: [seq] } = await h.pool.query(
-      `INSERT INTO coexistence.follow_up_sequences (name, active) VALUES ($1, FALSE) RETURNING id`,
-      [`Movable ${h.SEED}`]);
+    const { rows: [form] } = await h.pool.query(
+      `INSERT INTO coexistence.lead_forms (name, slug) VALUES ($1, $2) RETURNING id`,
+      [`Movable ${h.SEED}`, `movable-${h.SEED}`]);
 
     const filed = await req(admin, 'POST', '/api/projects/assign',
-      { kind: 'followup', ids: [seq.id], projectId: id });
+      { kind: 'form', ids: [form.id], projectId: id });
     assert.equal(filed.status, 200, filed.raw);
     let { rows } = await h.pool.query(
-      `SELECT project_id FROM coexistence.follow_up_sequences WHERE id = $1`, [seq.id]);
+      `SELECT project_id FROM coexistence.lead_forms WHERE id = $1`, [form.id]);
     assert.equal(String(rows[0].project_id), String(id), 'filed into the project');
 
     const unfiled = await req(admin, 'POST', '/api/projects/assign',
-      { kind: 'followup', ids: [seq.id], projectId: null });
+      { kind: 'form', ids: [form.id], projectId: null });
     assert.equal(unfiled.status, 200, unfiled.raw);
     ({ rows } = await h.pool.query(
-      `SELECT project_id FROM coexistence.follow_up_sequences WHERE id = $1`, [seq.id]));
+      `SELECT project_id FROM coexistence.lead_forms WHERE id = $1`, [form.id]));
     assert.equal(rows[0].project_id, null, 'unfiled');
   });
 

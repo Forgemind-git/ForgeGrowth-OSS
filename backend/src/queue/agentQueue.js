@@ -24,8 +24,8 @@ let worker = null;
 let queueEvents = null;
 
 async function processJob(job) {
-  const { agentId, contactNumber, inboundMessageId, inboundText } = job.data || {};
-  return await runAgent({ agentId, contactNumber, inboundMessageId, inboundText });
+  const { agentId, contactNumber, inboundMessageId, inboundText, isTest } = job.data || {};
+  return await runAgent({ agentId, contactNumber, inboundMessageId, inboundText, isTest: !!isTest });
 }
 
 function startAgentWorker() {
@@ -55,10 +55,13 @@ function startAgentWorker() {
  * messages from the same number doesn't fan out into parallel runs that step
  * over each other.
  */
-async function enqueueAgentRun({ agentId, contactNumber, inboundMessageId, inboundText }) {
+async function enqueueAgentRun({ agentId, contactNumber, inboundMessageId, inboundText, isTest = false }) {
   await agentQueue.add(
     'run',
-    { agentId, contactNumber, inboundMessageId, inboundText },
+    // isTest travels WITH the job rather than being re-derived in the worker:
+    // the test-number list could be edited between enqueue and run, and a
+    // message must be handled under the rules that applied when it arrived.
+    { agentId, contactNumber, inboundMessageId, inboundText, isTest: !!isTest },
     {
       jobId: `agent-${agentId}-${contactNumber}-${inboundMessageId || Date.now()}`,
       attempts: ATTEMPTS,

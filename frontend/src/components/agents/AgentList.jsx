@@ -64,7 +64,7 @@ function Row({ agent, waAccounts, onEdit }) {
     >
       <div style={{
         width: 36, height: 36, borderRadius: 10,
-        background: agent.isActive ? '#FEF1F1' : '#F2F2EC',
+        background: agent.isActive ? 'var(--c-dangerBgSoft, #FEF1F1)' : 'var(--c-xf2f2ec, #F2F2EC)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         flexShrink: 0,
       }}>
@@ -73,16 +73,16 @@ function Row({ agent, waAccounts, onEdit }) {
 
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{agent.name}</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{agent.name}</div>
           <StatusPill status={agent.status} active={agent.isActive} />
         </div>
         {agent.description && (
-          <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {agent.description}
           </div>
         )}
-        <div style={{ display: 'flex', gap: 14, marginTop: 6, fontSize: 11, color: C.textMuted, fontFamily: MONO }}>
-          <span style={{ color: isDraft && !agent.aiProvider ? '#B45309' : C.textMuted }}>{providerLabel}</span>
+        <div style={{ display: 'flex', gap: 14, marginTop: 6, fontSize: 13, color: C.textMuted, fontFamily: MONO }}>
+          <span style={{ color: isDraft && !agent.aiProvider ? 'var(--c-sb45309, #B45309)' : C.textMuted }}>{providerLabel}</span>
           <span>· {agent.toolCount || 0} tool{(agent.toolCount || 0) === 1 ? '' : 's'}</span>
           {wa && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <MessageSquare size={11} /> {wa.displayName}
@@ -106,7 +106,7 @@ function Row({ agent, waAccounts, onEdit }) {
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '7px 12px', borderRadius: 8,
           border: `1px solid ${C.border}`, background: C.cardBg,
-          color: C.text, fontSize: 12, fontFamily: FONT, fontWeight: 600,
+          color: C.text, fontSize: 14, fontFamily: FONT, fontWeight: 600,
           cursor: 'pointer', flexShrink: 0,
         }}
       >
@@ -120,13 +120,13 @@ function StatusPill({ status, active }) {
   // Draft takes precedence: a draft is incomplete and never handles traffic,
   // regardless of the (forced-false) is_active flag.
   const variant = status === 'draft'
-    ? { bg: '#FEF3C7', color: '#92400E', label: 'Draft' }
+    ? { bg: 'var(--c-sfef3c7, #FEF3C7)', color: 'var(--c-s92400e, #92400E)', label: 'Draft' }
     : active
-      ? { bg: '#ECFDF5', color: '#065F46', label: 'Active' }
-      : { bg: '#F2F2EC', color: C.textSecondary, label: 'Paused' };
+      ? { bg: 'var(--c-successBgSoft, #ECFDF5)', color: 'var(--c-s065f46, #065F46)', label: 'Active' }
+      : { bg: 'var(--c-xf2f2ec, #F2F2EC)', color: C.textSecondary, label: 'Paused' };
   return (
     <span style={{
-      fontSize: 10, fontWeight: 700, letterSpacing: '.04em',
+      fontSize: 12, fontWeight: 700, letterSpacing: '.04em',
       textTransform: 'uppercase',
       padding: '3px 8px', borderRadius: 999,
       background: variant.bg, color: variant.color,
@@ -145,14 +145,14 @@ function EmptyState({ onCreate }) {
     }}>
       <div style={{
         width: 56, height: 56, borderRadius: 14, margin: '0 auto 16px',
-        background: '#FEF1F1', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'var(--c-dangerBgSoft, #FEF1F1)', display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         <Bot size={28} color={C.primary} />
       </div>
-      <h2 style={{ fontSize: 18, fontWeight: 700, color: C.text, margin: '0 0 8px' }}>
+      <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: '0 0 8px' }}>
         No agents yet
       </h2>
-      <p style={{ fontSize: 13, color: C.textSecondary, margin: '0 0 22px', lineHeight: 1.55 }}>
+      <p style={{ fontSize: 15, color: C.textSecondary, margin: '0 0 22px', lineHeight: 1.55 }}>
         Create an AI agent to auto-reply to inbound WhatsApp messages.
         Attach a Google Sheet so the agent can look up bookings, save leads, or update orders.
       </p>
@@ -162,7 +162,7 @@ function EmptyState({ onCreate }) {
           display: 'inline-flex', alignItems: 'center', gap: 8,
           padding: '10px 18px', borderRadius: 8, border: 'none',
           background: C.primary, color: '#fff', cursor: 'pointer',
-          fontSize: 13, fontFamily: FONT, fontWeight: 700,
+          fontSize: 15, fontFamily: FONT, fontWeight: 700,
         }}
       >
         <Plus size={14} /> Create your first agent

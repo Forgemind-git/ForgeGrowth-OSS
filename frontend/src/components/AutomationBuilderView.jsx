@@ -4,6 +4,13 @@ import { api } from "../api.js";
 import { maskPhone, downloadJson, slugifyName } from "../constants.js";
 import AutomationExecutions from "./AutomationExecutions.jsx";
 import SearchableSelect from "./SearchableSelect.jsx";
+import { useFunnelConfig } from "../hooks/useFunnelConfig.js";
+import {
+  NODE_W, HANDLE_DOT, HANDLE_HIT, INPUT_DOT, INPUT_HIT, ROW_H, SYS_H, mediaChipFor,
+  nodeH, nodeLayout, nodeRows, outputHandlesOf, handlePos, inputCY, hasSummaryPanel,
+  buttonLabel, isQuickReplyButton, replyButtonsOf, listRowsOf, tapTargetsOf,
+  isWaitingNode, bodyPreview, handleTone,
+} from "./builder/nodeLayout.js";
 
 /* ══════════════════════════════════════════════════════════════════════
    WhatsFlow AI — Premium WhatsApp Automation Builder (UI Mockup)
@@ -22,15 +29,19 @@ const C = {
   rowDiv:"var(--c-border)", divider:"var(--c-border)", inputBorder:"var(--c-borderDark)",
   text1:"var(--c-text)", text2:"var(--c-text)", text3:"var(--c-textSecondary)", text4:"var(--c-textSecondary)", text5:"var(--c-textMuted)",
   muted:"var(--c-textMuted)", ghost:"var(--c-textMuted)", ph:"var(--c-textMuted)",
-  brand:"#0F6E56", brandBright:"#1D9E75", brandDark:"#085041", brandBg:"#E1F5EE", brandTint:"#F0FAF6",
-  purple:"#534AB7", purpleBg:"#EEEDFE", purpleDark:"#3C3489",
-  red:"#A32D2D", redBg:"#FCEBEB", redDark:"#791F1F",
-  orange:"#E65100", orangeBg:"#FFF3E0", orangeBorder:"#FFE0B2", orangeText:"#A04400",
-  amber:"#854F0B", amberBg:"#FAEEDA",
-  blue:"#1565C0", blueBg:"#E3F2FD", blueBorder:"#BBDEFB",
-  navy:"#1B2A4E", navyBg:"#E5EAF2",
-  teal:"#00796B", tealBg:"#DDF1EE",
-  pink:"#9C2153", pinkBg:"#FBE5EE",
+  // Semantic accents are tokens, not literals: every *Bg below is a pale tint
+  // that rendered as a bright patch on the dark canvas, and every paired text
+  // colour was too dark to read on it.
+  brand:"var(--c-successText)", brandBright:"var(--c-successBright)", brandDark:"var(--c-successText)",
+  brandBg:"var(--c-successBg)", brandTint:"var(--c-successTint)",
+  purple:"var(--c-purple)", purpleBg:"var(--c-purpleBg)", purpleDark:"var(--c-purple)",
+  red:"var(--c-dangerText)", redBg:"var(--c-dangerBg)", redDark:"var(--c-dangerStrong)",
+  orange:"var(--c-orangeText)", orangeBg:"var(--c-orangeBg)", orangeBorder:"var(--c-orangeBorder)", orangeText:"var(--c-orangeText)",
+  amber:"var(--c-warnText)", amberBg:"var(--c-warnBg)",
+  blue:"var(--c-infoText)", blueBg:"var(--c-infoBg)", blueBorder:"var(--c-infoBorder)",
+  navy:"var(--c-navy)", navyBg:"var(--c-navyBg)",
+  teal:"var(--c-teal)", tealBg:"var(--c-tealBg)",
+  pink:"var(--c-pink)", pinkBg:"var(--c-pinkBg)",
   sb:"#161513", sbItem:"#9E9A92", sbActive:"#26241F", sbBorder:"#26241F",
 };
 
@@ -72,7 +83,6 @@ const IC = {
   branch:(s)=>I(<><circle cx="6" cy="3" r="2"/><circle cx="18" cy="3" r="2"/><circle cx="12" cy="21" r="2"/><path d="M6 5v6a6 6 0 0 0 6 6M18 5v6a6 6 0 0 1-6 6"/></>,s),
   clock:(s)=>I(<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>,s),
   api:(s)=>I(<><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></>,s),
-  payment:(s)=>I(<><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/></>,s),
   tag:(s)=>I(<><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></>,s),
   agent:(s)=>I(<><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,s),
   ai:(s)=>I(<><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></>,s),
@@ -104,7 +114,7 @@ const IC = {
 
 /* ── Primitive components ─────────────────────────────────────────── */
 const Badge = ({ label, bg, color, border, dot, style }) => (
-  <span style={{ fontSize:10, fontWeight:700, padding:"3px 9px", borderRadius:99, background:bg, color, fontFamily:"'DM Sans'", whiteSpace:"nowrap", letterSpacing:".03em", border:border?`1px solid ${border}`:"none", display:"inline-flex", alignItems:"center", gap:5, ...style }}>
+  <span style={{ fontSize:13, fontWeight:700, padding:"3px 9px", borderRadius:99, background:bg, color, fontFamily:"'DM Sans'", whiteSpace:"nowrap", letterSpacing:".03em", border:border?`1px solid ${border}`:"none", display:"inline-flex", alignItems:"center", gap:5, ...style }}>
     {dot && <span style={{ width:5, height:5, borderRadius:"50%", background:color }}/>}
     {label}
   </span>
@@ -112,15 +122,15 @@ const Badge = ({ label, bg, color, border, dot, style }) => (
 
 const StatusPill = ({ status }) => {
   const m = {
-    Live:{bg:C.brandBg,color:C.brandDark,dot:true}, Draft:{bg:"#EFEEE9",color:C.text4,dot:true},
+    Live:{bg:C.brandBg,color:C.brandDark,dot:true}, Draft:{bg:"var(--c-surfaceSubtle, #EFEEE9)",color:C.text4,dot:true},
     Paused:{bg:C.orangeBg,color:C.orangeText,dot:true}, Error:{bg:C.redBg,color:C.redDark,dot:true},
     Approved:{bg:C.brandBg,color:C.brandDark,dot:true}, "Pending Review":{bg:C.amberBg,color:C.amber,dot:true},
     Rejected:{bg:C.redBg,color:C.redDark,dot:true},
-    Connected:{bg:C.brandBg,color:C.brandDark,dot:true}, "Not connected":{bg:"#EFEEE9",color:C.text4,dot:true},
-    draft:{bg:"#EFEEE9",color:C.text4,dot:true}, active:{bg:C.brandBg,color:C.brandDark,dot:true},
-    inactive:{bg:"#EEEDE8",color:C.text4,dot:true},
+    Connected:{bg:C.brandBg,color:C.brandDark,dot:true}, "Not connected":{bg:"var(--c-surfaceSubtle, #EFEEE9)",color:C.text4,dot:true},
+    draft:{bg:"var(--c-surfaceSubtle, #EFEEE9)",color:C.text4,dot:true}, active:{bg:C.brandBg,color:C.brandDark,dot:true},
+    inactive:{bg:"var(--c-surfaceSubtle, #EEEDE8)",color:C.text4,dot:true},
     paused:{bg:C.orangeBg,color:C.orangeText,dot:true}, error:{bg:C.redBg,color:C.redDark,dot:true},
-  }[status] || {bg:"#EFEEE9",color:C.text4,dot:true};
+  }[status] || {bg:"var(--c-surfaceSubtle, #EFEEE9)",color:C.text4,dot:true};
   return <Badge label={status} bg={m.bg} color={m.color} dot={m.dot}/>;
 };
 
@@ -130,9 +140,9 @@ const Btn = ({ kind="ghost", icon, children, onClick, style, size="md", title, .
   const v = {
     primary:{ background:C.brand, color:"#fff", border:`1px solid ${C.brand}` },
     dark:   { background:C.text1, color:"#fff", border:`1px solid ${C.text1}` },
-    ghost:  { background:"#fff", color:C.text3, border:`1.5px solid ${C.inputBorder}` },
+    ghost:  { background:"var(--c-surface, #fff)", color:C.text3, border:`1.5px solid ${C.inputBorder}` },
     soft:   { background:C.brandBg, color:C.brandDark, border:"1px solid transparent" },
-    danger: { background:"#fff", color:C.redDark, border:`1.5px solid ${C.redBg}` },
+    danger: { background:"var(--c-surface, #fff)", color:C.redDark, border:`1.5px solid ${C.redBg}` },
   }[kind];
   return <button onClick={onClick} title={title} style={{ fontFamily:"'DM Sans'", fontSize:fs, fontWeight:600, borderRadius:10, padding:pad, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:7, whiteSpace:"nowrap", transition:"all .14s", lineHeight:1, ...v, ...style }} {...rest}>{icon}{children}</button>;
 };
@@ -141,17 +151,17 @@ const IconBtn = ({ children, onClick, title, danger, style }) => (
   <button onClick={onClick} title={title} style={{ width:30, height:30, border:"none", background:"transparent", borderRadius:7, cursor:"pointer", color:danger?C.redDark:C.text4, display:"flex", alignItems:"center", justifyContent:"center", ...style }}>{children}</button>
 );
 
-const Sec = ({ children, style }) => <div style={{ fontSize:10, textTransform:"uppercase", letterSpacing:".1em", color:C.muted, fontWeight:700, ...style }}>{children}</div>;
+const Sec = ({ children, style }) => <div style={{ fontSize:13, textTransform:"uppercase", letterSpacing:".1em", color:C.muted, fontWeight:700, ...style }}>{children}</div>;
 
 const Toggle = ({ value, onChange, size="md" }) => {
   const w = size==="sm" ? 32:38, h = size==="sm" ? 18:20, k = h-4;
-  return <div onClick={() => onChange && onChange(!value)} style={{ width:w, height:h, borderRadius:99, background:value?C.brandBright:"#D5D5D0", position:"relative", cursor:"pointer", transition:"background .2s", flexShrink:0 }}>
-    <div style={{ width:k, height:k, borderRadius:"50%", background:"#fff", position:"absolute", top:2, left:value?w-k-2:2, transition:"left .18s", boxShadow:"0 1px 3px rgba(0,0,0,.2)" }}/>
+  return <div onClick={() => onChange && onChange(!value)} style={{ width:w, height:h, borderRadius:99, background:value?C.brandBright:"var(--c-borderStrong, #D5D5D0)", position:"relative", cursor:"pointer", transition:"background .2s", flexShrink:0 }}>
+    <div style={{ width:k, height:k, borderRadius:"50%", background:"var(--c-surface, #fff)", position:"absolute", top:2, left:value?w-k-2:2, transition:"left .18s", boxShadow:"0 1px 3px rgba(0,0,0,.2)" }}/>
   </div>;
 };
 
-const Input = ({ style, ...p }) => <input {...p} style={{ width:"100%", padding:"8px 11px", border:`1.5px solid ${C.inputBorder}`, borderRadius:8, fontSize:12, fontFamily:"'DM Sans'", outline:"none", background:"#fff", color:C.text1, ...style }}/>;
-const Textarea = ({ style, ...p }) => <textarea {...p} style={{ width:"100%", padding:"9px 11px", border:`1.5px solid ${C.inputBorder}`, borderRadius:8, fontSize:12, fontFamily:"'DM Sans'", outline:"none", background:"#fff", color:C.text1, lineHeight:1.5, resize:"vertical", ...style }}/>;
+const Input = ({ style, ...p }) => <input {...p} style={{ width:"100%", padding:"8px 11px", border:`1.5px solid ${C.inputBorder}`, borderRadius:8, fontSize:15, fontFamily:"'DM Sans'", outline:"none", background:"var(--c-surface, #fff)", color:C.text1, ...style }}/>;
+const Textarea = ({ style, ...p }) => <textarea {...p} style={{ width:"100%", padding:"9px 11px", border:`1.5px solid ${C.inputBorder}`, borderRadius:8, fontSize:15, fontFamily:"'DM Sans'", outline:"none", background:"var(--c-surface, #fff)", color:C.text1, lineHeight:1.5, resize:"vertical", ...style }}/>;
 
 // Textarea with a Word-like B/I/U toolbar. Wraps selection in WhatsApp
 // markers (`*`, `_`, `~`); with no selection, inserts the markers and parks
@@ -179,7 +189,7 @@ const FormatTextarea = ({ value, onChange, style, ...p }) => {
     <button type="button" title={title}
       onMouseDown={(ev)=>ev.preventDefault()}
       onClick={()=>apply(marker)}
-      style={{ width:26, height:24, border:`1px solid ${C.inputBorder}`, borderRadius:6, background:"#fff", color:C.text1, fontFamily:"'DM Sans'", fontSize:12, cursor:"pointer", display:"inline-flex", alignItems:"center", justifyContent:"center", ...sx }}>
+      style={{ width:26, height:24, border:`1px solid ${C.inputBorder}`, borderRadius:6, background:"var(--c-surface, #fff)", color:C.text1, fontFamily:"'DM Sans'", fontSize:15, cursor:"pointer", display:"inline-flex", alignItems:"center", justifyContent:"center", ...sx }}>
       {label}
     </button>
   );
@@ -207,38 +217,35 @@ const FormatTextarea = ({ value, onChange, style, ...p }) => {
         </span>
       </div>
       <textarea ref={taRef} value={value || ""} onChange={onChange}
-        style={{ width:"100%", padding:"9px 11px", border:`1.5px solid ${C.inputBorder}`, borderRadius:8, fontSize:12, fontFamily:"'DM Sans'", outline:"none", background:"#fff", color:C.text1, lineHeight:1.5, resize:"vertical", ...style }}
+        style={{ width:"100%", padding:"9px 11px", border:`1.5px solid ${C.inputBorder}`, borderRadius:8, fontSize:15, fontFamily:"'DM Sans'", outline:"none", background:"var(--c-surface, #fff)", color:C.text1, lineHeight:1.5, resize:"vertical", ...style }}
         {...p}/>
     </div>
   );
 };
-const Select = ({ style, children, ...p }) => <select {...p} style={{ width:"100%", padding:"7px 9px", border:`1.5px solid ${C.inputBorder}`, borderRadius:8, fontSize:12, fontFamily:"'DM Sans'", outline:"none", background:"#fff", color:C.text1, ...style }}>{children}</select>;
+const Select = ({ style, children, ...p }) => <select {...p} style={{ width:"100%", padding:"7px 9px", border:`1.5px solid ${C.inputBorder}`, borderRadius:8, fontSize:15, fontFamily:"'DM Sans'", outline:"none", background:"var(--c-surface, #fff)", color:C.text1, ...style }}>{children}</select>;
 
 // ─── Variable picker (Insert {{key}} into any text input) ──────────────────
 // React Context lets the settings panel pass nodes+edges+currentNodeId once
 // and every nested VarInput/VarTextarea/FormatTextarea reads from it.
-const VarContext = React.createContext({ nodes: [], edges: [], currentNodeId: null, contactFields: [] });
+const VarContext = React.createContext({ nodes: [], edges: [], currentNodeId: null });
 
 // Built-in variables that the engine's resolveVariables always knows about.
+// ⚠ Every key here must exist in the engine's `resolveVariables` lookup
+// (backend/src/engine/automationEngine.js). An unknown token is left in the
+// message as literal braces — the customer receives "{{whatever}}".
 const BUILTIN_VARS = [
   { key: "name",           description: "Full contact name" },
   { key: "first_name",     description: "First word of the name" },
   { key: "phone",          description: "Contact phone number" },
   { key: "contact_number", description: "Contact phone number (alias)" },
+  { key: "answer",         description: "What the customer just sent — their reply to an Ask step" },
+  { key: "last_message",   description: "The customer's latest message (same value as answer)" },
 ];
 
-// Normalize a ForgeCRM field name into a {{variable}} token key.
-// MUST stay identical to fieldVarKey() in backend automationEngine.js so the
-// token this picker inserts is the token the engine resolves at runtime.
-// "Date of Birth" -> "date_of_birth", "city" -> "city".
-function fieldVarKey(name) {
-  return String(name || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-}
 
 // Small "{x}" button that opens a dropdown of available variables and
 // calls onInsert(varKey) when one is picked.
 const VarPickerButton = ({ onInsert, style }) => {
-  const { contactFields } = React.useContext(VarContext);
   const [open, setOpen] = React.useState(false);
   const wrapRef = React.useRef(null);
   React.useEffect(() => {
@@ -247,20 +254,10 @@ const VarPickerButton = ({ onInsert, style }) => {
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [open]);
-  // Custom contact fields from ForgeCRM (Admin Settings → Fields), as variable
-  // tokens. Deduped against the built-ins and each other by normalized key.
-  const customVars = [];
-  const seen = new Set(BUILTIN_VARS.map(v => v.key));
-  (contactFields || []).forEach(f => {
-    const key = fieldVarKey(f.name);
-    if (!key || seen.has(key)) return;
-    seen.add(key);
-    customVars.push({ key, label: f.name });
-  });
   const pick = (k) => { onInsert(k); setOpen(false); };
   const Row = (v) => (
     <button key={v.key} type="button" onClick={()=>pick(v.key)}
-      style={{ display:"block", width:"100%", textAlign:"left", padding:"7px 11px", border:"none", background:"transparent", cursor:"pointer", fontSize:11 }}
+      style={{ display:"block", width:"100%", textAlign:"left", padding:"7px 11px", border:"none", background:"transparent", cursor:"pointer", fontSize:14 }}
       onMouseEnter={(e)=>e.currentTarget.style.background=C.sectionBg}
       onMouseLeave={(e)=>e.currentTarget.style.background="transparent"}>
       <span style={{ fontFamily:"'DM Mono'", color:C.brandDark, fontWeight:700 }}>{`{{${v.key}}}`}</span>
@@ -274,24 +271,13 @@ const VarPickerButton = ({ onInsert, style }) => {
         title="Insert a variable"
         onMouseDown={(e)=>e.preventDefault()}
         onClick={()=>setOpen(o=>!o)}
-        style={{ height:24, padding:"0 8px", border:`1px solid ${C.inputBorder}`, borderRadius:6, background:"#fff", color:C.text1, fontFamily:"'DM Mono'", fontSize:11, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:3, fontWeight:700 }}>
+        style={{ height:24, padding:"0 8px", border:`1px solid ${C.inputBorder}`, borderRadius:6, background:"var(--c-surface, #fff)", color:C.text1, fontFamily:"'DM Mono'", fontSize:14, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:3, fontWeight:700 }}>
         {"{x}"}
       </button>
       {open && (
-        <div style={{ position:"absolute", top:28, right:0, zIndex:50, minWidth:240, maxHeight:320, overflowY:"auto", background:"#fff", border:`1px solid ${C.cardBorder}`, borderRadius:8, boxShadow:C.shadowLg || "0 8px 24px rgba(0,0,0,.12)", fontFamily:"'DM Sans'" }}>
-          <div style={{ padding:"7px 11px", fontSize:9, fontWeight:700, color:C.text5, textTransform:"uppercase", letterSpacing:".06em", borderBottom:`1px solid ${C.cardBorder}` }}>Built-in</div>
+        <div style={{ position:"absolute", top:28, right:0, zIndex:50, minWidth:240, maxHeight:320, overflowY:"auto", background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:8, boxShadow:C.shadowLg || "0 8px 24px rgba(0,0,0,.12)", fontFamily:"'DM Sans'" }}>
+          <div style={{ padding:"7px 11px", fontSize:13, fontWeight:700, color:C.text5, textTransform:"uppercase", letterSpacing:".06em", borderBottom:`1px solid ${C.cardBorder}` }}>Built-in</div>
           {BUILTIN_VARS.map(Row)}
-          {customVars.length > 0 && (
-            <>
-              <div style={{ padding:"7px 11px", fontSize:9, fontWeight:700, color:C.text5, textTransform:"uppercase", letterSpacing:".06em", borderTop:`1px solid ${C.cardBorder}`, background:C.sectionBg }}>Custom fields</div>
-              {customVars.map(Row)}
-            </>
-          )}
-          {customVars.length === 0 && (
-            <div style={{ padding:"8px 11px", fontSize:10, color:C.text5, fontStyle:"italic", borderTop:`1px solid ${C.cardBorder}` }}>
-              No custom fields yet — add them in Admin Settings → Fields.
-            </div>
-          )}
         </div>
       )}
     </span>
@@ -320,7 +306,7 @@ const VarInput = ({ value, onChange, style, pickerStyle, ...p }) => {
   return (
     <div style={{ display:"flex", alignItems:"stretch", gap:6 }}>
       <input ref={ref} value={value ?? ""} onChange={onChange}
-        style={{ flex:1, padding:"8px 11px", border:`1.5px solid ${C.inputBorder}`, borderRadius:8, fontSize:12, fontFamily:"'DM Sans'", outline:"none", background:"#fff", color:C.text1, ...style }}
+        style={{ flex:1, padding:"8px 11px", border:`1.5px solid ${C.inputBorder}`, borderRadius:8, fontSize:15, fontFamily:"'DM Sans'", outline:"none", background:"var(--c-surface, #fff)", color:C.text1, ...style }}
         {...p}/>
       <VarPickerButton onInsert={(k)=>_insertVarAtCursor(ref, value, onChange, k)} style={pickerStyle}/>
     </div>
@@ -336,7 +322,7 @@ const VarTextarea = ({ value, onChange, style, ...p }) => {
         <VarPickerButton onInsert={(k)=>_insertVarAtCursor(ref, value, onChange, k)}/>
       </div>
       <textarea ref={ref} value={value ?? ""} onChange={onChange}
-        style={{ width:"100%", padding:"9px 38px 9px 11px", border:`1.5px solid ${C.inputBorder}`, borderRadius:8, fontSize:12, fontFamily:"'DM Sans'", outline:"none", background:"#fff", color:C.text1, lineHeight:1.5, resize:"vertical", ...style }}
+        style={{ width:"100%", padding:"9px 38px 9px 11px", border:`1.5px solid ${C.inputBorder}`, borderRadius:8, fontSize:15, fontFamily:"'DM Sans'", outline:"none", background:"var(--c-surface, #fff)", color:C.text1, lineHeight:1.5, resize:"vertical", ...style }}
         {...p}/>
     </div>
   );
@@ -344,15 +330,15 @@ const VarTextarea = ({ value, onChange, style, ...p }) => {
 
 const Field = ({ label, hint, children, style }) => (
   <div style={{ marginBottom:13, ...style }}>
-    {label && <div style={{ fontSize:11, fontWeight:600, color:C.text3, marginBottom:5, fontFamily:"'DM Sans'" }}>{label}</div>}
+    {label && <div style={{ fontSize:14, fontWeight:600, color:C.text3, marginBottom:5, fontFamily:"'DM Sans'" }}>{label}</div>}
     {children}
-    {hint && <div style={{ fontSize:10, color:C.text5, marginTop:4, fontWeight:500 }}>{hint}</div>}
+    {hint && <div style={{ fontSize:13, color:C.text5, marginTop:4, fontWeight:500 }}>{hint}</div>}
   </div>
 );
 
 const Pill = ({ active, children, onClick, color=C.brand, bg=C.brandBg, textDark=C.brandDark }) => (
   <button onClick={onClick} style={{
-    fontSize:11, padding:"5px 11px", borderRadius:99,
+    fontSize:14, padding:"5px 11px", borderRadius:99,
     border:active?`1.5px solid ${color}`:`1.5px solid ${C.inputBorder}`,
     background:active?bg:"transparent",
     color:active?textDark:C.text4,
@@ -361,7 +347,7 @@ const Pill = ({ active, children, onClick, color=C.brand, bg=C.brandBg, textDark
 );
 
 const Chip = ({ children, onClick }) => (
-  <button onClick={onClick} style={{ fontSize:10.5, padding:"4px 9px", borderRadius:99, border:`1.5px solid ${C.inputBorder}`, background:"#fff", color:C.text3, fontFamily:"'DM Mono'", fontWeight:500, cursor:"pointer" }}>{children}</button>
+  <button onClick={onClick} style={{ fontSize:13, padding:"4px 9px", borderRadius:99, border:`1.5px solid ${C.inputBorder}`, background:"var(--c-surface, #fff)", color:C.text3, fontFamily:"'DM Mono'", fontWeight:500, cursor:"pointer" }}>{children}</button>
 );
 
 const Alert = ({ kind, children, style }) => {
@@ -372,8 +358,8 @@ const Alert = ({ kind, children, style }) => {
     ok:{bg:C.brandBg,color:C.brandDark,border:C.brandBright,icon:IC.ok(13)},
   }[kind];
   return <div style={{ background:m.bg, border:`1px solid ${m.border}`, borderRadius:10, padding:"9px 11px", display:"flex", gap:9, alignItems:"flex-start", margin:"12px 0 4px", ...style }}>
-    <span style={{ fontSize:13, fontWeight:700, color:m.color, lineHeight:1, marginTop:1, flexShrink:0 }}>{m.icon}</span>
-    <div style={{ fontSize:11, color:m.color, lineHeight:1.55, fontWeight:500 }}>{children}</div>
+    <span style={{ fontSize:15, fontWeight:700, color:m.color, lineHeight:1, marginTop:1, flexShrink:0 }}>{m.icon}</span>
+    <div style={{ fontSize:14, color:m.color, lineHeight:1.55, fontWeight:500 }}>{children}</div>
   </div>;
 };
 
@@ -383,29 +369,32 @@ const Alert = ({ kind, children, style }) => {
    Node types, sample flow, canvas, blocks, settings, preview, toolbar
    ══════════════════════════════════════════════════════════════════════ */
 
+const NT_FALLBACK = { bg:"var(--c-sectionBg, #F5F5F0)", border:"var(--c-cardBorder, #E5E5E0)", color:"var(--c-t3, #444)", accent:"var(--c-t3, #444)", label:"STEP", icon:IC.flow };
 const NT = {
-  trigger: { bg:"#FCEBEB", border:"#E8A0A0", color:"#A32D2D", accent:"#791F1F", label:"TRIGGER",       icon:IC.zap },
-  message: { bg:"#FDF2F2", border:"#E8B0B0", color:"#B53D3D", accent:"#A32D2D", label:"MESSAGE",       icon:IC.msg },
-  condition:{ bg:"#FFF5F5", border:"#F0C0C0", color:"#C44A4A", accent:"#A32D2D", label:"CONDITION",     icon:IC.branch },
-  action:  { bg:"#FAF0F0", border:"#D8B0B0", color:"#8B3A3A", accent:"#A32D2D", label:"ACTION",        icon:IC.tag },
-  delay:   { bg:"#FDF8F5", border:"#E0C8B8", color:"#A05040", accent:"#A32D2D", label:"DELAY",         icon:IC.clock },
-  api:     { bg:"#F5ECEC", border:"#C8A0A0", color:"#7A2A2A", accent:"#791F1F", label:"API",           icon:IC.api },
-  handoff: { bg:"#FDF0F0", border:"#E0B8B8", color:"#B04040", accent:"#A32D2D", label:"HUMAN HANDOFF", icon:IC.agent },
-  ai:      { bg:"#F8F0F0", border:"#D0B0B0", color:"#8B3A3A", accent:"#A32D2D", label:"AI",            icon:IC.ai },
-  ai_agent:{ bg:"#F4ECEC", border:"#C8A8A8", color:"#7A2E2E", accent:"#791F1F", label:"AI AGENT",      icon:IC.ai },
-  subflow: { bg:"#F0E8E8", border:"#C0A0A0", color:"#6A2A2A", accent:"#791F1F", label:"SUB-FLOW",      icon:IC.flow },
-  payment: { bg:"#EDF6F1", border:"#9CC9B4", color:"#0F6E56", accent:"#0F6E56", label:"PAYMENT",       icon:IC.payment },
+  trigger: { bg:"var(--c-dangerBg, #FCEBEB)", border:"#E8A0A0", color:"var(--c-dangerText, #A32D2D)", accent:"var(--c-s791f1f, #791F1F)", label:"TRIGGER",       icon:IC.zap },
+  message: { bg:"var(--c-xfdf2f2, #FDF2F2)", border:"#E8B0B0", color:"var(--c-xb53d3d, #B53D3D)", accent:"var(--c-dangerText, #A32D2D)", label:"MESSAGE",       icon:IC.msg },
+  condition:{ bg:"var(--c-xfff5f5, #FFF5F5)", border:"#F0C0C0", color:"var(--c-xc44a4a, #C44A4A)", accent:"var(--c-dangerText, #A32D2D)", label:"CONDITION",     icon:IC.branch },
+  action:  { bg:"var(--c-xfaf0f0, #FAF0F0)", border:"#D8B0B0", color:"var(--c-s8b3a3a, #8B3A3A)", accent:"var(--c-dangerText, #A32D2D)", label:"ACTION",        icon:IC.tag },
+  delay:   { bg:"var(--c-xfdf8f5, #FDF8F5)", border:"#E0C8B8", color:"var(--c-xa05040, #A05040)", accent:"var(--c-dangerText, #A32D2D)", label:"DELAY",         icon:IC.clock },
+  api:     { bg:"var(--c-xf5ecec, #F5ECEC)", border:"#C8A0A0", color:"var(--c-x7a2a2a, #7A2A2A)", accent:"var(--c-s791f1f, #791F1F)", label:"API",           icon:IC.api },
+  handoff: { bg:"var(--c-xfdf0f0, #FDF0F0)", border:"#E0B8B8", color:"var(--c-xb04040, #B04040)", accent:"var(--c-dangerText, #A32D2D)", label:"HUMAN HANDOFF", icon:IC.agent },
+  ai:      { bg:"var(--c-xf8f0f0, #F8F0F0)", border:"#D0B0B0", color:"var(--c-s8b3a3a, #8B3A3A)", accent:"var(--c-dangerText, #A32D2D)", label:"AI",            icon:IC.ai },
+  ai_agent:{ bg:"var(--c-xf4ecec, #F4ECEC)", border:"#C8A8A8", color:"var(--c-x7a2e2e, #7A2E2E)", accent:"var(--c-s791f1f, #791F1F)", label:"AI AGENT",      icon:IC.ai },
+  subflow: { bg:"var(--c-xf0e8e8, #F0E8E8)", border:"#C0A0A0", color:"var(--c-x6a2a2a, #6A2A2A)", accent:"var(--c-s791f1f, #791F1F)", label:"SUB-FLOW",      icon:IC.flow },
 };
 
-const NODE_W = 240;
-export const nodeH = (n) => {
-  if (n.type === "action") return Math.max(96, 44 + (n.actions?.length||0) * 54);
-  if (n.type === "condition") return 118;
-  if (n.type === "message") return 102;
-  if (n.type === "ai_agent") return 116;
-  if (n.type === "payment") return 110;
-  return 96;
-};
+// Geometry and the handle vocabulary now live in builder/nodeLayout.js, where
+// the rows a node RENDERS are the single authority and both the handle list and
+// the handle positions are derived from them. They used to be three
+// hand-written switches here that had drifted from each other and from
+// ExecutionFlowCanvas's fourth copy. Re-exported so existing importers
+// (ExecutionFlowCanvas, the logic tests) keep working unchanged.
+export {
+  NODE_W, HANDLE_DOT, HANDLE_HIT, INPUT_DOT, INPUT_HIT, ROW_H, SYS_H, mediaChipFor,
+  nodeH, nodeLayout, nodeRows, outputHandlesOf, handlePos, inputCY, hasSummaryPanel,
+  buttonLabel, isQuickReplyButton, replyButtonsOf, listRowsOf, tapTargetsOf,
+  isWaitingNode, bodyPreview, handleTone,
+} from "./builder/nodeLayout.js";
 
 export const getTriggerDisplay = (n) => {
   const tk = n.triggerKind || 'keyword';
@@ -420,8 +409,15 @@ export const getTriggerDisplay = (n) => {
       sub: kw ? `When ${who} "${kw}" · ${mtLabel} match` : `When ${who} a specific keyword`,
     };
   }
-  if (tk === 'link') return { title: 'Trigger: wa.me Link', sub: 'When contact opens a click-to-chat link' };
-  if (tk === 'qr') return { title: 'Trigger: QR Scan', sub: 'When contact scans a printed QR code' };
+  if (tk === 'link') {
+    // Show the CODE, because it is the whole of the configuration and the only
+    // thing that decides whether this trigger can ever fire.
+    const code = (n.trackingCode || '').trim();
+    return {
+      title: 'Trigger: wa.me Link',
+      sub: code ? `When the opening message contains "${code}"` : 'No tracking code set — this can never fire',
+    };
+  }
   if (tk === 'newContact') return { title: 'Trigger: New Contact', sub: 'First-time message from a new contact' };
   if (tk === 'anyMessage') return { title: 'Trigger: Any Message', sub: 'Fires on every inbound message' };
   if (tk === 'tagApplied') {
@@ -429,81 +425,85 @@ export const getTriggerDisplay = (n) => {
     const dir = n.tagDirection === 'removed' ? 'removed from' : 'added to';
     return { title: `Trigger: Tag ${dir} contact`, sub: `When "${tag}" is ${dir} a contact` };
   }
-  if (tk === 'webhook') return { title: 'Trigger: Webhook', sub: 'Incoming HTTP POST webhook' };
-  if (tk === 'apiEvent') return { title: 'Trigger: API Event', sub: `Event from ${n.integration || 'integration'}` };
   return { title: n.title, sub: n.sub };
 };
 
-export const outputHandlesOf = (n) => {
-  if (n.type === "condition") return ["yes","no"];
-  if (n.type === "ai_agent") return ["default","model","tool"];
-  // A Payment node only branches when it actually waits for the money. Without
-  // the wait there is nothing to branch on, so it keeps a single output — two
-  // dead handles would invite wiring a "not paid" path that could never fire.
-  if (n.type === "payment") return n.waitForPayment === true ? ["paid","unpaid"] : ["default"];
-  if (n.type === "message" && n.messageMode === "direct") {
-    const dd = n.directData || {};
-    if (n.directType === "quick_reply" && Array.isArray(dd.buttons) && dd.buttons.length > 0) {
-      return dd.buttons.map((_,i)=>`btn:${i}`);
-    }
-    if (n.directType === "list" && Array.isArray(dd.sections) && dd.sections.length > 0) {
-      return dd.sections.map((_,i)=>`row:${i}`);
-    }
-  }
-  if (n.type === "message" && n.buttons && n.buttons.length > 0) return n.buttons.map((_,i)=>`btn:${i}`);
-  return ["default"];
-};
-
-export const handlePos = (n, kind, which="default") => {
-  const h = nodeH(n);
-  if (kind === "input") return { x: n.x + NODE_W/2, y: n.y };
-  const dd = n.directData || {};
-  if (n.type === "message" && n.messageMode === "direct") {
-    if (n.directType === "quick_reply" && Array.isArray(dd.buttons) && dd.buttons.length > 0 && typeof which === "string" && which.startsWith("btn:")) {
-      const idx = parseInt(which.slice(4), 10);
-      const total = dd.buttons.length;
-      return { x: n.x + ((idx + 1) * NODE_W) / (total + 1), y: n.y + h };
-    }
-    if (n.directType === "list" && Array.isArray(dd.sections) && dd.sections.length > 0 && typeof which === "string" && which.startsWith("row:")) {
-      const idx = parseInt(which.slice(4), 10);
-      const total = dd.sections.length;
-      return { x: n.x + ((idx + 1) * NODE_W) / (total + 1), y: n.y + h };
-    }
-  }
-  if (n.buttons && typeof which === "string" && which.startsWith("btn:")) {
-    const idx = parseInt(which.slice(4), 10);
-    const total = n.buttons.length;
-    return { x: n.x + ((idx + 1) * NODE_W) / (total + 1), y: n.y + h };
-  }
-  if (n.type === "condition" && which === "yes") return { x: n.x + NODE_W/3,     y: n.y + h };
-  if (n.type === "condition" && which === "no")  return { x: n.x + (NODE_W*2)/3, y: n.y + h };
-  if (n.type === "payment" && which === "paid")   return { x: n.x + NODE_W/3,     y: n.y + h };
-  if (n.type === "payment" && which === "unpaid") return { x: n.x + (NODE_W*2)/3, y: n.y + h };
-  if (n.type === "ai_agent" && which === "model") return { x: n.x,            y: n.y + h/2 };
-  if (n.type === "ai_agent" && which === "tool")  return { x: n.x + NODE_W,   y: n.y + h/2 };
-  return { x: n.x + NODE_W/2, y: n.y + h };
-};
+/* outputHandlesOf / handlePos / buttonLabel / isQuickReplyButton now come from
+   builder/nodeLayout.js — see the re-export block above. */
 
 /* ── screenToWorld is defined inside the component so it can read viewportRef ── */
 
-/* ── Simple tree auto-layout ── */
+/* ── Auto-layout: HORIZONTAL, left to right ── */
+/**
+ * Columns advance in X, siblings stack in Y.
+ *
+ * ⚠ It was top-down until 2026-08-12, and that is what made the canvas
+ * unreadable: outputs leave from the right edge at each row's own height, so a
+ * node with five branches sending five edges DOWNWARDS had to fan them back
+ * across the cards beneath it, and the lines crossed each other. Reading
+ * left-to-right, a branch is a straight lane at its own height and two lanes
+ * only meet if their subtrees genuinely overlap.
+ *
+ * ⚠ Siblings are packed by their SUBTREE height, not by a fixed step. A step
+ * per child buries a tall branch (a menu with ten options is well over 400px)
+ * under the next one — the same bug the vertical version had to fix for X.
+ * Each child is given a band as tall as everything hanging off it, and is
+ * centred in that band, so no two subtrees can ever occupy the same pixels.
+ */
 export const layoutTree = (nodes, edges) => {
   const roots = nodes.filter(n => !edges.some(e => e.to === n.id));
   if (roots.length === 0) return nodes;
   const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
-  const childrenOf = (id) => edges.filter(e => e.from === id).map(e => byId[e.to]).filter(Boolean);
-  const placed = new Set();
-  const walk = (n, x, y, depth = 0) => {
-    if (!n || placed.has(n.id)) return;
-    n.x = x; n.y = y; placed.add(n.id);
-    const kids = childrenOf(n.id);
-    if (!kids.length) return;
-    const gap = 300;
-    const totalW = (kids.length - 1) * gap;
-    kids.forEach((c, i) => walk(c, x - totalW/2 + i*gap, y + 180, depth+1));
+
+  const COL_GAP = 170;   // room for a branch label between two columns
+  const ROW_GAP = 44;    // vertical space between two sibling subtrees
+
+  // A node is placed once. Guarding on the way DOWN (not after recursing)
+  // keeps a cycle — or a diamond where two branches rejoin — from looping
+  // forever or double-counting a shared subtree's height.
+  const seen = new Set();
+  const childrenOf = (id) => {
+    const out = [];
+    edges.forEach(e => {
+      if (e.from !== id || !e.to || seen.has(e.to)) return;
+      const c = byId[e.to];
+      if (c && !out.includes(c)) { out.push(c); seen.add(c); }
+    });
+    return out;
   };
-  roots.forEach((r, i) => walk(r, 80 + i*340, 60));
-  return [...nodes];
+
+  // Height of the whole subtree rooted at n, in one pass, reusing the same
+  // claim set so measuring and placing agree on who owns which child.
+  const measure = (n) => {
+    const kids = childrenOf(n.id);
+    const own = nodeH(n);
+    if (!kids.length) return { n, kids: [], h: own };
+    const sub = kids.map(measure);
+    const stack = sub.reduce((a, k) => a + k.h, 0) + ROW_GAP * (sub.length - 1);
+    return { n, kids: sub, h: Math.max(own, stack) };
+  };
+
+  const pos = {};
+  // `top` is the band this subtree owns; the node itself is centred in it.
+  const place = (t, x, top) => {
+    pos[t.n.id] = { x, y: Math.round(top + (t.h - nodeH(t.n)) / 2) };
+    let y = top;
+    t.kids.forEach(k => { place(k, x + NODE_W + COL_GAP, y); y += k.h + ROW_GAP; });
+  };
+
+  let top = 60;
+  roots.forEach(r => {
+    if (seen.has(r.id)) return;
+    seen.add(r.id);
+    const t = measure(r);
+    place(t, 120, top);
+    top += t.h + ROW_GAP * 2;   // a second trigger starts its own band below
+  });
+
+  // ⚠ Do NOT mutate the node objects in place — they are React state. Build a
+  // position map and apply it once, so a layout run produces a new array
+  // rather than silently editing the array a render is already using.
+  return nodes.map(n => (pos[n.id] ? { ...n, ...pos[n.id] } : n));
 };
 
 /* ── Default trigger node ── */
@@ -526,11 +526,10 @@ export const makeNode = (type, x, y, id, templates) => {
     action:     { title:"Action", sub:"Run one or more actions" },
     delay:      { title:"Delay", sub:"Wait before next step" },
     api:        { title:"API call", sub:"Send data to external system" },
-    handoff:    { title:"Human handoff", sub:"Assign to team member" },
+    handoff:    { title:"Human handoff", sub:"Assign to a user" },
     ai:         { title:"AI step", sub:"Let AI generate a response" },
     ai_agent:   { title:"AI Agent", sub:"Reasoning agent with model & tools" },
     subflow:    { title:"Sub-flow", sub:"Run another automation" },
-    payment:    { title:"Collect payment", sub:"Send a Razorpay link on this chat" },
   }[type] || { title: type, sub: "" };
   const base = { id, type, x, y, title: defs.title, sub: defs.sub };
   if (type === "trigger") return { ...base, triggerKind: "keyword", keyword: "", matchType: "exact", caseSensitive: false };
@@ -539,51 +538,61 @@ export const makeNode = (type, x, y, id, templates) => {
   if (type === "action") return { ...base, actions: [] };
   if (type === "delay") return { ...base, delayMode: "duration", waitValue: "10", waitUnit: "minutes", useContactTz: false };
   if (type === "api") return { ...base, method: "POST", apiUrl: "", headers: [], body: "", onError: "continue", saveResponsePath: "", saveResponseField: "" };
-  if (type === "handoff") return { ...base, assignMode: "specific", assigned: [], priority: "high", internalNote: "", notifyEmail: false };
-  if (type === "ai") return { ...base, aiTask: "lead_qualification", aiGoal: "", aiContext: "", aiSaveTo: "", aiModelRef: null, aiFallback: "fallback_message", fallbackTemplateId: "" };
+  if (type === "ai") return { ...base, aiTask: "lead_qualification", aiGoal: "", aiContext: "", aiModelRef: null, aiFallback: "fallback_message", fallbackTemplateId: "" };
   if (type === "ai_agent") return { ...base, systemPrompt: "", agentContext: "", modelRef: null, toolRefs: [] };
   if (type === "subflow") return { ...base, flowId: "", waitMode: "await" };
-  if (type === "payment") return {
-    ...base,
-    paymentSource: "product",      // product | amount
-    courseId: "",
-    amount: "",
-    paymentKind: "fixed",          // fixed | partial | open
-    minAmount: "",
-    purpose: "",
-    paymentDescription: "",
-    messageText: "Here is your payment link for {{product}} — ₹{{amount}}. Tap to pay securely.",
-    linkExpiryHours: "24",
-    // auto = plain message inside WhatsApp's 24h window, approved template
-    // outside it. The operator cannot know which it will be at build time.
-    deliveryMode: "auto",
-    paymentTemplateId: "",
-    templateVariables: [],
-    // Waiting is ON by default: a payment node that fires and forgets is almost
-    // never what someone wants when they add it, and the whole point of the
-    // block is knowing whether this person paid.
-    waitForPayment: true,
-    waitMinutes: "30",
-    followUpEnabled: true,
-    followUpMinutes: "10",
-    followUpMax: "1",
-    followUpText: "Just checking — were you able to complete the payment? If the link gave you any trouble, tell me and I will sort it out.",
-    confirmText: "Payment received — thank you! You are all set.",
-  };
   return base;
 };
+
+/* ── Trigger kinds ──
+   THE authority for what a trigger can be. Both the block library's Triggers
+   group and the settings panel read this one array, so a kind can never exist
+   in the library with no way to configure it.
+
+   That is not hypothetical: until now the panel had no `trigger` branch at all,
+   so every trigger fell through to the generic "uses default settings" card and
+   `keyword` / `matchType` / `trackingCode` / `tag` were fixed forever at
+   whatever the library item happened to seed. The keyword trigger shipped
+   hardcoded to "PRICE", and the wa.me-link trigger read a `trackingCode` that
+   nothing on earth could set — so it could never fire.
+
+   Every field listed here is one the ENGINE actually evaluates; see
+   backend/src/engine/automationEngine.js `evaluateTriggers` (keyword / link /
+   newContact / anyMessage) and `fireTagAppliedTriggers` (tagApplied). Do not
+   add a field here that the engine does not read — that is a control which
+   silently does nothing. */
+const TRIGGER_KINDS = [
+  { kind:"keyword", libName:"Keyword Trigger", label:"Keyword", icon:IC.zap, desc:"User sends a keyword",
+    // Deliberately BLANK, not "PRICE". An empty keyword can never match, and
+    // flowValidator blocks activation until one is typed — so the author is
+    // asked once, instead of shipping somebody else's placeholder word live.
+    defaults:{ keyword:"", matchType:"exact", caseSensitive:false, triggerDirection:"inbound" } },
+  { kind:"link", libName:"WhatsApp Link", label:"wa.me Link", icon:IC.link, desc:"wa.me link clicked",
+    defaults:{ trackingCode:"" } },
+  { kind:"newContact", libName:"New Contact", label:"New Contact", icon:IC.user, desc:"New contact created",
+    defaults:{} },
+  { kind:"anyMessage", libName:"Inbound Message", label:"Any Message", icon:IC.msg, desc:"Any new message",
+    defaults:{} },
+  { kind:"tagApplied", libName:"Tag Applied", label:"Tag Applied", icon:IC.tag, desc:"Tag added to contact",
+    defaults:{ tag:"", tagDirection:"added", fireOncePerTag:true } },
+];
+const findTriggerKind = (k) => TRIGGER_KINDS.find(t => t.kind === k) || TRIGGER_KINDS[0];
 
 /* ── Action kinds ── */
 const ACTION_KINDS = [
   { kind:"Assign to BDA",       icon:IC.agent,    valueType:"bdaUser", emptyText:"Choose a BDA Sales user" },
+  // A funnel stage is NOT a tag. It drives the funnel chart, conversion maths,
+  // the cold-drop engine, follow-up enrolment and the ad-conversion dispatchers.
+  // Its own action, so it is findable and cannot be mistaken for a label.
+  { kind:"Set Funnel Stage",   icon:IC.branch,   valueType:"funnelStage", emptyText:"Choose a funnel stage" },
+  // Stores an answer on the LEAD — the record of the person, which is where a
+  // typed reply belongs now that contact custom fields are gone. Carries a
+  // `field` alongside `value` rather than packing both into one string: a
+  // delimiter would break the first time a customer's answer contained it.
+  { kind:"Set Lead Field",     icon:IC.user,     valueType:"leadField", emptyText:"Choose a field to fill" },
   { kind:"Add Tag",            icon:IC.tag,      valueType:"tag",     emptyText:"Choose a tag" },
   { kind:"Remove Tag",         icon:IC.tag,      valueType:"tag",     emptyText:"Choose a tag" },
-  { kind:"Set Custom Field",   icon:IC.cog,      valueType:"field",   emptyText:"Pick a field and value" },
-  { kind:"Clear Custom Field", icon:IC.cog,      valueType:"field",   emptyText:"Pick a field to clear" },
-  { kind:"Mark Closed",        icon:IC.inbox,    valueType:"none",    emptyText:"Conversation will be marked closed (cleared from the unread queue)" },
-  { kind:"Send Webhook",       icon:IC.api,      valueType:"text",    emptyText:"https://hook.example.com/...", placeholder:"https://hook.eu1.make.com/abc123 — receives a JSON contact payload" },
   { kind:"Send Email",         icon:IC.mail,     valueType:"emailGmail", emptyText:"to@example.com | Subject | Body", placeholder:"to@example.com | Subject | Body — sent via connected Gmail" },
-  { kind:"Send Internal Email",icon:IC.mail,     valueType:"text",    emptyText:"team@example.com | Subject | Body", placeholder:"team@example.com | New hot lead | {{name}} ({{contact_number}}) is interested" },
   { kind:"Append to Google Sheet", icon:IC.cog,  valueType:"text",    emptyText:"spreadsheetId | Sheet1!A:Z | val1, val2", placeholder:"1abc...XYZ | Sheet1!A:Z | {{name}}, {{phone}}, {{contact_number}}" },
   { kind:"Create Calendar Event",  icon:IC.cog,  valueType:"text",    emptyText:"primary | Title | startISO | endISO | description", placeholder:"primary | Demo with {{name}} | 2026-05-30T14:00:00+05:30 | 2026-05-30T14:30:00+05:30 | Phone {{contact_number}}" },
 ];
@@ -595,12 +604,10 @@ const DIRECT_MSG_TYPES = [
   { key:"video",       label:"Video Message",     fields:["url","caption"] },
   { key:"audio",       label:"Audio Message",     fields:["url"] },
   { key:"document",    label:"Document / PDF",    fields:["url","caption","filename"] },
-  { key:"location",    label:"Location Message",  fields:["latitude","longitude","name","address"] },
   { key:"contact",     label:"Contact Card",      fields:["name","phone"] },
-  { key:"product",     label:"Product Message",   fields:["catalog_id","product_retailer_id"] },
-  { key:"catalog",     label:"Catalog Message",   fields:["body","catalog_id"] },
   { key:"quick_reply", label:"Quick Reply",       fields:["body","buttons"] },
   { key:"list",        label:"List Message",      fields:["body","button_text","sections"] },
+  { key:"cta_url",     label:"Call-to-action Link", fields:["body","button_text","url"] },
   { key:"dynamic_api", label:"Dynamic API Msg",   fields:["endpoint","method","headers","body"] },
 ];
 const DIRECT_MSG_LABELS = Object.fromEntries(DIRECT_MSG_TYPES.map(t => [t.key, t.label]));
@@ -610,7 +617,6 @@ const DIRECT_MSG_MAP = Object.fromEntries(DIRECT_MSG_TYPES.map(t => [t.key, t]))
 // Sources the engine's getFieldValue actually evaluates.
 const CONDITION_SOURCES = [
   { id:"system", label:"System fields" },
-  { id:"custom", label:"Custom fields" },
   { id:"tags",   label:"Tags" },
   { id:"bot",    label:"AI / Bot output" },
   { id:"time",   label:"Time" },
@@ -628,8 +634,11 @@ const WA_CONDITION_PRESETS = [
 
 
 /* ── Interactive FlowNode with input/output handles ── */
-const FlowNode = ({ n, selected, isDropTarget, onSelect, onStartDrag, onStartConnect, onPickAgentResource, whatsappAccounts=[] }) => {
-  const t = NT[n.type];
+const FlowNode = ({ n, selected, isDropTarget, onSelect, onStartDrag, onStartConnect, onPickAgentResource, whatsappAccounts=[], wiredHandles, onRowClick, whatsappTemplates=[] }) => {
+  const [hoverHandle, setHoverHandle] = React.useState(null);
+  // A removed node type can still exist in a saved config; without the
+  // fallback `t.bg` throws during render and blanks the whole app.
+  const t = NT[n.type] || NT_FALLBACK;
   const h = nodeH(n);
   const isCondition = n.type === "condition";
   const isAction = n.type === "action";
@@ -639,15 +648,37 @@ const FlowNode = ({ n, selected, isDropTarget, onSelect, onStartDrag, onStartCon
   return (
     <div
       data-testid="flow-node"
+      data-node-card
       data-node-id={n.id}
       onMouseDown={(e) => { e.stopPropagation(); onStartDrag(e, n.id); }}
       onClick={(e) => { e.stopPropagation(); onSelect(n.id); }}
       style={{
-        position:"absolute", left:n.x, top:n.y, width:NODE_W, minHeight:h, background:"#fff",
-        border: isDropTarget ? `2px solid ${DROP}` : selected ? `2px solid ${SEL}` : `1px solid ${isDisabled ? "#D0D0CA" : C.cardBorder}`,
-        borderRadius:12,
-        boxShadow: isDropTarget ? `0 0 0 4px rgba(29,158,117,.22), 0 10px 28px rgba(0,0,0,.10)`
-          : selected ? `0 0 0 3px rgba(0,0,0,.06), 0 10px 28px rgba(0,0,0,.08)` : "0 1px 4px rgba(0,0,0,.05)",
+        position:"absolute", left:n.x, top:n.y, width:NODE_W, minHeight:h,
+        // ONE surface. The card used to open with a 3px accent bar in a second
+        // colour, which read as two stacked shapes rather than one block and
+        // made a row of nodes look striped. Separation from the canvas now
+        // comes from a soft shadow and a hairline, not from a coloured lining.
+        background:"var(--c-surface, #fff)",
+        // A REAL hairline, not the near-invisible --c-border: on the tinted
+        // canvas the card edge disappeared into the background. borderStrong
+        // is the one border token with contrast against the surface in BOTH
+        // themes (#D5D5D0 light / #3A3A3A dark).
+        // A node's edge is STRUCTURE, so it gets its own token and 2px. At
+        // 1.5px in borderStrong (#D5D5D0 — a table-divider grey) the cards
+        // dissolved into the tinted canvas. Selected/drop states go to 2.5px
+        // so they still read as a state ON TOP of the new resting weight,
+        // rather than matching it.
+        border: isDropTarget ? `2.5px solid ${DROP}` : selected ? `2.5px solid ${SEL}` : `2px solid ${isDisabled ? C.cardBorder : "var(--c-nodeBorder, #B4B3AA)"}`,
+        // A chat bubble's geometry: square-ish at the top-left where the tail
+        // would be — which is also where the inbound connector now lands — and
+        // fully rounded elsewhere. This is what makes a step read as a message
+        // rather than a box.
+        borderRadius:"5px 16px 16px 16px",
+        boxShadow: isDropTarget
+          ? "0 0 0 4px rgba(29,158,117,.20), 0 12px 30px rgba(0,0,0,.13)"
+          : selected
+            ? "0 0 0 4px rgba(163,45,45,.10), 0 12px 30px rgba(0,0,0,.12)"
+            : "0 2px 5px rgba(16,24,20,.055), 0 8px 20px rgba(16,24,20,.055)",
         cursor:"grab", userSelect:"none", fontFamily:"'DM Sans'", overflow:"visible",
         opacity: isDisabled ? 0.55 : 1,
         filter: isDisabled ? "grayscale(0.6)" : "none",
@@ -656,21 +687,19 @@ const FlowNode = ({ n, selected, isDropTarget, onSelect, onStartDrag, onStartCon
       {isDisabled && (
         <div style={{
           position:"absolute", top:-9, right:8, zIndex:6,
-          background:"#fff", color:"#666", border:`1px solid ${C.cardBorder}`,
-          fontSize:8.5, fontWeight:700, padding:"2px 8px", borderRadius:99,
+          background:"var(--c-surface, #fff)", color:"var(--c-t4, #666)", border:`1px solid ${C.cardBorder}`,
+          fontSize:13, fontWeight:700, padding:"2px 8px", borderRadius:99,
           letterSpacing:".1em", textTransform:"uppercase",
           boxShadow:"0 1px 3px rgba(0,0,0,.08)",
         }}>Disabled</div>
       )}
-      <div style={{ height:3, background:selected?SEL:C.cardBorder, borderRadius:"11px 11px 0 0" }}/>
-
       {isAction ? (
-        <div style={{ padding:"10px 12px 8px", display:"flex", alignItems:"flex-start", gap:9 }}>
-          <div style={{ width:30, height:30, borderRadius:8, background:C.sectionBg, color:C.text3, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, border:`1px solid ${C.cardBorder}` }}>{IC.tag(15)}</div>
+        <div data-node-head style={{ padding:"12px 13px 9px", display:"flex", alignItems:"flex-start", gap:10 }}>
+          <div style={{ width:32, height:32, borderRadius:9, background:t.bg, color:t.accent, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{IC.tag(16)}</div>
           <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontSize:9, fontWeight:700, letterSpacing:".1em", textTransform:"uppercase", color:C.muted, marginBottom:2 }}>{t.label}</div>
-            <div style={{ fontSize:13, fontWeight:700, color:C.text1, lineHeight:1.25, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{n.title || "Actions"}</div>
-            <div style={{ fontSize:10, color:C.text5, fontWeight:500, marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            <div style={{ fontSize:12, fontWeight:800, letterSpacing:".12em", textTransform:"uppercase", color:t.accent, marginBottom:3 }}>{t.label}</div>
+            <div style={{ fontSize:15, fontWeight:700, color:C.text1, lineHeight:1.3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{n.title || "Actions"}</div>
+            <div style={{ fontSize:14, color:C.text4, fontWeight:500, marginTop:3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
               {(n.actions || []).length > 0 ? `${(n.actions || []).length} action${(n.actions || []).length===1?"":"s"}` : "Click to configure"}
             </div>
           </div>
@@ -684,29 +713,21 @@ const FlowNode = ({ n, selected, isDropTarget, onSelect, onStartDrag, onStartCon
           )}
         </div>
       ) : (
-        <div style={{ padding:"10px 12px 8px", display:"flex", alignItems:"flex-start", gap:9 }}>
-          <div style={{ width:30, height:30, borderRadius:8, background:C.sectionBg, color:C.text3, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, border:`1px solid ${C.cardBorder}` }}>{t.icon(15)}</div>
+        <div data-node-head style={{ padding:"12px 13px 9px", display:"flex", alignItems:"flex-start", gap:10 }}>
+          <div style={{ width:32, height:32, borderRadius:9, background:t.bg, color:t.accent, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{t.icon(16)}</div>
           <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontSize:9, fontWeight:700, letterSpacing:".1em", textTransform:"uppercase", color:C.muted, marginBottom:2 }}>{t.label}</div>
-            <div style={{ fontSize:13, fontWeight:700, color:C.text1, lineHeight:1.25, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            <div style={{ fontSize:12, fontWeight:800, letterSpacing:".12em", textTransform:"uppercase", color:t.accent, marginBottom:3 }}>{t.label}</div>
+            <div style={{ fontSize:15, fontWeight:700, color:C.text1, lineHeight:1.3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
               {n.type === 'trigger' ? getTriggerDisplay(n).title : n.title}
             </div>
-            <div style={{ fontSize:10, color:C.text5, fontWeight:500, marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            <div style={{ fontSize:14, color:C.text4, fontWeight:500, marginTop:3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
               {n.type === "message" && n.messageMode === "direct" ? (DIRECT_MSG_LABELS[n.directType] || "Direct message")
                : n.type === 'trigger' ? getTriggerDisplay(n).sub
                : n.sub}
             </div>
             {n.type === "message" && n.whatsappAccountId && (
-              <div style={{ fontSize:9, color:C.muted, fontWeight:500, marginTop:3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontFamily:"'DM Mono'" }}>
+              <div style={{ fontSize:13, color:C.muted, fontWeight:500, marginTop:3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontFamily:"'DM Mono'" }}>
                 via {maskPhone(whatsappAccounts.find(a => String(a.id) === String(n.whatsappAccountId))?.displayPhoneNumber) || 'custom number'}
-              </div>
-            )}
-            {/* A payment node's most important fact is what it charges — shown
-                on the card so nobody has to open it to find out. */}
-            {n.type === "payment" && (
-              <div style={{ fontSize:9.5, color:"#0F6E56", fontWeight:700, marginTop:3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontFamily:"'DM Mono'" }}>
-                {n.paymentSource === "amount" && n.amount ? `₹${n.amount}` : n.courseId ? "Product price" : "Not configured"}
-                {n.waitForPayment ? " · waits for payment" : ""}
               </div>
             )}
           </div>
@@ -723,132 +744,349 @@ const FlowNode = ({ n, selected, isDropTarget, onSelect, onStartDrag, onStartCon
 
       {isCondition && (
         <div style={{ padding:"0 12px 10px", display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-          <span style={{ fontSize:9, fontWeight:700, color:C.text3, background:C.sectionBg, border:`1px solid ${C.innerBorder}`, padding:"2px 7px", borderRadius:99, letterSpacing:".06em" }}>
+          <span style={{ fontSize:13, fontWeight:700, color:C.text3, background:C.sectionBg, border:`1px solid ${C.innerBorder}`, padding:"2px 7px", borderRadius:99, letterSpacing:".06em" }}>
             {n.matchMode === "any" ? "ANY MATCH" : "ALL MATCH"}
           </span>
-          <span style={{ fontSize:9, fontWeight:700, color:C.muted, background:C.sectionBg, border:`1px solid ${C.innerBorder}`, padding:"2px 7px", borderRadius:99 }}>
+          <span style={{ fontSize:13, fontWeight:700, color:C.muted, background:C.sectionBg, border:`1px solid ${C.innerBorder}`, padding:"2px 7px", borderRadius:99 }}>
             {(n.rules || []).length} rule{(n.rules || []).length === 1 ? "" : "s"}
           </span>
         </div>
       )}
 
-      {/* Input handle — triggers don't accept inbound connections */}
+      {/* Input handle — triggers don't accept inbound connections.
+          Doubles as a drag SOURCE: pulling up from here and releasing on a node
+          above builds the same edge a forward drag would, so a connection can be
+          started from either end. */}
+      {/* ⚠ Positioned from inputCY(n) — the SAME function handlePos() draws every
+          inbound edge endpoint from. A literal here (it used to be
+          `INPUT_CY - 22`) would put the visible arrow somewhere the line does
+          not actually end. */}
       {n.type !== "trigger" && (
         <div
           data-handle="input"
           data-node-id={n.id}
-          onMouseDown={(e) => e.stopPropagation()}
-          title="Inbound connection target — drag an output handle here to connect"
-          style={{ position:"absolute", top:-9, left:"50%", transform:"translateX(-50%)", display:"flex", alignItems:"center", justifyContent:"center", width:30, height:16, borderRadius:"8px 8px 4px 4px", background:"#fff", border:`1.5px solid ${t.accent}`, borderBottomWidth:0, color:t.accent, fontSize:11, fontWeight:700, lineHeight:1, boxShadow:"0 1px 3px rgba(0,0,0,.10)", zIndex:5, cursor:"crosshair", fontFamily:"'DM Sans'" }}
+          className="fg-handle"
+          onMouseDown={(e) => { e.stopPropagation(); onStartConnect(e, n.id, null, "reverse"); }}
+          title="Drag from here to the step that should come before this one"
+          style={{ position:"absolute", left:-(INPUT_HIT/2), top:inputCY(n) - INPUT_HIT/2, width:INPUT_HIT, height:INPUT_HIT, display:"flex", alignItems:"center", justifyContent:"center", background:"transparent", zIndex:6, cursor:"crosshair" }}
         >
-          <svg width="11" height="9" viewBox="0 0 11 9" style={{ display:"block" }}>
-            <path d="M5.5 0 L5.5 6 M2 4 L5.5 7.5 L9 4" stroke={t.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-          </svg>
+          {/* A round dot, centred on the left edge. The old shape was a 16x30
+              half-tab tucked into the top-left corner, which read as a piece of
+              the card's chrome rather than as the point a line arrives at. */}
+          <div className="fg-handle-dot" style={{ display:"flex", alignItems:"center", justifyContent:"center", width:INPUT_DOT, height:INPUT_DOT, borderRadius:"50%", background:"var(--c-surface, #fff)", border:`2px solid ${t.accent}`, color:t.accent, boxShadow:"0 1px 4px rgba(0,0,0,.14)", transition:"transform .12s", pointerEvents:"none" }}>
+            <svg width="11" height="11" viewBox="0 0 11 11" style={{ display:"block" }}>
+              <path d="M1.5 5.5 L8 5.5 M5.5 2.5 L8.5 5.5 L5.5 8.5" stroke={t.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+            </svg>
+          </div>
         </div>
       )}
 
-      {/* Output handles */}
-      {outputHandlesOf(n).map(h => {
-        const isAgentSide = n.type === "ai_agent" && (h === "model" || h === "tool");
-        const sidePos = isAgentSide
-          ? (h === "model"
-              ? { left:-6, top:"50%", transform:"translateY(-50%)" }
-              : { right:-6, top:"50%", transform:"translateY(-50%)" })
-          : { bottom:-6, left:`${(()=>{
-              if(h==="yes"||h==="paid")return 33.3;
-              if(h==="no"||h==="unpaid")return 66.7;
-              if(typeof h==="string" && h.startsWith("btn:")){
-                const idx=parseInt(h.slice(4),10);
-                const dd=n.directData||{};
-                const total = (n.type==="message" && n.messageMode==="direct" && n.directType==="quick_reply" && Array.isArray(dd.buttons))
-                  ? dd.buttons.length
-                  : (Array.isArray(n.buttons) ? n.buttons.length : 1);
-                return ((idx+1)*100)/(total+1);
-              }
-              if(typeof h==="string" && h.startsWith("row:")){
-                const idx=parseInt(h.slice(4),10);
-                const dd=n.directData||{};
-                const total = Array.isArray(dd.sections) ? dd.sections.length : 1;
-                return ((idx+1)*100)/(total+1);
-              }
-              return 50;
-            })()}%`, transform:"translateX(-50%)" };
-        const isBtnHandle = typeof h === "string" && h.startsWith("btn:");
-        const labelPos = isAgentSide
-          ? (h === "model"
-              ? { right:18, top:"50%", transform:"translateY(-50%)" }
-              : { left:18,  top:"50%", transform:"translateY(-50%)" })
-          : isBtnHandle
-            ? { top:16, left:"50%", transform:"translateX(-50%)" }
-            : { top:-16, left:"50%", transform:"translateX(-50%)" };
-        let labelText = h === "yes" ? "Yes"
-          : h === "no" ? "No"
-          : h === "paid" ? "Paid"
-          : h === "unpaid" ? "Not paid"
-          : h === "model" ? "Model"
-          : h === "tool" ? "Tool"
-          : h.startsWith("btn:") ? (() => {
-              const idx = parseInt(h.slice(4), 10);
-              if (n.type === "message" && n.messageMode === "direct") {
-                const dd = n.directData || {};
-                if (n.directType === "quick_reply" && Array.isArray(dd.buttons) && dd.buttons[idx]) {
-                  return dd.buttons[idx].title || `Btn ${idx + 1}`;
-                }
-              }
-              if (n.buttons && n.buttons[idx]) {
-                const b = n.buttons[idx];
-                return b.text || b || `Btn ${idx + 1}`;
-              }
-              return `Btn ${idx + 1}`;
-            })()
-          : "";
-        if (h === "model" && n.modelRef?.label) labelText = n.modelRef.label;
-        if (h === "tool" && Array.isArray(n.toolRefs) && n.toolRefs.length) {
-          labelText = n.toolRefs.length === 1 ? n.toolRefs[0].label : `${n.toolRefs.length} tools`;
-        }
-        const handleEvents = isAgentSide
-          ? {
-              onMouseDown: (e) => e.stopPropagation(),
-              onClick: (e) => { e.stopPropagation(); onPickAgentResource && onPickAgentResource(e, n.id, h); },
-            }
-          : { onMouseDown: (e) => { e.stopPropagation(); onStartConnect(e, n.id, h); } };
+      {/* Output handles.
+          Each dot sits inside a larger TRANSPARENT grab area centred on the very
+          same point, so the visible dot (and therefore handlePos(), which every
+          edge endpoint is drawn from) does not move — only the clickable region
+          grows. */}
+      {/* ── What the customer actually sees ──────────────────────────
+          A real WhatsApp bubble on the card, so you can read the message
+          without opening the step. The canvas previously showed only a type
+          label ("Text Message"), which told you nothing about what would be
+          sent — you had to open every node to review a flow. */}
+      {/* Every OTHER step gets the same bubble treatment, so the canvas reads
+          as one chat rather than message cards beside plain squares. Its
+          height is SUMMARY_H in nodeLayout — change one and change both, or
+          the first output row lands on top of this panel. */}
+      {hasSummaryPanel(n) && (
+        <div style={{ padding:"0 13px 8px" }}>
+          <div style={{
+            background:"var(--c-surfaceInner, #F5F5F0)",
+            border:`1px solid ${C.borderSubtle || C.cardBorder}`,
+            borderRadius:"3px 10px 10px 10px", padding:"6px 9px",
+            minHeight:34, display:"flex", alignItems:"center",
+          }}>
+            <div style={{
+              fontSize:13, lineHeight:1.35, color:C.text3,
+              display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical",
+              overflow:"hidden", wordBreak:"break-word",
+            }}>
+              {n.type === "trigger" ? getTriggerDisplay(n).sub
+                : n.type === "delay" ? `Waits ${n.waitValue || "10"} ${n.waitUnit || "minutes"} before continuing`
+                : n.type === "api" ? `${String(n.method || "GET").toUpperCase()} ${n.apiUrl || "(no URL set)"}`
+                : n.summary || n.sub || "Not configured yet"}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {n.type === "message" && (() => {
+        const chip = mediaChipFor(n);
+        const tpl = n.messageMode !== "direct" && n.templateId
+          ? (whatsappTemplates || []).find(t => String(t.id) === String(n.templateId))
+          : null;
+        const body = bodyPreview(n) || (tpl ? String(tpl.body || "") : "");
+        const empty = !body && !chip;
         return (
-          <div key={h}
-            data-handle-kind="output"
-            data-handle-which={h}
-            title={isAgentSide ? (h === "model" ? "Choose a model" : "Choose tools") : "Drag to connect this to another step"}
-            style={{ position:"absolute", ...sidePos, width:12, height:12, borderRadius:"50%", background: isAgentSide && (h === "model" ? n.modelRef : (n.toolRefs?.length)) ? NT.ai_agent.accent : "#fff", border:`2px solid ${isAgentSide ? NT.ai_agent.accent : C.cardBorder}`, zIndex:5, cursor: isAgentSide ? "pointer" : "crosshair" }}
-            {...handleEvents}
-          >
-            {h !== "default" && (
-              <span style={{ position:"absolute", ...labelPos, fontSize:8, fontWeight:700, color:isAgentSide ? NT.ai_agent.accent : C.muted, whiteSpace:"nowrap", fontFamily:"'DM Mono'", letterSpacing:".06em", maxWidth:72, overflow:"hidden", textOverflow:"ellipsis", textAlign:"center", background:"#fff", padding:"0 3px", borderRadius:3, zIndex:6 }}>
-                {labelText}
-              </span>
-            )}
+          <div style={{ padding:"0 13px 8px" }}>
+            <div style={{
+              background:"var(--c-chatIncoming, #fff)",
+              border:`1px solid ${C.borderSubtle || C.cardBorder}`,
+              borderRadius:"3px 10px 10px 10px", padding:"7px 9px",
+              minHeight:44, display:"flex", flexDirection:"column", gap:4,
+              boxShadow:"0 1px 1px rgba(0,0,0,.05)",
+            }}>
+              {chip && (
+                <div style={{ fontSize:12, fontWeight:800, letterSpacing:".06em", textTransform:"uppercase",
+                  color:C.text5, fontFamily:"'DM Mono'" }}>{chip}</div>
+              )}
+              <div style={{
+                fontSize:13, lineHeight:1.42, color: empty ? C.text6 : C.text2,
+                fontStyle: empty ? "italic" : "normal",
+                display:"-webkit-box", WebkitLineClamp: chip ? 2 : 3, WebkitBoxOrient:"vertical",
+                overflow:"hidden", wordBreak:"break-word",
+              }}>
+                {body || (n.messageMode !== "direct" && !n.templateId ? "No template chosen yet" : "Nothing to send yet")}
+              </div>
+            </div>
           </div>
         );
-      })}
+      })()}
+
+      {/* ── Output rows ──────────────────────────────────────────────
+          Every branchable thing the customer can do is its own labelled row
+          with its own connector at the RIGHT edge, so a wire is unambiguously
+          the one belonging to the label beside it.
+
+          This replaces anonymous dots spaced across the BOTTOM edge by
+          dividing a fixed width: at three buttons their labels overlapped, at
+          ten list rows they sat 22px apart, and none of them said which button
+          they belonged to. Geometry comes from nodeLayout(), the same function
+          handlePos() reads, so a row and its wire can never disagree. */}
+      {(() => {
+        const L = nodeLayout(n);
+        const wired = wiredHandles || new Set();
+        const rows = L.rows.map((r, idx) => {
+          const isSystem = r.kind === "system";
+          const isWired = r.handle && wired.has(r.handle);
+          const tone = handleTone(r.handle);
+          const dotColor =
+            tone === "good" ? "var(--c-successText, #0F6E56)"
+            : tone === "bad" ? "var(--c-dangerText, #A32D2D)"
+            : tone === "warn" ? "var(--c-orangeText, #8A5A1B)"
+            : tone === "muted" ? C.muted
+            : t.accent;
+          return (
+            <div key={r.handle || `static:${r.label}`}
+              data-node-row
+              style={{ position:"absolute", left:0, right:0, top:r.top, height:r.h,
+                display:"flex", alignItems:"center", padding:"0 12px" }}
+            >
+              <div
+                onMouseDown={(e) => { if (r.handle && onRowClick) e.stopPropagation(); }}
+                onClick={(e) => { if (r.handle && onRowClick) { e.stopPropagation(); onRowClick(e, n.id, r.handle, r.label); } }}
+                title={r.handle
+                  ? `Click to choose what happens next, or drag the dot to an existing step`
+                  : "This button opens a link or dialler on the customer's phone — WhatsApp tells us nothing about it, so a flow cannot branch on it"}
+                style={{
+                  // Rows share the card's ONE surface — no pill fills, no second
+                  // tone. Structure comes from a hairline between rows and from
+                  // the numbering, which also keeps the card from reading as a
+                  // stack of generic chips.
+                  flex:1, minWidth:0, height:"100%", display:"flex", alignItems:"center", gap:9,
+                  padding:"0 2px",
+                  background:"transparent",
+                  border:"none",
+                  borderTop: idx === 0 ? "none" : `1px solid ${C.rowSep || C.divider}`,
+                  fontSize: isSystem ? 13 : 15,
+                  fontWeight: isSystem ? 600 : 650,
+                  fontFamily: isSystem ? "'DM Mono'" : "inherit",
+                  letterSpacing: isSystem ? ".03em" : 0,
+                  color: isSystem ? C.text5 : (r.handle ? C.text1 : C.text5),
+                  cursor: r.handle && onRowClick ? "pointer" : "default",
+                  opacity: r.handle ? 1 : 0.7,
+                }}
+              >
+                {r.kind === "button" && (
+                  <span style={{ fontFamily:"'DM Mono'", fontSize:13, fontWeight:700, color:C.text5, flexShrink:0, minWidth:9 }}>
+                    {r.handle ? String(parseInt(r.handle.slice(4), 10) + 1) : "\u2014"}
+                  </span>
+                )}
+                <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  {r.label}
+                </span>
+              </div>
+
+              {r.handle && (
+                <div
+                  data-handle-kind="output"
+                  data-handle-which={r.handle}
+                  data-node-id={n.id}
+                  className="fg-handle"
+                  onMouseDown={(e) => { e.stopPropagation(); onStartConnect(e, n.id, r.handle, "forward"); }}
+                  onClick={(e) => {
+                    // A click that was not a drag opens the step picker.
+                    // Dragging still works; precision is now optional.
+                    if (!isWired && onRowClick) { e.stopPropagation(); onRowClick(e, n.id, r.handle, r.label); }
+                  }}
+                  onMouseEnter={() => setHoverHandle(r.handle)}
+                  onMouseLeave={() => setHoverHandle(null)}
+                  style={{ position:"absolute", right:-(HANDLE_HIT/2), top:"50%", transform:"translateY(-50%)",
+                    width:HANDLE_HIT, height:Math.min(HANDLE_HIT, r.h), display:"flex", alignItems:"center",
+                    justifyContent:"center", background:"transparent", zIndex:7, cursor:"crosshair" }}
+                >
+                  {hoverHandle === r.handle && !isWired && (
+                    <span style={{ position:"absolute", left:22, top:"50%", transform:"translateY(-50%)",
+                      whiteSpace:"nowrap", fontSize:12, fontWeight:700, fontFamily:"'DM Mono'",
+                      letterSpacing:".04em", color:C.text4, background:"var(--c-surface, #fff)",
+                      border:`1px solid ${C.cardBorder}`, borderRadius:5, padding:"2px 7px",
+                      boxShadow:"0 2px 6px rgba(0,0,0,.10)", pointerEvents:"none", zIndex:9 }}>
+                      Add step
+                    </span>
+                  )}
+                  {/* A filled dot means wired, a hollow ring means declared but
+                      not yet connected — so an unfinished flow is visible at a
+                      glance instead of needing every node opened. */}
+                  <div className="fg-handle-dot" style={{ width:HANDLE_DOT, height:HANDLE_DOT, borderRadius:"50%",
+                    background: isWired ? dotColor : "var(--c-surface, #fff)",
+                    border:`2px solid ${isWired ? dotColor : C.cardBorder}`,
+                    boxShadow:"0 1px 2px rgba(0,0,0,.10)", transition:"transform .12s, border-color .12s",
+                    pointerEvents:"none" }}/>
+                </div>
+              )}
+            </div>
+          );
+        });
+
+        // AI Agent model/tool sockets stay SIDE handles: they are click-to-pick
+        // resource pickers, not conversational branches, and must never be
+        // draggable connection sources.
+        if (n.type === "ai_agent") {
+          ["model", "tool"].forEach((h) => {
+            const filled = h === "model" ? n.modelRef : (n.toolRefs?.length);
+            let labelText = h === "model" ? "Model" : "Tool";
+            if (h === "model" && n.modelRef?.label) labelText = n.modelRef.label;
+            if (h === "tool" && Array.isArray(n.toolRefs) && n.toolRefs.length) {
+              labelText = n.toolRefs.length === 1 ? n.toolRefs[0].label : `${n.toolRefs.length} tools`;
+            }
+            rows.push(
+              <div key={h}
+                data-handle-kind="output" data-handle-which={h} data-node-id={n.id}
+                className="fg-handle"
+                title={h === "model" ? "Choose a model" : "Choose tools"}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); onPickAgentResource && onPickAgentResource(e, n.id, h); }}
+                style={{ position:"absolute", ...(h === "model" ? { left:-(HANDLE_HIT/2) } : { right:-(HANDLE_HIT/2) }),
+                  top:"50%", transform:"translateY(-50%)", width:HANDLE_HIT, height:HANDLE_HIT,
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  background:"transparent", zIndex:7, cursor:"pointer" }}
+              >
+                <div className="fg-handle-dot" style={{ position:"relative", width:HANDLE_DOT, height:HANDLE_DOT, borderRadius:"50%",
+                  background: filled ? NT.ai_agent.accent : "var(--c-surface, #fff)",
+                  border:`2px solid ${NT.ai_agent.accent}`, boxShadow:"0 1px 2px rgba(0,0,0,.10)",
+                  transition:"transform .12s, border-color .12s", pointerEvents:"none" }}>
+                  <span style={{ position:"absolute", ...(h === "model" ? { right:18 } : { left:18 }), top:"50%",
+                    transform:"translateY(-50%)", fontSize:13, fontWeight:700, color:NT.ai_agent.accent,
+                    whiteSpace:"nowrap", fontFamily:"'DM Mono'", letterSpacing:".06em", maxWidth:90,
+                    overflow:"hidden", textOverflow:"ellipsis", background:"var(--c-surface, #fff)",
+                    padding:"0 3px", borderRadius:3 }}>
+                    {labelText}
+                  </span>
+                </div>
+              </div>
+            );
+          });
+        }
+        return rows;
+      })()}
     </div>
   );
 };
 
 
 /* ── SVG connectors between nodes ── */
-export const edgePath = (x1,y1,x2,y2) => {
-  const dy = Math.abs(y2 - y1);
-  const c = Math.max(40, dy * 0.45);
-  return `M ${x1} ${y1} C ${x1} ${y1+c}, ${x2} ${y2-c}, ${x2} ${y2}`;
+/**
+ * Orthogonal left-to-right route: out of the source's RIGHT edge, along a
+ * vertical lane, then into the target's LEFT edge — with rounded corners.
+ *
+ * ⚠ `lane` is what stops branches stacking on top of each other. Every edge
+ * leaving one node shares the same target column in an auto-arranged flow, so
+ * with a single shared mid-x they would all run down the SAME vertical line
+ * and you could not tell which option led where — the exact complaint this
+ * routing exists to fix. Each branch is given its own lane, indexed by the
+ * source ROW, so the vertical segments sit side by side.
+ *
+ * A backward edge (target left of source) cannot use a mid lane at all — the
+ * lane would land inside one of the cards — so it takes a wide bezier that
+ * arcs clear of both.
+ */
+export const edgePath = (x1, y1, x2, y2, lane = 0) => {
+  const STUB = 28;                 // clears the handle before the first turn
+  const R = 10;                    // corner radius
+  const LANE_GAP = 16;
+
+  // Backward or barely-forward: no room between the cards for a vertical lane.
+  if (x2 - x1 < STUB * 2 + 8) {
+    const bow = Math.max(70, Math.abs(y2 - y1) * 0.5 + 60);
+    return `M ${x1} ${y1} C ${x1 + bow} ${y1}, ${x2 - bow} ${y2}, ${x2} ${y2}`;
+  }
+
+  // The lane sits just past the source, offset per branch, and is never
+  // allowed to cross into the target's stub.
+  const xm = Math.min(x1 + STUB + lane * LANE_GAP, x2 - STUB);
+
+  // Straight shot: same row, nothing to route around.
+  if (Math.abs(y2 - y1) < 2) return `M ${x1} ${y1} L ${x2} ${y2}`;
+
+  // Not enough vertical travel to fit two radii — a gentle S instead of
+  // corners tighter than the radius.
+  if (Math.abs(y2 - y1) < R * 2) {
+    const c = Math.max(30, (x2 - x1) * 0.4);
+    return `M ${x1} ${y1} C ${x1 + c} ${y1}, ${x2 - c} ${y2}, ${x2} ${y2}`;
+  }
+
+  const v = y2 > y1 ? 1 : -1;      // down or up the lane
+  return [
+    `M ${x1} ${y1}`,
+    `L ${xm - R} ${y1}`,
+    `Q ${xm} ${y1} ${xm} ${y1 + R * v}`,
+    `L ${xm} ${y2 - R * v}`,
+    `Q ${xm} ${y2} ${xm + R} ${y2}`,
+    `L ${x2} ${y2}`,
+  ].join(' ');
 };
 
-const Connectors = ({ nodes, edges, ghost }) => {
+const edgeColorFor = (handle) => {
+  switch (handleTone(handle)) {
+    case 'good':  return 'var(--c-successText, #0F6E56)';
+    case 'bad':   return 'var(--c-dangerText, #A32D2D)';
+    case 'warn':  return 'var(--c-orangeText, #8A5A1B)';
+    case 'muted': return 'var(--c-t6, #7B7B7B)';
+    case 'brand': return 'var(--c-brand, #0F6E56)';
+    // ⚠ NOT a border token. This drew every plain edge in borderStrong
+    // (#D5D5D0), so the commonest connector on the canvas — the one from the
+    // trigger to the first step — was a near-invisible hairline while the
+    // branch edges, which get semantic colours, read fine. That asymmetry is
+    // what "the flow lines are too thin, we cannot see them" describes.
+    // (The old fallback said #9C9B92, which was not even the token's value.)
+    default:      return 'var(--c-edgeLine, #8A897F)';
+  }
+};
+
+const Connectors = ({ nodes, edges, ghost, onEdgeHover }) => {
   const map = Object.fromEntries(nodes.map(n=>[n.id,n]));
   return (
     <svg style={{ position:"absolute", top:0, left:0, width:"100%", height:"100%", overflow:"visible", pointerEvents:"none" }}>
       <defs>
-        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-          <path d="M0,0 L10,5 L0,10 z" fill="#9C9B92"/>
-        </marker>
-        <marker id="arrGhost" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        {/* markerWidth is in STROKE-WIDTHS, not pixels, so a 6 that looked right
+            against a 2px line renders an oversized head against a 3px one.
+            Sized to 5 to keep the arrow roughly the same absolute size now that
+            the line is thicker. */}
+        {["good","bad","warn","muted","brand","plain"].map(tone => (
+          <marker key={tone} id={`arr-${tone}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill={edgeColorFor(
+              tone === "good" ? "paid" : tone === "bad" ? "unpaid" : tone === "warn" ? "nomatch"
+              : tone === "muted" ? "timeout" : tone === "brand" ? "btn:0" : "default")}/>
+          </marker>
+        ))}
+        <marker id="arrGhost" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
           <path d="M0,0 L10,5 L0,10 z" fill={C.red}/>
         </marker>
       </defs>
@@ -856,21 +1094,70 @@ const Connectors = ({ nodes, edges, ghost }) => {
         const a=map[e.from]; const b=map[e.to]; if (!a||!b) return null;
         const p1 = handlePos(a, "output", e.fromHandle || "default");
         const p2 = handlePos(b, "input");
-        const d = edgePath(p1.x, p1.y, p2.x, p2.y);
-        const isCond = e.fromHandle==="yes"||e.fromHandle==="no";
-        const isPay  = e.fromHandle==="paid"||e.fromHandle==="unpaid";
-        const color = isCond ? (e.fromHandle==="yes"?"#C44A4A":"#A32D2D")
-          : isPay ? (e.fromHandle==="paid"?"#0F6E56":"#A05040")
-          : "#9C9B92";
+        const handle = e.fromHandle || "default";
+        // Lane index = this branch's ROW on the source, so every edge leaving
+        // one node gets its own vertical lane instead of them all sharing one.
+        const lane = Math.max(0, nodeRows(a).findIndex(r => r.handle === handle));
+        const d = edgePath(p1.x, p1.y, p2.x, p2.y, lane);
+        const color = edgeColorFor(handle);
+        // The label is read LIVE from the source node's own row, never stored on
+        // the edge — a stored copy goes stale the instant the button is renamed
+        // (respond.io's "Branch 1..9" problem).
+        const srcRow = nodeRows(a).find(r => r.handle === handle);
+        const label = handle === "default" ? "" : (srcRow ? srcRow.label : handle);
+        // The pill sits just BEFORE the target's input ("how do I reach this
+        // step?"), which is where the eye lands travelling left to right. When
+        // the two cards are too close for it to fit, fall back to the source's
+        // own stub so the label never overlaps a card.
+        const roomBefore = p2.x - p1.x > 120;
+        const mx = roomBefore ? p2.x - 34 : p1.x + 40;
+        const my = roomBefore ? p2.y - 14 : p1.y - 13;
+        const dashed = handle === "timeout";
         return <g key={i}>
-          <path d={d} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" markerEnd="url(#arr)"/>
-          <path d={d} fill="none" stroke={color} strokeWidth={10} strokeOpacity={0} style={{ pointerEvents:"stroke", cursor:"pointer" }}/>
+          <path d={d} fill="none" stroke={color} strokeWidth={3} strokeLinecap="round"
+                strokeDasharray={dashed ? "5 4" : undefined} markerEnd={`url(#arr-${handleTone(handle)})`}/>
+          <path d={d} fill="none" stroke={color} strokeWidth={18} strokeOpacity={0}
+                style={{ pointerEvents:"stroke", cursor:"pointer" }}
+                onMouseEnter={() => onEdgeHover && onEdgeHover(i)}
+                onMouseLeave={() => onEdgeHover && onEdgeHover(null)}/>
+          {/* Room test, not a magic number. The pill sits 30px above the
+              target, so it needs the source row to be at least that far up —
+              a fixed ">70px apart" silently swallowed every label the moment
+              the cards grew taller with the message bubble. */}
+          {label && (() => {
+            // ⚠ The pill is sized from the TEXT, so both must come from the
+            // same font size. It used to hardcode `label.length * 6.1` — the
+            // per-character advance of DM Mono at 10.5px — and when the type
+            // scale moved the label to 13px the text became ~28% wider than
+            // the box drawn for it and spilled over the target card. Derived
+            // now, so the next size change cannot reintroduce it.
+            const FS = 13;
+            const CHAR_W = FS * 0.6;          // DM Mono advance is 0.6em
+            const PAD_X = 10;
+            const MAX_W = 190;
+            const maxChars = Math.floor((MAX_W - PAD_X) / CHAR_W);
+            const shown = label.length > maxChars ? label.slice(0, maxChars - 1) + "\u2026" : label;
+            const w = Math.min(MAX_W, PAD_X + shown.length * CHAR_W);
+            const h = FS + 9;
+            return (
+              <g transform={`translate(${mx}, ${my})`} style={{ pointerEvents:"none" }}>
+                <rect x={-w / 2} y={-h / 2} rx={6} width={w} height={h}
+                      fill="var(--c-surface, #fff)" stroke={color} strokeOpacity={.35}/>
+                <text x={0} y={FS * 0.36} fontSize={FS} fontWeight={700} fill={color} textAnchor="middle"
+                      fontFamily="'DM Mono', monospace">
+                  {shown}
+                </text>
+              </g>
+            );
+          })()}
         </g>;
       })}
       {ghost && (
         <g>
           <path d={edgePath(ghost.x1, ghost.y1, ghost.x2, ghost.y2)} stroke={C.red} strokeWidth="2.5" strokeDasharray="6 5" fill="none" markerEnd="url(#arrGhost)"/>
-          <circle cx={ghost.x1} cy={ghost.y1} r="5" fill={C.brandBright}/>
+          {/* The dot marks the FIXED end you started from — which on a reverse
+              drag is the arrow end, since the cursor is playing the source. */}
+          <circle cx={ghost.reverse ? ghost.x2 : ghost.x1} cy={ghost.reverse ? ghost.y2 : ghost.y1} r="5" fill={C.brandBright}/>
         </g>
       )}
     </svg>
@@ -879,18 +1166,23 @@ const Connectors = ({ nodes, edges, ghost }) => {
 
 const EdgePlus = ({ x, y, onClick, withConnector=false }) => (
   <div data-testid={withConnector ? "append-plus" : "edge-plus"} onClick={onClick} style={{ position:"absolute", left:x, top:y, transform:"translate(-50%,-50%)", zIndex:8, cursor:"pointer" }}>
-    <div style={{ width:26, height:26, borderRadius:"50%", background:"#fff", border:`1.5px solid ${C.red}`, color:C.red, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:700, boxShadow:"0 2px 6px rgba(0,0,0,.12)", transition:"all .15s", lineHeight:1 }}>
+    <div style={{ width:26, height:26, borderRadius:"50%", background:"var(--c-surface, #fff)", border:`1.5px solid ${C.red}`, color:C.red, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:700, boxShadow:"0 2px 6px rgba(0,0,0,.12)", transition:"all .15s", lineHeight:1 }}>
       {IC.plus(14)}
     </div>
     {withConnector && (
-      <div style={{ position:"absolute", top:-37, left:12, width:2, height:37, background:C.red, zIndex:-1 }}/>
+      // Purely decorative stub joining this + back to the output handle on
+      // its LEFT. It MUST NOT take pointer events: it reaches the handle's
+      // exact centre, and because this wrapper sits at zIndex 8 (above the
+      // handle's 6) it would otherwise swallow the click on the dead centre of
+      // the very dot you are trying to grab.
+      <div style={{ position:"absolute", top:12, left:-34, width:34, height:2, background:C.red, zIndex:-1, pointerEvents:"none" }}/>
     )}
   </div>
 );
 
 const EdgeDelete = ({ x, y, onClick }) => (
   <div data-testid="edge-delete" onClick={onClick} title="Remove this connection" style={{ position:"absolute", left:x, top:y, transform:"translate(-50%,-50%)", zIndex:8, cursor:"pointer" }}>
-    <div style={{ width:24, height:24, borderRadius:"50%", background:C.redBg, border:`1.5px solid ${C.red}`, color:C.red, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, boxShadow:"0 2px 6px rgba(0,0,0,.14)", transition:"all .15s" }}>
+    <div style={{ width:24, height:24, borderRadius:"50%", background:C.redBg, border:`1.5px solid ${C.red}`, color:C.red, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, fontWeight:700, boxShadow:"0 2px 6px rgba(0,0,0,.14)", transition:"all .15s" }}>
       {IC.x(12)}
     </div>
   </div>
@@ -898,8 +1190,8 @@ const EdgeDelete = ({ x, y, onClick }) => (
 
 const NodeActions = ({ x, y, onDuplicate, onDelete }) => (
   <div style={{ position:"absolute", left:x, top:y, transform:"translate(-50%,-100%)", zIndex:10, display:"flex", gap:4 }}>
-    <button onClick={(e)=>{e.stopPropagation(); onDuplicate();}} style={{ background:"#fff", border:`1px solid ${C.cardBorder}`, borderRadius:7, width:28, height:28, display:"flex", alignItems:"center", justifyContent:"center", color:C.text3, cursor:"pointer", boxShadow:"0 2px 6px rgba(0,0,0,.08)" }}>{IC.copy(13)}</button>
-    <button onClick={(e)=>{e.stopPropagation(); onDelete();}} style={{ background:"#fff", border:`1px solid ${C.redBg}`, borderRadius:7, width:28, height:28, display:"flex", alignItems:"center", justifyContent:"center", color:C.red, cursor:"pointer", boxShadow:"0 2px 6px rgba(0,0,0,.08)" }}>{IC.trash(13)}</button>
+    <button onClick={(e)=>{e.stopPropagation(); onDuplicate();}} style={{ background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:7, width:28, height:28, display:"flex", alignItems:"center", justifyContent:"center", color:C.text3, cursor:"pointer", boxShadow:"0 2px 6px rgba(0,0,0,.08)" }}>{IC.copy(13)}</button>
+    <button onClick={(e)=>{e.stopPropagation(); onDelete();}} style={{ background:"var(--c-surface, #fff)", border:`1px solid ${C.redBg}`, borderRadius:7, width:28, height:28, display:"flex", alignItems:"center", justifyContent:"center", color:C.red, cursor:"pointer", boxShadow:"0 2px 6px rgba(0,0,0,.08)" }}>{IC.trash(13)}</button>
   </div>
 );
 
@@ -940,8 +1232,8 @@ const AgentResourcePicker = ({ x, y, kind, selectedIds = [], onPick, onClose, mo
   }, [x, y]);
 
   return (
-    <div ref={pickerRef} onClick={(e)=>e.stopPropagation()} style={{ position:"fixed", left:pos.x, top:pos.y, zIndex:70, background:"#fff", border:`1px solid ${C.cardBorder}`, borderRadius:12, padding:8, boxShadow:"0 12px 36px rgba(0,0,0,.14)", width:240 }}>
-      <div style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:".1em", textTransform:"uppercase", padding:"4px 6px 8px" }}>
+    <div ref={pickerRef} onClick={(e)=>e.stopPropagation()} style={{ position:"fixed", left:pos.x, top:pos.y, zIndex:70, background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:12, padding:8, boxShadow:"0 12px 36px rgba(0,0,0,.14)", width:240 }}>
+      <div style={{ fontSize:13, fontWeight:700, color:C.muted, letterSpacing:".1em", textTransform:"uppercase", padding:"4px 6px 8px" }}>
         {kind === "model" ? "Choose a model" : "Choose tools"}
       </div>
       {options.map(opt => {
@@ -952,22 +1244,22 @@ const AgentResourcePicker = ({ x, y, kind, selectedIds = [], onPick, onClose, mo
             border:`1px solid ${isSel ? C.cardBorder : "transparent"}`, borderRadius:8, cursor:"pointer",
             textAlign:"left", display:"flex", alignItems:"center", gap:10, fontFamily:"'DM Sans'", marginBottom:2,
           }}
-            onMouseEnter={(e)=>{ if(!isSel) e.currentTarget.style.background="#F8F7F2"; }}
+            onMouseEnter={(e)=>{ if(!isSel) e.currentTarget.style.background="var(--c-xf8f7f2, #F8F7F2)"; }}
             onMouseLeave={(e)=>{ if(!isSel) e.currentTarget.style.background="transparent"; }}
           >
-            <span style={{ width:26, height:26, borderRadius:7, background:NT.ai_agent.bg, color:NT.ai_agent.color, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, fontSize:11, fontWeight:700 }}>
+            <span style={{ width:26, height:26, borderRadius:7, background:NT.ai_agent.bg, color:NT.ai_agent.color, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, fontSize:14, fontWeight:700 }}>
               {opt.label.slice(0,2).toUpperCase()}
             </span>
             <span style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:12, fontWeight:700, color:C.text1 }}>{opt.label}</div>
-              <div style={{ fontSize:10, color:C.muted, marginTop:1 }}>{opt.hint}</div>
+              <div style={{ fontSize:15, fontWeight:700, color:C.text1 }}>{opt.label}</div>
+              <div style={{ fontSize:13, color:C.muted, marginTop:1 }}>{opt.hint}</div>
             </span>
             {isSel && <span style={{ color:NT.ai_agent.accent, flexShrink:0 }}>{IC.ok(14)}</span>}
           </button>
         );
       })}
       <div style={{ borderTop:`1px solid ${C.rowDiv}`, margin:"6px 0 2px" }}/>
-      <button onClick={onClose} style={{ width:"100%", padding:"6px 10px", background:"transparent", border:"none", cursor:"pointer", textAlign:"center", fontSize:11, color:C.muted, fontWeight:600 }}>
+      <button onClick={onClose} style={{ width:"100%", padding:"6px 10px", background:"transparent", border:"none", cursor:"pointer", textAlign:"center", fontSize:14, color:C.muted, fontWeight:600 }}>
         {multi ? "Done" : "Cancel"}
       </button>
     </div>
@@ -1004,10 +1296,10 @@ const NodePicker = ({ x, y, onPick, onClose, mode, groups = [] }) => {
   }, [x, y, activeG, q]);
 
   return (
-    <div ref={pickerRef} onClick={(e) => e.stopPropagation()} style={{ position:"fixed", left:pos.x, top:pos.y, zIndex:70, background:"#fff", border:`1px solid ${C.cardBorder}`, borderRadius:12, padding:6, boxShadow:"0 12px 36px rgba(0,0,0,.14)", width:220, maxHeight:"70vh", overflowY:"auto" }}>
-      <div style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:".1em", textTransform:"uppercase", padding:"4px 8px 6px" }}>{mode==="append"?"Add next step":"Insert block"}</div>
+    <div ref={pickerRef} onClick={(e) => e.stopPropagation()} style={{ position:"fixed", left:pos.x, top:pos.y, zIndex:70, background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:12, padding:6, boxShadow:"0 12px 36px rgba(0,0,0,.14)", width:220, maxHeight:"70vh", overflowY:"auto" }}>
+      <div style={{ fontSize:13, fontWeight:700, color:C.muted, letterSpacing:".1em", textTransform:"uppercase", padding:"4px 8px 6px" }}>{mode==="append"?"Add next step":"Insert block"}</div>
       <div style={{ padding:"0 8px 6px" }}>
-        <Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search blocks…" style={{ padding:"6px 9px", fontSize:11 }}/>
+        <Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search blocks…" style={{ padding:"6px 9px", fontSize:14 }}/>
       </div>
       {visibleGroups.map(g => {
         const items = g.items.filter(i => !q || i.name.toLowerCase().includes(q.toLowerCase()));
@@ -1015,18 +1307,18 @@ const NodePicker = ({ x, y, onPick, onClose, mode, groups = [] }) => {
         const isOpen = hasSearch ? true : activeG === g.title;
         return (
           <div key={g.title} style={{ marginBottom:4 }}>
-            <div onClick={()=>setActiveG(prev => prev === g.title ? null : g.title)} style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 8px", cursor:"pointer", borderRadius:6, transition:"background .12s" }} onMouseEnter={e=>e.currentTarget.style.background="#F8F7F2"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            <div onClick={()=>setActiveG(prev => prev === g.title ? null : g.title)} style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 8px", cursor:"pointer", borderRadius:6, transition:"background .12s" }} onMouseEnter={e=>e.currentTarget.style.background="var(--c-xf8f7f2, #F8F7F2)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
               <span style={{ width:6, height:6, borderRadius:99, background:g.color }}/>
-              <span style={{ fontSize:9, color:C.text4, fontWeight:700, letterSpacing:".08em", textTransform:"uppercase", flex:1 }}>{g.title}</span>
-              <span style={{ fontSize:10, fontWeight:600, color:C.muted, background:C.sectionBg, borderRadius:99, padding:"1px 6px", minWidth:18, textAlign:"center" }}>{items.length}</span>
+              <span style={{ fontSize:13, color:C.text4, fontWeight:700, letterSpacing:".08em", textTransform:"uppercase", flex:1 }}>{g.title}</span>
+              <span style={{ fontSize:13, fontWeight:600, color:C.muted, background:C.sectionBg, borderRadius:99, padding:"1px 6px", minWidth:18, textAlign:"center" }}>{items.length}</span>
               <span style={{ color:C.ghost, transform:isOpen?"rotate(180deg)":"rotate(0)", transition:"transform .15s" }}>{IC.cD(10)}</span>
             </div>
             {isOpen && items.map(it => {
-              const t = NT[it.type];
+              const t = NT[it.type] || NT_FALLBACK;
               return (
                 <button data-testid="node-picker-item" key={it.name} onClick={()=>onPick(it)} style={{
                   width:"100%", padding:"7px 9px", background:"transparent", border:"1px solid transparent", borderRadius:7, cursor:"pointer", textAlign:"left",
-                  display:"flex", alignItems:"center", gap:8, fontSize:11, fontWeight:600, color:C.text2, fontFamily:"'DM Sans'",
+                  display:"flex", alignItems:"center", gap:8, fontSize:14, fontWeight:600, color:C.text2, fontFamily:"'DM Sans'",
                 }}>
                   <span style={{ width:22, height:22, borderRadius:6, background:t.bg, color:t.color, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{it.icon(13)}</span>
                   <span>{it.name}</span>
@@ -1037,7 +1329,7 @@ const NodePicker = ({ x, y, onPick, onClose, mode, groups = [] }) => {
         );
       })}
       <div style={{ borderTop:`1px solid ${C.rowDiv}`, margin:"4px 0" }}/>
-      <button onClick={onClose} style={{ width:"100%", padding:"6px 10px", background:"transparent", border:"none", cursor:"pointer", textAlign:"center", fontSize:11, color:C.muted, fontWeight:600 }}>Cancel</button>
+      <button onClick={onClose} style={{ width:"100%", padding:"6px 10px", background:"transparent", border:"none", cursor:"pointer", textAlign:"center", fontSize:14, color:C.muted, fontWeight:600 }}>Cancel</button>
     </div>
   );
 };
@@ -1045,114 +1337,109 @@ const NodePicker = ({ x, y, onPick, onClose, mode, groups = [] }) => {
 
 /* ── Block Library (left sidebar of builder) ── */
 const BLOCK_GROUPS = [
-  { title:"Triggers", color:C.brand, items:[
-    { name:"Keyword Trigger",  type:"trigger", icon:IC.zap,   desc:"User sends a keyword",
-      defaults:{ triggerKind:"keyword", keyword:"PRICE", matchType:"exact", caseSensitive:false, summary:"Trigger when contact sends a specific keyword" } },
-    { name:"WhatsApp Link",    type:"trigger", icon:IC.link,  desc:"wa.me link clicked",
-      defaults:{ triggerKind:"link", summary:"Trigger when contact opens a wa.me link with a tracked code" } },
-    { name:"QR Code Scan",     type:"trigger", icon:IC.qr,    desc:"Scan printed QR",
-      defaults:{ triggerKind:"qr", summary:"Trigger when contact scans a printed QR code" } },
-    { name:"New Contact",      type:"trigger", icon:IC.user,  desc:"New contact created",
-      defaults:{ triggerKind:"newContact", summary:"Trigger the first time a contact messages your number" } },
-    { name:"Inbound Message",  type:"trigger", icon:IC.msg,   desc:"Any new message",
-      defaults:{ triggerKind:"anyMessage", summary:"Trigger on every inbound WhatsApp message" } },
-    { name:"Tag Applied",      type:"trigger", icon:IC.tag,   desc:"Tag added to contact",
-      defaults:{ triggerKind:"tagApplied", tag:"Hot Lead", summary:"Trigger when a tag is applied to a contact" } },
-    { name:"Webhook Received", type:"trigger", icon:IC.api,   desc:"Incoming HTTP webhook",
-      defaults:{ triggerKind:"webhook", summary:"Trigger when an external service POSTs to your webhook URL" } },
-    { name:"API Event",        type:"trigger", icon:IC.api,   desc:"External API event",
-      defaults:{ triggerKind:"apiEvent", summary:"Trigger on a custom event from an integrated app" } },
+  // DERIVED from TRIGGER_KINDS — never a second hand-kept list. A library item
+  // with no matching kind would drop something onto the canvas that the
+  // settings panel cannot configure, which is the defect this whole array
+  // exists to prevent.
+  { title:"Triggers", color:C.brand, items: TRIGGER_KINDS.map(t => ({
+    name: t.libName, type: "trigger", icon: t.icon, desc: t.desc,
+    defaults: { triggerKind: t.kind, ...t.defaults },
+  })) },
+  // Split by the question that actually matters when building a bot: does this
+  // step just SAY something, or does it ASK and then branch on the answer?
+  // Every message type used to hide behind one "WhatsApp Message" block and a
+  // native dropdown, so the formats WhatsApp supports were undiscoverable.
+  { title:"Send", color:C.blue, items:[
+    { name:"Template",      type:"message", icon:IC.tpl,  desc:"Approved template, works any time",
+      defaults:{ messageMode:"template", templateId:"", title:"Template" } },
+    { name:"Text",          type:"message", icon:IC.msg,  desc:"Plain message, inside the 24h window",
+      defaults:{ messageMode:"direct", directType:"text", title:"Text", directData:{ body:"" } } },
+    { name:"Image",         type:"message", icon:IC.img,  desc:"Photo with an optional caption",
+      defaults:{ messageMode:"direct", directType:"image", title:"Image", directData:{} } },
+    { name:"Video",         type:"message", icon:IC.vid,  desc:"Video with an optional caption",
+      defaults:{ messageMode:"direct", directType:"video", title:"Video", directData:{} } },
+    { name:"Document",      type:"message", icon:IC.doc,  desc:"PDF or file",
+      defaults:{ messageMode:"direct", directType:"document", title:"Document", directData:{} } },
+    { name:"Audio",         type:"message", icon:IC.send, desc:"Voice note or audio file",
+      defaults:{ messageMode:"direct", directType:"audio", title:"Audio", directData:{} } },
+    { name:"Contact Card",  type:"message", icon:IC.user, desc:"Share a saveable contact",
+      defaults:{ messageMode:"direct", directType:"contact", title:"Contact card", directData:{} } },
+    { name:"Call to Action", type:"message", icon:IC.zap, desc:"A tappable link button",
+      defaults:{ messageMode:"direct", directType:"cta_url", title:"Call to action", directData:{ button_text:"Open" } } },
   ]},
-  { title:"Messages", color:C.blue, items:[
-    { name:"WhatsApp Message", type:"message", icon:IC.msg,   desc:"Approved template message",
-      defaults:{ templateId:"", summary:"Send a Meta-approved WhatsApp template" } },
+  { title:"Ask", color:C.brand, items:[
+    // These default waitForReply ON. An asking step with the wait off cannot
+    // branch on anything, which is the commonest way to build a dead flow.
+    { name:"Ask with Buttons", type:"message", icon:IC.branch, desc:"Up to 3 tappable choices",
+      defaults:{ messageMode:"direct", directType:"quick_reply", title:"Ask with buttons", waitForReply:true,
+        directData:{ body:"", buttons:[{ title:"Yes" }, { title:"No" }] } } },
+    { name:"Ask with a List",  type:"message", icon:IC.list, desc:"A menu of up to 10 options",
+      defaults:{ messageMode:"direct", directType:"list", title:"Ask with a list", waitForReply:true,
+        directData:{ body:"", button_text:"Choose", sections:[{ title:"", rows:[{ title:"Option 1" }, { title:"Option 2" }] }] } } },
+    { name:"Ask a Question",   type:"message", icon:IC.msg,  desc:"Free-text answer",
+      defaults:{ messageMode:"direct", directType:"text", title:"Ask a question", waitForReply:true,
+        directData:{ body:"" } } },
   ]},
   { title:"Logic", color:C.orange, items:[
     { name:"Condition",         type:"condition", icon:IC.branch, desc:"If / else branch",
       defaults:{ matchMode:"all", rules:[], summary:"Branch the flow based on contact data" } },
     { name:"Smart Delay",       type:"delay",     icon:IC.clock,  desc:"Wait minutes/hours/days",
       defaults:{ delayMode:"duration", waitValue:"10", waitUnit:"minutes", useContactTz:false, summary:"Pause the flow before continuing" } },
-    { name:"Business Hours",    type:"condition", icon:IC.clock,  desc:"Branch on working hours",
-      defaults:{ matchMode:"all", rules:[{ source:"time", field:"Current time", op:"equals", value:"business" }], summary:"Matched = Mon–Sat 09:00–18:00 IST" } },
     { name:"Random Split",      type:"condition", icon:IC.branch, desc:"A/B test paths",
       defaults:{ matchMode:"random", rules:[], summary:"Send half to Matched and half to Not-matched at random" } },
   ]},
-  { title:"Actions", color:"#5B5851", items:[
+  { title:"Actions", color:"var(--c-s5b5851, #5B5851)", items:[
+    { name:"Change Funnel Stage", type:"action", icon:IC.branch, desc:"Move the lead along the funnel",
+      defaults:{ title:"Change funnel stage", actions:[{ kind:"Set Funnel Stage", value:"" }] } },
     { name:"Add Tag",             type:"action", icon:IC.tag,    desc:"Tag the contact",
       defaults:{ actions:[{ kind:"Add Tag", value:"" }] } },
     { name:"Remove Tag",          type:"action", icon:IC.tag,    desc:"Remove a tag",
       defaults:{ actions:[{ kind:"Remove Tag", value:"" }] } },
-    { name:"Set Custom Field",    type:"action", icon:IC.edit,   desc:"Update a contact field",
-      defaults:{ actions:[{ kind:"Set Custom Field", value:"" }] } },
-    { name:"Clear Custom Field",  type:"action", icon:IC.x,      desc:"Empty a contact field",
-      defaults:{ actions:[{ kind:"Clear Custom Field", value:"" }] } },
+    { name:"Save Answer to Lead", type:"action", icon:IC.user,   desc:"Store a reply on the lead record",
+      defaults:{ title:"Save answer to lead", actions:[{ kind:"Set Lead Field", field:"", value:"{{answer}}" }] } },
     { name:"Assign to BDA",       type:"action", icon:IC.agent,  desc:"Set the contact's owner to a BDA Sales user",
       defaults:{ actions:[{ kind:"Assign to BDA", value:"" }] } },
-    { name:"Mark Closed",         type:"action", icon:IC.inbox,  desc:"Clear the chat from the unread queue",
-      defaults:{ actions:[{ kind:"Mark Closed", value:"" }] } },
-    { name:"Send Webhook",        type:"action", icon:IC.api,    desc:"Outbound HTTP POST with a contact payload",
-      defaults:{ actions:[{ kind:"Send Webhook", value:"https://" }] } },
     { name:"Send Email",          type:"action", icon:IC.mail,   desc:"Email via connected Gmail",
       defaults:{ actions:[{ kind:"Send Email", value:"" }] } },
-    { name:"Send Internal Email", type:"action", icon:IC.mail,   desc:"Notify the team by email",
-      defaults:{ actions:[{ kind:"Send Internal Email", value:"" }] } },
-    { name:"Human Handoff",       type:"handoff",icon:IC.agent,  desc:"Assign to a live user & end the flow",
-      defaults:{ assignMode:"specific", priority:"high", assigned:[], notifyEmail:false, internalNote:"" } },
   ]},
-  { title:"Payments", color:"#0F6E56", items:[
-    { name:"Collect Payment",     type:"payment", icon:IC.payment, desc:"Send a Razorpay link and wait for the money",
-      defaults:{ summary:"Raise a payment link on this chat and branch on whether it is paid" } },
-    { name:"Sell a Product",      type:"payment", icon:IC.payment, desc:"Charge a product's listed price",
-      defaults:{ paymentSource:"product", paymentKind:"fixed", waitForPayment:true, waitMinutes:"30",
-                 messageText:"Here is your payment link for {{product}} — ₹{{amount}}. Tap to pay securely.",
-                 summary:"Charge a product at its listed price" } },
-    { name:"Take a Part Payment", type:"payment", icon:IC.payment, desc:"Booking amount now, balance later",
-      defaults:{ paymentSource:"product", paymentKind:"partial", waitForPayment:true, waitMinutes:"60",
-                 messageText:"You can reserve your place with a part payment now — the link below accepts the booking amount.",
-                 summary:"Accept a first instalment against a larger total" } },
-  ]},
-  { title:"API & Integrations", color:C.navy, items:[
-    { name:"External API Request", type:"api", icon:IC.api, desc:"Any REST call (GET/POST/PUT)",
-      defaults:{ method:"POST", apiUrl:"https://api.example.com/endpoint" } },
-    { name:"Send to Webhook",      type:"api", icon:IC.api, desc:"Forward data to Make/Zapier/n8n",
-      defaults:{ method:"POST", apiUrl:"https://hook.eu1.make.com/abc123" } },
-  ]},
-  { title:"AI", color:C.purple, items:[
-    { name:"AI Agent",            type:"ai_agent", icon:IC.ai, desc:"Reasoning agent — attach a model & tools",
-      defaults:{ systemPrompt:"You are a helpful assistant for our business. Stay on-task and follow the instructions in the context.", agentContext:"Add any context the agent needs: company info, product catalog, FAQs, escalation rules." } },
-    { name:"AI Reply",            type:"ai", icon:IC.ai, desc:"LLM-generated response",
-      defaults:{ aiGoal:"Reply naturally to the contact, answer any questions, and continue the conversation toward a site visit booking.", aiContext:"We are Forge Realty in Chennai. Inventory and pricing: 2BHK & 3BHK in Anna Nagar (₹85L-₹1.2Cr), Adyar (₹1.4Cr-₹2.1Cr), Velachery (₹70L-₹95L). Site visits Mon-Sat 11 AM - 6 PM.", aiSaveTo:"ai_summary" } },
-    { name:"AI Lead Qualify",     type:"ai", icon:IC.ai, desc:"Qualify lead intent",
-      defaults:{ aiGoal:"Qualify the lead. Ask about budget, timeline, preferred area, and BHK, then summarise how ready they are to buy.", aiContext:"Budget brackets: ₹70L-₹95L = warm, ₹95L-₹1.5Cr = hot, ₹1.5Cr+ = VIP. Timeline within 60 days = hot.", aiSaveTo:"" } },
-    { name:"AI Intent Detection", type:"ai", icon:IC.ai, desc:"Detect intent & route",
-      defaults:{ aiGoal:"Classify the contact's last message into one intent: pricing, site_visit, brochure, payment, other.", aiContext:"Use Indian English idioms. 'flat' and 'apartment' both mean the same thing.", aiSaveTo:"last_intent" } },
-    { name:"AI Summary",          type:"ai", icon:IC.ai, desc:"Summarize the conversation",
-      defaults:{ aiGoal:"Summarize the conversation so far in 2-3 lines for the sales team handoff.", aiContext:"Real-estate context. Mention budget, location preference, BHK, and timeline if known.", aiSaveTo:"ai_summary" } },
-    { name:"AI Handoff Reason",   type:"ai", icon:IC.ai, desc:"Explain why a handoff is needed",
-      defaults:{ aiGoal:"Generate a short 1-sentence reason why this contact needs a human agent now.", aiContext:"Common reasons: pricing negotiation, site visit scheduling, document requests, complaint.", aiSaveTo:"ai_summary" } },
-  ]},
-  { title:"Workflows", color:"#6A3FAF", items:[
-    { name:"Trigger Another Flow", type:"subflow", icon:IC.flow,    desc:"Run another automation",
-      defaults:{ flowId:"", waitMode:"await" } },
-    { name:"Exit & Run Flow",      type:"subflow", icon:IC.flow,    desc:"End this flow, then run another",
-      defaults:{ flowId:"", waitMode:"handoff" } },
-    { name:"Schedule Flow",        type:"subflow", icon:IC.clock,   desc:"Run a flow at a later time",
-      defaults:{ flowId:"", waitMode:"fire" } },
-  ]},
+  // REMOVED 2026-08-11 — three groups taken out of the library:
+  //
+  //   AI                  (ai_agent + 5 ai steps)  — agents are built in the
+  //                       AI Agents section, not dropped into a flow.
+  //   API & Integrations  (api)
+  //   Workflows           (subflow ×3)
+  //
+  // ⚠ Their ENGINE HANDLERS are deliberately kept (`NODE_HANDLERS.ai`,
+  // `.ai_agent`, `.api`, `.subflow`) and so are their settings panels: removing
+  // them from the library stops NEW ones being added, it does not break a flow
+  // that already contains one — e.g. an automation imported from another
+  // instance. Verified before deleting: 0 of the 5 live automations use any of
+  // these node types (they use trigger/message/action/delay only).
+  //
+  // ⚠ "Schedule Flow" went with Workflows and was NOT re-added under Triggers.
+  // It was never a scheduled trigger — it is a subflow with waitMode:'fire',
+  // i.e. "run another flow right now, detached"; the "Run a flow at a later
+  // time" wording was wrong. There is no time-based trigger in the engine at
+  // all: evaluateTriggers() is called from the webhook, so every trigger kind
+  // can only fire in response to an inbound message. Adding a Triggers entry
+  // would have shipped a control that silently never fires (anti-pattern #20).
 ];
 
 const BlockLibrary = ({ onAddBlock }) => {
-  const [openG, setOpenG] = useState({ Triggers:true, Messages:true, Logic:true, Actions:true, "API & Integrations":true, AI:true, Workflows:true });
+  // Derived from BLOCK_GROUPS, not a hand-kept copy — a group added or removed
+  // above must not need a second edit here to open by default (anti-pattern #43).
+  const [openG, setOpenG] = useState(() =>
+    Object.fromEntries(BLOCK_GROUPS.map(g => [g.title, true])));
   const [q, setQ] = useState("");
   return (
-    <aside style={{ width:236, borderRight:`1px solid ${C.cardBorder}`, background:"#FAFAF7", display:"flex", flexDirection:"column", flexShrink:0 }}>
+    <aside style={{ width:236, borderRight:`1px solid ${C.cardBorder}`, background:"var(--c-surfaceInner, #FAFAF7)", display:"flex", flexDirection:"column", flexShrink:0 }}>
       <div style={{ padding:"14px 14px 10px", borderBottom:`1px solid ${C.cardBorder}` }}>
-        <div style={{ fontSize:10, color:C.muted, fontWeight:700, letterSpacing:".1em", textTransform:"uppercase", marginBottom:6 }}>Block Library</div>
+        <div style={{ fontSize:13, color:C.muted, fontWeight:700, letterSpacing:".1em", textTransform:"uppercase", marginBottom:6 }}>Block Library</div>
         <div style={{ position:"relative" }}>
           <span style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)", color:C.ph }}>{IC.search(13)}</span>
-          <Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search blocks…" style={{ paddingLeft:30, padding:"7px 10px 7px 30px", fontSize:11}}/>
+          <Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search blocks…" style={{ paddingLeft:30, padding:"7px 10px 7px 30px", fontSize:14}}/>
         </div>
-        <div style={{ fontSize:9, color:C.text5, marginTop:8, lineHeight:1.4, fontWeight:500 }}>Click any block to add it to the canvas</div>
+        <div style={{ fontSize:13, color:C.text5, marginTop:8, lineHeight:1.4, fontWeight:500 }}>Click any block to add it to the canvas</div>
       </div>
       <div style={{ flex:1, overflowY:"auto", padding:"10px 6px" }}>
         {BLOCK_GROUPS.map(g => {
@@ -1163,21 +1450,21 @@ const BlockLibrary = ({ onAddBlock }) => {
             <div key={g.title} style={{ marginBottom:8 }}>
               <div onClick={()=>setOpenG({ ...openG, [g.title]: !isOpen })} style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 10px", cursor:"pointer" }}>
                 <span style={{ width:6, height:6, borderRadius:99, background:g.color }}/>
-                <span style={{ fontSize:10, color:C.text4, fontWeight:700, letterSpacing:".08em", textTransform:"uppercase", flex:1 }}>{g.title}</span>
+                <span style={{ fontSize:13, color:C.text4, fontWeight:700, letterSpacing:".08em", textTransform:"uppercase", flex:1 }}>{g.title}</span>
                 <span style={{ color:C.ghost, transform:isOpen?"rotate(180deg)":"rotate(0)", transition:"transform .15s" }}>{IC.cD(10)}</span>
               </div>
               {isOpen && items.map(it => {
-                const t = NT[it.type];
+                const t = NT[it.type] || NT_FALLBACK;
                 return (
                   <button data-testid="block-library-item" key={it.name} title={`Click to add "${it.name}" to the canvas · ${it.desc}`}
                     draggable
                     onDragStart={(e)=>{ e.dataTransfer.setData("blockType", JSON.stringify(it)); }}
                     onClick={(e)=>onAddBlock && onAddBlock(it, e)}
-                    style={{ background:"#fff", border:`1px solid ${C.cardBorder}`, borderRadius:8, padding:"7px 9px", margin:"3px 4px", cursor:"pointer", display:"flex", alignItems:"center", gap:8, transition:"all .12s", width:"calc(100% - 8px)", textAlign:"left", fontFamily:"'DM Sans'" }}>
+                    style={{ background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:8, padding:"7px 9px", margin:"3px 4px", cursor:"pointer", display:"flex", alignItems:"center", gap:8, transition:"all .12s", width:"calc(100% - 8px)", textAlign:"left", fontFamily:"'DM Sans'" }}>
                     <div style={{ width:22, height:22, borderRadius:6, background:t.bg, color:t.color, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{it.icon(13)}</div>
                     <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:11, fontWeight:600, color:C.text2, fontFamily:"'DM Sans'" }}>{it.name}</div>
-                      <div style={{ fontSize:9, color:C.text5, marginTop:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{it.desc}</div>
+                      <div style={{ fontSize:14, fontWeight:600, color:C.text2, fontFamily:"'DM Sans'" }}>{it.name}</div>
+                      <div style={{ fontSize:13, color:C.text5, marginTop:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{it.desc}</div>
                     </div>
                     <span style={{ color:C.brand, opacity:0.6, flexShrink:0 }}>{IC.plus(12)}</span>
                   </button>
@@ -1193,12 +1480,128 @@ const BlockLibrary = ({ onAddBlock }) => {
 
 
 /* ── Settings Panel content for each node type ── */
+/**
+ * WhatsApp text formatting, as the customer will actually see it.
+ * *bold* _italic_ ~strike~ ```mono``` — the builder previously showed the raw
+ * markers, so you could not tell whether the formatting was right until you had
+ * already sent it to somebody.
+ */
+const renderWaText = (raw) => {
+  const src = String(raw == null ? "" : raw);
+  if (!src) return null;
+  const out = [];
+  const re = /(\*[^*\n]+\*|_[^_\n]+_|~[^~\n]+~|```[\s\S]+?```)/g;
+  let last = 0, m, k = 0;
+  while ((m = re.exec(src)) !== null) {
+    if (m.index > last) out.push(src.slice(last, m.index));
+    const tok = m[0];
+    if (tok.startsWith("```")) out.push(<code key={k++} style={{ fontFamily:"'DM Mono'", fontSize:"0.94em" }}>{tok.slice(3, -3)}</code>);
+    else if (tok[0] === "*") out.push(<b key={k++}>{tok.slice(1, -1)}</b>);
+    else if (tok[0] === "_") out.push(<i key={k++}>{tok.slice(1, -1)}</i>);
+    else out.push(<s key={k++}>{tok.slice(1, -1)}</s>);
+    last = m.index + tok.length;
+  }
+  if (last < src.length) out.push(src.slice(last));
+  return out;
+};
+
+/**
+ * The exact bubble a send-type step produces: header, media chip, formatted
+ * body, footer, and the real reply buttons or list rows underneath.
+ *
+ * Only templates had a preview before, so building a list or a button menu
+ * meant guessing. Every Send/Ask type renders here.
+ */
+const StepPreview = ({ node, templates = [] }) => {
+  if (!node || node.type !== "message") return null;
+  const dd = node.directData || {};
+  const direct = node.messageMode === "direct";
+  const dt = node.directType || "text";
+  const tpl = !direct && node.templateId
+    ? templates.find(t => String(t.id) === String(node.templateId)) : null;
+
+  const header = direct ? (dd.header || "") : (tpl?.header_text || "");
+  const footer = direct ? (dd.footer || "") : (tpl?.footer || "");
+  const body   = direct ? bodyPreview(node) : String(tpl?.body || node.templateBody || "");
+  const chip   = mediaChipFor(node);
+
+  let actions = [];
+  if (direct && dt === "quick_reply") actions = (dd.buttons || []).map((b, i) => ({ label: buttonLabel(b, i) }));
+  else if (direct && dt === "cta_url") actions = [{ label: dd.button_text || "Open link", link: true }];
+  else if (direct && dt === "location_request") actions = [{ label: "Send location", link: true }];
+  else if (!direct && Array.isArray(tpl?.buttons)) actions = tpl.buttons.map((b, i) => ({ label: buttonLabel(b, i), link: !isQuickReplyButton(b) }));
+
+  const listRows = direct && dt === "list"
+    ? (dd.sections || []).flatMap(sec => (sec.rows || []).map(r => ({ title: r.title, desc: r.description, section: sec.title })))
+    : [];
+
+  const empty = !body && !chip && actions.length === 0 && listRows.length === 0;
+
+  return (
+    <div style={{ background:"var(--c-chatWall)", borderRadius:10, padding:"12px 12px 14px",
+      border:`1px solid ${C.cardBorder}` }}>
+      <div style={{ fontSize:11, fontWeight:800, letterSpacing:".12em", textTransform:"uppercase",
+        color:C.muted, marginBottom:8, fontFamily:"'DM Mono'" }}>What the customer sees</div>
+      <div style={{ maxWidth:250 }}>
+        <div style={{ background:"var(--c-chatIncoming, #fff)", borderRadius:"3px 9px 9px 9px",
+          overflow:"hidden", boxShadow:"0 1px 1px rgba(0,0,0,.08)" }}>
+          <div style={{ padding:"7px 9px 5px" }}>
+            {chip && (
+              <div style={{ fontSize:12, fontWeight:800, letterSpacing:".05em", textTransform:"uppercase",
+                color:C.text5, fontFamily:"'DM Mono'", marginBottom:5 }}>{chip}</div>
+            )}
+            {header && <div style={{ fontSize:14, fontWeight:700, color:C.text1, marginBottom:3 }}>{renderWaText(header)}</div>}
+            <div style={{ fontSize:14, lineHeight:1.45, color: empty ? C.text6 : C.text1,
+              whiteSpace:"pre-wrap", wordBreak:"break-word", fontStyle: empty ? "italic" : "normal" }}>
+              {empty ? "Nothing to send yet — fill in the message below." : renderWaText(body)}
+            </div>
+            {footer && <div style={{ fontSize:12, color:C.text6, marginTop:5 }}>{renderWaText(footer)}</div>}
+            <div style={{ fontSize:11, color:C.text6, textAlign:"right", marginTop:3 }}>12:00</div>
+          </div>
+          {actions.length > 0 && (
+            <div style={{ borderTop:`1px solid ${C.rowSep || C.divider}` }}>
+              {actions.slice(0, 3).map((a, i) => (
+                <div key={i} style={{ padding:"7px 9px", textAlign:"center", fontSize:13, fontWeight:600,
+                  color:"#00A5F4", borderTop: i ? `1px solid ${C.rowSep || C.divider}` : "none" }}>
+                  {a.link ? "\u2197 " : ""}{a.label}
+                </div>
+              ))}
+            </div>
+          )}
+          {listRows.length > 0 && (
+            <div style={{ borderTop:`1px solid ${C.rowSep || C.divider}`, padding:"7px 9px", textAlign:"center",
+              fontSize:13, fontWeight:600, color:"#00A5F4" }}>
+              {dd.button_text || "Choose"}
+            </div>
+          )}
+        </div>
+        {listRows.length > 0 && (
+          <div style={{ marginTop:7, background:"var(--c-surface, #fff)", borderRadius:9, overflow:"hidden",
+            border:`1px solid ${C.cardBorder}` }}>
+            {listRows.slice(0, 10).map((r, i) => (
+              <div key={i} style={{ padding:"7px 10px", borderTop: i ? `1px solid ${C.rowSep || C.divider}` : "none" }}>
+                <div style={{ fontSize:13, fontWeight:650, color:C.text1 }}>{r.title || `Option ${i + 1}`}</div>
+                {r.desc && <div style={{ fontSize:12, color:C.text5, marginTop:1 }}>{r.desc}</div>}
+              </div>
+            ))}
+            {listRows.length > 10 && (
+              <div style={{ padding:"6px 10px", fontSize:12, color:C.dangerText, fontWeight:700 }}>
+                {listRows.length} options — WhatsApp allows 10
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const PreviewBubble = ({ text }) => (
   <div style={{ marginTop:10, background:C.sectionBg, border:`1px solid ${C.innerBorder}`, borderRadius:10, padding:12 }}>
     <Sec style={{ marginBottom:8 }}>Preview in WhatsApp</Sec>
-    <div style={{ background:"#fff", border:`1px solid ${C.cardBorder}`, borderRadius:"10px 10px 10px 2px", padding:"8px 11px", fontSize:12, color:C.text1, lineHeight:1.45, maxWidth:"85%" }}>
+    <div style={{ background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:"10px 10px 10px 2px", padding:"8px 11px", fontSize:14, color:C.text1, lineHeight:1.45, maxWidth:"85%" }}>
       {text}
-      <div style={{ fontSize:9, color:C.muted, textAlign:"right", marginTop:4, fontFamily:"'DM Mono'", fontWeight:600 }}>10:24 AM</div>
+      <div style={{ fontSize:11, color:C.muted, textAlign:"right", marginTop:4, fontFamily:"'DM Mono'", fontWeight:600 }}>10:24 AM</div>
     </div>
   </div>
 );
@@ -1206,12 +1609,12 @@ const PreviewBubble = ({ text }) => (
 const PreviewQR = ({ header, body, buttons }) => (
   <div style={{ marginTop:10, background:C.sectionBg, border:`1px solid ${C.innerBorder}`, borderRadius:10, padding:12 }}>
     <Sec style={{ marginBottom:8 }}>Preview in WhatsApp</Sec>
-    <div style={{ background:"#fff", border:`1px solid ${C.cardBorder}`, borderRadius:"10px 10px 10px 2px", overflow:"hidden", maxWidth:"85%" }}>
-      {header && <div style={{ padding:"7px 11px 3px", fontSize:12, fontWeight:700, color:C.text1 }}>{header}</div>}
-      <div style={{ padding:"0 11px 5px", fontSize:12, color:C.text2, lineHeight:1.45 }}>{body}</div>
-      <div style={{ fontSize:9, color:C.muted, textAlign:"right", padding:"0 11px 5px", fontFamily:"'DM Mono'", fontWeight:600 }}>10:24 AM</div>
+    <div style={{ background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:"10px 10px 10px 2px", overflow:"hidden", maxWidth:"85%" }}>
+      {header && <div style={{ padding:"7px 11px 3px", fontSize:14, fontWeight:700, color:C.text1 }}>{header}</div>}
+      <div style={{ padding:"0 11px 5px", fontSize:14, color:C.text2, lineHeight:1.45 }}>{body}</div>
+      <div style={{ fontSize:11, color:C.muted, textAlign:"right", padding:"0 11px 5px", fontFamily:"'DM Mono'", fontWeight:600 }}>10:24 AM</div>
       <div style={{ borderTop:`1px solid ${C.rowDiv}` }}>
-        {buttons.map(b=><div key={b.text} style={{ padding:"7px 12px", textAlign:"center", fontSize:12, fontWeight:600, color:C.blue, borderBottom:`1px solid ${C.rowDiv}` }}>{b.text}</div>)}
+        {buttons.map(b=><div key={b.text} style={{ padding:"7px 12px", textAlign:"center", fontSize:14, fontWeight:600, color:C.blue, borderBottom:`1px solid ${C.rowDiv}` }}>{b.text}</div>)}
       </div>
     </div>
   </div>
@@ -1230,36 +1633,38 @@ const TemplatePreview = ({ template }) => {
   const hasButtons = buttons.length > 0;
 
   return (
-    <div style={{ marginTop:14, marginBottom:14, background:"#E5DDD5", border:`1px solid ${C.cardBorder}`, borderRadius:12, padding:"12px 10px", overflow:"hidden", position:"relative" }}>
-      {/* WhatsApp chat pattern overlay */}
-      <div style={{ position:"absolute", inset:0, opacity:0.06, backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cpath d='M20 20 L25 25 M55 55 L60 60' stroke='%23000' stroke-width='1'/%3E%3C/svg%3E\")", pointerEvents:"none" }}/>
+    <div style={{ marginTop:14, marginBottom:14, background:"var(--c-chatWall)", border:`1px solid ${C.cardBorder}`, borderRadius:12, padding:"12px 10px", overflow:"hidden", position:"relative" }}>
+      {/* Same wallpaper as the real chat viewer. No extra opacity here — the
+          token's own SVG carries a per-theme fill-opacity, and stacking a
+          second multiplier on top would wash it out to nothing. */}
+      <div style={{ position:"absolute", inset:0, backgroundImage:"var(--c-chatPattern)", pointerEvents:"none" }}/>
       <Sec style={{ marginBottom:10, position:"relative", zIndex:1 }}>Template preview</Sec>
       <div style={{ position:"relative", zIndex:1 }}>
         {/* Date pill */}
         <div style={{ display:"flex", justifyContent:"center", marginBottom:8 }}>
-          <span style={{ background:"#E1F2FA", color:"#3C6678", fontSize:9, padding:"2px 9px", borderRadius:99, fontWeight:600 }}>TODAY</span>
+          <span style={{ background:"var(--c-infoBg, #E1F2FA)", color:"var(--c-s3c6678, #3C6678)", fontSize:11, padding:"2px 9px", borderRadius:99, fontWeight:600 }}>TODAY</span>
         </div>
         {/* Incoming message bubble */}
         <div style={{ display:"flex", justifyContent:"flex-start", marginBottom:4 }}>
-          <div style={{ background:"#fff", borderRadius:"0 8px 8px 8px", maxWidth:"88%", fontSize:12, color:"#111", lineHeight:1.45, overflow:"hidden", boxShadow:"0 1px 1px rgba(0,0,0,.07)" }}>
+          <div style={{ background:"var(--c-surface, #fff)", borderRadius:"0 8px 8px 8px", maxWidth:"88%", fontSize:14, color:"var(--c-t1, #111)", lineHeight:1.45, overflow:"hidden", boxShadow:"0 1px 1px rgba(0,0,0,.07)" }}>
             {hasHeader && (
-              <div style={{ padding:"7px 10px 3px", fontSize:12, fontWeight:700, color:C.text1, borderBottom:"1px solid #F0F0F0" }}>
+              <div style={{ padding:"7px 10px 3px", fontSize:14, fontWeight:700, color:C.text1, borderBottom:"1px solid #F0F0F0" }}>
                 {template.header_text}
               </div>
             )}
             <div style={{ padding:"7px 10px 5px", whiteSpace:"pre-wrap" }}>{body}</div>
             {hasFooter && (
-              <div style={{ padding:"0 10px 5px", fontSize:10, color:"#667781", fontWeight:500 }}>
+              <div style={{ padding:"0 10px 5px", fontSize:12, color:"var(--c-s667781, #667781)", fontWeight:500 }}>
                 {template.footer}
               </div>
             )}
-            <div style={{ fontSize:8, color:"#667781", textAlign:"right", padding:"0 10px 5px", fontFamily:"-apple-system, 'SF Pro Display', sans-serif", display:"flex", justifyContent:"flex-end", alignItems:"center", gap:3 }}>
+            <div style={{ fontSize:13, color:"var(--c-s667781, #667781)", textAlign:"right", padding:"0 10px 5px", fontFamily:"-apple-system, 'SF Pro Display', sans-serif", display:"flex", justifyContent:"flex-end", alignItems:"center", gap:3 }}>
               10:24 AM
             </div>
             {hasButtons && (
               <div style={{ borderTop:"1px solid #E0E0E0" }}>
                 {buttons.map((btn, idx) => (
-                  <div key={idx} style={{ display:"block", width:"100%", padding:"7px 9px", border:"none", borderTop: idx > 0 ? "1px solid #F0F0F0" : "none", textAlign:"center", color:"#00A5F4", fontSize:11, fontWeight:500, background:"transparent", fontFamily:"-apple-system, 'SF Pro Display', sans-serif" }}>
+                  <div key={idx} style={{ display:"block", width:"100%", padding:"7px 9px", border:"none", borderTop: idx > 0 ? "1px solid #F0F0F0" : "none", textAlign:"center", color:"#00A5F4", fontSize:14, fontWeight:500, background:"transparent", fontFamily:"-apple-system, 'SF Pro Display', sans-serif" }}>
                     {btn.text || btn}
                   </div>
                 ))}
@@ -1273,40 +1678,10 @@ const TemplatePreview = ({ template }) => {
 };
 
 
-// Real webhook URL + signing secret for a Webhook / API-Event trigger. Fetches
-// (and lazily mints) the secret from the backend for the SAVED automation.
-const WebhookTriggerConfig = ({ automationId }) => {
-  const [info, setInfo] = React.useState(null);
-  const [loading, setLoading] = React.useState(false);
-  const [copied, setCopied] = React.useState("");
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
-  React.useEffect(() => {
-    if (!automationId) return;
-    setLoading(true);
-    api.chatbots.webhook(automationId).then(setInfo).catch(() => setInfo(null)).finally(() => setLoading(false));
-  }, [automationId]);
-  const url = info ? `${origin}${info.path}` : "";
-  const copy = (text, which) => { try { navigator.clipboard?.writeText(text); } catch {} setCopied(which); setTimeout(() => setCopied(""), 1500); };
-  const rotate = async () => { if (!automationId) return; setLoading(true); try { setInfo(await api.chatbots.rotateWebhook(automationId)); } finally { setLoading(false); } };
-  if (!automationId) return <Alert kind="warn">Save this automation first to generate its webhook URL and secret.</Alert>;
-  return (<>
-    <Field label="Your webhook URL" hint="POST a JSON body here to start this flow. Include contact_phone in the body.">
-      <div style={{ display:"flex", gap:6 }}>
-        <Input value={loading && !url ? "Loading…" : url} readOnly style={{ fontFamily:"'DM Mono'", fontSize:10, color:C.text3, background:C.sectionBg }}/>
-        <Btn kind="ghost" size="sm" icon={IC.copy(13)} onClick={()=>copy(url,"url")}>{copied==="url"?"Copied":"Copy"}</Btn>
-      </div>
-    </Field>
-    <Field label="Signing secret" hint="Send as the X-Whatsflow-Signature header (or ?secret=) to authenticate the caller.">
-      <div style={{ display:"flex", gap:6 }}>
-        <Input value={info?.secret || ""} readOnly style={{ fontFamily:"'DM Mono'", fontSize:10, color:C.text3, background:C.sectionBg }}/>
-        <Btn kind="ghost" size="sm" icon={IC.copy(13)} onClick={()=>copy(info?.secret||"","secret")}>{copied==="secret"?"Copied":"Copy"}</Btn>
-        <Btn kind="ghost" size="sm" onClick={rotate}>Rotate</Btn>
-      </div>
-    </Field>
-  </>);
-};
-
-const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDeleteNode=()=>{}, onDuplicateNode=()=>{}, onSaveAndClose=()=>{}, onToggleDisable=()=>{}, onDeleteButton=()=>{}, onSelectTemplate=()=>{}, onCreateTemplate=()=>{}, templates=[], teamMembers=[], tags=[], contactFields=[], otherAutomations=[], whatsappAccounts=[], assignableUsers=[], aiModels=[], products=[], automationId=null }) => {
+const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDeleteNode=()=>{}, onDuplicateNode=()=>{}, onSaveAndClose=()=>{}, onToggleDisable=()=>{}, onDeleteButton=()=>{}, onSelectTemplate=()=>{}, onCreateTemplate=()=>{}, templates=[], tags=[], leadFields=[], otherAutomations=[], whatsappAccounts=[], assignableUsers=[], aiModels=[], automationId=null }) => {
+  // Real, admin-configured stages — never a hardcoded list, which would drift
+  // the moment somebody renames or adds one in Funnel Settings.
+  const { stages: funnelStages } = useFunnelConfig();
   // Flattened list of connected AI models, for the legacy AI node's picker.
   const aiModelOptions = [];
   (aiModels || []).forEach(cred => {
@@ -1335,7 +1710,6 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
   };
 
   const tagNames = tags.map(t => t.name).filter(Boolean);
-  const fieldNames = contactFields.map(f => f.name).filter(Boolean);
 
   // Hooks for message node media library — must be at top level (Rules of Hooks)
   const [mediaItems, setMediaItems] = useState([]);
@@ -1346,13 +1720,13 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
   }, [node?.type, node?.directType]);
 
   if (!node) return (
-    <aside style={{ width:344, borderLeft:`1px solid ${C.cardBorder}`, background:"#fff", flexShrink:0, padding:24, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", textAlign:"center", color:C.text5 }}>
+    <aside style={{ width:344, borderLeft:`1px solid ${C.cardBorder}`, background:"var(--c-surface, #fff)", flexShrink:0, padding:24, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", textAlign:"center", color:C.text5 }}>
       <div style={{ width:56, height:56, borderRadius:12, background:C.sectionBg, display:"flex", alignItems:"center", justifyContent:"center", color:C.muted, marginBottom:14 }}>{IC.flow(24)}</div>
-      <div style={{ fontSize:14, fontWeight:700, color:C.text2, marginBottom:6 }}>Select a block to edit</div>
-      <div style={{ fontSize:12, color:C.text5, lineHeight:1.5 }}>Click any node on the canvas to configure its message body, buttons, conditions, or API behavior.</div>
+      <div style={{ fontSize:16, fontWeight:700, color:C.text2, marginBottom:6 }}>Select a block to edit</div>
+      <div style={{ fontSize:15, color:C.text5, lineHeight:1.5 }}>Click any node on the canvas to configure its message body, buttons, conditions, or API behavior.</div>
     </aside>
   );
-  const t = NT[node.type];
+  const t = NT[node.type] || NT_FALLBACK;
 
   let content = null;
 
@@ -1399,7 +1773,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
       : 'the triggering number’s account';
 
     const TabBtn = ({ label, active, onClick }) => (
-      <button onClick={onClick} style={{ flex:1, padding:"6px 0", fontSize:11, fontWeight:700, fontFamily:"'DM Sans'", borderRadius:8, border:"none", cursor:"pointer", background: active ? C.brandBg : "transparent", color: active ? C.brandDark : C.muted }}>
+      <button onClick={onClick} style={{ flex:1, padding:"6px 0", fontSize:14, fontWeight:700, fontFamily:"'DM Sans'", borderRadius:8, border:"none", cursor:"pointer", background: active ? C.brandBg : "transparent", color: active ? C.brandDark : C.muted }}>
         {label}
       </button>
     );
@@ -1407,9 +1781,9 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
     const DirectField = ({ label, type="text", value, onChange, placeholder="", hint="" }) => (
       <Field label={label} hint={hint}>
         {type === "textarea" ? (
-          <Textarea value={value || ""} onChange={e => setDirect({ [label.toLowerCase().replace(/[^a-z]/g,"_")]: e.target.value })} placeholder={placeholder} style={{ fontSize:11 }}/>
+          <Textarea value={value || ""} onChange={e => setDirect({ [label.toLowerCase().replace(/[^a-z]/g,"_")]: e.target.value })} placeholder={placeholder} style={{ fontSize:14 }}/>
         ) : (
-          <Input value={value || ""} onChange={e => setDirect({ [label.toLowerCase().replace(/[^a-z]/g,"_")]: e.target.value })} placeholder={placeholder} style={{ padding:"6px 9px", fontSize:11 }}/>
+          <Input value={value || ""} onChange={e => setDirect({ [label.toLowerCase().replace(/[^a-z]/g,"_")]: e.target.value })} placeholder={placeholder} style={{ padding:"6px 9px", fontSize:14 }}/>
         )}
       </Field>
     );
@@ -1418,7 +1792,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
       const dt = node.directType || "text";
       switch (dt) {
         case "text":
-          return <Field label="Message text" hint="Max 4096 characters. Insert variables with the {x} button (e.g. {{name}})."><VarTextarea value={dd.body || ""} onChange={e=>setDirect({body:e.target.value})} placeholder="Type your message…" style={{ fontSize:11 }}/></Field>;
+          return <Field label="Message text" hint="Max 4096 characters. Insert variables with the {x} button (e.g. {{name}})."><VarTextarea value={dd.body || ""} onChange={e=>setDirect({body:e.target.value})} placeholder="Type your message…" style={{ fontSize:14 }}/></Field>;
         case "image":
         case "video":
         case "audio":
@@ -1430,7 +1804,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
               <select
                 value={dd.mediaLibraryId || ""}
                 onChange={e => setDirect({ mediaLibraryId: e.target.value || null, url: '' })}
-                style={{ width:'100%', padding:'6px 9px', fontSize:11, border:`1px solid ${C.inputBorder}`, borderRadius:8, fontFamily:"'DM Sans'", background:C.cardBg }}
+                style={{ width:'100%', padding:'6px 9px', fontSize:14, border:`1px solid ${C.inputBorder}`, borderRadius:8, fontFamily:"'DM Sans'", background:C.cardBg }}
               >
                 <option value="">— Select {dt} —</option>
                 {filtered.map(m => (
@@ -1457,57 +1831,47 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                     </div>
                     <div>
-                      <div style={{ fontSize:12, fontWeight:600, color:C.text2 }}>{selected.name || selected.originalName}</div>
-                      <div style={{ fontSize:11, color:C.muted, textTransform:'capitalize' }}>{selected.mediaType} • {selected.mimeType}</div>
+                      <div style={{ fontSize:15, fontWeight:600, color:C.text2 }}>{selected.name || selected.originalName}</div>
+                      <div style={{ fontSize:14, color:C.muted, textTransform:'capitalize' }}>{selected.mediaType} • {selected.mimeType}</div>
                     </div>
                   </div>
                 )}
               </div>
             )}
-            {dt !== 'audio' && <Field label="Caption (optional)"><VarTextarea value={dd.caption || ""} onChange={e=>setDirect({caption:e.target.value})} placeholder="Optional caption…" style={{ fontSize:11}}/></Field>}
-            {dt === 'document' && <Field label="Filename (optional)"><VarInput value={dd.filename || ""} onChange={e=>setDirect({filename:e.target.value})} placeholder="e.g. brochure.pdf" style={{ padding:"6px 9px", fontSize:11 }}/></Field>}
+            {dt !== 'audio' && dt !== 'sticker' && <Field label="Caption (optional)"><VarTextarea value={dd.caption || ""} onChange={e=>setDirect({caption:e.target.value})} placeholder="Optional caption…" style={{ fontSize:14}}/></Field>}
+            {dt === 'document' && <Field label="Filename (optional)"><VarInput value={dd.filename || ""} onChange={e=>setDirect({filename:e.target.value})} placeholder="e.g. brochure.pdf" style={{ padding:"6px 9px", fontSize:14 }}/></Field>}
           </>;
         }
-        case "location":
+        case "cta_url":
           return <>
-            <div style={{ display:"flex", gap:8 }}>
-              <Field label="Latitude" style={{ flex:1 }}><Input value={dd.latitude || ""} onChange={e=>setDirect({latitude:e.target.value})} placeholder="12.97" style={{ padding:"6px 9px", fontSize:11 }}/></Field>
-              <Field label="Longitude" style={{ flex:1 }}><Input value={dd.longitude || ""} onChange={e=>setDirect({longitude:e.target.value})} placeholder="80.21" style={{ padding:"6px 9px", fontSize:11 }}/></Field>
-            </div>
-            <Field label="Location name (optional)"><VarInput value={dd.name || ""} onChange={e=>setDirect({name:e.target.value})} placeholder="e.g. Forge Realty HQ" style={{ padding:"6px 9px", fontSize:11 }}/></Field>
-            <Field label="Address (optional)"><VarInput value={dd.address || ""} onChange={e=>setDirect({address:e.target.value})} placeholder="e.g. 123 Anna Nagar, Chennai" style={{ padding:"6px 9px", fontSize:11 }}/></Field>
+            <Field label="Header (optional)" hint="Shown bold above the body. Max 60 characters."><VarInput value={dd.header || ""} maxLength={60} onChange={e=>setDirect({header:e.target.value})} placeholder="e.g. Your seat is ready" style={{ padding:"6px 9px", fontSize:14, fontWeight:700 }}/></Field>
+            <Field label="Body text" hint="Required by Meta. Max 1024 characters."><VarTextarea value={dd.body || ""} maxLength={1024} onChange={e=>setDirect({body:e.target.value})} placeholder="Tell them what the link is for…" style={{ fontSize:14 }}/></Field>
+            <Field label="Button text" hint="Max 20 characters."><VarInput value={dd.button_text || ""} maxLength={20} onChange={e=>setDirect({button_text:e.target.value})} placeholder="e.g. Book my seat" style={{ padding:"6px 9px", fontSize:14 }}/></Field>
+            <Field label="Link" hint="Must start with https://"><VarInput value={dd.url || ""} onChange={e=>setDirect({url:e.target.value})} placeholder="https://forgemind.in/apply" style={{ padding:"6px 9px", fontSize:14 }}/></Field>
+            <Field label="Footer (optional)" hint="Max 60 characters."><VarInput value={dd.footer || ""} maxLength={60} onChange={e=>setDirect({footer:e.target.value})} placeholder="e.g. Limited seats" style={{ padding:"6px 9px", fontSize:14 }}/></Field>
+            <Alert kind="warn" style={{ marginTop:4 }}>WhatsApp does not tell us when someone taps a link button, so this step cannot branch on it. Wire the next step from "Next step".</Alert>
           </>;
         case "contact":
           return <>
-            <Field label="Full name" hint="Required by Meta. Shown as the card's title."><VarInput value={dd.name || ""} onChange={e=>setDirect({name:e.target.value})} placeholder="e.g. Rahul Sharma" style={{ padding:"6px 9px", fontSize:11 }}/></Field>
+            <Field label="Full name" hint="Required by Meta. Shown as the card's title."><VarInput value={dd.name || ""} onChange={e=>setDirect({name:e.target.value})} placeholder="e.g. Rahul Sharma" style={{ padding:"6px 9px", fontSize:14 }}/></Field>
             <div style={{ display:"flex", gap:8 }}>
-              <Field label="First name" style={{ flex:1 }}><VarInput value={dd.first_name || ""} onChange={e=>setDirect({first_name:e.target.value})} placeholder="Rahul" style={{ padding:"6px 9px", fontSize:11 }}/></Field>
-              <Field label="Last name" style={{ flex:1 }}><VarInput value={dd.last_name || ""} onChange={e=>setDirect({last_name:e.target.value})} placeholder="Sharma" style={{ padding:"6px 9px", fontSize:11 }}/></Field>
+              <Field label="First name" style={{ flex:1 }}><VarInput value={dd.first_name || ""} onChange={e=>setDirect({first_name:e.target.value})} placeholder="Rahul" style={{ padding:"6px 9px", fontSize:14 }}/></Field>
+              <Field label="Last name" style={{ flex:1 }}><VarInput value={dd.last_name || ""} onChange={e=>setDirect({last_name:e.target.value})} placeholder="Sharma" style={{ padding:"6px 9px", fontSize:14 }}/></Field>
             </div>
-            <Field label="Phone number" hint="Use E.164 format (e.g. +919876543210). Variables resolved at send time."><VarInput value={dd.phone || ""} onChange={e=>setDirect({phone:e.target.value})} placeholder="+91 98765 43210" style={{ padding:"6px 9px", fontSize:11 }}/></Field>
+            <Field label="Phone number" hint="Use E.164 format (e.g. +919876543210). Variables resolved at send time."><VarInput value={dd.phone || ""} onChange={e=>setDirect({phone:e.target.value})} placeholder="+91 98765 43210" style={{ padding:"6px 9px", fontSize:14 }}/></Field>
             <Field label="Phone type"><Select value={dd.phone_type || "CELL"} onChange={e=>setDirect({phone_type:e.target.value})}><option value="CELL">Cell</option><option value="HOME">Home</option><option value="WORK">Work</option><option value="MAIN">Main</option><option value="IPHONE">iPhone</option></Select></Field>
-            <Field label="Email (optional)"><VarInput value={dd.email || ""} onChange={e=>setDirect({email:e.target.value})} placeholder="rahul@example.com" style={{ padding:"6px 9px", fontSize:11 }}/></Field>
-            <Field label="Organization (optional)"><VarInput value={dd.org || ""} onChange={e=>setDirect({org:e.target.value})} placeholder="Company name" style={{ padding:"6px 9px", fontSize:11 }}/></Field>
+            <Field label="Email (optional)"><VarInput value={dd.email || ""} onChange={e=>setDirect({email:e.target.value})} placeholder="rahul@example.com" style={{ padding:"6px 9px", fontSize:14 }}/></Field>
+            <Field label="Organization (optional)"><VarInput value={dd.org || ""} onChange={e=>setDirect({org:e.target.value})} placeholder="Company name" style={{ padding:"6px 9px", fontSize:14 }}/></Field>
             <Alert kind="info" style={{ marginTop:4 }}>Sent as a WhatsApp contact card the recipient can save to their address book.</Alert>
-          </>;
-        case "product":
-          return <>
-            <Field label="Catalog ID"><Input value={dd.catalog_id || ""} onChange={e=>setDirect({catalog_id:e.target.value})} placeholder="Catalog ID from Meta" style={{ padding:"6px 9px", fontSize:11 }}/></Field>
-            <Field label="Product Retailer ID"><Input value={dd.product_retailer_id || ""} onChange={e=>setDirect({product_retailer_id:e.target.value})} placeholder="SKU or retailer ID" style={{ padding:"6px 9px", fontSize:11 }}/></Field>
-          </>;
-        case "catalog":
-          return <>
-            <Field label="Body text"><Textarea value={dd.body || ""} onChange={e=>setDirect({body:e.target.value})} placeholder="Message text before catalog…" style={{ fontSize:11 }}/></Field>
-            <Field label="Catalog ID"><Input value={dd.catalog_id || ""} onChange={e=>setDirect({catalog_id:e.target.value})} placeholder="Catalog ID from Meta" style={{ padding:"6px 9px", fontSize:11 }}/></Field>
           </>;
         case "quick_reply":
           return <>
-            <Field label="Header (optional)" hint="Shown bold above the body. Max 60 characters."><VarInput value={dd.header || ""} maxLength={60} onChange={e=>setDirect({header:e.target.value})} placeholder="e.g. Choose an option" style={{ padding:"6px 9px", fontSize:11, fontWeight:700 }}/></Field>
-            <Field label="Body text" hint="Select text then click B/I/U, or click first to type inside the markers."><FormatTextarea value={dd.body || ""} onChange={e=>setDirect({body:e.target.value})} placeholder="Your message with quick reply options…" style={{ fontSize:11 }}/></Field>
+            <Field label="Header (optional)" hint="Shown bold above the body. Max 60 characters."><VarInput value={dd.header || ""} maxLength={60} onChange={e=>setDirect({header:e.target.value})} placeholder="e.g. Choose an option" style={{ padding:"6px 9px", fontSize:14, fontWeight:700 }}/></Field>
+            <Field label="Body text" hint="Select text then click B/I/U, or click first to type inside the markers."><FormatTextarea value={dd.body || ""} onChange={e=>setDirect({body:e.target.value})} placeholder="Your message with quick reply options…" style={{ fontSize:14 }}/></Field>
             <Sec style={{ marginBottom:6 }}>Quick reply buttons</Sec>
             {(dd.buttons || []).map((btn, i) => (
               <div key={i} style={{ display:"flex", gap:6, marginBottom:6 }}>
-                <Input value={btn.title || ""} onChange={e => { const b = [...(dd.buttons||[])]; b[i] = { ...b[i], title: e.target.value }; setDirect({ buttons: b }); }} placeholder={`Button ${i+1}`} style={{ flex:1, padding:"6px 9px", fontSize:11 }}/>
+                <Input value={btn.title || ""} onChange={e => { const b = [...(dd.buttons||[])]; b[i] = { ...b[i], title: e.target.value }; setDirect({ buttons: b }); }} placeholder={`Button ${i+1}`} style={{ flex:1, padding:"6px 9px", fontSize:14 }}/>
                 <IconBtn onClick={()=>setDirect({ buttons: (dd.buttons||[]).filter((_,j)=>j!==i) })} danger>{IC.trash(12)}</IconBtn>
               </div>
             ))}
@@ -1524,25 +1888,25 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
           const atRowCap = totalRows >= ROW_CAP;
           const atSectionCap = sectionsArr.length >= SECTION_CAP;
           return <>
-            <Field label="Header (optional)" hint="Shown bold above the body. Max 60 characters."><VarInput value={dd.header || ""} maxLength={60} onChange={e=>setDirect({header:e.target.value})} placeholder="e.g. Pick a category" style={{ padding:"6px 9px", fontSize:11, fontWeight:700 }}/></Field>
-            <Field label="Body text" hint="Required. Select text then click B/I/U, or click first to type inside the markers."><FormatTextarea value={dd.body || ""} onChange={e=>setDirect({body:e.target.value})} placeholder="Your message before the list…" style={{ fontSize:11 }}/></Field>
-            <Field label="List button text" hint="Max 20 characters."><Input value={dd.button_text || ""} maxLength={20} onChange={e=>setDirect({button_text:e.target.value})} placeholder="e.g. View options" style={{ padding:"6px 9px", fontSize:11 }}/></Field>
+            <Field label="Header (optional)" hint="Shown bold above the body. Max 60 characters."><VarInput value={dd.header || ""} maxLength={60} onChange={e=>setDirect({header:e.target.value})} placeholder="e.g. Pick a category" style={{ padding:"6px 9px", fontSize:14, fontWeight:700 }}/></Field>
+            <Field label="Body text" hint="Required. Select text then click B/I/U, or click first to type inside the markers."><FormatTextarea value={dd.body || ""} onChange={e=>setDirect({body:e.target.value})} placeholder="Your message before the list…" style={{ fontSize:14 }}/></Field>
+            <Field label="List button text" hint="Max 20 characters."><Input value={dd.button_text || ""} maxLength={20} onChange={e=>setDirect({button_text:e.target.value})} placeholder="e.g. View options" style={{ padding:"6px 9px", fontSize:14 }}/></Field>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:12, marginBottom:6 }}>
               <Sec>List sections</Sec>
-              <span style={{ fontSize:10, fontFamily:"'DM Mono'", color: atRowCap ? C.red : C.muted }}>{totalRows} / {ROW_CAP} rows</span>
+              <span style={{ fontSize:13, fontFamily:"'DM Mono'", color: atRowCap ? C.red : C.muted }}>{totalRows} / {ROW_CAP} rows</span>
             </div>
             {sectionsArr.map((sec, si) => (
               <div key={si} style={{ background:C.sectionBg, border:`1px solid ${C.innerBorder}`, borderRadius:10, padding:8, marginBottom:8 }}>
                 <div style={{ display:"flex", gap:6, marginBottom:6 }}>
-                  <Input value={sec.title || ""} maxLength={24} onChange={e=>{ const s=[...(dd.sections||[])]; s[si]={...s[si],title:e.target.value}; setDirect({sections:s}); }} placeholder={sectionsArr.length > 1 ? "Section title (required)" : "Section title (optional)"} style={{ flex:1, padding:"6px 9px", fontSize:11 }}/>
+                  <Input value={sec.title || ""} maxLength={24} onChange={e=>{ const s=[...(dd.sections||[])]; s[si]={...s[si],title:e.target.value}; setDirect({sections:s}); }} placeholder={sectionsArr.length > 1 ? "Section title (required)" : "Section title (optional)"} style={{ flex:1, padding:"6px 9px", fontSize:14 }}/>
                   <IconBtn onClick={()=>setDirect({ sections: (dd.sections||[]).filter((_,j)=>j!==si) })} danger>{IC.trash(12)}</IconBtn>
                 </div>
                 {(sec.rows || []).map((row, ri) => (
                   <div key={ri} style={{ display:"flex", gap:6, marginBottom:6, paddingLeft:8, flexWrap:"wrap" }}>
-                    <Input value={row.title || ""} maxLength={24} onChange={e=>{ const s=[...(dd.sections||[])]; s[si].rows[ri]={...s[si].rows[ri],title:e.target.value}; setDirect({sections:s}); }} placeholder="Row title" style={{ flex:"1 1 130px", padding:"6px 9px", fontSize:11 }}/>
-                    <Input value={row.id || ""} maxLength={200} onChange={e=>{ const s=[...(dd.sections||[])]; s[si].rows[ri]={...s[si].rows[ri],id:e.target.value}; setDirect({sections:s}); }} placeholder="ID (auto)" style={{ flex:"0 0 80px", padding:"6px 9px", fontSize:11 }}/>
+                    <Input value={row.title || ""} maxLength={24} onChange={e=>{ const s=[...(dd.sections||[])]; s[si].rows[ri]={...s[si].rows[ri],title:e.target.value}; setDirect({sections:s}); }} placeholder="Row title" style={{ flex:"1 1 130px", padding:"6px 9px", fontSize:14 }}/>
+                    <Input value={row.id || ""} maxLength={200} onChange={e=>{ const s=[...(dd.sections||[])]; s[si].rows[ri]={...s[si].rows[ri],id:e.target.value}; setDirect({sections:s}); }} placeholder="ID (auto)" style={{ flex:"0 0 80px", padding:"6px 9px", fontSize:14 }}/>
                     <IconBtn onClick={()=>{ const s=[...(dd.sections||[])]; s[si].rows=s[si].rows.filter((_,j)=>j!==ri); setDirect({sections:s}); }} danger>{IC.trash(12)}</IconBtn>
-                    <Input value={row.description || ""} maxLength={72} onChange={e=>{ const s=[...(dd.sections||[])]; s[si].rows[ri]={...s[si].rows[ri],description:e.target.value}; setDirect({sections:s}); }} placeholder="Description (optional)" style={{ flex:"1 1 100%", padding:"6px 9px", fontSize:11 }}/>
+                    <Input value={row.description || ""} maxLength={72} onChange={e=>{ const s=[...(dd.sections||[])]; s[si].rows[ri]={...s[si].rows[ri],description:e.target.value}; setDirect({sections:s}); }} placeholder="Description (optional)" style={{ flex:"1 1 100%", padding:"6px 9px", fontSize:14 }}/>
                   </div>
                 ))}
                 <Btn kind="ghost" size="sm" icon={IC.plus(11)} disabled={atRowCap} onClick={()=>{ if (atRowCap) return; const s=[...(dd.sections||[])]; s[si].rows=[...(s[si].rows||[]),{title:"",id:""}]; setDirect({sections:s}); }}>Add row</Btn>
@@ -1555,10 +1919,10 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
         case "dynamic_api":
           return <>
             <Alert kind="info" style={{ marginBottom:10 }}>Calls a third-party HTTP endpoint instead of sending through WhatsApp. The response is logged on the execution step.</Alert>
-            <Field label="Endpoint URL" hint="Must start with http:// or https://. Variables like {{contact_number}} are resolved."><VarInput value={dd.endpoint || ""} onChange={e=>setDirect({endpoint:e.target.value})} placeholder="https://api.example.com/message" style={{ padding:"6px 9px", fontSize:11 }}/></Field>
+            <Field label="Endpoint URL" hint="Must start with http:// or https://. Variables like {{contact_number}} are resolved."><VarInput value={dd.endpoint || ""} onChange={e=>setDirect({endpoint:e.target.value})} placeholder="https://api.example.com/message" style={{ padding:"6px 9px", fontSize:14 }}/></Field>
             <Field label="Method"><Select value={dd.method || "POST"} onChange={e=>setDirect({method:e.target.value})}><option>POST</option><option>GET</option><option>PUT</option><option>PATCH</option><option>DELETE</option></Select></Field>
-            <Field label="Headers (JSON)" hint="Optional. Must be a JSON object."><VarTextarea value={dd.headers || ""} onChange={e=>setDirect({headers:e.target.value})} placeholder='{"Authorization": "Bearer …"}' style={{ fontSize:11 }}/></Field>
-            <Field label="Body template" hint="Use {{variables}} for dynamic data. JSON is validated before sending."><VarTextarea value={dd.body || ""} onChange={e=>setDirect({body:e.target.value})} placeholder='{"to": "{{contact_number}}", "text": "Hello"}' style={{ fontSize:11}}/></Field>
+            <Field label="Headers (JSON)" hint="Optional. Must be a JSON object."><VarTextarea value={dd.headers || ""} onChange={e=>setDirect({headers:e.target.value})} placeholder='{"Authorization": "Bearer …"}' style={{ fontSize:14 }}/></Field>
+            <Field label="Body template" hint="Use {{variables}} for dynamic data. JSON is validated before sending."><VarTextarea value={dd.body || ""} onChange={e=>setDirect({body:e.target.value})} placeholder='{"to": "{{contact_number}}", "text": "Hello"}' style={{ fontSize:14}}/></Field>
             <Field label="On non-2xx response"><Select value={dd.onError || "continue"} onChange={e=>setDirect({onError:e.target.value})}><option value="continue">Continue automation</option><option value="fail">Fail this step (stop walker)</option></Select></Field>
             <Alert kind="warn" style={{ marginTop:8 }}>15-second timeout. The full response (truncated to 4 KB) is captured in the execution log.</Alert>
           </>;
@@ -1568,6 +1932,14 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
     };
 
     content = (<>
+      {/* The preview leads, because "what will they actually receive?" is the
+          question you open a message step to answer. Only templates had one
+          before, so building a list or a button menu meant guessing at the
+          shape and the formatting until it had already been sent. */}
+      <div style={{ marginBottom:14 }}>
+        <StepPreview node={node} templates={templates} />
+      </div>
+
       <div style={{ display:"flex", gap:4, background:C.sectionBg, borderRadius:10, padding:3, marginBottom:14 }}>
         <TabBtn label="Template" active={mode==="template"} onClick={()=>setMode("template")}/>
         <TabBtn label="Direct" active={mode==="direct"} onClick={()=>setMode("direct")}/>
@@ -1590,7 +1962,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
       {mode === "template" ? (<>
         <div style={{ background:C.blueBg, border:`1px solid #90CAF9`, borderRadius:10, padding:"10px 12px", marginBottom:14, display:"flex", alignItems:"flex-start", gap:9 }}>
           <span style={{ color:C.blue, flexShrink:0, paddingTop:1 }}>{IC.tpl(15)}</span>
-          <div style={{ flex:1, fontSize:11, color:C.text2, lineHeight:1.5 }}>
+          <div style={{ flex:1, fontSize:14, color:C.text2, lineHeight:1.5 }}>
             Messages are sent using <strong>Meta-approved templates only</strong>. Reply buttons, if any, are defined by the template. To create or edit a template, use WhatsApp Manager.
           </div>
         </div>
@@ -1609,7 +1981,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
         </Field>
 
         {tpl && _scopeAccountIds && !(tpl.whatsappAccountId != null && _scopeAccountIds.has(String(tpl.whatsappAccountId))) && (
-          <div style={{ background:"#FCEBEB", border:"1px solid #F0B4B4", borderRadius:10, padding:"10px 12px", marginBottom:14, fontSize:11, color:"#A32D2D", lineHeight:1.5 }}>
+          <div style={{ background:"var(--c-dangerBg, #FCEBEB)", border:"1px solid #F0B4B4", borderRadius:10, padding:"10px 12px", marginBottom:14, fontSize:14, color:"var(--c-dangerText, #A32D2D)", lineHeight:1.5 }}>
             <strong>This template won’t send from {scopeAccountLabel}.</strong> “{tpl.name}” is approved on a different WhatsApp number, so Meta will reject it (#132001). Pick a template from the list above, or change “Send from”.
           </div>
         )}
@@ -1618,16 +1990,16 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
           <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:14 }}>
             <Badge label={tpl.category} bg={C.brandBg} color={C.brandDark}/>
             <Badge label={tpl.lang || tpl.language || 'English'} bg={C.sectionBg} color={C.text3}/>
-            <Badge label={tpl.status} bg={tpl.status==="Approved"||tpl.status==="APPROVED"?C.brandBg:"#FFF3E0"} color={tpl.status==="Approved"||tpl.status==="APPROVED"?C.brandDark:"#B04E0E"} dot/>
+            <Badge label={tpl.status} bg={tpl.status==="Approved"||tpl.status==="APPROVED"?C.brandBg:"var(--c-orangeBg, #FFF3E0)"} color={tpl.status==="Approved"||tpl.status==="APPROVED"?C.brandDark:"var(--c-sb04e0e, #B04E0E)"} dot/>
             {templateButtons && (
-              <Badge label={`${templateButtons.length} reply button${templateButtons.length===1?"":"s"}`} bg="#FFF8E1" color="#7A5C00"/>
+              <Badge label={`${templateButtons.length} reply button${templateButtons.length===1?"":"s"}`} bg="var(--c-warnBgSoft, #FFF8E1)" color="var(--c-s7a5c00, #7A5C00)"/>
             )}
           </div>
 
           <TemplatePreview template={tpl} />
 
           <Field label="Template body" hint="Read-only — edit in WhatsApp Manager.">
-            <div style={{ background:C.sectionBg, border:`1px solid ${C.innerBorder}`, borderRadius:10, padding:"10px 12px", fontSize:12, color:C.text2, lineHeight:1.5, fontFamily:"'DM Sans'", whiteSpace:"pre-wrap" }}>
+            <div style={{ background:C.sectionBg, border:`1px solid ${C.innerBorder}`, borderRadius:10, padding:"10px 12px", fontSize:15, color:C.text2, lineHeight:1.5, fontFamily:"'DM Sans'", whiteSpace:"pre-wrap" }}>
               {tpl.body}
             </div>
           </Field>
@@ -1638,14 +2010,11 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
               const key = "var" + num;
               return (
                 <div key={num} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
-                  <span style={{ fontSize:11, fontWeight:700, color:C.brand, fontFamily:"'DM Mono'", minWidth:34 }}>{"{{"+num+"}}"}</span>
-                  <Select value={(node.bindings || {})[key] || ""} onChange={(e)=>onUpdateNode(node.id, n => ({ ...n, bindings: { ...(n.bindings || {}), [key]: e.target.value } }))} style={{ flex:1, fontSize:11 }}>
+                  <span style={{ fontSize:14, fontWeight:700, color:C.brand, fontFamily:"'DM Mono'", minWidth:34 }}>{"{{"+num+"}}"}</span>
+                  <Select value={(node.bindings || {})[key] || ""} onChange={(e)=>onUpdateNode(node.id, n => ({ ...n, bindings: { ...(n.bindings || {}), [key]: e.target.value } }))} style={{ flex:1, fontSize:14 }}>
                     <option value="">— Pick a variable —</option>
                     <option value="{{name}}">Contact Name</option>
                     <option value="{{contact_number}}">Phone Number</option>
-                    {contactFields.map(f => (
-                      <option key={f.id} value={`{{${f.name}}}`}>{f.name}</option>
-                    ))}
                     <option value="static">Static text…</option>
                   </Select>
                 </div>
@@ -1658,9 +2027,9 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
             <Alert kind="info" style={{ marginBottom:8 }}>Buttons are defined by the template. The node will sprout one output handle per button — wire each to the next step.</Alert>
             {templateButtons.map((b, i) => (
               <div key={i} style={{ background:C.sectionBg, border:`1px solid ${C.innerBorder}`, borderRadius:10, padding:"10px 11px", marginBottom:6, display:"flex", alignItems:"center", gap:9 }}>
-                <div style={{ width:22, height:22, borderRadius:5, background:"#fff", border:`1px solid ${C.cardBorder}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontFamily:"'DM Mono'", fontWeight:700, color:C.text3, flexShrink:0 }}>{i+1}</div>
-                <div style={{ flex:1, fontSize:12, fontWeight:600, color:C.text1 }}>{b.text}</div>
-                <span style={{ fontSize:9, fontFamily:"'DM Mono'", fontWeight:700, color:C.brandDark, background:C.brandBg, border:`1px solid ${C.brandBright}`, borderRadius:5, padding:"2px 6px", letterSpacing:".04em" }}>{`btn:${i}`}</span>
+                <div style={{ width:22, height:22, borderRadius:5, background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, fontFamily:"'DM Mono'", fontWeight:700, color:C.text3, flexShrink:0 }}>{i+1}</div>
+                <div style={{ flex:1, fontSize:15, fontWeight:600, color:C.text1 }}>{b.text}</div>
+                <span style={{ fontSize:13, fontFamily:"'DM Mono'", fontWeight:700, color:C.brandDark, background:C.brandBg, border:`1px solid ${C.brandBright}`, borderRadius:5, padding:"2px 6px", letterSpacing:".04em" }}>{`btn:${i}`}</span>
               </div>
             ))}
           </>)}
@@ -1683,9 +2052,9 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
           <Alert kind="warn">Pick a template above to configure variables and preview the message.</Alert>
         )}
       </>) : (<>
-        <div style={{ background:"#FFF8E1", border:`1px solid #FFE082`, borderRadius:10, padding:"10px 12px", marginBottom:14, display:"flex", alignItems:"flex-start", gap:9 }}>
-          <span style={{ color:"#7A5C00", flexShrink:0, paddingTop:1 }}>{IC.warn(15)}</span>
-          <div style={{ flex:1, fontSize:11, color:"#7A5C00", lineHeight:1.5 }}>
+        <div style={{ background:"var(--c-warnBgSoft, #FFF8E1)", border:`1px solid #FFE082`, borderRadius:10, padding:"10px 12px", marginBottom:14, display:"flex", alignItems:"flex-start", gap:9 }}>
+          <span style={{ color:"var(--c-s7a5c00, #7A5C00)", flexShrink:0, paddingTop:1 }}>{IC.warn(15)}</span>
+          <div style={{ flex:1, fontSize:14, color:"var(--c-s7a5c00, #7A5C00)", lineHeight:1.5 }}>
             <strong>Direct messages</strong> are sent via the WhatsApp Business API without a template. They only work within the 24-hour conversation window. Outside that window, the message will fail.
           </div>
         </div>
@@ -1700,26 +2069,26 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
       </>)}
 
       <div style={{ marginTop:14, padding:"12px", background:C.sectionBg, borderRadius:10, border:`1px solid ${C.innerBorder}` }}>
-        <label style={{ display:"flex", alignItems:"flex-start", gap:8, fontSize:12, color:C.text1, cursor:"pointer", lineHeight:1.4 }}>
+        <label style={{ display:"flex", alignItems:"flex-start", gap:8, fontSize:15, color:C.text1, cursor:"pointer", lineHeight:1.4 }}>
           <input type="checkbox"
             checked={!!node.waitForReply}
             onChange={e => onUpdateNode(node.id, { waitForReply: e.target.checked })}
             style={{ marginTop:2, flexShrink:0 }}/>
           <span>
             <strong>Wait for customer's reply</strong> before continuing
-            <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>
+            <div style={{ fontSize:14, color:C.muted, marginTop:2 }}>
               When on, the execution pauses here. The next inbound message from the customer resumes the flow with that message as the input to downstream nodes.
             </div>
           </span>
         </label>
         {node.waitForReply && (
           <div style={{ marginTop:10, display:"flex", alignItems:"center", gap:8 }}>
-            <span style={{ fontSize:11, fontWeight:600, color:C.text3 }}>Timeout</span>
+            <span style={{ fontSize:14, fontWeight:600, color:C.text3 }}>Timeout</span>
             <Input type="number" min={1} max={168}
               value={node.waitTimeoutHours ?? 24}
               onChange={e => onUpdateNode(node.id, { waitTimeoutHours: Math.max(1, Math.min(168, parseInt(e.target.value || '24', 10))) })}
-              style={{ width:80, padding:"5px 8px", fontSize:11 }}/>
-            <span style={{ fontSize:11, color:C.muted }}>hours (max 168 = 7d). Expired pauses are marked failed.</span>
+              style={{ width:80, padding:"5px 8px", fontSize:14 }}/>
+            <span style={{ fontSize:14, color:C.muted }}>hours (max 168 = 7d). Expired pauses are marked failed.</span>
           </div>
         )}
       </div>
@@ -1733,7 +2102,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
   }
 
   else if (node.type==="condition") {
-    const fieldsBySource = { system: WA_SYSTEM_FIELDS, custom: fieldNames, tags: tagNames, bot:["last_intent","bot_state"], time:["Current time","Day of week","Hour of day"] };
+    const fieldsBySource = { system: WA_SYSTEM_FIELDS, tags: tagNames, bot:["last_intent","bot_state"], time:["Current time","Day of week","Hour of day"] };
     const rules = node.rules || [];
     const matchMode = node.matchMode || "all";
 
@@ -1751,7 +2120,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
       ...n, rules: (n.rules || []).filter((_, i) => i !== idx)
     }));
     const addRule = () => onUpdateNode(node.id, n => ({
-      ...n, rules: [...(n.rules || []), { source:"custom", field: fieldNames[0] || "city", op:"equals", value:"" }]
+      ...n, rules: [...(n.rules || []), { source:"system", field: WA_SYSTEM_FIELDS[0], op:"equals", value:"" }]
     }));
     const addPresetAsRule = (p) => onUpdateNode(node.id, n => ({
       ...n, rules: [...(n.rules || []), { source:p.source, field:p.field, op:p.op, value:p.value }]
@@ -1797,10 +2166,10 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
             width:"100%", padding:"7px 9px", background:"transparent",
             border:"1px solid transparent", borderTop:"1px solid transparent", cursor:"pointer", textAlign:"left",
             display:"flex", alignItems:"center", gap:8, borderRadius:7,
-            fontSize:11, fontWeight:500, color:C.brand, fontFamily:"'DM Sans'",
+            fontSize:14, fontWeight:500, color:C.brand, fontFamily:"'DM Sans'",
             lineHeight:1.3, marginBottom:1,
           }}>
-            <span style={{ width:18, height:18, borderRadius:5, background:"#fff", border:`1.2px solid ${C.cardBorder}`, display:"flex", alignItems:"center", justifyContent:"center", color:C.brand, flexShrink:0 }}>{IC.plus(11)}</span>
+            <span style={{ width:18, height:18, borderRadius:5, background:"var(--c-surface, #fff)", border:`1.2px solid ${C.cardBorder}`, display:"flex", alignItems:"center", justifyContent:"center", color:C.brand, flexShrink:0 }}>{IC.plus(11)}</span>
             <span style={{ flex:1, overflow:"hidden", textOverflow:"ellipsis" }}>{p.label}</span>
           </button>
         ))}
@@ -1810,7 +2179,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
       {rules.length === 0 && (
         <div style={{ background:C.redBg, border:`1px solid #F4C9C9`, borderRadius:10, padding:"11px 13px", marginBottom:8, display:"flex", alignItems:"center", gap:9 }}>
           <span style={{ color:C.redDark }}>{IC.err(14)}</span>
-          <div style={{ fontSize:11, color:C.redDark, lineHeight:1.45, fontWeight:500 }}>
+          <div style={{ fontSize:14, color:C.redDark, lineHeight:1.45, fontWeight:500 }}>
             No rules defined. Add at least one condition or pick a preset above.
           </div>
         </div>
@@ -1820,24 +2189,24 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
         return (
           <div key={i} style={{ background:C.sectionBg, border:`1px solid ${C.innerBorder}`, borderRadius:10, padding:11, marginBottom:6 }}>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:7 }}>
-              <span style={{ fontSize:9, fontWeight:700, color:C.muted, letterSpacing:".1em", textTransform:"uppercase" }}>Rule {i+1}</span>
+              <span style={{ fontSize:13, fontWeight:700, color:C.muted, letterSpacing:".1em", textTransform:"uppercase" }}>Rule {i+1}</span>
               <div style={{ display:"flex", gap:2 }}>
                 <IconBtn title="Duplicate rule" onClick={()=>duplicateRule(i)}>{IC.copy(12)}</IconBtn>
                 <IconBtn title="Delete rule" danger onClick={()=>deleteRule(i)}>{IC.trash(12)}</IconBtn>
               </div>
             </div>
             <div style={{ marginBottom:5 }}>
-              <Select value={r.source || "custom"} onChange={(e)=>updateRule(i, { source: e.target.value, field: (fieldsBySource[e.target.value] || GENERAL_FIELDS)[0] })} style={{ fontSize:11 }}>
+              <Select value={r.source || "custom"} onChange={(e)=>updateRule(i, { source: e.target.value, field: (fieldsBySource[e.target.value] || GENERAL_FIELDS)[0] })} style={{ fontSize:14 }}>
                 {CONDITION_SOURCES.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
               </Select>
             </div>
             <div style={{ marginBottom:5 }}>
-              <Select value={r.field || ""} onChange={(e)=>updateRule(i, { field: e.target.value })} style={{ fontSize:11 }}>
+              <Select value={r.field || ""} onChange={(e)=>updateRule(i, { field: e.target.value })} style={{ fontSize:14 }}>
                 {(fieldsBySource[r.source] || GENERAL_FIELDS).map(f=><option key={f} value={f}>{f}</option>)}
               </Select>
             </div>
             <div style={{ display:"flex", gap:5 }}>
-              <Select value={r.op || "equals"} onChange={(e)=>updateRule(i, { op: e.target.value })} style={{ width:140, fontSize:11 }}>
+              <Select value={r.op || "equals"} onChange={(e)=>updateRule(i, { op: e.target.value })} style={{ width:140, fontSize:14 }}>
                 {OPERATORS.map(op=><option key={op} value={op}>{op}</option>)}
               </Select>
               {(() => {
@@ -1863,10 +2232,10 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
                     }}
                     inputMode={isNumeric || isPhone ? "numeric" : "text"}
                     placeholder={noValueOp ? "—" : isEmail ? "name@domain.com" : isPhone ? "+91 9876543210" : "Value"}
-                    style={{ flex:1, fontSize:11, fontFamily: (isNumeric||isPhone) ? "'DM Mono'" : undefined, borderColor: valid ? C.inputBorder : C.red }}
+                    style={{ flex:1, fontSize:14, fontFamily: (isNumeric||isPhone) ? "'DM Mono'" : undefined, borderColor: valid ? C.inputBorder : C.red }}
                     disabled={noValueOp}
                   />
-                  {!valid && <span style={{ fontSize:9, color:C.red, fontWeight:600, alignSelf:"center" }}>!</span>}
+                  {!valid && <span style={{ fontSize:13, color:C.red, fontWeight:600, alignSelf:"center" }}>!</span>}
                 </>);
               })()}
             </div>
@@ -1881,7 +2250,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
 
       <Sec style={{ marginTop:18, marginBottom:8 }}>Test with sample contact</Sec>
       <div style={{ background:C.sectionBg, border:`1px solid ${C.innerBorder}`, borderRadius:10, padding:11 }}>
-        <Select style={{ marginBottom:8, fontSize:11, fontFamily:"'DM Mono'" }}>
+        <Select style={{ marginBottom:8, fontSize:14, fontFamily:"'DM Mono'" }}>
           <option>— Select a sample contact —</option>
         </Select>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:rules.length?10:0 }}>
@@ -1889,9 +2258,9 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
           {rules.length > 0 && <Badge label="Matched" bg={C.brandBg} color={C.brandDark} dot style={{ padding:"4px 9px" }}/>}
         </div>
         {rules.length > 0 && (
-          <div style={{ background:"#fff", border:`1px solid ${C.cardBorder}`, borderRadius:8, padding:"8px 10px" }}>
+          <div style={{ background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:8, padding:"8px 10px" }}>
             {rules.map((r, i)=>(
-              <div key={i} style={{ display:"flex", alignItems:"center", gap:7, padding:"4px 0", fontSize:10.5, color:C.text3, borderBottom:i===rules.length-1?"none":`1px solid ${C.rowDiv}` }}>
+              <div key={i} style={{ display:"flex", alignItems:"center", gap:7, padding:"4px 0", fontSize:13, color:C.text3, borderBottom:i===rules.length-1?"none":`1px solid ${C.rowDiv}` }}>
                 <span style={{ color:C.brand, flexShrink:0 }}>{IC.ok(11)}</span>
                 <span style={{ flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                   <strong style={{ color:C.text2 }}>{r.field}</strong> {r.op}{r.value?" "+r.value:""}
@@ -1905,30 +2274,30 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
       <Sec style={{ marginTop:18, marginBottom:8 }}>Branch connections</Sec>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
         <div style={{
-          background: matchedSteps.length ? C.brandBg : "#fff",
+          background: matchedSteps.length ? C.brandBg : "var(--c-surface, #fff)",
           border:`1px solid ${matchedSteps.length ? C.brandBright : C.cardBorder}`,
           borderRadius:10, padding:10,
           opacity: matchedSteps.length ? 1 : 0.85,
         }}>
-          <div style={{ fontSize:9, color:C.brandDark, fontWeight:700, letterSpacing:".08em", textTransform:"uppercase", marginBottom:3 }}>Matched</div>
-          <div style={{ fontSize:11, color: matchedSteps.length ? C.brandDark : C.text5, fontWeight:600, lineHeight:1.4 }}>
+          <div style={{ fontSize:13, color:C.brandDark, fontWeight:700, letterSpacing:".08em", textTransform:"uppercase", marginBottom:3 }}>Matched</div>
+          <div style={{ fontSize:14, color: matchedSteps.length ? C.brandDark : C.text5, fontWeight:600, lineHeight:1.4 }}>
             {branchSummary(matchedSteps)}
           </div>
-          <div style={{ fontSize:9, color: matchedSteps.length ? C.brandDark : C.muted, opacity: matchedSteps.length ? 0.75 : 1, fontFamily:"'DM Mono'", marginTop:4 }}>
+          <div style={{ fontSize:13, color: matchedSteps.length ? C.brandDark : C.muted, opacity: matchedSteps.length ? 0.75 : 1, fontFamily:"'DM Mono'", marginTop:4 }}>
             {matchedSteps.length} step{matchedSteps.length===1?"":"s"} connected
           </div>
         </div>
         <div style={{
-          background: notMatchedSteps.length ? "#FFF3E0" : "#fff",
+          background: notMatchedSteps.length ? "var(--c-orangeBg, #FFF3E0)" : "var(--c-surface, #fff)",
           border: `1px solid ${notMatchedSteps.length ? "#FFCC80" : C.cardBorder}`,
           borderRadius:10, padding:10,
           opacity: notMatchedSteps.length ? 1 : 0.85,
         }}>
-          <div style={{ fontSize:9, color:"#B04E0E", fontWeight:700, letterSpacing:".08em", textTransform:"uppercase", marginBottom:3 }}>Not matched</div>
-          <div style={{ fontSize:11, color: notMatchedSteps.length ? "#B04E0E" : C.text5, fontWeight:600, lineHeight:1.4 }}>
+          <div style={{ fontSize:13, color:"var(--c-sb04e0e, #B04E0E)", fontWeight:700, letterSpacing:".08em", textTransform:"uppercase", marginBottom:3 }}>Not matched</div>
+          <div style={{ fontSize:14, color: notMatchedSteps.length ? "var(--c-sb04e0e, #B04E0E)" : C.text5, fontWeight:600, lineHeight:1.4 }}>
             {branchSummary(notMatchedSteps)}
           </div>
-          <div style={{ fontSize:9, color: notMatchedSteps.length ? "#B04E0E" : C.muted, opacity: notMatchedSteps.length ? 0.75 : 1, fontFamily:"'DM Mono'", marginTop:4 }}>
+          <div style={{ fontSize:13, color: notMatchedSteps.length ? "var(--c-sb04e0e, #B04E0E)" : C.muted, opacity: notMatchedSteps.length ? 0.75 : 1, fontFamily:"'DM Mono'", marginTop:4 }}>
             {notMatchedSteps.length} step{notMatchedSteps.length===1?"":"s"} connected
           </div>
         </div>
@@ -1957,7 +2326,6 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
         <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:5 }}>
           <Pill active={delayMode==="duration"} onClick={()=>onUpdateNode(node.id, { delayMode:"duration" })}>For a duration</Pill>
           <Pill active={delayMode==="date"}     onClick={()=>onUpdateNode(node.id, { delayMode:"date"     })}>Until specific date</Pill>
-          <Pill active={delayMode==="field"}    onClick={()=>onUpdateNode(node.id, { delayMode:"field"    })}>Date from a field</Pill>
           <Pill active={delayMode==="until"}    onClick={()=>onUpdateNode(node.id, { delayMode:"until"    })}>Until a specific time</Pill>
         </div>
       </Field>
@@ -1979,22 +2347,13 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
               <option value="days">Days</option>
             </Select>
           </div>
-          {(!waitValue || waitValue === "0") && <div style={{ fontSize:10, color:C.red, marginTop:5, fontWeight:600 }}>Duration must be a positive number</div>}
+          {(!waitValue || waitValue === "0") && <div style={{ fontSize:13, color:C.red, marginTop:5, fontWeight:600 }}>Duration must be a positive number</div>}
         </Field>
       )}
 
       {delayMode === "date" && (
         <Field label="Wait until date & time" hint="Interpreted in IST. Capped at 7 days from now.">
           <Input type="datetime-local" value={node.untilDateTime || ""} onChange={(e)=>onUpdateNode(node.id, { untilDateTime: e.target.value })}/>
-        </Field>
-      )}
-
-      {delayMode === "field" && (
-        <Field label="Use date from custom field" hint="The flow waits until the date stored in this field (e.g. an appointment date).">
-          <Select value={node.dateField || ""} onChange={(e)=>onUpdateNode(node.id, { dateField: e.target.value })}>
-            <option value="">— Select a field —</option>
-            {fieldNames.map(f => <option key={f} value={f}>{f}</option>)}
-          </Select>
         </Field>
       )}
 
@@ -2023,7 +2382,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
     const addHeader = () => onUpdateNode(node.id, n => ({ ...n, headers: [ ...(Array.isArray(n.headers)?n.headers:[]), { k:"", v:"" } ] }));
     const delHeader = (i) => onUpdateNode(node.id, n => ({ ...n, headers: (Array.isArray(n.headers)?n.headers:[]).filter((_,idx)=>idx!==i) }));
     content = (<>
-      <div style={{ background:C.navyBg, border:`1px solid #9FAFD0`, borderRadius:10, padding:"10px 12px", marginBottom:14, fontSize:11, color:C.text2, lineHeight:1.5 }}>
+      <div style={{ background:C.navyBg, border:`1px solid #9FAFD0`, borderRadius:10, padding:"10px 12px", marginBottom:14, fontSize:14, color:C.text2, lineHeight:1.5 }}>
         Makes a real HTTP request when the flow reaches this step. URL, headers, and body all support <code style={{ background:C.sectionBg, padding:"1px 4px", borderRadius:3, fontFamily:"'DM Mono'" }}>{`{{variables}}`}</code> from upstream nodes. 15-second timeout.
       </div>
       <Field label="Method & URL">
@@ -2031,39 +2390,29 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
           <Select value={method} onChange={e=>onUpdateNode(node.id,{ method:e.target.value })} style={{ width:90, fontFamily:"'DM Mono'", fontWeight:700, color:C.brand }}>
             <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option>
           </Select>
-          <Input value={apiUrl} onChange={e=>onUpdateNode(node.id,{ apiUrl:e.target.value })} placeholder="https://api.example.com/endpoint" style={{ flex:1, fontFamily:"'DM Mono'", fontSize:11, borderColor: apiUrl && !urlOk ? C.red : C.inputBorder }}/>
+          <Input value={apiUrl} onChange={e=>onUpdateNode(node.id,{ apiUrl:e.target.value })} placeholder="https://api.example.com/endpoint" style={{ flex:1, fontFamily:"'DM Mono'", fontSize:14, borderColor: apiUrl && !urlOk ? C.red : C.inputBorder }}/>
         </div>
-        {apiUrl && !urlOk && <div style={{ fontSize:10, color:C.red, marginTop:5, fontWeight:600 }}>URL must start with http:// or https://</div>}
+        {apiUrl && !urlOk && <div style={{ fontSize:13, color:C.red, marginTop:5, fontWeight:600 }}>URL must start with http:// or https://</div>}
       </Field>
       <Field label="Headers">
         <div style={{ background:C.sectionBg, border:`1px solid ${C.innerBorder}`, borderRadius:8, padding:8 }}>
-          {headers.length === 0 && <div style={{ fontSize:11, color:C.muted, padding:"2px 4px 6px" }}>No headers.</div>}
+          {headers.length === 0 && <div style={{ fontSize:14, color:C.muted, padding:"2px 4px 6px" }}>No headers.</div>}
           {headers.map((h,i)=>(
             <div key={i} style={{ display:"grid", gridTemplateColumns:"1fr 1.6fr 24px", gap:5, marginBottom:4, alignItems:"center" }}>
-              <Input value={h.k||""} onChange={e=>setHeader(i,{ k:e.target.value })} placeholder="Header" style={{ padding:"5px 8px", fontSize:10, fontFamily:"'DM Mono'" }}/>
-              <Input value={h.v||""} onChange={e=>setHeader(i,{ v:e.target.value })} placeholder="Value" style={{ padding:"5px 8px", fontSize:10, fontFamily:"'DM Mono'" }}/>
+              <Input value={h.k||""} onChange={e=>setHeader(i,{ k:e.target.value })} placeholder="Header" style={{ padding:"5px 8px", fontSize:13, fontFamily:"'DM Mono'" }}/>
+              <Input value={h.v||""} onChange={e=>setHeader(i,{ v:e.target.value })} placeholder="Value" style={{ padding:"5px 8px", fontSize:13, fontFamily:"'DM Mono'" }}/>
               <IconBtn title="Remove header" onClick={()=>delHeader(i)}>{IC.x(12)}</IconBtn>
             </div>
           ))}
-          <button onClick={addHeader} style={{ background:"none", border:"none", color:C.brand, fontSize:11, fontWeight:600, cursor:"pointer", padding:"3px 4px" }}>+ Add header</button>
+          <button onClick={addHeader} style={{ background:"none", border:"none", color:C.brand, fontSize:14, fontWeight:600, cursor:"pointer", padding:"3px 4px" }}>+ Add header</button>
         </div>
       </Field>
       {method !== "GET" && (
         <Field label="Body" hint="Plain text or JSON. JSON is validated and sent with application/json. Supports {{variables}}.">
           <Textarea rows={6} value={node.body || ""} onChange={(e)=>onUpdateNode(node.id,{ body: e.target.value })}
-            placeholder={`{\n  "name": "{{name}}",\n  "phone": "{{contact_number}}"\n}`} style={{ fontFamily:"'DM Mono'", fontSize:11 }}/>
+            placeholder={`{\n  "name": "{{name}}",\n  "phone": "{{contact_number}}"\n}`} style={{ fontFamily:"'DM Mono'", fontSize:14 }}/>
         </Field>
       )}
-      <Field label="Save response to field" hint="Optional. Pull a value from the JSON response by path (e.g. $.data.id) and store it on the contact.">
-        <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-          <Input value={node.saveResponsePath || ""} onChange={e=>onUpdateNode(node.id,{ saveResponsePath:e.target.value })} placeholder="$.id" style={{ flex:1, fontFamily:"'DM Mono'", fontSize:11 }}/>
-          <span style={{ fontSize:12, color:C.text5 }}>→</span>
-          <Select value={node.saveResponseField || ""} onChange={e=>onUpdateNode(node.id,{ saveResponseField:e.target.value })} style={{ flex:1 }}>
-            <option value="">— Select a field —</option>
-            {fieldNames.map(f => <option key={f} value={f}>{f}</option>)}
-          </Select>
-        </div>
-      </Field>
       <Field label="On error" hint="What to do if the request fails or times out.">
         <div style={{ display:"flex", gap:6 }}>
           <Pill active={onError==="continue"} onClick={()=>onUpdateNode(node.id,{ onError:"continue" })}>Continue</Pill>
@@ -2071,672 +2420,6 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
           <Pill active={onError==="fail"}     onClick={()=>onUpdateNode(node.id,{ onError:"fail" })}>Fail run</Pill>
         </div>
       </Field>
-      <div style={{ display:"flex", gap:6, marginTop:14 }}>
-        <Btn kind="primary" style={{ flex:1, justifyContent:"center" }} onClick={onSaveAndClose}>Save</Btn>
-        <Btn kind="ghost" icon={IC.copy(13)} onClick={()=>onDuplicateNode(node.id)}>Duplicate</Btn>
-        <Btn kind="danger" icon={IC.trash(13)} onClick={()=>onDeleteNode(node.id)}>Delete</Btn>
-      </div>
-    </>);
-  }
-  else if (node.type === "handoff") {
-    const assignMode = node.assignMode || "specific";
-    const priority   = node.priority   || "high";
-    const slaValue   = node.slaValue   !== undefined ? node.slaValue : 15;
-    const slaUnit    = node.slaUnit    || "minutes";
-    const internalNote = node.internalNote !== undefined ? node.internalNote : "";
-    const assigned   = node.assigned   || [];
-    const notify     = node.notify     || { wa:true, email:true, task:false };
-
-    const toggleAssigned = (id) => onUpdateNode(node.id, n => {
-      const cur = n.assigned || [];
-      return { ...n, assigned: cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id] };
-    });
-    const setNotify = (key, val) => onUpdateNode(node.id, n => ({ ...n, notify: { ...(n.notify || {}), [key]: val } }));
-
-    const eligible = (assignableUsers || []).filter(u => assigned.includes(u.id));
-    const previewNames = eligible.map(u => u.displayName).join(", ") || "Nobody selected";
-    const roleLabel = (r) => r === 'admin' ? 'Admin' : r === 'bda_sales' ? 'BDA Sales' : (r || 'User');
-
-    content = (<>
-      <div style={{ background:C.pinkBg, border:`1px solid #E2A8C0`, borderRadius:10, padding:"11px 13px", marginBottom:14, display:"flex", alignItems:"flex-start", gap:9 }}>
-        <span style={{ color:C.pink, flexShrink:0, paddingTop:1 }}>{IC.agent(15)}</span>
-        <div style={{ flex:1 }}>
-          <div style={{ fontSize:12, fontWeight:700, color:C.pink, marginBottom:3 }}>What this block does</div>
-          <div style={{ fontSize:11, color:C.text2, lineHeight:1.5 }}>
-            Assigns the conversation to a live <strong>user</strong> (sets the contact's owner), ends the automation, and surfaces the chat in that user's Chats inbox. Optionally emails them to take over.
-          </div>
-        </div>
-      </div>
-
-      <Field label="Assignment mode" hint="Pick one specific person, or rotate across several.">
-        <div style={{ display:"flex", gap:6 }}>
-          <Pill active={assignMode==="specific"}    onClick={()=>onUpdateNode(node.id, { assignMode: "specific"    })}>Specific user</Pill>
-          <Pill active={assignMode==="round-robin"} onClick={()=>onUpdateNode(node.id, { assignMode: "round-robin" })}>Round robin</Pill>
-        </div>
-      </Field>
-
-      <Sec style={{ marginBottom:8 }}>
-        {assignMode==="round-robin" ? `Eligible users (${eligible.length} selected)` : "Pick the user"}
-      </Sec>
-      <div style={{ background:C.sectionBg, border:`1px solid ${C.innerBorder}`, borderRadius:10, padding:6, marginBottom:14, maxHeight:260, overflowY:"auto" }}>
-        {(assignableUsers || []).length === 0 && (
-          <div style={{ padding:"10px 12px", fontSize:11, color:C.muted, fontStyle:"italic" }}>No users available. Add users in Admin Settings → Users.</div>
-        )}
-        {(assignableUsers || []).map(u => {
-          const isSel = assigned.includes(u.id);
-          return (
-            <button key={u.id}
-              onClick={()=>{
-                if (assignMode === "specific") onUpdateNode(node.id, { assigned: isSel ? [] : [u.id] });
-                else toggleAssigned(u.id);
-              }}
-              className="picker-item"
-              style={{
-                width:"100%", padding:"8px 10px",
-                background: isSel ? C.brandBg : "transparent",
-                border: `1px solid ${isSel ? C.brandBright : "transparent"}`,
-                borderRadius:8, cursor:"pointer", textAlign:"left",
-                display:"flex", alignItems:"center", gap:10, marginBottom:2,
-                fontFamily:"'DM Sans'",
-              }}>
-              <div style={{ width:28, height:28, borderRadius:"50%", background:"#fff", border:`1px solid ${C.cardBorder}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:C.text2, flexShrink:0 }}>
-                {String(u.displayName||"?").split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase()}
-              </div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:12, fontWeight:600, color:C.text1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{u.displayName}</div>
-                <div style={{ fontSize:10, color:C.text5, marginTop:1 }}>{roleLabel(u.role)}{u.email ? ` · ${u.email}` : ""}</div>
-              </div>
-              <span style={{
-                width:18, height:18, borderRadius:assignMode==="round-robin" ? 5 : "50%",
-                border:`1.5px solid ${isSel ? C.brand : C.cardBorder}`,
-                background: isSel ? C.brand : "#fff",
-                color:"#fff", display:"flex", alignItems:"center", justifyContent:"center",
-                fontSize:10, fontWeight:700, flexShrink:0,
-              }}>{isSel ? <>{IC.ok(10)}</> : ""}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {eligible.length > 0 && (
-        <div style={{ background:C.brandBg, border:`1px solid ${C.brandBright}`, borderRadius:10, padding:"9px 12px", marginBottom:14 }}>
-          <div style={{ fontSize:10, color:C.brandDark, fontWeight:700, letterSpacing:".06em", textTransform:"uppercase", marginBottom:3 }}>Will assign to</div>
-          <div style={{ fontSize:11, color:C.brandDark, fontWeight:600, lineHeight:1.4 }}>{previewNames}</div>
-        </div>
-      )}
-      {eligible.length === 0 && (
-        <Alert kind="warn" style={{ marginBottom:14 }}>
-          No user selected. The flow will still end here, but the contact won't be reassigned.
-        </Alert>
-      )}
-
-      <Field label="Priority">
-        <div style={{ display:"flex", gap:6 }}>
-          {["low","normal","high","urgent"].map(p => (
-            <Pill key={p} active={priority===p} onClick={()=>onUpdateNode(node.id, { priority: p })}>{p[0].toUpperCase()+p.slice(1)}</Pill>
-          ))}
-        </div>
-      </Field>
-
-      <Field label="Internal note for the assigned user" hint="Included in the notification email so they have context.">
-        <Textarea rows={3} value={internalNote} onChange={(e)=>onUpdateNode(node.id, { internalNote: e.target.value })} placeholder="e.g. Hot lead — asked about pricing twice. Call within the hour."/>
-      </Field>
-
-      <Field label="Email the assigned user" hint="Sends a handoff email via your connected Gmail (Admin Settings → Integrations).">
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"7px 0" }}>
-          <span style={{ fontSize:12, color:C.text3, fontWeight:500 }}>{node.notifyEmail ? "On · emails the user when assigned" : "Off · assign silently"}</span>
-          <Toggle value={!!node.notifyEmail} onChange={(v)=>onUpdateNode(node.id, { notifyEmail: v })}/>
-        </div>
-      </Field>
-
-      <Alert kind="info">This ends the automation. The contact now belongs to the assigned user and appears in their Chats inbox in real time.</Alert>
-
-      <div style={{ display:"flex", gap:6, marginTop:14 }}>
-        <Btn kind="primary" style={{ flex:1, justifyContent:"center" }} onClick={onSaveAndClose}>Save</Btn>
-        <Btn kind="ghost" icon={IC.copy(13)} onClick={()=>onDuplicateNode(node.id)}>Duplicate</Btn>
-        <Btn kind="danger" icon={IC.trash(13)} onClick={()=>onDeleteNode(node.id)}>Delete</Btn>
-      </div>
-    </>);
-  }
-
-  else if (node.type==="trigger") {
-    const tk = node.triggerKind || "keyword";
-    const TRIGGER_EXPLAIN = {
-      keyword: {
-        icon: IC.zap, color: C.brand, bg: C.brandBg, border: C.brandBright,
-        source: "wa", sourceLabel: "WhatsApp message (inbound or outbound)",
-        title: "Keyword trigger",
-        body: "Starts this automation when a specific word or phrase appears in a WhatsApp message. Set 'Trigger on' to Inbound for words a contact sends (PRICE, BOOK, INFO on flyers/ads), or Outbound to fire on words YOU send from a BD number — e.g. auto-advance a lead the moment you send them 'bank details', without labelling them by hand."
-      },
-      link: {
-        icon: IC.link, color: C.blue, bg: C.blueBg, border: "#90CAF9",
-        source: "wa", sourceLabel: "WhatsApp inbound message webhook",
-        title: "WhatsApp click-to-chat link",
-        body: "Starts when a contact opens a wa.me link from your website, Meta ads, Instagram bio, or email signature. If the link is inside a Click-to-WhatsApp Meta ad, Meta opens a 72-hour free conversation window instead of the usual 24h."
-      },
-      qr: {
-        icon: IC.qr, color: "#6A3FAF", bg: "#E8E0F8", border: "#B5A4DD",
-        source: "wa", sourceLabel: "WhatsApp inbound message webhook",
-        title: "QR code scan",
-        body: "Technically identical to a click-to-chat link — the QR encodes a wa.me URL with a pre-filled message that identifies the scan source. WhatsApp doesn't know it came from a QR; the BSP attributes it via the pre-filled text."
-      },
-      newContact: {
-        icon: IC.user, color: C.purpleDark, bg: C.purpleBg, border: "#C7C2F4",
-        source: "wa", sourceLabel: "WhatsApp inbound message webhook (first-time contact)",
-        title: "New contact created",
-        body: "Fires the first time an unknown WhatsApp number messages your business number. Use this for welcome flows, opt-in capture, GDPR/DPDP consent, or any first-time greeting."
-      },
-      anyMessage: {
-        icon: IC.msg, color: C.blue, bg: C.blueBg, border: "#90CAF9",
-        source: "wa", sourceLabel: "WhatsApp inbound message webhook",
-        title: "Any inbound message",
-        body: "Fires on every inbound WhatsApp message from any contact — a catch-all entry point. Use sparingly; combine with filters so it doesn't override more specific triggers like Keyword or Tag Applied."
-      },
-      tagApplied: {
-        icon: IC.tag, color: "#5B5851", bg: "#F1F0EB", border: "#D9D6CE",
-        source: "bsp", sourceLabel: "Workspace event · not a WhatsApp API event",
-        title: "Tag applied to contact",
-        body: "Fires the moment a specific tag is added to a contact — by another flow, manual tagging in the inbox, or an import. This is a workspace-level event, not something WhatsApp itself emits."
-      },
-      webhook: {
-        icon: IC.api, color: C.navy, bg: C.navyBg, border: "#9FAFD0",
-        source: "bsp", sourceLabel: "External HTTP webhook · not a WhatsApp API event",
-        title: "Incoming webhook",
-        body: "Starts when an external service sends an HTTP POST to this flow's unique webhook URL. Each field in the request body becomes a variable downstream. Connect Razorpay, Stripe, Google Forms, Make.com, Zapier — anything that can fire a webhook."
-      },
-      apiEvent: {
-        icon: IC.api, color: "#4A2D7A", bg: "#E8E0F8", border: "#B5A4DD",
-        source: "bsp", sourceLabel: "Integrated app event · not a WhatsApp API event",
-        title: "Integrated app event",
-        body: "Starts on a typed event from an integrated app — Razorpay payment success, Calendly booking confirmed, Google Form submission, etc. Filter to just the events you care about."
-      },
-    };
-    const ex = TRIGGER_EXPLAIN[tk] || TRIGGER_EXPLAIN.keyword;
-
-    let kindFields = null;
-
-    if (tk === "keyword") {
-      const keyword     = node.keyword     !== undefined ? node.keyword     : "";
-      const matchType   = node.matchType   || "exact";
-      const caseSens    = !!node.caseSensitive;
-      const direction   = node.triggerDirection || "inbound";
-      const keywordOk   = !!(keyword && keyword.trim());
-      const whoOf = (d) => d === 'outbound' ? 'you send' : d === 'both' ? 'either side sends' : 'contact sends';
-      const subOf = (kw, mt, d) => {
-        const mtLabel = mt === 'contains' ? 'contains' : mt === 'starts' ? 'starts with' : 'exact';
-        return kw.trim() ? `When ${whoOf(d)} "${kw.trim()}" · ${mtLabel} match` : `When ${whoOf(d)} a specific keyword`;
-      };
-      const updateKeyword = (val) => {
-        onUpdateNode(node.id, {
-          keyword: val,
-          title: val.trim() ? `Trigger: ${val.trim()} keyword` : 'Trigger: Keyword',
-          sub: subOf(val, node.matchType || 'exact', direction),
-        });
-      };
-      const updateMatchType = (mt) => {
-        const kw = node.keyword || '';
-        onUpdateNode(node.id, {
-          matchType: mt,
-          title: kw.trim() ? `Trigger: ${kw.trim()} keyword` : 'Trigger: Keyword',
-          sub: subOf(kw, mt, direction),
-        });
-      };
-      const updateDirection = (d) => {
-        const kw = node.keyword || '';
-        onUpdateNode(node.id, { triggerDirection: d, sub: subOf(kw, node.matchType || 'exact', d) });
-      };
-      kindFields = (<>
-        <Field label="Keyword" hint="The word or phrase that must appear in the message to start this flow.">
-          <Input
-            value={keyword}
-            onChange={(e)=>updateKeyword(e.target.value.slice(0, 64))}
-            placeholder="e.g. PRICE, BOOK, INFO"
-            style={{ borderColor: keywordOk ? C.inputBorder : C.red, fontFamily:"'DM Mono'", fontWeight:600 }}
-          />
-          {!keywordOk && <div style={{ fontSize:10, color:C.red, marginTop:5, fontWeight:600 }}>Keyword is required</div>}
-        </Field>
-        <Field label="Trigger on" hint="Inbound = when the contact sends this keyword. Outbound = when YOU (a BD number) send it — e.g. auto-advance a lead right after you send them bank details. Both = either side.">
-          <div style={{ display:"flex", gap:6 }}>
-            <Pill active={direction==="inbound"}  onClick={()=>updateDirection("inbound")}>Inbound</Pill>
-            <Pill active={direction==="outbound"} onClick={()=>updateDirection("outbound")}>Outbound</Pill>
-            <Pill active={direction==="both"}     onClick={()=>updateDirection("both")}>Both</Pill>
-          </div>
-        </Field>
-        <Field label="Match type">
-          <div style={{ display:"flex", gap:6 }}>
-            <Pill active={matchType==="exact"}    onClick={()=>updateMatchType("exact")}>Exact match</Pill>
-            <Pill active={matchType==="contains"} onClick={()=>updateMatchType("contains")}>Contains</Pill>
-            <Pill active={matchType==="starts"}   onClick={()=>updateMatchType("starts")}>Starts with</Pill>
-          </div>
-        </Field>
-        <Field label="Case sensitive">
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-            <span style={{ fontSize:12, color:C.text3 }}>{caseSens ? "On · only matches exact case" : "Off · matches PRICE, price, Price"}</span>
-            <Toggle value={caseSens} onChange={(v)=>onUpdateNode(node.id, { caseSensitive: v })}/>
-          </div>
-        </Field>
-        <Field label="Example preview">
-          <div style={{ background:C.sectionBg, border:`1px solid ${C.innerBorder}`, borderRadius:10, padding:11 }}>
-            <div style={{ fontSize:10, color:C.muted, fontWeight:700, letterSpacing:".08em", textTransform:"uppercase", marginBottom:6 }}>{direction === 'outbound' ? 'When you send' : direction === 'both' ? 'When either side sends' : 'When contact sends'}</div>
-            <div style={{ background: direction === 'outbound' ? "#D3E7FF" : "#DCF8C6", borderRadius:"8px 0 8px 8px", padding:"5px 9px", fontSize:11, color:C.text1, alignSelf:"flex-end", marginBottom:6, display:"inline-block", fontFamily:"'DM Mono'", fontWeight:600 }}>{(keyword || "").trim() || "price"}</div>
-            <div style={{ fontSize:10, color:C.muted, fontWeight:700, letterSpacing:".08em", textTransform:"uppercase", marginBottom:6 }}>Bot starts</div>
-            <div style={{ fontSize:11, color:C.brandDark, fontWeight:600 }}>→ This flow runs</div>
-          </div>
-        </Field>
-      </>);
-    }
-
-    else if (tk === "link") {
-      const phone        = node.businessPhone  || "919876543210";
-      const trackingCode = node.trackingCode   || "WEB_HOMEPAGE_HERO";
-      const linkSource   = node.linkSource     || "Website";
-      const prefilledMsg = node.prefilledMsg   || "Hi, I'd like to know more";
-      const codeOk = !!(trackingCode && trackingCode.trim());
-      const generatedUrl = `https://wa.me/${phone.replace(/[^\d]/g, "")}?text=${encodeURIComponent(prefilledMsg + " · " + trackingCode)}`;
-      kindFields = (<>
-        <Field label="Business WhatsApp number" hint="The number visitors will start chatting with. No leading + needed.">
-          <Input
-            value={phone}
-            onChange={(e)=>onUpdateNode(node.id, { businessPhone: e.target.value.replace(/[^\d]/g, "").slice(0, 15) })}
-            placeholder="919876543210"
-            style={{ fontFamily:"'DM Mono'", fontWeight:600 }}
-            inputMode="numeric"
-          />
-        </Field>
-        <Field label="Tracking code" hint="Appended to the wa.me link's prefilled text. Used to attribute the lead back to a campaign.">
-          <Input
-            value={trackingCode}
-            onChange={(e)=>onUpdateNode(node.id, { trackingCode: e.target.value.toUpperCase().replace(/[^\w_]/g, "").slice(0, 40) })}
-            placeholder="WEB_HOMEPAGE_HERO"
-            style={{ borderColor: codeOk ? C.inputBorder : C.red, fontFamily:"'DM Mono'", fontWeight:600 }}
-          />
-          {!codeOk && <div style={{ fontSize:10, color:C.red, marginTop:5, fontWeight:600 }}>Tracking code is required to attribute leads</div>}
-        </Field>
-        <Field label="Campaign source">
-          <Select value={linkSource} onChange={(e)=>onUpdateNode(node.id, { linkSource: e.target.value })}>
-            <option>Website</option>
-            <option>Meta Ads</option>
-            <option>Google Ads</option>
-            <option>Instagram Bio</option>
-            <option>Email Signature</option>
-            <option>Newsletter</option>
-            <option>Other</option>
-          </Select>
-        </Field>
-        <Field label="Pre-filled message" hint="What auto-appears in the contact's WhatsApp message box.">
-          <Input value={prefilledMsg} onChange={(e)=>onUpdateNode(node.id, { prefilledMsg: e.target.value })}/>
-        </Field>
-        <Field label="Generated wa.me URL">
-          <div style={{ background:C.sectionBg, border:`1px solid ${C.innerBorder}`, borderRadius:10, padding:"9px 11px", fontSize:10, color:C.text3, fontFamily:"'DM Mono'", wordBreak:"break-all", lineHeight:1.5 }}>
-            {generatedUrl}
-          </div>
-          <div style={{ fontSize:10, color:C.muted, marginTop:5, fontWeight:500 }}>Copy this URL into your website CTA, ads, or email signature.</div>
-        </Field>
-      </>);
-    }
-
-    else if (tk === "qr") {
-      const qrLabel    = node.qrLabel    || "FLYER_DIWALI_2025";
-      const qrLocation = node.qrLocation || "Anna Nagar billboard";
-      const phone      = node.businessPhone || "919876543210";
-      const prefilledMsg = node.prefilledMsg || `Scanned from ${qrLocation}`;
-      const labelOk = !!(qrLabel && qrLabel.trim());
-      kindFields = (<>
-        <Field label="QR code label" hint="A unique name for this QR. The flow will know exactly which printed asset triggered the scan.">
-          <Input
-            value={qrLabel}
-            onChange={(e)=>onUpdateNode(node.id, { qrLabel: e.target.value.toUpperCase().replace(/[^\w_]/g, "").slice(0, 40) })}
-            placeholder="FLYER_DIWALI_2025"
-            style={{ borderColor: labelOk ? C.inputBorder : C.red, fontFamily:"'DM Mono'", fontWeight:600 }}
-          />
-          {!labelOk && <div style={{ fontSize:10, color:C.red, marginTop:5, fontWeight:600 }}>Label is required</div>}
-        </Field>
-        <Field label="Where this QR is printed" hint="For internal tracking only.">
-          <Input
-            value={qrLocation}
-            onChange={(e)=>onUpdateNode(node.id, { qrLocation: e.target.value })}
-            placeholder="e.g. Anna Nagar billboard, brochure"
-          />
-        </Field>
-        <Field label="Business number">
-          <Input
-            value={phone}
-            onChange={(e)=>onUpdateNode(node.id, { businessPhone: e.target.value.replace(/[^\d]/g, "").slice(0, 15) })}
-            placeholder="919876543210"
-            style={{ fontFamily:"'DM Mono'", fontWeight:600 }}
-            inputMode="numeric"
-          />
-        </Field>
-        <Field label="Pre-filled message" hint="The label is appended so the scan can be attributed back to this QR.">
-          <Input value={prefilledMsg} onChange={(e)=>onUpdateNode(node.id, { prefilledMsg: e.target.value })}/>
-        </Field>
-        <Field label="Encode this wa.me URL into your QR" hint="Generate a QR for this URL with any QR tool. When scanned, the label below arrives in the message and fires this trigger.">
-          <div style={{ background:C.sectionBg, border:`1px solid ${C.innerBorder}`, borderRadius:10, padding:"9px 11px", fontSize:10, color:C.text3, fontFamily:"'DM Mono'", wordBreak:"break-all", lineHeight:1.5 }}>
-            {`https://wa.me/${phone.replace(/[^\d]/g, "")}?text=${encodeURIComponent(prefilledMsg + " · " + qrLabel)}`}
-          </div>
-          <div style={{ fontSize:10, color:C.muted, marginTop:5, fontWeight:500 }}>Matches when the inbound message contains <code style={{ background:"#fff", padding:"1px 4px", borderRadius:3, fontFamily:"'DM Mono'", fontWeight:700 }}>{qrLabel || "your label"}</code>.</div>
-        </Field>
-      </>);
-    }
-
-    else if (tk === "newContact") {
-      const onlyFirstEver = node.onlyFirstEver !== undefined ? node.onlyFirstEver : true;
-      const optIn = !!node.requireOptIn;
-      kindFields = (<>
-        <Field label="Trigger condition">
-          <div style={{ background:C.sectionBg, border:`1px solid ${C.innerBorder}`, borderRadius:10, padding:"10px 12px", fontSize:11, color:C.text3, lineHeight:1.5 }}>
-            <strong style={{ color:C.text2 }}>Fires when:</strong> An unknown WhatsApp number messages this business number for the very first time.
-          </div>
-        </Field>
-        <Field label="Only first-ever message">
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-            <span style={{ fontSize:12, color:C.text3 }}>{onlyFirstEver ? "On · ignore returning contacts" : "Off · also fire on returning contacts that left the previous flow"}</span>
-            <Toggle value={onlyFirstEver} onChange={(v)=>onUpdateNode(node.id, { onlyFirstEver: v })}/>
-          </div>
-        </Field>
-        <Field label="Require DPDP / GDPR opt-in">
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-            <span style={{ fontSize:12, color:C.text3 }}>{optIn ? "On · ask consent before continuing" : "Off · proceed without explicit opt-in"}</span>
-            <Toggle value={optIn} onChange={(v)=>onUpdateNode(node.id, { requireOptIn: v })}/>
-          </div>
-        </Field>
-        <Alert kind="info">Combine this trigger with a Welcome Message and an AI step that captures the contact's name, city, and intent in one flow.</Alert>
-      </>);
-    }
-
-    else if (tk === "anyMessage") {
-      const skipIfInFlow = node.skipIfInFlow !== undefined ? node.skipIfInFlow : true;
-      const requireTag = node.requireTag || "";
-      kindFields = (<>
-        <Field label="Skip if contact is already in another flow">
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-            <span style={{ fontSize:12, color:C.text3 }}>{skipIfInFlow ? "On · recommended" : "Off · run alongside other flows"}</span>
-            <Toggle value={skipIfInFlow} onChange={(v)=>onUpdateNode(node.id, { skipIfInFlow: v })}/>
-          </div>
-        </Field>
-        <Field label="Only run for contacts with tag" hint="Leave empty to run for all contacts.">
-          <Select value={requireTag} onChange={(e)=>onUpdateNode(node.id, { requireTag: e.target.value })}>
-            <option value="">— Any contact —</option>
-            {tagNames.map(tg => <option key={tg} value={tg}>{tg}</option>)}
-          </Select>
-        </Field>
-        <Alert kind="warn">This is a catch-all trigger — keep it as a low-priority fallback. More specific triggers (Keyword, Tag Applied) should take precedence.</Alert>
-      </>);
-    }
-
-    else if (tk === "tagApplied") {
-      const tag = node.tag || "";
-      const fireOnce = node.fireOncePerTag !== undefined ? node.fireOncePerTag : true;
-      const direction = node.tagDirection || "added";
-      const tagOk = !!tag;
-      kindFields = (<>
-        <Field label="Tag to watch" hint="Which tag to listen for.">
-          <Select value={tag} onChange={(e)=>onUpdateNode(node.id, { tag: e.target.value })}
-            style={{ borderColor: tagOk ? C.inputBorder : C.red }}>
-            <option value="">— Select a tag —</option>
-            {tagNames.map(tg => <option key={tg} value={tg}>{tg}</option>)}
-          </Select>
-          {!tagOk && <div style={{ fontSize:10, color:C.red, marginTop:5, fontWeight:600 }}>Pick a tag — this trigger needs to know which one to watch</div>}
-        </Field>
-        <Field label="Trigger when tag is">
-          <div style={{ display:"flex", gap:6 }}>
-            <Pill active={direction==="added"}   onClick={()=>onUpdateNode(node.id, { tagDirection:"added" })}>Added</Pill>
-            <Pill active={direction==="removed"} onClick={()=>onUpdateNode(node.id, { tagDirection:"removed" })}>Removed</Pill>
-          </div>
-        </Field>
-        <Field label="Fire only the first time" hint="If on, the trigger fires only the first time this tag is added to each contact.">
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-            <span style={{ fontSize:12, color:C.text3 }}>{fireOnce ? "On · once per contact" : "Off · fire on every tag application"}</span>
-            <Toggle value={fireOnce} onChange={(v)=>onUpdateNode(node.id, { fireOncePerTag: v })}/>
-          </div>
-        </Field>
-      </>);
-    }
-
-    else if (tk === "webhook") {
-      kindFields = (<>
-        <WebhookTriggerConfig automationId={automationId} />
-        <Alert kind="info">Each top-level field in the POSTed JSON becomes a variable downstream — e.g. <code style={{ background:C.sectionBg, padding:"1px 4px", borderRadius:3, fontFamily:"'DM Mono'", fontWeight:600 }}>{`{{contact_name}}`}</code>. The <code style={{ background:C.sectionBg, padding:"1px 4px", borderRadius:3, fontFamily:"'DM Mono'", fontWeight:600 }}>contact_phone</code> field is required — it's who the flow runs for.</Alert>
-      </>);
-    }
-
-    else if (tk === "apiEvent") {
-      const integration = node.integration || "razorpay";
-      const eventType   = node.eventType   || "";
-      const eventOk     = !!eventType;
-      const EVENT_OPTIONS = {
-        razorpay:    ["payment.captured","payment.failed","payment.authorized","refund.created","refund.processed","subscription.charged"],
-        stripe:      ["payment_intent.succeeded","payment_intent.payment_failed","invoice.paid","customer.subscription.created","charge.refunded"],
-        calendly:    ["invitee.created","invitee.canceled","invitee.rescheduled"],
-        googleforms: ["response.submitted","response.updated"],
-        makecom:     ["scenario.completed","scenario.failed","data.received"],
-        zapier:      ["zap.triggered","zap.completed"],
-      };
-      kindFields = (<>
-        <Field label="Source integration">
-          <Select value={integration} onChange={(e)=>onUpdateNode(node.id, { integration: e.target.value, eventType: "" })}>
-            <option value="razorpay">Razorpay Payments</option>
-            <option value="stripe">Stripe Payments</option>
-            <option value="calendly">Calendly</option>
-            <option value="googleforms">Google Forms</option>
-            <option value="makecom">Make.com</option>
-            <option value="zapier">Zapier</option>
-          </Select>
-        </Field>
-        <Field label="Event type" hint="Only fire when the POSTed JSON's `event` field matches this. Leave blank to accept any event.">
-          <Select value={eventType} onChange={(e)=>onUpdateNode(node.id, { eventType: e.target.value })}
-            style={{ fontFamily:"'DM Mono'", fontSize:11 }}>
-            <option value="">— Any event —</option>
-            {(EVENT_OPTIONS[integration] || []).map(ev => <option key={ev} value={ev}>{ev}</option>)}
-          </Select>
-        </Field>
-        <WebhookTriggerConfig automationId={automationId} />
-        <Alert kind="info">Point your {integration === "razorpay" ? "Razorpay" : integration === "stripe" ? "Stripe" : integration === "calendly" ? "Calendly" : integration === "googleforms" ? "Google Forms" : integration === "makecom" ? "Make.com" : "Zapier"} webhook at the URL above. The flow runs for the <code style={{ background:C.sectionBg, padding:"1px 4px", borderRadius:3, fontFamily:"'DM Mono'", fontWeight:600 }}>contact_phone</code> in the payload, and every field becomes a {`{{variable}}`}.</Alert>
-      </>);
-    }
-
-    content = (<>
-      <div style={{ background:ex.bg, border:`1px solid ${ex.border}`, borderRadius:10, padding:"11px 13px", marginBottom:14, display:"flex", alignItems:"flex-start", gap:9 }}>
-        <span style={{ color:ex.color, flexShrink:0, paddingTop:1 }}>{ex.icon(15)}</span>
-        <div style={{ flex:1 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3, flexWrap:"wrap" }}>
-            <div style={{ fontSize:12, fontWeight:700, color:ex.color }}>{ex.title}</div>
-            <span style={{
-              fontSize:8.5, fontWeight:700, padding:"2px 6px", borderRadius:99,
-              letterSpacing:".08em", textTransform:"uppercase",
-              background: ex.source === "wa" ? "#1F8451" : "#7A5C00",
-              color:"#fff",
-            }}>{ex.source === "wa" ? "WhatsApp event" : "Workspace event"}</span>
-          </div>
-          <div style={{ fontSize:11, color:C.text2, lineHeight:1.5, marginBottom:5 }}>{ex.body}</div>
-          <div style={{ fontSize:9.5, color:C.muted, fontFamily:"'DM Mono'", fontWeight:600 }}>Source: {ex.sourceLabel}</div>
-        </div>
-      </div>
-
-      <Field label="Trigger type" hint="Change how this flow gets triggered.">
-        <Select value={tk} onChange={(e)=>{
-          const newKind = e.target.value;
-          const nextNode = { ...node, triggerKind: newKind };
-          const display = getTriggerDisplay(nextNode);
-          onUpdateNode(node.id, { triggerKind: newKind, title: display.title, sub: display.sub });
-        }}
-          style={{ fontWeight:600 }}>
-          <option value="keyword">Keyword Trigger</option>
-          <option value="link">WhatsApp Click-to-Chat Link</option>
-          <option value="qr">QR Code Scan</option>
-          <option value="newContact">New Contact</option>
-          <option value="anyMessage">Any Inbound Message</option>
-          <option value="tagApplied">Tag Applied</option>
-          <option value="webhook">Incoming Webhook</option>
-          <option value="apiEvent">Integrated App Event</option>
-        </Select>
-      </Field>
-
-      {/* WhatsApp account filter — empty array means "fire on any number" */}
-      {(() => {
-        const selected = Array.isArray(node.triggerAccounts) ? node.triggerAccounts : [];
-        const toggle = (phone) => {
-          const next = selected.includes(phone) ? selected.filter(p => p !== phone) : [...selected, phone];
-          onUpdateNode(node.id, { triggerAccounts: next });
-        };
-        const all = whatsappAccounts || [];
-        return (
-          <Field
-            label="Listen on WhatsApp accounts"
-            hint={selected.length === 0
-              ? "Empty = fire when the message arrives on ANY of your WhatsApp numbers."
-              : `${selected.length} account${selected.length === 1 ? '' : 's'} selected — trigger only fires for inbound messages on these.`}
-          >
-            {all.length === 0 ? (
-              <div style={{ background:C.sectionBg, border:`1px dashed ${C.cardBorder}`, borderRadius:8, padding:"10px 12px", fontSize:11, color:C.muted, fontStyle:"italic" }}>
-                No WhatsApp accounts configured. Add one in Admin Settings → WhatsApp Accounts.
-              </div>
-            ) : (
-              <div style={{ display:"flex", flexDirection:"column", gap:5, maxHeight:200, overflowY:"auto", border:`1px solid ${C.cardBorder}`, borderRadius:8, padding:6, background:"#fff" }}>
-                {all.map(acc => {
-                  const phone = acc.displayPhoneNumber;
-                  const checked = selected.includes(phone);
-                  return (
-                    <label key={acc.id}
-                      style={{ display:"flex", alignItems:"center", gap:9, padding:"6px 8px", borderRadius:6, cursor:"pointer", background: checked ? C.brandBg : "transparent" }}
-                      onMouseEnter={(e)=>{ if (!checked) e.currentTarget.style.background = C.sectionBg; }}
-                      onMouseLeave={(e)=>{ if (!checked) e.currentTarget.style.background = "transparent"; }}>
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={()=>toggle(phone)}
-                        style={{ accentColor: C.brand, cursor:"pointer" }}
-                      />
-                      <span style={{ fontSize:12, fontWeight:600, color: checked ? C.brandDark : C.text1, fontFamily:"'DM Sans'" }}>
-                        {acc.displayName}
-                      </span>
-                      {acc.isDefault && (
-                        <span style={{ fontSize:9, fontWeight:700, padding:"1px 5px", borderRadius:4, background:C.sectionBg, color:C.muted, letterSpacing:".04em", textTransform:"uppercase" }}>default</span>
-                      )}
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-          </Field>
-        );
-      })()}
-
-      {kindFields}
-
-      <div style={{ display:"flex", gap:6, marginTop:14 }}>
-        <Btn kind="primary" style={{ flex:1, justifyContent:"center" }} onClick={onSaveAndClose}>Save</Btn>
-        <Btn kind="ghost" icon={IC.copy(13)} onClick={()=>onDuplicateNode(node.id)}>Duplicate</Btn>
-        <Btn kind="danger" icon={IC.trash(13)} onClick={()=>onDeleteNode(node.id)}>Delete</Btn>
-      </div>
-    </>);
-  }
-
-  else if (node.type==="ai") {
-    const aiTask    = node.aiTask    || "lead_qualification";
-    const aiGoal    = node.aiGoal    !== undefined ? node.aiGoal    : "Qualify the lead by asking about budget, timeline, and preferred area. Politely escalate to a human if the lead is hot.";
-    const aiContext = node.aiContext !== undefined ? node.aiContext : "We are Forge Realty, a Chennai-based real-estate agency. Our active inventory: 2BHK & 3BHK apartments in Anna Nagar (₹85L–₹1.2Cr), Adyar (₹1.4Cr–₹2.1Cr), and Velachery (₹70L–₹95L). Site visits Mon–Sat 11 AM – 6 PM. Token amount ₹50,000 (refundable).";
-    const aiSaveTo  = node.aiSaveTo  || "ai_summary";
-    const aiFallback= node.aiFallback|| "fallback_message";
-    const fallbackTemplateId = node.fallbackTemplateId || "";
-    const goalOk    = !!(aiGoal && aiGoal.trim());
-    content = (<>
-      <div style={{ background:"#FFF3E0", border:"1px solid #FFCC80", borderRadius:10, padding:"11px 13px", marginBottom:14, display:"flex", alignItems:"flex-start", gap:9 }}>
-        <span style={{ color:"#B04E0E", flexShrink:0, paddingTop:1 }}>{IC.warn(15)}</span>
-        <div style={{ flex:1 }}>
-          <div style={{ fontSize:12, fontWeight:700, color:"#B04E0E", marginBottom:3 }}>Meta AI policy · January 2026</div>
-          <div style={{ fontSize:11, color:C.text2, lineHeight:1.5 }}>
-            Open-ended general-purpose AI chatbots on WhatsApp are <strong>not allowed</strong>. Every AI step must serve a concrete business task. Pick one below so this step stays compliant.
-          </div>
-        </div>
-      </div>
-
-      <Field label="Business task" hint="Per Meta's policy the AI must be tied to a specific business task.">
-        <Select value={aiTask} onChange={(e)=>onUpdateNode(node.id, { aiTask: e.target.value })}>
-          <option value="lead_qualification">Lead qualification</option>
-          <option value="customer_support">Customer support</option>
-          <option value="appointment_booking">Appointment booking</option>
-          <option value="product_recommendation">Product recommendation</option>
-          <option value="order_status">Order status lookup</option>
-          <option value="payment_assistance">Payment assistance</option>
-          <option value="faq_answering">FAQ answering</option>
-          <option value="data_collection">Structured data collection</option>
-        </Select>
-      </Field>
-
-      <Field label="AI model" hint="Which connected model runs this step. Leave on auto to use the first available.">
-        <Select
-          value={node.aiModelRef ? `${node.aiModelRef.credentialId}::${node.aiModelRef.modelId}` : ""}
-          onChange={(e)=>{
-            const val = e.target.value;
-            if (!val) { onUpdateNode(node.id, { aiModelRef: null }); return; }
-            const sep = val.indexOf("::");
-            const cid = val.slice(0, sep), mid = val.slice(sep + 2);
-            const opt = aiModelOptions.find(o => String(o.credentialId) === cid && o.modelId === mid);
-            onUpdateNode(node.id, { aiModelRef: opt ? { credentialId: opt.credentialId, modelId: opt.modelId, provider: opt.provider, label: opt.label } : null });
-          }}
-        >
-          <option value="">— Auto-select a connected model —</option>
-          {aiModelOptions.map(o => <option key={`${o.credentialId}::${o.modelId}`} value={`${o.credentialId}::${o.modelId}`}>{o.label}</option>)}
-        </Select>
-        {aiModelOptions.length === 0 && <div style={{ fontSize:10, color:"#B04E0E", marginTop:5, fontWeight:600 }}>No AI provider connected — add one in Admin Settings → AI Models, or this step runs its fallback.</div>}
-      </Field>
-
-      <Field label="Tell AI what to do" hint="Set the goal for this step. Be specific and task-bounded.">
-        <Textarea
-          rows={4}
-          value={aiGoal}
-          onChange={(e)=>onUpdateNode(node.id, { aiGoal: e.target.value })}
-          placeholder="Set a goal for the conversation"
-          style={{ borderColor: goalOk ? C.inputBorder : C.red }}
-        />
-        {!goalOk && <div style={{ fontSize:10, color:C.red, marginTop:5, fontWeight:600 }}>Goal is required — tell the AI what it should do at this step</div>}
-      </Field>
-
-      <Field label="Give AI context" hint="Share all the info AI needs (catalog, hours, pricing, FAQs).">
-        <Textarea
-          rows={6}
-          value={aiContext}
-          onChange={(e)=>onUpdateNode(node.id, { aiContext: e.target.value })}
-          placeholder="Share all the info"
-        />
-      </Field>
-
-      <Alert kind="warn" style={{ marginTop:4 }}>
-        <strong>24-hour service window required.</strong> AI generates free-form text, which WhatsApp only allows inside the customer service window. Outside it, the flow falls back to the approved template you pick below.
-      </Alert>
-
-      <Field label="Save AI output to field" style={{ marginTop:14 }}>
-        <Select value={aiSaveTo} onChange={(e)=>onUpdateNode(node.id, { aiSaveTo: e.target.value })}>
-          {fieldNames.map(f => <option key={f} value={f}>{f}</option>)}
-          <option value="__new__">+ New custom field</option>
-        </Select>
-      </Field>
-
-      <Field label="Fallback if outside 24h window or AI fails">
-        <Select value={aiFallback} onChange={(e)=>onUpdateNode(node.id, { aiFallback: e.target.value })}>
-          <option value="fallback_message">Send an approved template</option>
-          <option value="handoff">Hand off to team member</option>
-          <option value="exit">Exit flow</option>
-        </Select>
-      </Field>
-
-      {aiFallback === "fallback_message" && (
-        <Field label="Fallback template" hint="Required since AI free-form is window-restricted.">
-          <SearchableSelect
-            value={fallbackTemplateId}
-            onChange={(val) => onUpdateNode(node.id, { fallbackTemplateId: val })}
-            options={templateOptions}
-            placeholder="— Pick a template —"
-            searchPlaceholder="Search templates..."
-            emptyText="No templates found"
-            createLabel="Create new template"
-            onCreate={onCreateTemplate}
-          />
-          {!fallbackTemplateId && <div style={{ fontSize:10, color:C.red, marginTop:5, fontWeight:600 }}>Pick a fallback template — required for outside-window scenarios</div>}
-        </Field>
-      )}
-
       <div style={{ display:"flex", gap:6, marginTop:14 }}>
         <Btn kind="primary" style={{ flex:1, justifyContent:"center" }} onClick={onSaveAndClose}>Save</Btn>
         <Btn kind="ghost" icon={IC.copy(13)} onClick={()=>onDuplicateNode(node.id)}>Duplicate</Btn>
@@ -2771,7 +2454,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
           placeholder="You are a helpful assistant for our business…"
         />
       </Field>
-      <Field label="Context" hint="Background info the agent needs every turn (catalog, hours, FAQs, escalation rules).">
+      <Field label="Context" hint="Background info the agent needs every turn (products, hours, FAQs, escalation rules).">
         <Textarea
           rows={5}
           value={agentContext}
@@ -2798,21 +2481,15 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
         hint="Pick which ForgeCRM contact fields the agent should extract. Extracted values are saved onto the contact (name → contact name, others → their custom field) and can be inserted downstream via the {x} picker (e.g. {{name}})."
       >
         {outputVariables.length === 0 && (
-          <div style={{ background:C.sectionBg, border:`1px dashed ${C.cardBorder}`, borderRadius:8, padding:"10px 12px", fontSize:11, color:C.muted, fontStyle:"italic", marginBottom:8 }}>
+          <div style={{ background:C.sectionBg, border:`1px dashed ${C.cardBorder}`, borderRadius:8, padding:"10px 12px", fontSize:14, color:C.muted, fontStyle:"italic", marginBottom:8 }}>
             No output variables yet. Click "+ Add variable" to choose a ForgeCRM field (like <span style={{ fontFamily:"'DM Mono'" }}>name</span>) the agent should extract.
           </div>
         )}
         {(() => {
-          // ForgeCRM field options the agent can extract into: the built-in
-          // contact name + every custom field (Admin Settings → Fields).
+          // Contact custom fields were removed, so the contact NAME is the only
+          // thing an extraction can be written back to. Everything else the
+          // agent parses is still exposed downstream as a {{variable}}.
           const fieldOpts = [{ key: "name", label: "name · Full contact name" }];
-          const seenOpt = new Set(["name"]);
-          (contactFields || []).forEach(f => {
-            const k = fieldVarKey(f.name);
-            if (!k || seenOpt.has(k)) return;
-            seenOpt.add(k);
-            fieldOpts.push({ key: k, label: f.name, fieldName: f.name });
-          });
           return outputVariables.map((ov, i) => {
             const known = !ov.key || fieldOpts.some(o => o.key === ov.key);
             return (
@@ -2820,7 +2497,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
                 <Select
                   value={ov.key || ""}
                   onChange={(e)=>{ const k = e.target.value; const o = fieldOpts.find(x=>x.key===k); setOutVar(i, { key: k, fieldName: o ? (o.fieldName || o.label) : "" }); }}
-                  style={{ fontFamily:"'DM Mono'", fontSize:11 }}
+                  style={{ fontFamily:"'DM Mono'", fontSize:14 }}
                 >
                   <option value="">— Select a field —</option>
                   {fieldOpts.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
@@ -2830,7 +2507,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
                   value={ov.description || ""}
                   onChange={(e)=>setOutVar(i, { description: e.target.value })}
                   placeholder="hint for the agent (optional)"
-                  style={{ fontSize:11 }}
+                  style={{ fontSize:14 }}
                 />
                 <IconBtn danger title="Remove variable" onClick={()=>delOutVar(i)}>{IC.trash(12)}</IconBtn>
               </div>
@@ -2840,14 +2517,14 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
         <Btn kind="ghost" size="sm" icon={IC.plus ? IC.plus(12) : null} onClick={addOutVar}>+ Add variable</Btn>
       </Field>
       <Field label="Model">
-        <div style={{ padding:"10px 12px", border:`1.5px dashed ${C.inputBorder}`, borderRadius:8, background:C.sectionBg, fontSize:12, color:C.text3, fontFamily:"'DM Sans'" }}>
+        <div style={{ padding:"10px 12px", border:`1.5px dashed ${C.inputBorder}`, borderRadius:8, background:C.sectionBg, fontSize:15, color:C.text3, fontFamily:"'DM Sans'" }}>
           {modelRef
             ? <>Using <strong style={{ color:C.text1 }}>{modelRef.label}</strong> — click the left handle to change.</>
             : <>No model selected. Click the <strong>left "Model"</strong> handle to pick one.</>}
         </div>
       </Field>
       <Field label={`Tools${toolRefs.length ? ` (${toolRefs.length})` : ""}`}>
-        <div style={{ padding:"10px 12px", border:`1.5px dashed ${C.inputBorder}`, borderRadius:8, background:C.sectionBg, fontSize:12, color:C.text3, fontFamily:"'DM Sans'" }}>
+        <div style={{ padding:"10px 12px", border:`1.5px dashed ${C.inputBorder}`, borderRadius:8, background:C.sectionBg, fontSize:15, color:C.text3, fontFamily:"'DM Sans'" }}>
           {toolRefs.length
             ? toolRefs.map(t => t.label).join(", ")
             : <>No tools attached. Click the <strong>right "Tool"</strong> handle to add one.</>}
@@ -2880,10 +2557,10 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
     }));
 
     content = (<>
-      <div style={{ fontSize:14, fontWeight:600, color:C.text1, marginBottom:14, fontFamily:"'DM Sans'" }}>Perform following actions:</div>
+      <div style={{ fontSize:16, fontWeight:600, color:C.text1, marginBottom:14, fontFamily:"'DM Sans'" }}>Perform following actions:</div>
 
       {actions.length === 0 && (
-        <div style={{ background:C.sectionBg, border:`1px dashed ${C.cardBorder}`, borderRadius:10, padding:"18px 14px", textAlign:"center", fontSize:12, color:C.muted, fontStyle:"italic", marginBottom:12 }}>
+        <div style={{ background:C.sectionBg, border:`1px dashed ${C.cardBorder}`, borderRadius:10, padding:"18px 14px", textAlign:"center", fontSize:15, color:C.muted, fontStyle:"italic", marginBottom:12 }}>
           No actions yet. Click "+ Action" below to add one.
         </div>
       )}
@@ -2893,15 +2570,23 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
         return (
           <div key={a.id} style={{ marginBottom:16 }}>
             <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:7 }}>
-              <span style={{ color:"#C8881F", display:"flex", flexShrink:0 }}>{kind.icon(17)}</span>
-              <Select value={a.kind} onChange={(e)=>updateAction(i, { kind: e.target.value })} style={{ flex:1, fontSize:13, fontWeight:600, color:C.text1, border:"none", background:"transparent", padding:"2px 6px 2px 0" }}>
+              <span style={{ color:"var(--c-sc8881f, #C8881F)", display:"flex", flexShrink:0 }}>{kind.icon(17)}</span>
+              <Select value={a.kind} onChange={(e)=>updateAction(i, { kind: e.target.value })} style={{ flex:1, fontSize:15, fontWeight:600, color:C.text1, border:"none", background:"transparent", padding:"2px 6px 2px 0" }}>
                 {ACTION_KINDS.map(k=><option key={k.kind} value={k.kind}>{k.kind}</option>)}
               </Select>
               <IconBtn title="Duplicate action" onClick={()=>duplicateAction(i)}>{IC.copy(13)}</IconBtn>
               <IconBtn danger title="Remove action" onClick={()=>deleteAction(i)}>{IC.trash(13)}</IconBtn>
             </div>
             {kind.valueType === "bdaUser" ? (() => {
-              const roleFilter = a.roleFilter || 'all'; // 'all' | 'admin' | 'bda_sales'
+              const roleFilter = a.roleFilter || 'all';
+              // ⚠ DERIVED from the users actually present, never a hardcoded
+              // role list. Roles are user-defined now, so a fixed set of pills
+              // would silently omit any role added in Settings — and keep
+              // offering ones that were removed.
+              const roleOpts = [{ v: 'all', label: 'All' },
+                ...[...new Set(assignableUsers.map(u => u.role).filter(Boolean))]
+                  .sort()
+                  .map(r => ({ v: r, label: r.charAt(0).toUpperCase() + r.slice(1) }))];
               const assignMode = a.assignMode || 'pick';  // 'pick' | 'variable'
               const filtered = assignableUsers.filter(u =>
                 roleFilter === 'all' || u.role === roleFilter
@@ -2919,9 +2604,9 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
                         type="button"
                         onClick={()=>updateAction(i, { assignMode: opt.v, value: '' })}
                         style={{
-                          flex:1, padding:"5px 8px", fontSize:11, fontWeight:700, fontFamily:"'DM Sans'",
+                          flex:1, padding:"5px 8px", fontSize:14, fontWeight:700, fontFamily:"'DM Sans'",
                           border:`1px solid ${assignMode===opt.v ? C.brand : C.cardBorder}`,
-                          background: assignMode===opt.v ? C.brandBg : "#fff",
+                          background: assignMode===opt.v ? C.brandBg : "var(--c-surface, #fff)",
                           color: assignMode===opt.v ? C.brandDark : C.text3,
                           borderRadius:6, cursor:"pointer",
                         }}>
@@ -2935,28 +2620,24 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
                         value={a.value || ""}
                         onChange={(e)=>updateAction(i, { value: e.target.value })}
                         placeholder="{{assigned_bda_id}}"
-                        style={{ fontFamily:"'DM Mono'", fontSize:11 }}
+                        style={{ fontFamily:"'DM Mono'", fontSize:14 }}
                       />
-                      <div style={{ fontSize:10, color:C.text5, fontWeight:500, lineHeight:1.4 }}>
-                        The resolved value must be a numeric user id (forgecrm_users.id). If it's missing, disabled, or not an admin/BDA Sales user, the step fails.
+                      <div style={{ fontSize:13, color:C.text5, fontWeight:500, lineHeight:1.4 }}>
+                        The resolved value must be a numeric user id (forgecrm_users.id). If it's missing or the user is disabled, the step fails.
                       </div>
                     </>
                   ) : (
                     <>
                       <div style={{ display:"flex", gap:4 }}>
-                        {[
-                          { v:'all',       label:'All' },
-                          { v:'admin',     label:'Admin' },
-                          { v:'bda_sales', label:'BDA Sales' },
-                        ].map(opt => (
+                        {roleOpts.map(opt => (
                           <button
                             key={opt.v}
                             type="button"
                             onClick={()=>updateAction(i, { roleFilter: opt.v })}
                             style={{
-                              flex:1, padding:"5px 8px", fontSize:11, fontWeight:600, fontFamily:"'DM Sans'",
+                              flex:1, padding:"5px 8px", fontSize:14, fontWeight:600, fontFamily:"'DM Sans'",
                               border:`1px solid ${roleFilter===opt.v ? C.brand : C.cardBorder}`,
-                              background: roleFilter===opt.v ? C.brandBg : "#fff",
+                              background: roleFilter===opt.v ? C.brandBg : "var(--c-surface, #fff)",
                               color: roleFilter===opt.v ? C.brandDark : C.text3,
                               borderRadius:6, cursor:"pointer",
                             }}>
@@ -2976,91 +2657,54 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
                   )}
                 </div>
               );
-            })() : kind.valueType === "agent" ? (
+            })() : kind.valueType === "funnelStage" ? (
               <Select value={a.value || ""} onChange={(e)=>updateAction(i, { value: e.target.value })}>
-                <option value="">— Select a team member —</option>
-                {teamMembers.map(m => (
-                  <option key={m.id} value={m.name}>
-                    {m.avail === "online" ? "🟢" : m.avail === "away" ? "🟡" : "⚫"} {m.name} · {m.role} · {m.city}
-                  </option>
-                ))}
+                <option value="">— Select a stage —</option>
+                {funnelStages.map(st => <option key={st.stageKey} value={st.stageKey}>{st.label}</option>)}
               </Select>
             ) : kind.valueType === "tag" ? (
               <Select value={a.value || ""} onChange={(e)=>updateAction(i, { value: e.target.value })}>
                 <option value="">— Select a tag —</option>
                 {tagNames.map(tg => <option key={tg} value={tg}>{tg}</option>)}
               </Select>
-            ) : kind.valueType === "field" ? (() => {
-              const isSetKind = kind.kind === "Set Custom Field";
-              const raw = a.value || "";
-              let curField = "", curValue = "";
-              if (isSetKind && raw.includes("=")) {
-                const ix = raw.indexOf("=");
-                curField = raw.slice(0, ix).trim();
-                curValue = raw.slice(ix + 1).trim();
-              } else {
-                curField = raw.trim();
-              }
-              const setField = (f) => { updateAction(i, { value: isSetKind ? `${f} = ${curValue}` : f }); };
-              const setValue = (v) => { updateAction(i, { value: `${curField} = ${v}` }); };
-              const f = (curField || "").toLowerCase();
-              const isNumeric = /score|budget|count|pincode|amount|points|qty|age/.test(f);
-              const isEmail   = f === "email";
-              const isPhone   = f === "phone";
-              const isDate    = /date|_at$|_on$/.test(f);
-              let valueValid = true, valueHint = "";
-              if (isSetKind && curValue) {
-                if (isNumeric) { valueValid = /^-?\d+(\.\d+)?$/.test(curValue); valueHint = "Numeric value required"; }
-                else if (isEmail) { valueValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(curValue); valueHint = "Valid email required (name@domain.com)"; }
-                else if (isPhone) { valueValid = /^\+?91[\s-]?\d{10}$/.test(curValue.replace(/\s/g, "")); valueHint = "Use format +91 9876543210"; }
-                else if (isDate)  { valueValid = curValue.length > 0; valueHint = ""; }
-              }
-              const fieldOk = !!curField;
-              return (<>
-                <Select value={curField} onChange={(e)=>setField(e.target.value)}
-                  style={{ marginBottom: isSetKind ? 6 : 0, borderColor: fieldOk ? C.inputBorder : C.red }}>
-                  <option value="">— Select a field —</option>
-                  {fieldNames.map(fld => <option key={fld} value={fld}>{fld}</option>)}
-                  <option value="__new__">+ Create new field…</option>
-                </Select>
-                {isSetKind && (<>
+            ) : kind.valueType === "leadField" ? (() => {
+              // TWO controls, because this action needs two values: which field
+              // and what to put in it. `a.field` and `a.value` are separate
+              // keys — packing them into one delimited string would break the
+              // first time a customer's answer contained the delimiter.
+              const chosen = leadFields.find(f => f.fieldKey === a.field);
+              return (
+                <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
+                  <Select value={a.field || ""} onChange={(e)=>updateAction(i, { field: e.target.value })}>
+                    <option value="">— Choose a field on the lead —</option>
+                    {leadFields.map(f => (
+                      <option key={f.fieldKey} value={f.fieldKey}>
+                        {f.label}{f.isSystem ? "" : " (custom)"}
+                      </option>
+                    ))}
+                  </Select>
                   <VarInput
-                    value={curValue}
-                    onChange={(e)=>{
-                      let v = e.target.value;
-                      // Skip the strip-non-numeric when a {{var}} token is in flight.
-                      if (isNumeric && !/{{/.test(v)) v = v.replace(/[^\d.\-]/g, "");
-                      setValue(v);
-                    }}
-                    inputMode={isNumeric || isPhone ? "numeric" : "text"}
-                    placeholder={ !curField ? "Pick a field first" : isPhone ? "+91 9876543210" : isEmail ? "name@domain.com" : isDate ? "YYYY-MM-DD or relative date" : isNumeric ? "0" : `Value for ${curField}` }
-                    disabled={!curField}
-                    style={{ fontFamily: (isNumeric || isPhone || isEmail) ? "'DM Mono'" : undefined, borderColor: valueValid ? C.inputBorder : C.red, opacity: curField ? 1 : 0.55 }}
+                    value={a.value || ""}
+                    onChange={(e)=>updateAction(i, { value: e.target.value })}
+                    placeholder="{{answer}}"
                   />
-                  {curField && (
-                    <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:5 }}>
-                      <span style={{ fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:5, background: isNumeric ? "#FFF8E1" : isEmail ? C.blueBg : isPhone ? C.purpleBg : isDate ? C.tealBg : C.sectionBg, color: isNumeric ? "#7A5C00" : isEmail ? C.blue : isPhone ? C.purpleDark : isDate ? C.teal : C.text4, fontFamily:"'DM Mono'", letterSpacing:".04em", textTransform:"uppercase" }}>
-                        {isNumeric ? "Number" : isEmail ? "Email" : isPhone ? "Phone +91" : isDate ? "Date" : "Text"}
-                      </span>
-                      {!valueValid && <span style={{ fontSize:10, color:C.red, fontWeight:600 }}>{valueHint}</span>}
+                  <div style={{ fontSize:13, color:C.muted, lineHeight:1.5 }}>
+                    <strong>{"{{answer}}"}</strong> is what the customer just sent — put an
+                    “Ask a question” step before this one and their reply lands here.
+                    {chosen && chosen.fieldType === "dropdown" && Array.isArray(chosen.options) && chosen.options.length > 0 && (
+                      <> Expected values: {chosen.options.join(", ")}. Anything else is still stored, as typed.</>
+                    )}
+                    {chosen && chosen.fieldType === "number" && <> Must be a number.</>}
+                    {chosen && chosen.fieldType === "date" && <> Must be a date.</>}
+                  </div>
+                  {leadFields.length === 0 && (
+                    <div style={{ fontSize:13, color:C.orangeText }}>
+                      No writable lead fields loaded. Add one under Settings → Fields.
                     </div>
                   )}
-                </>)}
-              </>);
-            })() : kind.valueType === "email" ? (() => {
-              const v = a.value || "";
-              const valid = !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
-              return (<>
-                <VarInput value={v} onChange={(e)=>updateAction(i, { value: e.target.value })}
-                  placeholder={kind.placeholder}
-                  style={{ borderColor: valid ? C.inputBorder : C.red }}/>
-                {!valid && !/{{/.test(v) && <div style={{ fontSize:10, color:C.red, marginTop:4, fontWeight:600 }}>Enter a valid email address</div>}
-              </>);
-            })() : kind.valueType === "none" ? (
-              <div style={{ padding:"8px 11px", border:`1.5px dashed ${C.inputBorder}`, borderRadius:8, fontSize:11, color:C.muted, background:C.sectionBg, fontFamily:"'DM Sans'", fontStyle:"italic" }}>
-                No options to configure — this action runs as-is.
-              </div>
-            ) : (
+                </div>
+              );
+            })() : (
               <VarInput value={a.value || ""} onChange={(e)=>updateAction(i, { value: e.target.value })} placeholder={kind.placeholder}/>
             )}
           </div>
@@ -3073,22 +2717,22 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
           background:"transparent",
           border:`2px dashed #E5A100`,
           borderRadius:10, cursor:"pointer",
-          color:"#C8881F", fontSize:14, fontWeight:600,
+          color:"var(--c-sc8881f, #C8881F)", fontSize:16, fontWeight:600,
           fontFamily:"'DM Sans'",
           display:"flex", alignItems:"center", justifyContent:"center", gap:7,
         }}>
           <span style={{ display:"flex" }}>{IC.plus(13)}</span>
           Action
         </summary>
-        <div style={{ background:"#fff", border:`1px solid ${C.cardBorder}`, borderRadius:10, padding:6, marginTop:6, boxShadow:"0 6px 18px rgba(0,0,0,.08)", maxHeight:240, overflowY:"auto" }}>
+        <div style={{ background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:10, padding:6, marginTop:6, boxShadow:"0 6px 18px rgba(0,0,0,.08)", maxHeight:240, overflowY:"auto" }}>
           {ACTION_KINDS.map(k => (
             <button key={k.kind} onClick={()=>addAction(k.kind)} className="picker-item" style={{
               width:"100%", padding:"8px 10px", background:"transparent",
               border:"1px solid transparent", borderRadius:7, cursor:"pointer", textAlign:"left",
               display:"flex", alignItems:"center", gap:9, marginBottom:1,
-              fontSize:12, fontWeight:500, color:C.text2, fontFamily:"'DM Sans'",
+              fontSize:15, fontWeight:500, color:C.text2, fontFamily:"'DM Sans'",
             }}>
-              <span style={{ color:"#C8881F", display:"flex", flexShrink:0 }}>{k.icon(15)}</span>
+              <span style={{ color:"var(--c-sc8881f, #C8881F)", display:"flex", flexShrink:0 }}>{k.icon(15)}</span>
               <span>{k.kind}</span>
             </button>
           ))}
@@ -3116,15 +2760,15 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
         <div style={{ position:"relative" }}>
           <div style={{ position:"relative", marginBottom:6 }}>
             <span style={{ position:"absolute", left:9, top:"50%", transform:"translateY(-50%)", color:C.muted, pointerEvents:"none" }}>{IC.search(12)}</span>
-            <Input value={subflowSearch} onChange={e=>setSubflowSearch(e.target.value)} placeholder="Search automations…" style={{ paddingLeft:28, fontSize:12 }}/>
+            <Input value={subflowSearch} onChange={e=>setSubflowSearch(e.target.value)} placeholder="Search automations…" style={{ paddingLeft:28, fontSize:15 }}/>
           </div>
-          <div style={{ border:`1.5px solid ${C.inputBorder}`, borderRadius:8, background:"#fff", maxHeight:220, overflowY:"auto" }}>
+          <div style={{ border:`1.5px solid ${C.inputBorder}`, borderRadius:8, background:"var(--c-surface, #fff)", maxHeight:220, overflowY:"auto" }}>
             {active.length === 0 && paused.length === 0 && (
-              <div style={{ padding:"10px 11px", fontSize:11, color:C.muted, textAlign:"center" }}>No automations found</div>
+              <div style={{ padding:"10px 11px", fontSize:14, color:C.muted, textAlign:"center" }}>No automations found</div>
             )}
             {active.length > 0 && (
               <div>
-                <div style={{ padding:"5px 11px", fontSize:9, fontWeight:700, color:C.muted, letterSpacing:".08em", textTransform:"uppercase", background:C.sectionBg, position:"sticky", top:0, zIndex:1 }}>Active</div>
+                <div style={{ padding:"5px 11px", fontSize:13, fontWeight:700, color:C.muted, letterSpacing:".08em", textTransform:"uppercase", background:C.sectionBg, position:"sticky", top:0, zIndex:1 }}>Active</div>
                 {active.map(w => {
                   const selected = w.id === flowId;
                   return (
@@ -3134,8 +2778,8 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
                       borderBottom:`1px solid ${C.rowDiv}`,
                     }}>
                       <span style={{ width:6, height:6, borderRadius:"50%", background: C.brandBright, flexShrink:0 }}/>
-                      <span style={{ fontSize:11, fontWeight:600, color: selected ? C.brandDark : C.text2, flex:1 }}>{w.name}</span>
-                      {selected && <span style={{ fontSize:10, color:C.brandDark, fontWeight:700 }}>✓</span>}
+                      <span style={{ fontSize:14, fontWeight:600, color: selected ? C.brandDark : C.text2, flex:1 }}>{w.name}</span>
+                      {selected && <span style={{ fontSize:13, color:C.brandDark, fontWeight:700 }}>✓</span>}
                     </div>
                   );
                 })}
@@ -3143,7 +2787,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
             )}
             {paused.length > 0 && (
               <div>
-                <div style={{ padding:"5px 11px", fontSize:9, fontWeight:700, color:C.muted, letterSpacing:".08em", textTransform:"uppercase", background:C.sectionBg, position:"sticky", top:0, zIndex:1 }}>Paused</div>
+                <div style={{ padding:"5px 11px", fontSize:13, fontWeight:700, color:C.muted, letterSpacing:".08em", textTransform:"uppercase", background:C.sectionBg, position:"sticky", top:0, zIndex:1 }}>Paused</div>
                 {paused.map(w => {
                   const selected = w.id === flowId;
                   return (
@@ -3153,8 +2797,8 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
                       borderBottom:`1px solid ${C.rowDiv}`,
                     }}>
                       <span style={{ width:6, height:6, borderRadius:"50%", background: C.orange, flexShrink:0 }}/>
-                      <span style={{ fontSize:11, fontWeight:600, color: selected ? C.orangeText : C.text2, flex:1 }}>{w.name}</span>
-                      {selected && <span style={{ fontSize:10, color:C.orangeText, fontWeight:700 }}>✓</span>}
+                      <span style={{ fontSize:14, fontWeight:600, color: selected ? C.orangeText : C.text2, flex:1 }}>{w.name}</span>
+                      {selected && <span style={{ fontSize:13, color:C.orangeText, fontWeight:700 }}>✓</span>}
                     </div>
                   );
                 })}
@@ -3166,9 +2810,9 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
 
       {wf && (
         <div style={{ background:C.sectionBg, border:`1px solid ${C.innerBorder}`, borderRadius:10, padding:"11px 13px", marginBottom:14 }}>
-          <div style={{ fontSize:13, fontWeight:700, color:C.text1, marginBottom:6 }}>{wf.name}</div>
+          <div style={{ fontSize:15, fontWeight:700, color:C.text1, marginBottom:6 }}>{wf.name}</div>
           <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-            <Badge label={wf.status} bg={wf.status==="active"||wf.status==="Active"?C.brandBg:"#FFF3E0"} color={wf.status==="active"||wf.status==="Active"?C.brandDark:"#B04E0E"} dot/>
+            <Badge label={wf.status} bg={wf.status==="active"||wf.status==="Active"?C.brandBg:"var(--c-orangeBg, #FFF3E0)"} color={wf.status==="active"||wf.status==="Active"?C.brandDark:"var(--c-sb04e0e, #B04E0E)"} dot/>
           </div>
         </div>
       )}
@@ -3191,169 +2835,155 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
     </>);
   }
 
-  else if (node.type === "payment") {
-    // Approved templates carrying a payment button. Derived from the list the
-    // panel already receives, so there is no second fetch to keep in step.
-    const paymentTemplates = (templates || []).filter(t =>
-      t.hasPaymentButton && String(t.status || "").toUpperCase() === "APPROVED");
-    const src = node.paymentSource || "product";
-    const kind = node.paymentKind || "fixed";
-    const waiting = node.waitForPayment === true;
-    const chasing = waiting && node.followUpEnabled === true;
-    const product = products.find(p => String(p.id) === String(node.courseId));
-    const productPrice = product && product.defaultPrice != null ? Number(product.defaultPrice) : null;
-    // Everything the flow will actually charge, worked out here rather than
-    // left for the operator to infer — this is real money and the amount must
-    // never be a surprise.
-    const effectiveAmount = src === "product" ? productPrice : (node.amount === "" ? null : Number(node.amount));
+  else if (node.type === "trigger") {
+    const tk = node.triggerKind || "keyword";
+    const meta = findTriggerKind(tk);
+
+    // Switching kind REPLACES the fields of the old kind with the new kind's
+    // defaults. Leaving a stale `keyword` on a node that is now `tagApplied`
+    // would put a value in the config that nothing reads and that the card
+    // would not show — the same invisible-state problem the old panel had.
+    const switchKind = (next) => {
+      if (next === tk) return;
+      const cleared = {};
+      TRIGGER_KINDS.forEach(k => Object.keys(k.defaults).forEach(f => { cleared[f] = undefined; }));
+      onUpdateNode(node.id, { ...cleared, ...findTriggerKind(next).defaults, triggerKind: next });
+    };
+
+    const accounts = Array.isArray(node.triggerAccounts) ? node.triggerAccounts : [];
+    const toggleAccount = (num) => onUpdateNode(node.id, {
+      triggerAccounts: accounts.includes(num) ? accounts.filter(a => a !== num) : [...accounts, num],
+    });
 
     content = (<>
-      <Alert kind="warn">This raises a <strong>real Razorpay payment link</strong> and sends it to the customer on this chat. Test the flow on your own number before switching the automation on.</Alert>
-
-      <Field label="What are you charging for?" hint="A product uses its listed price, so the flow can never charge the wrong amount after someone edits it.">
-        <div style={{ display:"flex", gap:5 }}>
-          <Pill active={src==="product"} onClick={()=>onUpdateNode(node.id, { paymentSource:"product" })}>A product</Pill>
-          <Pill active={src==="amount"}  onClick={()=>onUpdateNode(node.id, { paymentSource:"amount"  })}>A set amount</Pill>
-        </div>
-      </Field>
-
-      {src === "product" ? (
-        <Field label="Product" hint={products.length === 0 ? "No products yet — add one in Sales → Products, or switch to a set amount." : "The price comes from the product, so changing it there changes it here."}>
-          <Select value={node.courseId || ""} onChange={(e)=>onUpdateNode(node.id, { courseId: e.target.value })}
-            style={{ borderColor: node.courseId ? C.inputBorder : C.red }}>
-            <option value="">— Select a product —</option>
-            {products.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.name}{p.defaultPrice != null ? ` — ₹${Number(p.defaultPrice).toLocaleString("en-IN")}` : " (no price set)"}
-              </option>
-            ))}
-          </Select>
-          {node.courseId && productPrice == null && (
-            <div style={{ fontSize:10.5, color:C.red, marginTop:5 }}>
-              This product has no price. Set one in Sales → Products, or switch to a set amount — the node will fail at run time otherwise.
-            </div>
-          )}
-        </Field>
-      ) : (
-        <Field label="Amount (₹)" hint="Supports variables, e.g. {{course_fee}} from a custom field.">
-          <VarInput value={node.amount || ""} onChange={(e)=>onUpdateNode(node.id, { amount: e.target.value })}
-            placeholder="5499"/>
-        </Field>
-      )}
-
-      <Field label="Payment type">
+      <Field label="What starts this flow?" hint="Only the first trigger in a flow ever fires.">
         <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-          <Pill active={kind==="fixed"}   onClick={()=>onUpdateNode(node.id, { paymentKind:"fixed"   })}>Full amount</Pill>
-          <Pill active={kind==="partial"} onClick={()=>onUpdateNode(node.id, { paymentKind:"partial" })}>Part payment — a minimum now, balance later</Pill>
-          <Pill active={kind==="open"}    onClick={()=>onUpdateNode(node.id, { paymentKind:"open"    })}>Open amount — they choose what to pay</Pill>
+          {TRIGGER_KINDS.map(k => (
+            <Pill key={k.kind} active={tk === k.kind} onClick={()=>switchKind(k.kind)}>{k.label}</Pill>
+          ))}
         </div>
       </Field>
 
-      {kind === "partial" && (
-        <Field label="Minimum first payment (₹)" hint="Razorpay refuses anything below this. Must not exceed the total.">
-          <Input type="number" value={node.minAmount || ""} onChange={(e)=>onUpdateNode(node.id, { minAmount: e.target.value })} placeholder="1000"
-            style={{ borderColor: node.minAmount ? C.inputBorder : C.red }}/>
-        </Field>
-      )}
-
-      <Field label="Message sent with the link" hint="Tokens: {{product}} {{amount}} {{name}}. The payment URL is added automatically, so you never have to place it.">
-        <VarTextarea rows={3} value={node.messageText || ""} onChange={(e)=>onUpdateNode(node.id, { messageText: e.target.value })}
-          placeholder="Here is your payment link for {{product}} — ₹{{amount}}."/>
-      </Field>
-
-      <Field label="If the chat has gone quiet" hint="WhatsApp refuses a normal message more than 24 hours after the customer last wrote. Only an approved template gets through then.">
-        <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-          <Pill active={(node.deliveryMode||"auto")==="auto"}     onClick={()=>onUpdateNode(node.id, { deliveryMode:"auto" })}>Message if I can, template if I can't</Pill>
-          <Pill active={node.deliveryMode==="template"} onClick={()=>onUpdateNode(node.id, { deliveryMode:"template" })}>Always send the template</Pill>
-          <Pill active={node.deliveryMode==="text"}     onClick={()=>onUpdateNode(node.id, { deliveryMode:"text" })}>Message only — skip if the window is shut</Pill>
-        </div>
-      </Field>
-
-      {(node.deliveryMode || "auto") !== "text" && (
-        <Field label="Payment template" hint={paymentTemplates.length ? "Must be APPROVED and carry a Payment Link button." : "None yet — build one in Template Builder with a Payment Link button."}>
-          <Select value={node.paymentTemplateId || ""} onChange={(e)=>onUpdateNode(node.id, { paymentTemplateId: e.target.value })}
-            style={{ borderColor: node.paymentTemplateId ? C.inputBorder : C.orange }}>
-            <option value="">— None —</option>
-            {paymentTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </Select>
-          {!node.paymentTemplateId && (
-            <Alert kind="warn">
-              Without a template this step can only reach customers who messaged in the last 24 hours. Everyone else is skipped and the step logs why.
-            </Alert>
-          )}
-        </Field>
-      )}
-
-      <Field label="Purpose (internal)" hint="Shown to your team on the Payments page, never to the customer.">
-        <Input value={node.purpose || ""} onChange={(e)=>onUpdateNode(node.id, { purpose: e.target.value })} placeholder="Course fee"/>
-      </Field>
-
-      <Field label="Link expires after (hours)" hint="After this the link stops working. Leave 24 unless you have a reason.">
-        <Input type="number" value={node.linkExpiryHours || ""} onChange={(e)=>onUpdateNode(node.id, { linkExpiryHours: e.target.value })} placeholder="24"/>
-      </Field>
-
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, padding:"11px 0", borderTop:`1px solid ${C.rowDiv}`, marginTop:6 }}>
-        <div>
-          <div style={{ fontSize:12, fontWeight:700, color:C.text1 }}>Wait for the payment</div>
-          <div style={{ fontSize:10.5, color:C.muted, marginTop:2 }}>Hold the flow here, then continue down <strong>Paid</strong> or <strong>Not paid</strong>.</div>
-        </div>
-        <Toggle value={waiting} onChange={(v)=>onUpdateNode(node.id, { waitForPayment: v })}/>
-      </div>
-
-      {waiting && (<>
-        <Field label="Give up after (minutes)" hint="If the money has not arrived by then, the flow continues down Not paid.">
-          <Input type="number" value={node.waitMinutes || ""} onChange={(e)=>onUpdateNode(node.id, { waitMinutes: e.target.value })} placeholder="30"/>
-        </Field>
-
-        <Field label="Message when the payment arrives" hint="Sent the moment the gateway confirms it. Leave blank to send nothing.">
-          <VarTextarea rows={2} value={node.confirmText || ""} onChange={(e)=>onUpdateNode(node.id, { confirmText: e.target.value })}
-            placeholder="Payment received — thank you!"/>
-        </Field>
-
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, padding:"11px 0", borderTop:`1px solid ${C.rowDiv}` }}>
-          <div>
-            <div style={{ fontSize:12, fontWeight:700, color:C.text1 }}>Chase if they have not paid</div>
-            <div style={{ fontSize:10.5, color:C.muted, marginTop:2 }}>Ask whether they ran into trouble, while they are still waiting.</div>
-          </div>
-          <Toggle value={chasing} onChange={(v)=>onUpdateNode(node.id, { followUpEnabled: v })}/>
-        </div>
-
-        {chasing && (<>
-          <div style={{ display:"flex", gap:8 }}>
-            <Field label="First reminder after (min)" style={{ flex:1 }}>
-              <Input type="number" value={node.followUpMinutes || ""} onChange={(e)=>onUpdateNode(node.id, { followUpMinutes: e.target.value })} placeholder="10"/>
-            </Field>
-            <Field label="How many reminders" style={{ flex:1 }}>
-              <Input type="number" value={node.followUpMax || ""} onChange={(e)=>onUpdateNode(node.id, { followUpMax: e.target.value })} placeholder="1"/>
-            </Field>
-          </div>
-          <Field label="Reminder message" hint="The payment link is re-attached automatically.">
-            <VarTextarea rows={3} value={node.followUpText || ""} onChange={(e)=>onUpdateNode(node.id, { followUpText: e.target.value })}
-              placeholder="Just checking — were you able to complete the payment?"/>
-          </Field>
-          {Number(node.followUpMinutes || 0) * Math.max(1, Number(node.followUpMax || 1)) >= Number(node.waitMinutes || 0) && (
-            <Alert kind="warn">
-              The reminders run past the give-up time, so the last one{Number(node.followUpMax || 1) > 1 ? "s" : ""} will never be sent. Raise the give-up time or send fewer reminders.
-            </Alert>
-          )}
-        </>)}
-
-        <Alert kind="info">
-          While waiting, this flow ignores anything the customer types — they are answered by your other automations or your AI agent as normal. Only the payment moves it on.
+      {/* A flow imported from another instance can carry a kind this build no
+          longer offers. Every live flow here is `keyword`, so this is defence —
+          but without it the switcher would render with NOTHING selected and no
+          fields, which reads as a broken panel rather than a retired trigger. */}
+      {!TRIGGER_KINDS.some(k => k.kind === tk) && (
+        <Alert kind="warn">
+          This trigger is set to <strong>{tk}</strong>, which this version no longer supports —
+          it will never fire. Pick one of the options above.
         </Alert>
+      )}
+
+      {tk === "keyword" && (<>
+        <Field label="Keyword" hint="The word the customer sends. Leave the match type on Exact unless the word appears inside a longer sentence.">
+          <Input
+            value={node.keyword || ""}
+            onChange={(e)=>onUpdateNode(node.id, { keyword: e.target.value })}
+            placeholder="e.g. PRICE"
+          />
+        </Field>
+        <Field label="Match">
+          <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+            {/* These three strings are read verbatim by the engine's
+                matchesKeyword switch. A prettier label here would compile,
+                render, and silently never match. */}
+            <Pill active={(node.matchType || "exact")==="exact"}    onClick={()=>onUpdateNode(node.id, { matchType:"exact" })}>Exact — the message is only this word</Pill>
+            <Pill active={node.matchType==="contains"}              onClick={()=>onUpdateNode(node.id, { matchType:"contains" })}>Contains — the word appears anywhere</Pill>
+            <Pill active={node.matchType==="starts"}                onClick={()=>onUpdateNode(node.id, { matchType:"starts" })}>Starts with — the message begins with it</Pill>
+          </div>
+        </Field>
+        <Field label="Case sensitive" hint="Off means PRICE, Price and price all match.">
+          <Toggle value={!!node.caseSensitive} onChange={(v)=>onUpdateNode(node.id, { caseSensitive: v })}/>
+        </Field>
+        <Field label="Whose message counts?" hint="Outbound fires on a message YOUR team sends — useful for internal shortcuts.">
+          <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+            <Pill active={(node.triggerDirection || "inbound")==="inbound"} onClick={()=>onUpdateNode(node.id, { triggerDirection:"inbound" })}>The customer sends it</Pill>
+            <Pill active={node.triggerDirection==="outbound"}               onClick={()=>onUpdateNode(node.id, { triggerDirection:"outbound" })}>Your team sends it</Pill>
+            <Pill active={node.triggerDirection==="both"}                   onClick={()=>onUpdateNode(node.id, { triggerDirection:"both" })}>Either side sends it</Pill>
+          </div>
+        </Field>
+        {!(node.keyword || "").trim() && (
+          <Alert kind="warn">Type a keyword. An empty one can never match, so this flow could never start.</Alert>
+        )}
       </>)}
 
-      {effectiveAmount != null && (
-        <div style={{ marginTop:12, padding:"10px 12px", borderRadius:9, background:"#EDF6F1", border:"1px solid #9CC9B4" }}>
-          <div style={{ fontSize:10, fontWeight:700, letterSpacing:".06em", textTransform:"uppercase", color:"#0F6E56" }}>This step will charge</div>
-          <div style={{ fontSize:18, fontWeight:700, color:"#0F6E56", fontFamily:"'DM Mono'", marginTop:3 }}>
-            ₹{Number(effectiveAmount).toLocaleString("en-IN")}
+      {tk === "link" && (<>
+        <Field label="Tracking code" hint="A wa.me link carries no query string, so the ONLY thing that survives into WhatsApp is the pre-filled message. This trigger fires when that message contains this code.">
+          <Input
+            value={node.trackingCode || ""}
+            onChange={(e)=>onUpdateNode(node.id, { trackingCode: e.target.value })}
+            placeholder="e.g. WEB_HOMEPAGE_HERO"
+          />
+        </Field>
+        {(node.trackingCode || "").trim()
+          ? <Alert kind="info">Build the link so its pre-filled text contains <strong>{node.trackingCode.trim()}</strong> — Message Formats generates one for you.</Alert>
+          : <Alert kind="warn">Without a code this trigger has nothing to match on, so it can never fire.</Alert>}
+      </>)}
+
+      {tk === "tagApplied" && (<>
+        <Field label="Tag to watch">
+          <Select value={node.tag || ""} onChange={(e)=>onUpdateNode(node.id, { tag: e.target.value })}>
+            <option value="">— Select a tag —</option>
+            {tagNames.map(tg => <option key={tg} value={tg}>{tg}</option>)}
+          </Select>
+        </Field>
+        <Field label="When it is">
+          <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+            <Pill active={(node.tagDirection || "added")==="added"} onClick={()=>onUpdateNode(node.id, { tagDirection:"added" })}>Added to the contact</Pill>
+            <Pill active={node.tagDirection==="removed"}            onClick={()=>onUpdateNode(node.id, { tagDirection:"removed" })}>Removed from the contact</Pill>
           </div>
-          <div style={{ fontSize:10.5, color:"#3C6656", marginTop:2 }}>
-            {kind === "fixed" ? "Paid in full." : kind === "partial" ? `Minimum first payment ₹${Number(node.minAmount || 0).toLocaleString("en-IN")}.` : "The customer chooses what to pay."}
-          </div>
-        </div>
+        </Field>
+        <Field label="Only once per contact" hint="On means a contact who already ran this flow for this tag will not run it again.">
+          <Toggle value={node.fireOncePerTag !== false} onChange={(v)=>onUpdateNode(node.id, { fireOncePerTag: v })}/>
+        </Field>
+        {!(node.tag || "").trim() && (
+          <Alert kind="warn">Choose a tag. Until then this trigger has nothing to watch.</Alert>
+        )}
+      </>)}
+
+      {tk === "newContact" && (
+        <Alert kind="info">Fires the first time a number ever messages you — nothing else to set.</Alert>
       )}
+      {tk === "anyMessage" && (
+        <Alert kind="warn">Fires on <strong>every</strong> inbound message from anyone. Add a condition step early, or this will reply to every conversation you have.</Alert>
+      )}
+
+      <Field label="Listen on" hint="Which of your WhatsApp numbers this trigger watches. None selected means all of them.">
+        <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+          {whatsappAccounts.length === 0 && (
+            <div style={{ fontSize:14, color:C.muted }}>No WhatsApp numbers connected yet.</div>
+          )}
+          {whatsappAccounts.map(a => {
+            const num = a.displayPhoneNumber;
+            const on = accounts.includes(num);
+            return (
+              <div key={a.id} onClick={()=>toggleAccount(num)} style={{
+                display:"flex", alignItems:"center", gap:9, padding:"7px 10px", cursor:"pointer",
+                border:`1.5px solid ${on ? C.brandBright : C.innerBorder}`, borderRadius:8,
+                background: on ? C.brandBg : "transparent",
+              }}>
+                <span style={{
+                  width:15, height:15, borderRadius:4, flexShrink:0,
+                  border:`1.5px solid ${on ? C.brandBright : C.inputBorder}`,
+                  background: on ? C.brandBright : "transparent",
+                  display:"flex", alignItems:"center", justifyContent:"center", color:"#fff",
+                }}>{on ? IC.check(10) : null}</span>
+                <span style={{ fontSize:14, fontWeight:600, color: on ? C.brandDark : C.text2 }}>
+                  {a.displayName} <span style={{ fontWeight:500, color:C.muted }}>{maskPhone(num)}</span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </Field>
+      {accounts.length === 0 && whatsappAccounts.length > 1 && (
+        <Alert kind="info">Listening on all {whatsappAccounts.length} numbers.</Alert>
+      )}
+
+      <Field label="Note" hint="For your own reference — not used by the engine.">
+        <Textarea rows={2} value={node.sub || ""} onChange={(e)=>onUpdateNode(node.id, { sub: e.target.value })} placeholder="Why this flow exists…"/>
+      </Field>
 
       <div style={{ display:"flex", gap:6, marginTop:14 }}>
         <Btn kind="primary" style={{ flex:1, justifyContent:"center" }} onClick={onSaveAndClose}>Save</Btn>
@@ -3378,23 +3008,23 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
   const isActionHeader = node.type === "action";
 
   return (
-    <aside style={{ width:344, borderLeft:`1px solid ${C.cardBorder}`, background:"#fff", flexShrink:0, overflowY:"auto" }}>
+    <aside style={{ width:344, borderLeft:`1px solid ${C.cardBorder}`, background:"var(--c-surface, #fff)", flexShrink:0, overflowY:"auto" }}>
       <div style={{
         padding:"15px 18px 13px",
-        borderBottom:`1px solid ${isActionHeader ? "#F0E0A8" : C.cardBorder}`,
-        background: isActionHeader ? "#FFF6D6" : "#fff",
+        borderBottom:`1px solid ${isActionHeader ? "var(--c-sf0e0a8, #F0E0A8)" : C.cardBorder}`,
+        background: isActionHeader ? "var(--c-sfff6d6, #FFF6D6)" : "var(--c-surface, #fff)",
       }}>
         <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom: isActionHeader ? 0 : 10 }}>
           <div style={{
             width:32, height:32, borderRadius:8,
-            background: isActionHeader ? "#FFFFFF80" : t.bg,
-            color: isActionHeader ? "#C8881F" : t.color,
+            background: isActionHeader ? "var(--c-overlaySoft)" : t.bg,
+            color: isActionHeader ? "var(--c-sc8881f, #C8881F)" : t.color,
             display:"flex", alignItems:"center", justifyContent:"center",
-            border:`1px solid ${isActionHeader ? "#F0E0A8" : t.border}`,
+            border:`1px solid ${isActionHeader ? "var(--c-sf0e0a8, #F0E0A8)" : t.border}`,
             flexShrink:0,
           }}>{isActionHeader ? IC.zap(16) : t.icon(16)}</div>
           <div style={{ flex:1, minWidth:0 }}>
-            {!isActionHeader && <div style={{ fontSize:9, fontWeight:700, letterSpacing:".1em", textTransform:"uppercase", color:t.accent, marginBottom:1 }}>{t.label} BLOCK</div>}
+            {!isActionHeader && <div style={{ fontSize:13, fontWeight:700, letterSpacing:".1em", textTransform:"uppercase", color:t.accent, marginBottom:1 }}>{t.label} BLOCK</div>}
             <div style={{ display:"flex", alignItems:"center", gap:5 }}>
               {editingTitle ? (
                 <input
@@ -3406,13 +3036,13 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
                   placeholder="Type a node name…"
                   className="rename-input"
                   style={{
-                    fontSize: isActionHeader ? 17 : 14,
+                    fontSize: isActionHeader ? 18 : 15,
                     fontWeight:700,
-                    color: isActionHeader ? "#7A5C00" : C.text1,
+                    color: isActionHeader ? "var(--c-s7a5c00, #7A5C00)" : C.text1,
                     fontFamily:"'DM Sans'", flex:1, minWidth:0,
                     border:`1px solid ${C.brandBright}`,
                     borderRadius:5,
-                    outline:"none", background:"#fff",
+                    outline:"none", background:"var(--c-surface, #fff)",
                     padding:"2px 6px",
                     margin:"-2px -6px",
                     boxShadow:`0 0 0 3px ${C.brandBg}`,
@@ -3423,9 +3053,9 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
                   onClick={()=>setEditingTitle(true)}
                   title="Click the pencil to rename"
                   style={{
-                    fontSize: isActionHeader ? 17 : 14,
+                    fontSize: isActionHeader ? 18 : 15,
                     fontWeight:700,
-                    color: isActionHeader ? "#7A5C00" : ((node.title && node.title.trim()) || node.type === 'trigger' ? C.text1 : C.muted),
+                    color: isActionHeader ? "var(--c-s7a5c00, #7A5C00)" : ((node.title && node.title.trim()) || node.type === 'trigger' ? C.text1 : C.muted),
                     fontFamily:"'DM Sans'", flex:1, minWidth:0,
                     padding:"2px 0",
                     overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
@@ -3438,12 +3068,12 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
                 title={editingTitle ? "Done editing" : "Rename this node"}
                 onClick={()=>setEditingTitle(v => !v)}
                 style={{
-                  color: editingTitle ? C.brand : (isActionHeader ? "#7A5C00" : C.text5),
+                  color: editingTitle ? C.brand : (isActionHeader ? "var(--c-s7a5c00, #7A5C00)" : C.text5),
                   background: editingTitle ? C.brandBg : "transparent",
                 }}
               >{editingTitle ? IC.ok(13) : IC.edit(13)}</IconBtn>
             </div>
-            {editingTitle && (!node.title || !String(node.title).trim()) && <div style={{ fontSize:9.5, color:C.red, marginTop:3, fontWeight:600 }}>Node name can't be empty</div>}
+            {editingTitle && (!node.title || !String(node.title).trim()) && <div style={{ fontSize:13, color:C.red, marginTop:3, fontWeight:600 }}>Node name can't be empty</div>}
           </div>
           {!isActionHeader && <IconBtn title="Duplicate" onClick={()=>onDuplicateNode(node.id)}>{IC.copy(15)}</IconBtn>}
           {!isActionHeader && <IconBtn danger title="Delete" onClick={()=>onDeleteNode(node.id)}>{IC.trash(15)}</IconBtn>}
@@ -3458,7 +3088,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
         )}
       </div>
       <div style={{ padding:18 }}>
-        <VarContext.Provider value={{ nodes, edges, currentNodeId: node.id, contactFields }}>
+        <VarContext.Provider value={{ nodes, edges, currentNodeId: node.id }}>
           {content}
         </VarContext.Provider>
       </div>
@@ -3480,11 +3110,11 @@ const BuilderToolbar = ({ automationName, status, onBack, onSave, isDirty, savin
     { key: 'executions', label: 'Executions' },
   ];
   return (
-    <div style={{ background:"#fff", borderBottom:`1px solid ${C.cardBorder}`, padding:"9px 16px", display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
+    <div style={{ background:"var(--c-surface, #fff)", borderBottom:`1px solid ${C.cardBorder}`, padding:"9px 16px", display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
       <Btn kind="ghost" icon={IC.back(13)} onClick={onBack}>Back</Btn>
       <div style={{ height:22, width:1, background:C.cardBorder }}/>
       <div style={{ display:"flex", flexDirection:"column", minWidth:0 }}>
-        <div style={{ fontSize:14, fontWeight:700, color:C.text1, fontFamily:"'DM Sans'" }}>{automationName || "Untitled Automation"}</div>
+        <div style={{ fontSize:16, fontWeight:700, color:C.text1, fontFamily:"'DM Sans'" }}>{automationName || "Untitled Automation"}</div>
       </div>
       <StatusPill status={status || "draft"}/>
       <div style={{ flex:1 }}/>
@@ -3501,11 +3131,11 @@ const BuilderToolbar = ({ automationName, status, onBack, onSave, isDirty, savin
                 padding: '6px 18px',
                 borderRadius: 8,
                 border: 'none',
-                fontSize: 12,
+                fontSize: 14,
                 fontWeight: 700,
                 fontFamily: "'DM Sans'",
                 cursor: 'pointer',
-                background: isActive ? '#fff' : 'transparent',
+                background: isActive ? 'var(--c-surface, #fff)' : 'transparent',
                 color: isActive ? C.text1 : C.text5,
                 boxShadow: isActive ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
                 transition: 'all .15s',
@@ -3550,7 +3180,7 @@ const BuilderToolbar = ({ automationName, status, onBack, onSave, isDirty, savin
       ) : (
         <Btn kind="ghost" icon={IC.check(13)} disabled
           title="No unsaved changes"
-          style={{ color: C.green || '#0F6E56', borderColor: C.green || '#0F6E56', opacity: .85, pointerEvents: 'none', cursor: 'default' }}>
+          style={{ color: C.green || 'var(--c-successText, #0F6E56)', borderColor: C.green || '#0F6E56', opacity: .85, pointerEvents: 'none', cursor: 'default' }}>
           Saved
         </Btn>
       )}
@@ -3559,9 +3189,10 @@ const BuilderToolbar = ({ automationName, status, onBack, onSave, isDirty, savin
   );
 };
 
-const PhonePreview = ({ onClose, nodes = [], edges = [], templates = [], teamMembers = [], otherAutomations = [] }) => {
+const PhonePreview = ({ onClose, nodes = [], edges = [], templates = [], otherAutomations = [] }) => {
   const [conv, setConv] = useState([]);
   const [waiting, setWaiting] = useState(null);
+  const [typed, setTyped] = useState("");
   const [ended, setEnded] = useState(false);
   const chatRef = useRef(null);
   const timersRef = useRef([]);
@@ -3593,9 +3224,15 @@ const PhonePreview = ({ onClose, nodes = [], edges = [], templates = [], teamMem
   };
 
   const resolveNext = (nodeId, fromHandle = null) => {
+    // Mirror the engine exactly (automationEngine.js walkFrom / resumeAutomation):
+    //   - an OMITTED fromHandle means "default", so asking for "default"
+    //     explicitly must still match those edges. The old strict equality
+    //     missed every one of them, and the builder deliberately omits the
+    //     string when it is default — so live flow 14's trigger edge is one.
+    //   - a placeholder row with a null target is not a route.
+    const want = fromHandle || "default";
     const candidates = edges.filter(e =>
-      e.from === nodeId &&
-      (fromHandle ? e.fromHandle === fromHandle : (!e.fromHandle || e.fromHandle === "default"))
+      e.from === nodeId && ((e.fromHandle || "default") === want) && e.to
     );
     if (!candidates.length) return null;
     let target = candidates[0].to;
@@ -3626,25 +3263,47 @@ const PhonePreview = ({ onClose, nodes = [], edges = [], templates = [], teamMem
         const dd = node.directData || {};
         const dt = node.directType || "text";
         let text = "";
-        let buttons = null;
+        let media = null;
         switch (dt) {
+          // No emojis anywhere in this codebase — a typed media chip renders
+          // in the bubble instead, via the `media` field.
           case "text": text = dd.body || "(empty text)"; break;
-          case "image": text = `📷 Image\n${dd.caption || ""}`; break;
-          case "video": text = `🎬 Video\n${dd.caption || ""}`; break;
-          case "audio": text = "🔊 Audio message"; break;
-          case "document": text = `📄 Document${dd.filename ? ` · ${dd.filename}` : ""}\n${dd.caption || ""}`; break;
-          case "location": text = `📍 ${dd.name || "Location"}\n${dd.address || ""}`.trim(); break;
-          case "contact": text = `👤 ${dd.name || "Contact"}\n${dd.phone || ""}`; break;
-          case "product": text = `🛒 Product`; break;
-          case "catalog": text = `📋 Catalog\n${dd.body || ""}`; break;
-          case "quick_reply": text = dd.body || ""; buttons = (dd.buttons || []).map(b => ({ text: b.title || "Button" })); break;
-          case "list": text = dd.body || ""; buttons = (dd.sections || []).flatMap(s => (s.rows || []).map(r => ({ text: r.title || "Option" }))); break;
+          case "image": text = dd.caption || ""; media = "Photo"; break;
+          case "video": text = dd.caption || ""; media = "Video"; break;
+          case "audio": text = ""; media = "Voice message"; break;
+          case "sticker": text = ""; media = "Sticker"; break;
+          case "document": text = dd.caption || ""; media = dd.filename ? `Document · ${dd.filename}` : "Document"; break;
+          case "location": text = `${dd.name || "Location"}${dd.address ? `\n${dd.address}` : ""}`.trim(); media = "Location"; break;
+          case "contact": text = `${dd.name || "Contact"}${dd.phone ? `\n${dd.phone}` : ""}`; media = "Contact card"; break;
+          case "cta_url":
+          case "location_request":
+          case "quick_reply":
+          case "list":
+            text = dd.body || "";
+            break;
           case "dynamic_api": text = `[Dynamic API] ${dd.endpoint || "API call"}`; break;
           default: text = "(direct message)";
         }
-        setConv(c => [...c, { from:"bot", text, time: now(), buttons, ownerNodeId: node.id }]);
-        if (buttons && buttons.length) {
-          setWaiting({ nodeId: node.id, buttons });
+        // ⚠ The simulator keeps NO handle list of its own. `tapTargetsOf` is the
+        // same derivation the canvas draws its connector rows from, so a tap
+        // here can only ever resolve a handle an edge could have been drawn to.
+        // The copy that used to live in this switch emitted `row:<section>`
+        // while the canvas drew `row:<section>:<row>`, so every list tap matched
+        // no edge and the run reported END OF FLOW on a correctly wired menu —
+        // and both options collapsed onto one handle besides. Nothing threw: a
+        // handle matching no edge is indistinguishable from "the flow finished".
+        const taps = tapTargetsOf(node);
+        const buttons = taps.length ? taps.map(t => ({ text: t.label })) : null;
+        const handles = taps.length ? taps.map(t => t.handle) : null;
+        setConv(c => [...c, { from:"bot", text, time: now(), buttons, media, ownerNodeId: node.id }]);
+        // A button that cannot advance the flow (a link button) must not park
+        // the simulator waiting for a tap that will never mean anything.
+        if (buttons && buttons.length && (handles.some(Boolean) || node.waitForReply)) {
+          setWaiting({ nodeId: node.id, buttons, handles });
+        } else if (node.waitForReply) {
+          // No buttons, but the step waits: a free-text question. Park with no
+          // buttons so the composer takes the answer.
+          setWaiting({ nodeId: node.id, buttons: null, handles: null });
         } else {
           const next = resolveNext(node.id);
           next ? sched(() => playNode(next, runId), 900) : setEnded(true);
@@ -3659,10 +3318,26 @@ const PhonePreview = ({ onClose, nodes = [], edges = [], templates = [], teamMem
         return;
       }
       const text = resolveBody(tpl.body, node.bindings || {});
-      const buttons = tpl.buttons;
+      // Every button is SHOWN (the customer really does see the link and call
+      // buttons), but only a QUICK_REPLY can move the flow on — Meta sends no
+      // inbound message at all for the others. A null handle marks those, and
+      // the tap handler says so instead of silently doing nothing.
+      //
+      // The buttons come from the TEMPLATE (the node stores only a snapshot,
+      // which can lag an edit), so this is the one place `tapTargetsOf` is fed
+      // a synthetic node rather than the real one — same derivation, live data.
+      const taps = tapTargetsOf({ ...node, messageMode: "template", buttons: tpl.buttons });
+      const buttons = taps.length ? taps.map(t => ({ text: t.label })) : null;
+      const handles = taps.length ? taps.map(t => t.handle) : null;
       setConv(c => [...c, { from:"bot", text, time: now(), buttons, ownerNodeId: node.id }]);
-      if (buttons && buttons.length) {
-        setWaiting({ nodeId: node.id, buttons });
+      // Park only when a tap can mean something, or the step waits for a typed
+      // answer. A template whose buttons are all URL / phone taps and which is
+      // NOT waiting used to strand the run here on a tap that can never advance
+      // the flow — the direct-message path already guarded against exactly that.
+      if (buttons && buttons.length && (handles.some(Boolean) || node.waitForReply)) {
+        setWaiting({ nodeId: node.id, buttons, handles });
+      } else if (node.waitForReply) {
+        setWaiting({ nodeId: node.id, buttons: null, handles: null });
       } else {
         const next = resolveNext(node.id);
         next ? sched(() => playNode(next, runId), 900) : setEnded(true);
@@ -3717,17 +3392,51 @@ const PhonePreview = ({ onClose, nodes = [], edges = [], templates = [], teamMem
 
   const onTapButton = (text, idx) => {
     if (!waiting) return;
-    const { nodeId } = waiting;
+    const { nodeId, handles } = waiting;
+    // A link / call / copy-code button opens something on the phone and sends
+    // us nothing, so the flow genuinely cannot continue from it. Say that
+    // rather than appearing to accept the tap and then stopping.
+    if (handles && handles[idx] === null) {
+      setConv(c => [...c, {
+        from: "system",
+        text: "That button opens a link or dialler on the customer's phone. WhatsApp tells us nothing about it, so a flow cannot branch on it.",
+        time: now(),
+      }]);
+      return;
+    }
     setConv(c => [...c, { from:"user", text, time: now() }]);
     setWaiting(null);
-    const next = resolveNext(nodeId, `btn:${idx}`);
+    // A list's outputs are `row:*`, hence the explicit handle list rather than
+    // an assumed `btn:<index>`.
+    const next = resolveNext(nodeId, handles ? handles[idx] : `btn:${idx}`);
     if (next) sched(() => playNode(next, runRef.current), 600);
+    else setEnded(true);
+  };
+
+  // Typing is allowed whenever the flow is parked on a reply — a free-text
+  // question, or a menu where the customer types instead of tapping.
+  const canType = !!waiting && !ended;
+
+  const onSendTyped = () => {
+    const text = typed.trim();
+    if (!text || !canType) return;
+    setTyped("");
+    const { nodeId, handles } = waiting;
+    setConv(c => [...c, { from:"user", text, time: now() }]);
+    setWaiting(null);
+    // Mirror resumeAutomation's order: a free-text answer follows `replied` on
+    // a question that offered no choices, and `nomatch` on one that did.
+    const target = resolveNext(nodeId, "replied")
+      || resolveNext(nodeId, "nomatch")
+      || resolveNext(nodeId, "default");
+    if (target) sched(() => playNode(target, runRef.current), 600);
     else setEnded(true);
   };
 
   const restart = () => {
     clearTimers();
     setWaiting(null);
+    setTyped("");
     setEnded(false);
     runRef.current += 1;
     const runId = runRef.current;
@@ -3766,13 +3475,6 @@ const PhonePreview = ({ onClose, nodes = [], edges = [], templates = [], teamMem
       if (next) sched(() => playNode(next, runId), 700);
       else setEnded(true);
       return;
-    } else if (tk === "qr") {
-      firstItem = { from:"user",   text: trigger.prefilledMsg || `Scanned from ${trigger.qrLocation || "QR"}`, time: now() };
-      setConv([{ from:"system", text:`[QR] Contact scanned QR · ${trigger.qrLabel || "FLYER_2025"}`, time: now() }, firstItem]);
-      const next = resolveNext(trigger.id);
-      if (next) sched(() => playNode(next, runId), 700);
-      else setEnded(true);
-      return;
     } else if (tk === "newContact") {
       firstItem = { from:"user", text:"Hello", time: now() };
       setConv([{ from:"system", text:"[New Contact] First time messaging this number", time: now() }, firstItem]);
@@ -3784,18 +3486,6 @@ const PhonePreview = ({ onClose, nodes = [], edges = [], templates = [], teamMem
       firstItem = { from:"user", text:"Hi there", time: now() };
     } else if (tk === "tagApplied") {
       setConv([{ from:"system", text:`[Tag] "${trigger.tag || "Hot Lead"}" was ${trigger.tagDirection === "removed" ? "removed from" : "added to"} the contact`, time: now() }]);
-      const next = resolveNext(trigger.id);
-      if (next) sched(() => playNode(next, runId), 700);
-      else setEnded(true);
-      return;
-    } else if (tk === "webhook") {
-      setConv([{ from:"system", text:`[Webhook] POST /hooks/${trigger.id}`, time: now() }]);
-      const next = resolveNext(trigger.id);
-      if (next) sched(() => playNode(next, runId), 700);
-      else setEnded(true);
-      return;
-    } else if (tk === "apiEvent") {
-      setConv([{ from:"system", text:`[Event] ${trigger.integration || "Razorpay"} · ${trigger.eventType || "(no event selected)"}`, time: now() }]);
       const next = resolveNext(trigger.id);
       if (next) sched(() => playNode(next, runId), 700);
       else setEnded(true);
@@ -3820,18 +3510,18 @@ const PhonePreview = ({ onClose, nodes = [], edges = [], templates = [], teamMem
   }, [conv, waiting, ended]);
 
   return (
-    <div style={{ width:308, borderLeft:`1px solid ${C.cardBorder}`, background:"#FAFAF7", flexShrink:0, display:"flex", flexDirection:"column", minHeight:0 }}>
+    <div style={{ width:308, borderLeft:`1px solid ${C.cardBorder}`, background:"var(--c-surfaceInner, #FAFAF7)", flexShrink:0, display:"flex", flexDirection:"column", minHeight:0 }}>
       <div style={{ padding:"11px 14px", borderBottom:`1px solid ${C.cardBorder}`, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
         <div>
-          <div style={{ fontSize:10, color:C.muted, fontWeight:700, letterSpacing:".1em", textTransform:"uppercase" }}>Live Preview</div>
-          <div style={{ fontSize:13, fontWeight:700, color:C.text1, marginTop:2 }}>WhatsApp simulator</div>
+          <div style={{ fontSize:12, color:C.muted, fontWeight:700, letterSpacing:".1em", textTransform:"uppercase" }}>Live Preview</div>
+          <div style={{ fontSize:15, fontWeight:700, color:C.text1, marginTop:2 }}>WhatsApp simulator</div>
         </div>
         <IconBtn onClick={onClose}>{IC.x(15)}</IconBtn>
       </div>
       <div style={{ flex:1, minHeight:0, overflow:"hidden", padding:"14px 14px 10px", display:"flex", flexDirection:"column", alignItems:"center" }}>
         <div style={{
           width: 278, flex: 1, minHeight: 0, maxHeight: 600,
-          background: "linear-gradient(155deg, #D8D8DE 0%, #A6A6AD 30%, #82828A 58%, #BFBFC5 82%, #6E6E76 100%)",
+          background: "linear-gradient(155deg, var(--c-sd8d8de, #D8D8DE) 0%, #A6A6AD 30%, #82828A 58%, var(--c-sbfbfc5, #BFBFC5) 82%, #6E6E76 100%)",
           borderRadius: 52, padding: 3.5,
           boxShadow: "0 22px 50px rgba(0,0,0,.28), 0 4px 10px rgba(0,0,0,.10), inset 0 0 0 0.5px rgba(255,255,255,.55), inset 0 -2px 4px rgba(0,0,0,.18)",
           position: "relative", display: "flex", flexDirection: "column",
@@ -3844,7 +3534,7 @@ const PhonePreview = ({ onClose, nodes = [], edges = [], templates = [], teamMem
 
           <div style={{ background: "#000", borderRadius: 48.5, padding: 2, flex: 1, minHeight: 0, display: "flex", flexDirection: "column", boxShadow: "inset 0 0 0 0.5px rgba(255,255,255,.12)" }}>
             <div style={{ flex: 1, minHeight: 0, position: "relative", borderRadius: 46.5, overflow: "hidden", display: "flex", flexDirection: "column", background: "#075E54" }}>
-              <div style={{ position:"absolute", top:0, left:0, right:0, height:46, padding:"14px 28px 0", display:"flex", justifyContent:"space-between", alignItems:"flex-start", color:"#fff", zIndex:5, fontFamily:"-apple-system, 'SF Pro Display', system-ui, sans-serif", fontWeight:600, fontSize:14, letterSpacing:"-.01em", pointerEvents:"none" }}>
+              <div style={{ position:"absolute", top:0, left:0, right:0, height:46, padding:"14px 28px 0", display:"flex", justifyContent:"space-between", alignItems:"flex-start", color:"#fff", zIndex:5, fontFamily:"-apple-system, 'SF Pro Display', system-ui, sans-serif", fontWeight:600, fontSize:15, letterSpacing:"-.01em", pointerEvents:"none" }}>
                 <span style={{ minWidth:48, textAlign:"left" }}>{now()}</span>
                 <div style={{ display:"flex", alignItems:"center", gap:5 }}>
                   <svg width="17" height="11" viewBox="0 0 17 11" style={{ display:"block" }}>
@@ -3872,11 +3562,11 @@ const PhonePreview = ({ onClose, nodes = [], edges = [], templates = [], teamMem
 
               <div style={{ background:"#075E54", paddingTop:50, paddingBottom:8, paddingLeft:12, paddingRight:12, color:"#fff", fontFamily:"-apple-system, 'SF Pro Display', system-ui, sans-serif", flexShrink:0, position:"relative", zIndex:1 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                  <span style={{ color:"#fff", fontSize:20, lineHeight:1, opacity:.9, marginRight:-2 }}>‹</span>
-                  <div style={{ width:30, height:30, borderRadius:"50%", background:`linear-gradient(135deg,${C.brandBright},${C.brand})`, display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", fontSize:12, fontWeight:700, flexShrink:0 }}>F</div>
+                  <span style={{ color:"#fff", fontSize:22, lineHeight:1, opacity:.9, marginRight:-2 }}>‹</span>
+                  <div style={{ width:30, height:30, borderRadius:"50%", background:`linear-gradient(135deg,${C.brandBright},${C.brand})`, display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", fontSize:14, fontWeight:700, flexShrink:0 }}>F</div>
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:13, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>Forge Automation</div>
-                    <div style={{ fontSize:10, opacity:.82, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{ended ? "Conversation ended" : waiting ? "Waiting for your reply" : "typing…"}</div>
+                    <div style={{ fontSize:15, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>Forge Automation</div>
+                    <div style={{ fontSize:12, opacity:.82, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{ended ? "Conversation ended" : waiting ? "Waiting for your reply" : "typing…"}</div>
                   </div>
                   <svg width="20" height="14" viewBox="0 0 20 14" style={{ display:"block", flexShrink:0 }}>
                     <rect x="0.5" y="1.5" width="13" height="11" rx="2.5" fill="none" stroke="#fff" strokeWidth="1.4"/>
@@ -3888,15 +3578,19 @@ const PhonePreview = ({ onClose, nodes = [], edges = [], templates = [], teamMem
                 </div>
               </div>
 
-              <div ref={chatRef} style={{ flex:1, minHeight:0, overflowY:"auto", background:"#E5DDD5", padding:"10px 7px", backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cpath d='M20 20 L25 25 M55 55 L60 60' stroke='%23D9CFC4' stroke-width='1'/%3E%3C/svg%3E\")" }}>
+              {/* Anchored so a test can read the CONVERSATION alone. The canvas
+                  behind it renders every node's body text too, so an unscoped
+                  assertion that "the flow reached the ONE branch" passes even
+                  when it reached neither. */}
+              <div ref={chatRef} data-testid="preview-chat" style={{ flex:1, minHeight:0, overflowY:"auto", background:"var(--c-chatWall)", padding:"10px 7px", backgroundImage:"var(--c-chatPattern)" }}>
                 <div style={{ display:"flex", justifyContent:"center", marginBottom:8 }}>
-                  <span style={{ background:"#E1F2FA", color:"#3C6678", fontSize:9, padding:"2px 9px", borderRadius:99, fontWeight:600 }}>TODAY</span>
+                  <span style={{ background:"var(--c-infoBg, #E1F2FA)", color:"var(--c-s3c6678, #3C6678)", fontSize:11, padding:"2px 9px", borderRadius:99, fontWeight:600 }}>TODAY</span>
                 </div>
                 {conv.map((m, i) => {
                   if (m.from === "system") {
                     return (
                       <div key={i} style={{ display:"flex", justifyContent:"center", margin:"6px 0" }}>
-                        <div style={{ background:"#FFF8E1", border:"1px solid #FFE082", color:"#7A5C00", fontSize:9, padding:"3px 9px", borderRadius:99, fontWeight:600, maxWidth:"90%", textAlign:"center", lineHeight:1.4 }}>{m.text}</div>
+                        <div style={{ background:"var(--c-warnBgSoft, #FFF8E1)", border:"1px solid #FFE082", color:"var(--c-s7a5c00, #7A5C00)", fontSize:11, padding:"3px 9px", borderRadius:99, fontWeight:600, maxWidth:"90%", textAlign:"center", lineHeight:1.4 }}>{m.text}</div>
                       </div>
                     );
                   }
@@ -3905,21 +3599,37 @@ const PhonePreview = ({ onClose, nodes = [], edges = [], templates = [], teamMem
                   const isWaitingOnThese = waiting && waiting.nodeId === m.ownerNodeId;
                   return (
                     <div key={i} style={{ display:"flex", justifyContent: isUser ? "flex-end" : "flex-start", marginBottom:4 }}>
-                      <div style={{ background: isUser ? "#DCF8C6" : "#fff", borderRadius: isUser ? "8px 0 8px 8px" : "0 8px 8px 8px", maxWidth: "82%", fontSize:11, color:"#111", lineHeight:1.4, overflow:"hidden", boxShadow:"0 1px 1px rgba(0,0,0,.07)" }}>
+                      <div style={{ background: isUser ? "var(--c-sdcf8c6, #DCF8C6)" : "var(--c-surface, #fff)", borderRadius: isUser ? "8px 0 8px 8px" : "0 8px 8px 8px", maxWidth: "82%", fontSize:13, color:"var(--c-t1, #111)", lineHeight:1.4, overflow:"hidden", boxShadow:"0 1px 1px rgba(0,0,0,.07)" }}>
                         <div style={{ padding:"5px 9px" }}>
+                          {/* Attachments read as a typed chip, the way WhatsApp
+                              shows a placeholder before media loads. */}
+                          {m.media && (
+                            <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom: m.text ? 4 : 2,
+                              background:"var(--c-surfaceInner, #F5F5F0)", borderRadius:5, padding:"5px 7px",
+                              fontSize:12, fontWeight:700, color:"var(--c-t4, #666)", letterSpacing:".02em" }}>
+                              {m.media}
+                            </div>
+                          )}
                           {m.text}
-                          <div style={{ fontSize:8, color:"#667781", textAlign:"right", marginTop:2, fontFamily:"-apple-system, 'SF Pro Display', sans-serif", display:"flex", justifyContent:"flex-end", alignItems:"center", gap:3 }}>
+                          <div style={{ fontSize:11, color:"var(--c-s667781, #667781)", textAlign:"right", marginTop:2, fontFamily:"-apple-system, 'SF Pro Display', sans-serif", display:"flex", justifyContent:"flex-end", alignItems:"center", gap:3 }}>
                             {m.time}
                           </div>
                         </div>
                         {hasButtons && (
                           <div style={{ borderTop:"1px solid #E0E0E0" }}>
                             {m.buttons.map((btn, idx) => (
-                              <button key={idx} onClick={()=>isWaitingOnThese && onTapButton(btn, idx)} disabled={!isWaitingOnThese}
-                                style={{ display:"block", width:"100%", padding:"7px 9px", border:"none", borderTop:"1px solid #F0F0F0", textAlign:"center", color:"#00A5F4", fontSize:11, fontWeight:500, background:"transparent", cursor: isWaitingOnThese ? "pointer" : "default", opacity: isWaitingOnThese ? 1 : 0.4, fontFamily:"-apple-system, 'SF Pro Display', sans-serif", transition:"background .12s" }}
-                                onMouseEnter={(e)=>{ if (isWaitingOnThese) e.currentTarget.style.background = "#F5FBFF"; }}
+                              // ⚠ Pass the LABEL, never the button object. The
+                              // handler stores what it is given as the
+                              // customer's message and the bubble renders it as
+                              // a React child — handing it an object throws and
+                              // PageErrorBoundary replaces the whole route with
+                              // "This page ran into a problem". Payment buttons
+                              // never crashed only because they pass strings.
+                              <button key={idx} onClick={()=>isWaitingOnThese && onTapButton(buttonLabel(btn, idx), idx)} disabled={!isWaitingOnThese}
+                                style={{ display:"block", width:"100%", padding:"7px 9px", border:"none", borderTop:"1px solid #F0F0F0", textAlign:"center", color:"#00A5F4", fontSize:13, fontWeight:500, background:"transparent", cursor: isWaitingOnThese ? "pointer" : "default", opacity: isWaitingOnThese ? 1 : 0.4, fontFamily:"-apple-system, 'SF Pro Display', sans-serif", transition:"background .12s" }}
+                                onMouseEnter={(e)=>{ if (isWaitingOnThese) e.currentTarget.style.background = "var(--c-xf5fbff, #F5FBFF)"; }}
                                 onMouseLeave={(e)=>{ e.currentTarget.style.background = "transparent"; }}
-                              >{btn.text || btn}</button>
+                              >{buttonLabel(btn, idx)}</button>
                             ))}
                           </div>
                         )}
@@ -3929,16 +3639,32 @@ const PhonePreview = ({ onClose, nodes = [], edges = [], templates = [], teamMem
                 })}
                 {ended && (
                   <div style={{ display:"flex", justifyContent:"center", marginTop:10 }}>
-                    <span style={{ background:"#E1F5EE", color:C.brandDark, fontSize:9, padding:"3px 10px", borderRadius:99, fontWeight:700, letterSpacing:".06em", textTransform:"uppercase" }}>End of flow</span>
+                    <span style={{ background:"var(--c-successBg, #E1F5EE)", color:C.brandDark, fontSize:11, padding:"3px 10px", borderRadius:99, fontWeight:700, letterSpacing:".06em", textTransform:"uppercase" }}>End of flow</span>
                   </div>
                 )}
               </div>
 
-              <div style={{ background:"#F0F0F0", padding:"7px 9px 22px", display:"flex", alignItems:"center", gap:6, flexShrink:0, position:"relative" }}>
-                <div style={{ flex:1, background:"#fff", borderRadius:99, padding:"6px 12px", fontSize:10, color:"#999", border:"1px solid #E5E5E0" }}>
-                  {waiting ? "↑ Tap a reply button above" : ended ? "Conversation ended — tap Restart" : "Message"}
-                </div>
-                <div style={{ width:28, height:28, background:"#25D366", borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", flexShrink:0, boxShadow:"0 1px 2px rgba(0,0,0,.15)" }}>{IC.send(13)}</div>
+              {/* A REAL composer. It used to be a static div reading "Tap a
+                  reply button above", so a free-text question — which by
+                  definition has no buttons — could not be answered at all and
+                  the preview stopped dead at END OF FLOW. */}
+              <div style={{ background:"var(--c-xf0f0f0, #F0F0F0)", padding:"7px 9px 22px", display:"flex", alignItems:"center", gap:6, flexShrink:0, position:"relative" }}>
+                <input
+                  value={typed}
+                  onChange={(e) => setTyped(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") onSendTyped(); }}
+                  disabled={!canType}
+                  placeholder={
+                    canType ? "Type a reply…"
+                    : ended ? "Conversation ended — tap Restart"
+                    : "Waiting for the next message…"
+                  }
+                  style={{ flex:1, background:"var(--c-surface, #fff)", borderRadius:99, padding:"6px 12px",
+                    fontSize:12, color:"var(--c-t1, #111)", border:"1px solid var(--c-border, #E5E5E0)",
+                    outline:"none", fontFamily:"'DM Sans'", minWidth:0 }}
+                />
+                <div onClick={() => canType && onSendTyped()}
+                  style={{ width:28, height:28, background: canType ? "var(--c-waGreen, #25D366)" : "var(--c-t7, #999)", borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", flexShrink:0, boxShadow:"0 1px 2px rgba(0,0,0,.15)", cursor: canType ? "pointer" : "default" }}>{IC.send(13)}</div>
                 <div style={{ position:"absolute", bottom:6, left:"50%", transform:"translateX(-50%)", width:110, height:4, background:"#111", borderRadius:99, opacity:.85 }}/>
               </div>
             </div>
@@ -3970,14 +3696,31 @@ const Canvas = ({
   nodes, edges, selectedId, setSelectedId, transform, setTransform,
   onStartDrag, onStartConnect, onPickAgentResource, ghost, panning, connectTargetId,
   onClickEdgePlus, onClickAppendPlus, onClickEdgeDelete, onDeleteNode, onDuplicateNode,
-  viewportRef, onViewportMouseDown, onAutoLayout, whatsappAccounts,
+  viewportRef, onViewportMouseDown, onAutoLayout, whatsappAccounts, onRowClick, canvasTemplates=[],
 }) => {
   const map = Object.fromEntries(nodes.map(n=>[n.id,n]));
+  // Which handles already carry a real edge, so a node can render a filled dot
+  // versus a hollow ring. `e.to` matters: a placeholder row with a null target
+  // is not a connection, and treating it as one is what used to suppress the
+  // append control on every button of a freshly-picked template.
+  const [hoveredEdge, setHoveredEdge] = React.useState(null);
+  const hoverTimer = React.useRef(null);
+  const setEdgeHover = (i) => {
+    if (hoverTimer.current) { clearTimeout(hoverTimer.current); hoverTimer.current = null; }
+    if (i == null) hoverTimer.current = setTimeout(() => setHoveredEdge(null), 260);
+    else setHoveredEdge(i);
+  };
+
+  const wiredByNode = {};
+  edges.forEach(e => {
+    if (!e.to) return;
+    (wiredByNode[e.from] || (wiredByNode[e.from] = new Set())).add(e.fromHandle || "default");
+  });
   const edgePluses = edges.map((e, i) => {
     const a = map[e.from]; const b = map[e.to]; if (!a||!b) return null;
     const p1 = handlePos(a, "output", e.fromHandle || "default");
     const p2 = handlePos(b, "input");
-    return { x:(p1.x+p2.x)/2, y:(p1.y+p2.y)/2, edgeIndex: i, isLabeled: !!e.label };
+    return { x:(p1.x + p2.x) / 2, y:(p1.y + p2.y) / 2, edgeIndex: i, isLabeled: !!e.label };
   }).filter(Boolean);
 
   const appendPluses = [];
@@ -3986,10 +3729,17 @@ const Canvas = ({
     handles.forEach(handle => {
       // AI Agent side handles open a resource picker — no "+" append button.
       if (n.type === "ai_agent" && (handle === "model" || handle === "tool")) return;
-      const hasEdge = edges.some(e => e.from === n.id && (e.fromHandle || "default") === handle);
+      // ⚠ `e.to` is load-bearing. onSelectTemplate used to write placeholder
+      // rows {from, to:null, fromHandle:'btn:N'}, which Connectors refused to
+      // draw and edgePluses filtered out — but this test accepted them, so
+      // picking a template with reply buttons left the node with N handles, no
+      // edges, and NO append controls at all. Live flow 4 still carries one.
+      const hasEdge = edges.some(e => e.from === n.id && (e.fromHandle || "default") === handle && e.to);
       if (!hasEdge) {
+        // To the RIGHT of the row now, not 50px below it: outputs leave from
+        // the right edge, so a "+" underneath would point at nothing.
         const p = handlePos(n, "output", handle);
-        appendPluses.push({ x:p.x, y:p.y+50, fromId:n.id, fromHandle:handle });
+        appendPluses.push({ x:p.x+46, y:p.y, fromId:n.id, fromHandle:handle });
       }
     });
   });
@@ -4022,7 +3772,7 @@ const Canvas = ({
         transform:`translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
         transformOrigin:"0 0",
       }}>
-        <Connectors nodes={nodes} edges={edges} ghost={ghost}/>
+        <Connectors nodes={nodes} edges={edges} ghost={ghost} onEdgeHover={setEdgeHover}/>
 
         {nodes.map(n => (
           <FlowNode
@@ -4033,20 +3783,28 @@ const Canvas = ({
             onStartConnect={onStartConnect}
             onPickAgentResource={onPickAgentResource}
             whatsappAccounts={whatsappAccounts}
+            wiredHandles={wiredByNode[n.id]}
+            onRowClick={onRowClick}
+            whatsappTemplates={canvasTemplates}
           />
         ))}
 
-        {edgePluses.map((p, i) => (
-          <React.Fragment key={"ep"+i}>
-            <EdgePlus   x={p.x - 16} y={p.y} onClick={(e)=>onClickEdgePlus(e, p.edgeIndex)}/>
-            <EdgeDelete x={p.x + 16} y={p.y} onClick={(e)=>onClickEdgeDelete(e, p.edgeIndex)}/>
-          </React.Fragment>
-        ))}
-
-        {appendPluses.map((p, i) => (
-          <EdgePlus key={"ap"+i} x={p.x} y={p.y} withConnector
-            onClick={(e)=>onClickAppendPlus(e, p.fromId, p.fromHandle)}/>
-        ))}
+        {/* Only ONE control on an edge, and only while you are pointing at it.
+            Every edge used to carry a permanent "+" and "x" chip, and every
+            unconnected handle carried a third — so a five-branch node put
+            thirteen red circles on the canvas, none of them attached to
+            anything you were looking at. Connecting is now the handle's own
+            job (click the circle), which leaves the edge with exactly one
+            reason to exist: removing it. */}
+        {hoveredEdge != null && edgePluses.find(p => p.edgeIndex === hoveredEdge) && (
+          <div onMouseEnter={() => setEdgeHover(hoveredEdge)} onMouseLeave={() => setEdgeHover(null)}>
+            <EdgeDelete
+              x={edgePluses.find(p => p.edgeIndex === hoveredEdge).x}
+              y={edgePluses.find(p => p.edgeIndex === hoveredEdge).y}
+              onClick={(e) => onClickEdgeDelete(e, hoveredEdge)}
+            />
+          </div>
+        )}
 
         {selectedNode && (
           <NodeActions
@@ -4058,11 +3816,11 @@ const Canvas = ({
         )}
       </div>
 
-      <div style={{ position:"absolute", top:14, left:"50%", transform:"translateX(-50%)", background:"#fff", border:`1px solid ${C.cardBorder}`, borderRadius:99, padding:"6px 14px", display:"flex", alignItems:"center", gap:10, boxShadow:"0 2px 8px rgba(0,0,0,.05)", fontSize:11, color:C.text3, fontWeight:500, fontFamily:"'DM Sans'", whiteSpace:"nowrap" }}>
+      <div style={{ position:"absolute", top:14, left:"50%", transform:"translateX(-50%)", background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:99, padding:"6px 14px", display:"flex", alignItems:"center", gap:10, boxShadow:"0 2px 8px rgba(0,0,0,.05)", fontSize:14, color:C.text3, fontWeight:500, fontFamily:"'DM Sans'", whiteSpace:"nowrap" }}>
         <span>Tap a step to edit</span>
         <span style={{ width:1, height:12, background:C.cardBorder }}/>
         <span style={{ display:"inline-flex", alignItems:"center", gap:5 }}>
-          <span style={{ width:16, height:16, borderRadius:"50%", background:"#fff", border:`1.5px dashed ${C.text4}`, color:C.text4, fontSize:11, fontWeight:600, display:"inline-flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}>+</span>
+          <span style={{ width:16, height:16, borderRadius:"50%", background:"var(--c-surface, #fff)", border:`1.5px dashed ${C.text4}`, color:C.text4, fontSize:14, fontWeight:600, display:"inline-flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}>+</span>
           Click to add a block
         </span>
         <span style={{ width:1, height:12, background:C.cardBorder }}/>
@@ -4070,8 +3828,8 @@ const Canvas = ({
       </div>
 
       <div style={{ position:"absolute", bottom:14, left:14, display:"flex", gap:6 }}>
-        <button onClick={()=>setTransform({ x:30, y:30, scale:0.7 })} style={{ background:"#fff", border:`1px solid ${C.cardBorder}`, borderRadius:10, padding:"6px 10px", display:"flex", alignItems:"center", gap:6, fontSize:11, fontFamily:"'DM Mono'", fontWeight:700, color:C.text2, cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,.04)" }}>{IC.fit(13)} Fit</button>
-        <button onClick={onAutoLayout} style={{ background:"#fff", border:`1px solid ${C.cardBorder}`, borderRadius:10, padding:"6px 10px", display:"flex", alignItems:"center", gap:6, fontSize:11, fontFamily:"'DM Mono'", fontWeight:700, color:C.text2, cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,.04)" }}>{IC.flow(13)} Auto layout</button>
+        <button onClick={()=>setTransform({ x:30, y:30, scale:0.7 })} style={{ background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:10, padding:"6px 10px", display:"flex", alignItems:"center", gap:6, fontSize:14, fontFamily:"'DM Mono'", fontWeight:700, color:C.text2, cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,.04)" }}>{IC.fit(13)} Fit</button>
+        <button onClick={onAutoLayout} style={{ background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:10, padding:"6px 10px", display:"flex", alignItems:"center", gap:6, fontSize:14, fontFamily:"'DM Mono'", fontWeight:700, color:C.text2, cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,.04)" }}>{IC.flow(13)} Auto layout</button>
       </div>
 
       <MiniMap nodes={nodes} transform={transform}/>
@@ -4083,8 +3841,8 @@ const MiniMap = ({ nodes, transform }) => {
   const mw = 164, mh = 100;
   if (!nodes || !nodes.length) {
     return (
-      <div style={{ position:"absolute", bottom:14, right:14, width:mw+16, background:"#fff", border:`1px solid ${C.cardBorder}`, borderRadius:10, padding:8, boxShadow:"0 4px 14px rgba(0,0,0,.05)" }}>
-        <div style={{ fontSize:8, fontWeight:700, color:C.muted, letterSpacing:".1em", textTransform:"uppercase", marginBottom:5 }}>Mini-map</div>
+      <div style={{ position:"absolute", bottom:14, right:14, width:mw+16, background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:10, padding:8, boxShadow:"0 4px 14px rgba(0,0,0,.05)" }}>
+        <div style={{ fontSize:13, fontWeight:700, color:C.muted, letterSpacing:".1em", textTransform:"uppercase", marginBottom:5 }}>Mini-map</div>
         <div style={{ width:mw, height:mh, background:C.sectionBg, borderRadius:6 }}/>
       </div>
     );
@@ -4099,11 +3857,11 @@ const MiniMap = ({ nodes, transform }) => {
   const offX = (mw - w * s) / 2;
   const offY = (mh - h * s) / 2;
   return (
-    <div style={{ position:"absolute", bottom:14, right:14, width:mw+16, background:"#fff", border:`1px solid ${C.cardBorder}`, borderRadius:10, padding:8, boxShadow:"0 4px 14px rgba(0,0,0,.05)" }}>
-      <div style={{ fontSize:8, fontWeight:700, color:C.muted, letterSpacing:".1em", textTransform:"uppercase", marginBottom:5 }}>Mini-map</div>
+    <div style={{ position:"absolute", bottom:14, right:14, width:mw+16, background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:10, padding:8, boxShadow:"0 4px 14px rgba(0,0,0,.05)" }}>
+      <div style={{ fontSize:13, fontWeight:700, color:C.muted, letterSpacing:".1em", textTransform:"uppercase", marginBottom:5 }}>Mini-map</div>
       <div style={{ position:"relative", width:mw, height:mh, background:C.sectionBg, borderRadius:6, overflow:"hidden" }}>
         {nodes.map(n=>{
-          const t = NT[n.type];
+          const t = NT[n.type] || NT_FALLBACK;
           return <div key={n.id} style={{
             position:"absolute",
             left: offX + (n.x - minX) * s,
@@ -4128,36 +3886,41 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
   const handleToggleStatus = onToggleStatus ? async (next) => {
     if (toggleBusy) return;
     setToggleBusy(true);
-    try { await onToggleStatus(next); } finally { setToggleBusy(false); }
+    try {
+      // Save FIRST when going live. The activation gate validates the stored
+      // config, so activating with unsaved edits would check the previous
+      // version — it would pass on a flow the canvas has since broken, or
+      // refuse one the canvas has since fixed. Either way "the builder said it
+      // was fine" and what actually runs would disagree.
+      // `isDirty` / `handleSave` are declared further down the component. That
+      // is safe ONLY because this closure runs on click, long after the body
+      // has finished — referencing either during RENDER would throw on the
+      // temporal dead zone and white out the page.
+      if (next === "active" && isDirty) await handleSave();
+      await onToggleStatus(next);
+    } finally { setToggleBusy(false); }
   } : undefined;
   const [templates,       setTemplates]       = useState([]);
-  const [teamMembers,     setTeamMembers]     = useState([]);
   const [tags,            setTags]            = useState([]);
-  const [contactFields,   setContactFields]   = useState([]);
   const [otherAutomations, setOtherAutomations] = useState([]);
   const [whatsappAccounts, setWhatsappAccounts] = useState([]);
   const [aiModels,        setAiModels]        = useState([]);
   const [assignableUsers, setAssignableUsers] = useState([]);
-  const [products,        setProducts]        = useState([]);
+  const [leadFields,      setLeadFields]      = useState([]);
   const [loading,         setLoading]         = useState(true);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const [tpls, mems, tgs, cFields, flows, accs, ais, usrs, prods] = await Promise.all([
+        const [tpls, tgs, flows, accs, ais, usrs, lf] = await Promise.all([
           api.templates.list(),
-          api.teamMembers.list(),
           api.tags.list(),
-          api.contactFields.list(),
           api.chatbots.list(),
           api.whatsappAccounts.list(true).catch(() => []),
           api.aiModels.list().catch(() => []),
           api.users.list().catch(() => []),
-          // Products drive the Payment node's price. A non-admin may not be able
-          // to read them; the node then falls back to a typed amount rather than
-          // failing to open.
-          api.products.list().catch(() => ({ products: [] })),
+          api.chatbots.leadFields().catch(() => ({ fields: [] })),
         ]);
         if (!alive) return;
         // Include APPROVED (sendable) and SUBMITTED (pending Meta review) so a
@@ -4168,26 +3931,17 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
           const s = String(t.status || "").toUpperCase();
           return s === "APPROVED" || s === "SUBMITTED";
         }));
-        setTeamMembers(mems || []);
-        setTags(tgs || []);
-        setContactFields(cFields || []);
+        // Managed tags (Funnel Stage, Product) are mirrored by the backend; an
+        // automation must not hand-assign one. Use Change Funnel Stage instead.
+        setTags((tgs || []).filter(t => !t.managed));
         setOtherAutomations((flows || []).filter(f => f.id !== automation?.id));
         setWhatsappAccounts(accs || []);
         setAiModels(ais || []);
-        setAssignableUsers((usrs || []).filter(u => u.isActive !== false && (u.role === 'bda_sales' || u.role === 'admin')));
-        // GET /products returns RAW rows (default_price_paise, active) — not the
-        // camelCase shape the rest of api.js uses. Normalised here, once, so the
-        // Payment panel can't quietly read an undefined price and label every
-        // product "(no price set)". Inactive products are dropped: an automation
-        // must not keep selling something that was retired.
-        const rawProducts = Array.isArray(prods) ? prods : (prods?.products || []);
-        setProducts(rawProducts
-          .filter(p => p.active !== false)
-          .map(p => ({
-            id: p.id,
-            name: p.name,
-            defaultPrice: p.default_price_paise != null ? Number(p.default_price_paise) / 100 : null,
-          })));
+        setAssignableUsers((usrs || []).filter(u => u.isActive !== false && u.role !== undefined));
+        // ⚠ The endpoint answers `{fields:[…]}`, not a bare array — an
+        // Array.isArray guard here would render the empty picker forever
+        // with a perfectly healthy backend behind it.
+        setLeadFields(Array.isArray(lf) ? lf : (lf?.fields || []));
       } catch (e) {
         console.error("AutomationBuilderView load error:", e);
       } finally {
@@ -4260,6 +4014,12 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
   const [historyIndex, setHistoryIndex] = useState(-1);
   const historyLockRef = useRef(false);
   const dragStartStateRef = useRef(null);
+  // Always the CURRENT graph. Window-registered handlers (drag, connect) run
+  // from the closure they were attached in, which is stale by the time they
+  // fire; reading through a ref is what makes their end-of-gesture bookkeeping
+  // see what actually happened.
+  const liveGraphRef = useRef({ nodes: [], edges: [] });
+  liveGraphRef.current = { nodes, edges };
 
   const pushHistory = useCallback((currentNodes, currentEdges) => {
     if (historyLockRef.current) return;
@@ -4338,12 +4098,20 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
   const onSelectTemplate = (nodeId, templateId) => {
     const tpl = templates.find(t => String(t.id) === String(templateId));
     if (!tpl) return;
-    updateNode(nodeId, { templateId, title: tpl.name, buttons: tpl.buttons || null });
+    // Stamp the body too: nodeLayout is pure and cannot look a template up, so
+    // without this the card would reserve space for a bubble it cannot fill.
+    updateNode(nodeId, { templateId, title: tpl.name, buttons: tpl.buttons || null, templateBody: tpl.body || "" });
     setEdges(prev => {
+      // Drop this node's button edges and write NOTHING back.
+      //
+      // This used to push a placeholder row per button with `to: null` to mean
+      // "declared but unconnected". Three consumers read that row three
+      // different ways — Connectors skipped it, edgePluses filtered it out, and
+      // appendPluses counted it as already wired — so the net effect was a node
+      // with handles, no visible edges and no way to add one except a precision
+      // drag. "Declared but unconnected" is a UI state (an empty handle), not
+      // an edge; the handles come from outputHandlesOf on their own.
       const next = prev.filter(e => e.from !== nodeId || !e.fromHandle?.startsWith("btn:"));
-      if (tpl.buttons && tpl.buttons.length > 0) {
-        next.push(...tpl.buttons.map((_, i) => ({ from: nodeId, to: null, fromHandle: `btn:${i}` })));
-      }
       pushHistory(nodes, next);
       return next;
     });
@@ -4442,14 +4210,24 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
   const onDragUp = useCallback(() => {
     if (dragStartStateRef.current) {
       const startNodes = dragStartStateRef.current.nodes;
-      const hasMoved = JSON.stringify(startNodes) !== JSON.stringify(nodes);
-      if (hasMoved) pushHistory(nodes, edges);
+      // ⚠ Read the CURRENT nodes from a ref, not from the closure.
+      //
+      // This handler is registered on `window` at mousedown, so the instance
+      // actually attached closes over `nodes` as it was BEFORE the drag.
+      // Comparing that against the deep copy taken at the same moment compares
+      // a value with its own source: `hasMoved` was always false and
+      // pushHistory never ran, so moving a node was not undoable and Ctrl+Z
+      // silently reverted an EARLIER edit instead. Invisible to a build, and
+      // to any test that calls the handler directly rather than dragging.
+      const current = liveGraphRef.current;
+      const hasMoved = JSON.stringify(startNodes) !== JSON.stringify(current.nodes);
+      if (hasMoved) pushHistory(current.nodes, current.edges);
       dragStartStateRef.current = null;
     }
     dragRef.current = null;
     window.removeEventListener("mousemove", onDragMove);
     window.removeEventListener("mouseup", onDragUp);
-  }, [nodes, edges, pushHistory]);
+  }, [pushHistory]);
 
   const onViewportMouseDown = (e) => {
     if (e.button !== 0 && e.button !== 1) return;
@@ -4470,15 +4248,29 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
     window.removeEventListener("mouseup", onPanUp);
   }, []);
 
-  const onStartConnect = (e, fromId, fromHandle) => {
+  // A connection can be started from EITHER end:
+  //   mode "forward" — dragging from a node's output dot, looking for a target.
+  //   mode "reverse" — dragging from a node's input tab, looking for a source.
+  // Both produce the identical { from, to, fromHandle } edge, so direction is
+  // always real flow direction and the arrow marker never lies.
+  const onStartConnect = (e, nodeId, handle, mode = "forward") => {
     e.stopPropagation();
-    connectRef.current = { fromId, fromHandle };
-    const from = nodes.find(n => n.id === fromId);
-    const p = from ? handlePos(from, "output", fromHandle) : { x:0, y:0 };
-    setGhost({ x1: p.x, y1: p.y, x2: p.x, y2: p.y });
+    const node = nodes.find(n => n.id === nodeId);
+    if (mode === "reverse") {
+      connectRef.current = { mode: "reverse", toId: nodeId };
+      const p = node ? handlePos(node, "input") : { x:0, y:0 };
+      // Anchored at the input, so the ghost's arrowhead still points INTO this
+      // node — the same way the finished edge will.
+      setGhost({ x1: p.x, y1: p.y, x2: p.x, y2: p.y, reverse: true });
+    } else {
+      connectRef.current = { mode: "forward", fromId: nodeId, fromHandle: handle };
+      const p = node ? handlePos(node, "output", handle) : { x:0, y:0 };
+      setGhost({ x1: p.x, y1: p.y, x2: p.x, y2: p.y });
+    }
     window.addEventListener("mousemove", onConnectMove);
     window.addEventListener("mouseup", onConnectUp);
   };
+
   // Resolve the node the cursor is over into a valid connection target. A node
   // is a valid target if it renders an input handle (triggers don't) and isn't
   // the source node — so you can drop the connection ANYWHERE on the node, not
@@ -4493,12 +4285,47 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
     return null;
   };
 
+  // The mirror of dropTargetAt for a reverse drag: which node (and which of its
+  // outputs) should feed the node we started from. Releasing on a specific
+  // output dot picks that handle; releasing on the node body picks "default",
+  // falling back to its first output for nodes that only have named ones
+  // (a condition's yes/no, a quick reply's buttons).
+  const sourceTargetAt = (clientX, clientY, toId) => {
+    const el = document.elementFromPoint(clientX, clientY);
+    if (!el || !el.closest) return null;
+    const isSide = (node, h) => node.type === "ai_agent" && (h === "model" || h === "tool");
+    const handleEl = el.closest('[data-handle-kind="output"]');
+    if (handleEl && handleEl.dataset.nodeId && handleEl.dataset.nodeId !== toId) {
+      const node = nodes.find(n => n.id === handleEl.dataset.nodeId);
+      const which = handleEl.dataset.handleWhich;
+      // The AI Agent's Model/Tool sockets are pickers, not connectors.
+      if (node && !isSide(node, which)) return { fromId: node.id, fromHandle: which || "default" };
+    }
+    const nodeEl = el.closest('[data-node-id]');
+    if (nodeEl && nodeEl.dataset.nodeId !== toId) {
+      const node = nodes.find(n => n.id === nodeEl.dataset.nodeId);
+      if (!node) return null;
+      const outs = outputHandlesOf(node).filter(h => !isSide(node, h));
+      if (!outs.length) return null;
+      return { fromId: node.id, fromHandle: outs.includes("default") ? "default" : outs[0] };
+    }
+    return null;
+  };
+
   const onConnectMove = useCallback((e) => {
     const c = connectRef.current; if (!c) return;
     const pos = screenToWorld(e.clientX, e.clientY);
-    setGhost(g => g ? { ...g, x2: pos.x, y2: pos.y } : null);
-    setConnectTargetId(dropTargetAt(e.clientX, e.clientY, c.fromId));
-  }, []);
+    if (c.mode === "reverse") {
+      // The moving end is the SOURCE, so it is the ghost's start point.
+      setGhost(g => g ? { ...g, x1: pos.x, y1: pos.y } : null);
+      const hit = sourceTargetAt(e.clientX, e.clientY, c.toId);
+      setConnectTargetId(hit ? hit.fromId : null);
+    } else {
+      setGhost(g => g ? { ...g, x2: pos.x, y2: pos.y } : null);
+      setConnectTargetId(dropTargetAt(e.clientX, e.clientY, c.fromId));
+    }
+  }, [nodes]);
+
   const onConnectUp = useCallback((e) => {
     const c = connectRef.current; if (!c) return;
     connectRef.current = null;
@@ -4506,18 +4333,28 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
     setConnectTargetId(null);
     window.removeEventListener("mousemove", onConnectMove);
     window.removeEventListener("mouseup", onConnectUp);
-    const toId = dropTargetAt(e.clientX, e.clientY, c.fromId);
-    if (toId) {
-      setEdges(prev => {
-        const handle = c.fromHandle || "default";
-        const filtered = prev.filter(ed => !(ed.from === c.fromId && (ed.fromHandle || "default") === handle));
-        const newEdge = { from: c.fromId, to: toId };
-        if (c.fromHandle && c.fromHandle !== "default") newEdge.fromHandle = c.fromHandle;
-        const next = [...filtered, newEdge];
-        pushHistory(nodes, next);
-        return next;
-      });
+
+    // Both modes resolve to the same pair before touching state, so the edge
+    // rules below (one edge per source handle) apply identically either way.
+    let fromId = null, toId = null, fromHandle = "default";
+    if (c.mode === "reverse") {
+      const hit = sourceTargetAt(e.clientX, e.clientY, c.toId);
+      if (!hit) return;
+      fromId = hit.fromId; toId = c.toId; fromHandle = hit.fromHandle || "default";
+    } else {
+      toId = dropTargetAt(e.clientX, e.clientY, c.fromId);
+      if (!toId) return;
+      fromId = c.fromId; fromHandle = c.fromHandle || "default";
     }
+
+    setEdges(prev => {
+      const filtered = prev.filter(ed => !(ed.from === fromId && (ed.fromHandle || "default") === fromHandle));
+      const newEdge = { from: fromId, to: toId };
+      if (fromHandle && fromHandle !== "default") newEdge.fromHandle = fromHandle;
+      const next = [...filtered, newEdge];
+      pushHistory(nodes, next);
+      return next;
+    });
   }, [nodes, pushHistory]);
 
   const onClickEdgePlus = (e, edgeIndex) => {
@@ -4530,6 +4367,22 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
   const onClickAppendPlus = (e, fromId, fromHandle) => {
     e.stopPropagation();
     setPicker({ x: e.clientX, y: e.clientY, connectTo: fromId, fromHandle, mode: "append" });
+  };
+
+  /**
+   * Click a row on a node to choose what happens next.
+   *
+   * The primary way to wire a branch, and the reason the old canvas was so hard
+   * to use: connecting a button previously REQUIRED a precision drag from a
+   * 30px dot (21px at the default zoom) onto a node that had to already exist.
+   * Clicking a row needs no precision and creates the step and the wire in one
+   * action. Same picker the append "+" uses — one code path, not two.
+   */
+  const onRowClick = (e, fromId, fromHandle, rowLabel) => {
+    e.stopPropagation();
+    const existing = edges.find(x => x.from === fromId && (x.fromHandle || "default") === fromHandle && x.to);
+    if (existing) { setSelectedId(existing.to); return; }  // already wired: reveal the step it goes to
+    setPicker({ x: e.clientX, y: e.clientY, connectTo: fromId, fromHandle, mode: "append", rowLabel });
   };
 
   const onPickAgentResource = (e, nodeId, kind) => {
@@ -4750,7 +4603,7 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
       <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100%", color:C.text5, fontFamily:"'DM Sans'" }}>
         <div style={{ textAlign:"center" }}>
           <div style={{ width:40, height:40, borderRadius:"50%", border:`3px solid ${C.cardBorder}`, borderTopColor:C.brand, animation:"spin .8s linear infinite", margin:"0 auto 16px" }}/>
-          <div style={{ fontSize:14, fontWeight:600 }}>Loading automation builder…</div>
+          <div style={{ fontSize:16, fontWeight:600 }}>Loading automation builder…</div>
         </div>
       </div>
     );
@@ -4838,6 +4691,8 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
             viewportRef={viewportRef} onViewportMouseDown={onViewportMouseDown}
             onAutoLayout={autoLayout}
             whatsappAccounts={whatsappAccounts}
+            onRowClick={onRowClick}
+            canvasTemplates={templates}
           />
 
           {selectedNode && (
@@ -4854,14 +4709,12 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
               onSelectTemplate={onSelectTemplate}
               onCreateTemplate={handleCreateTemplate}
               templates={templates}
-              teamMembers={teamMembers}
               tags={tags}
-              contactFields={contactFields}
+              leadFields={leadFields}
               otherAutomations={otherAutomations}
               whatsappAccounts={whatsappAccounts}
               assignableUsers={assignableUsers}
               aiModels={aiModels}
-              products={products}
               automationId={automation?.id}
             />
           )}
@@ -4871,7 +4724,6 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
               onClose={()=>setShowPreview(false)}
               nodes={nodes} edges={edges}
               templates={templates}
-              teamMembers={teamMembers}
               otherAutomations={otherAutomations}
             />
           )}
@@ -4927,9 +4779,9 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
 
       {confirmOpen && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.35)", zIndex:80, display:"flex", alignItems:"center", justifyContent:"center" }} onClick={closeConfirm}>
-          <div style={{ background:"#fff", borderRadius:12, padding:"24px", width:360, boxShadow:"0 20px 50px rgba(0,0,0,.2)" }} onClick={e=>e.stopPropagation()}>
+          <div style={{ background:"var(--c-surface, #fff)", borderRadius:12, padding:"24px", width:360, boxShadow:"0 20px 50px rgba(0,0,0,.2)" }} onClick={e=>e.stopPropagation()}>
             <div style={{ fontSize:16, fontWeight:700, color:C.text1, marginBottom:8 }}>Delete this block?</div>
-            <div style={{ fontSize:13, color:C.text3, lineHeight:1.5, marginBottom:20 }}>
+            <div style={{ fontSize:15, color:C.text3, lineHeight:1.5, marginBottom:20 }}>
               "{selectedNode?.title || selectedNode?.sub || "this block"}" will be removed and any connected links will be deleted. This can not be undone.
             </div>
             <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
@@ -4942,24 +4794,34 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
+        /* The grab area is deliberately much larger than the dot, so give it a
+           visible reaction — otherwise the extra room is undiscoverable and it
+           still feels like you must hit the dot exactly. */
+        .fg-handle:hover .fg-handle-dot {
+          transform: scale(1.35);
+          border-color: var(--c-dangerText, #A32D2D) !important;
+        }
+        .fg-handle:active .fg-handle-dot {
+          transform: scale(1.15);
+        }
         .picker-item:hover {
-          background: #F8F7F2 !important;
-          border-color: #E5E5E0 !important;
+          background: var(--c-surfaceSection, #F8F7F2) !important;
+          border-color: var(--c-border) !important;
         }
         .picker-item:active {
-          background: #F0EFEA !important;
+          background: var(--c-sf0efea, #F0EFEA) !important;
         }
         .rename-input::placeholder {
-          color: #AAA;
+          color: var(--c-t7);
           font-style: italic;
         }
         .rename-input:focus {
-          border-color: #1D9E75 !important;
+          border-color: var(--c-successBright, #1D9E75) !important;
           box-shadow: 0 0 0 3px #E1F5EE !important;
         }
         ::-webkit-scrollbar { width: 5px; height: 5px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #D5D5D0; border-radius: 99px; }
+        ::-webkit-scrollbar-thumb { background: var(--c-borderStrong, #D5D5D0); border-radius: 99px; }
         ::-webkit-scrollbar-thumb:hover { background: #AAA; }
       `}</style>
     </div>

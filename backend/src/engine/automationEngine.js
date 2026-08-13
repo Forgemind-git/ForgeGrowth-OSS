@@ -3,6 +3,8 @@ const { decrypt } = require('../util/crypto');
 const bus = require('../events');
 const { sheetsAppendRow, calendarInsertEvent, gmailSend } = require('../integrations/googleClient');
 const { PROVIDER_DEFAULT_BASE, runChatCompletion, pickDefaultModel } = require('../llm/chatCompletion');
+const { resolveReplyHandle, buildQuickReplyPayload, isQuickReply, handleAliases } = require('../services/replyRouting');
+const { applyLeadField } = require('../services/leadFields');
 
 /* ══════════════════════════════════════════════════════════════════════
    Minimal Automation Execution Engine
@@ -40,14 +42,6 @@ function _stringifyForInterpolation(v) {
   try { return JSON.stringify(v); } catch { return String(v); }
 }
 
-// Normalize a ForgeCRM field name into a {{variable}} token key.
-// MUST stay identical to fieldVarKey() in the frontend AutomationBuilderView.jsx
-// so the token the picker inserts is the token we resolve here.
-// "Date of Birth" -> "date_of_birth", "city" -> "city".
-function fieldVarKey(name) {
-  return String(name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-}
-
 function resolveVariables(text, context) {
   if (!text) return text;
   const contact = context.contact || {};
@@ -58,16 +52,26 @@ function resolveVariables(text, context) {
   // name so greetings still render for contacts we haven't formally captured.
   // (Conditions use the RAW captured name via getFieldValue — see below.)
   const displayName = contact.name || contact.profile_name || '';
+  // `answer` / `last_message` are the message that is driving this walk — on a
+  // resumed run, that is literally what the customer just replied.
+  //
+  // Without these an "Ask a question" step had nowhere to put the answer: it
+  // existed only in the execution log, so no later step could store it, send it
+  // back, or branch on it. `answer` is the name that reads correctly at the
+  // point of use ("store {{answer}} in City"); `last_message` is the same value
+  // under the name the condition editor already uses for it.
+  const lastMessage = String(context.message_body == null ? '' : context.message_body);
   const lookup = {
     name: displayName,
     first_name: displayName.split(' ')[0] || '',
     contact_number: contact.contact_number || context.contact_number || '',
     phone: contact.contact_number || context.contact_number || '',
+    answer: lastMessage,
+    last_message: lastMessage,
   };
-  // Map field id -> name so DB-loaded custom_fields (keyed by id, e.g. cf-city)
-  // can be referenced by their normalized field name (e.g. {{city}}).
-  const nameById = {};
-  for (const fd of (context.field_defs || [])) { if (fd && fd.id) nameById[fd.id] = fd.name; }
+  // custom_fields here are IN-MEMORY only — values an AI node parsed this run,
+  // exposed to downstream {{vars}}. Contact custom fields were removed, so
+  // nothing reads or writes them on the contacts row any more.
   Object.entries(contact.custom_fields || {}).forEach(([k, v]) => {
     const sval = _stringifyForInterpolation(v);
     const lk = String(k).toLowerCase();
@@ -75,12 +79,6 @@ function resolveVariables(text, context) {
     // can't clobber the canonical contact data.
     if (lookup[lk] === undefined || lookup[lk] === '') {
       lookup[lk] = sval;
-    }
-    // Also register under the field's normalized name when the key is a field id.
-    const fname = nameById[k];
-    if (fname) {
-      const nk = fieldVarKey(fname);
-      if (nk && (lookup[nk] === undefined || lookup[nk] === '')) lookup[nk] = sval;
     }
   });
   return String(text).replace(/\{\{([a-zA-Z0-9_]+)\}\}/g, (match, key) => {
@@ -119,14 +117,9 @@ function istNow() {
 function getFieldValue(source, field, context) {
   const contact = context.contact || {};
   const cf = contact.custom_fields || {};
-  // custom_fields are stored either by raw name (ai_summary, last_intent) OR by
-  // field-definition id (Set Custom Field). Resolve a NAME to whichever holds it.
-  const fromCustomFields = (name) => {
-    if (cf[name] !== undefined) return cf[name];
-    const def = (context.field_defs || []).find(d => String(d.name).toLowerCase() === String(name).toLowerCase());
-    if (def && cf[def.id] !== undefined) return cf[def.id];
-    return undefined;
-  };
+  // In-memory only, keyed by the raw name an AI node parsed (ai_summary,
+  // last_intent, …).
+  const fromCustomFields = (name) => cf[name];
 
   if (source === 'custom' || source === 'system') {
     if (field === 'name') return contact.name || '';
@@ -278,11 +271,22 @@ async function executeMessageNode(client, executionId, node, context) {
 
   if (mode === 'template') {
     const { rows: tplRows } = await client.query(
-      'SELECT id, name, body, category, language, buttons, header_type, header_text, footer, template_type, carousel_cards, whatsapp_account_id FROM coexistence.message_templates WHERE id = $1',
+      'SELECT id, name, body, category, language, buttons, header_type, header_text, header_media_library_id, footer, template_type, carousel_cards, whatsapp_account_id FROM coexistence.message_templates WHERE id = $1',
       [node.templateId]
     ).catch(() => ({ rows: [] }));
     const template = tplRows[0] || null;
-    const resolvedBody = template ? resolveTemplateVariables(template.body, node.bindings, context) : null;
+    // ⚠ This used to proceed with `template` null: the body became the literal
+    // string "Template: undefined", `payload.name` was undefined, Meta rejected
+    // it, and the step still logged SUCCESS. Deleting a template silently broke
+    // every active flow referencing it. Fail loudly instead.
+    if (!template) {
+      const msg = node.templateId
+        ? `The template this step sends (id ${node.templateId}) no longer exists. Pick another one.`
+        : 'This step has no template selected.';
+      await logStep(client, executionId, node, { templateId: node.templateId || null }, { error: msg }, 'error', msg);
+      throw new Error(msg);
+    }
+    const resolvedBody = resolveTemplateVariables(template.body, node.bindings, context);
 
     // Real Meta send via the shared outbound queue. We resolve the account
     // by the wa_number that received the trigger (the BDA's WhatsApp number).
@@ -340,6 +344,51 @@ async function executeMessageNode(client, executionId, node, context) {
           components.push({ type: 'button', sub_type: 'url', index: bi, parameters: [{ type: 'text', text }] });
         }
       }
+      // Stamp a routing key onto every QUICK_REPLY button. Meta echoes the
+      // payload back on the tap, which is what makes branching CORRECT rather
+      // than merely working: without it we can only match the visible label, so
+      // renaming a button — or Meta serving an approved translation — silently
+      // breaks the branch. `index` is the position in the FULL button array,
+      // matching both the URL loop above and outputHandlesOf, so mixed button
+      // sets stay aligned.
+      //
+      // Label matching stays as a permanent fallback: messages already
+      // delivered carry no payload, and they will keep arriving for days.
+      for (let bi = 0; bi < btns.length; bi++) {
+        if (!isQuickReply(btns[bi])) continue;
+        components.push({
+          type: 'button', sub_type: 'quick_reply', index: bi,
+          parameters: [{ type: 'payload', payload: buildQuickReplyPayload(node.id, bi) }],
+        });
+      }
+    }
+    // Header component. The engine was the ONLY send path that never emitted
+    // one, so every template with a media header was refused by Meta (132012)
+    // on every send while the step logged success.
+    {
+      const { buildHeaderComponent, needsHeaderMedia } = require('../services/templateComponents');
+      let headerMediaId = null;
+      if (needsHeaderMedia(template)) {
+        if (!template.header_media_library_id) {
+          const msg = `Template "${template.name}" has a ${String(template.header_type).toLowerCase()} header but no media saved against it. Re-pick the header media on the template, then try again.`;
+          await logStep(client, executionId, node, { templateId: template.id }, { error: msg }, 'error', msg);
+          throw new Error(msg);
+        }
+        const { resolveMetaMediaId } = require('../routes/mediaLibrary');
+        headerMediaId = await resolveMetaMediaId(template.header_media_library_id, account.id);
+        if (!headerMediaId) {
+          const msg = `Could not upload the header media for template "${template.name}" to this WhatsApp number. Check the Media Library entry still exists.`;
+          await logStep(client, executionId, node, { templateId: template.id }, { error: msg }, 'error', msg);
+          throw new Error(msg);
+        }
+      }
+      const headerText = /\{\{\s*\d+\s*\}\}/.test(String(template.header_text || ''))
+        ? resolveTemplateVariables(template.header_text, node.bindings, context)
+        : null;
+      const header = buildHeaderComponent(template, headerMediaId, headerText);
+      // Meta wants header before body; unshift so it leads regardless of the
+      // order these blocks happen to run in.
+      if (header) components.unshift(header);
     }
     // CAROUSEL templates: append the carousel send component (each card's header
     // media resolved to this account's media id + per-card quick-reply payloads).
@@ -494,7 +543,9 @@ async function executeMessageNode(client, executionId, node, context) {
     if (accErr || !account) {
       throw new Error(`automation direct message: ${accErr || 'no account for ' + (node.whatsappAccountId || fromPhone)}`);
     }
-    const STORED_TYPE_MAP = { quick_reply: 'interactive', list: 'interactive', product: 'interactive', catalog: 'interactive', contact: 'contacts' };
+    // product/catalog removed with the e-commerce feature (migration 101) —
+    // they built payloads against a catalog this app no longer tracks.
+    const STORED_TYPE_MAP = { quick_reply: 'interactive', list: 'interactive', cta_url: 'interactive', location_request: 'interactive', contact: 'contacts' };
     const storedMessageType = STORED_TYPE_MAP[directType] || directType;
     const localId = await insertPendingRow({
       account, toNumber: context.contact_number, messageType: storedMessageType, messageBody: resolvedBody,
@@ -517,11 +568,14 @@ async function executeMessageNode(client, executionId, node, context) {
       if (buttons.length === 0) {
         throw new Error('automation quick_reply: at least one button title required');
       }
+      if (!resolvedBody || !resolvedBody.trim()) {
+        throw new Error('automation quick_reply: body text is required by Meta');
+      }
       kind = 'interactive';
       const headerText = resolveVariables(dd.header, context);
       const interactive = {
         type: 'button',
-        body: { text: resolvedBody || '' },
+        body: { text: resolvedBody.slice(0, 1024) },
         action: { buttons },
       };
       if (headerText && headerText.trim()) {
@@ -588,7 +642,7 @@ async function executeMessageNode(client, executionId, node, context) {
       const headerText = resolveVariables(dd.header, context);
       const interactive = {
         type: 'list',
-        body: { text: resolvedBody || '' },
+        body: { text: resolvedBody.slice(0, 1024) },
         action: {
           button: buttonLabel,
           sections,
@@ -608,8 +662,11 @@ async function executeMessageNode(client, executionId, node, context) {
       payload = {
         latitude: Number(lat),
         longitude: Number(lon),
-        name: resolveVariables(dd.name, context) || undefined,
-        address: resolveVariables(dd.address, context) || undefined,
+        // Meta caps both at 1000. This was the only limit the engine did not
+        // enforce anywhere, so an over-long address failed at Meta after the
+        // optimistic chat_history row had already been written.
+        name: (resolveVariables(dd.name, context) || '').slice(0, 1000) || undefined,
+        address: (resolveVariables(dd.address, context) || '').slice(0, 1000) || undefined,
       };
     } else if (directType === 'contact' || directType === 'contacts') {
       const fullName = String(resolveVariables(dd.name, context) || '').trim();
@@ -648,36 +705,46 @@ async function executeMessageNode(client, executionId, node, context) {
       if (org) contactCard.org = { company: org };
       kind = 'contacts';
       payload = { contacts: [contactCard] };
-    } else if (directType === 'product') {
-      const catalogId = String(resolveVariables(dd.catalog_id, context) || '').trim();
-      const productId = String(resolveVariables(dd.product_retailer_id, context) || '').trim();
-      if (!catalogId || !productId) {
-        throw new Error('automation product: catalog_id and product_retailer_id are required');
-      }
+    } else if (directType === 'cta_url') {
+      // A single link button rendered as a real WhatsApp button rather than a
+      // bare URL in the text. Deliberately has NO branch: Meta fires no
+      // webhook when the customer taps it, so any edge off it would be a wire
+      // that can never carry anything.
+      const ctaUrl = String(resolveVariables(dd.url, context) || '').trim();
+      const ctaText = String(resolveVariables(dd.button_text, context) || 'Open').trim().slice(0, 20) || 'Open';
+      if (!ctaUrl) throw new Error('automation cta_url: a link is required');
+      if (!/^https?:\/\//i.test(ctaUrl)) throw new Error('automation cta_url: the link must start with http:// or https://');
+      if (!resolvedBody || !resolvedBody.trim()) throw new Error('automation cta_url: body text is required by Meta');
       kind = 'interactive';
       const interactive = {
-        type: 'product',
-        body: resolvedBody ? { text: resolvedBody.slice(0, 1024) } : undefined,
-        action: { catalog_id: catalogId, product_retailer_id: productId },
-      };
-      // Meta tolerates missing body for single-product but it's recommended; drop if empty
-      if (!interactive.body) delete interactive.body;
-      payload = { interactive };
-    } else if (directType === 'catalog') {
-      const catalogId = String(resolveVariables(dd.catalog_id, context) || '').trim();
-      if (!resolvedBody || !resolvedBody.trim()) {
-        throw new Error('automation catalog: body text is required by Meta');
-      }
-      kind = 'interactive';
-      const interactive = {
-        type: 'catalog_message',
+        type: 'cta_url',
         body: { text: resolvedBody.slice(0, 1024) },
-        action: { name: 'catalog_message' },
+        action: { name: 'cta_url', parameters: { display_text: ctaText, url: ctaUrl } },
       };
-      if (catalogId) {
-        interactive.action.parameters = { thumbnail_product_retailer_id: catalogId };
+      const ctaHeader = resolveVariables(dd.header, context);
+      if (ctaHeader && ctaHeader.trim()) {
+        interactive.header = { type: 'text', text: String(ctaHeader).slice(0, 60) };
+      }
+      const ctaFooter = resolveVariables(dd.footer, context);
+      if (ctaFooter && ctaFooter.trim()) {
+        interactive.footer = { text: String(ctaFooter).slice(0, 60) };
       }
       payload = { interactive };
+    } else if (directType === 'location_request') {
+      // Asks the customer to share their location. Their reply arrives as an
+      // ordinary type:'location' inbound, so a waiting node resumes on it
+      // through the normal reply path — no special casing needed downstream.
+      if (!resolvedBody || !resolvedBody.trim()) {
+        throw new Error('automation location_request: body text is required by Meta');
+      }
+      kind = 'interactive';
+      payload = {
+        interactive: {
+          type: 'location_request_message',
+          body: { text: resolvedBody.slice(0, 1024) },
+          action: { name: 'send_location' },
+        },
+      };
     } else if (directType === 'link') {
       // Link message = text with preview_url enabled. We append the URL to
       // the body if the body doesn't already contain it, so WhatsApp can
@@ -688,7 +755,7 @@ async function executeMessageNode(client, executionId, node, context) {
         ? resolvedBody
         : (resolvedBody ? `${resolvedBody}\n\n${linkUrl}` : linkUrl);
       kind = 'text';
-      payload = { body: bodyWithUrl, previewUrl: true };
+      payload = { body: bodyWithUrl.slice(0, 4096), previewUrl: true };
     } else if (['image', 'video', 'audio', 'document', 'sticker'].includes(directType)) {
       kind = 'media';
       if (dd.mediaLibraryId) {
@@ -756,6 +823,13 @@ async function executeMessageNode(client, executionId, node, context) {
           filename: resolveVariables(dd.filename, context),
         };
       }
+    } else if (directType && directType !== 'text') {
+      // ⚠ Terminating else. `kind`/`payload` were initialised to text defaults
+      // ABOVE this chain, so an unrecognised directType used to fall straight
+      // through and send the body as a plain text message — a silently wrong
+      // send rather than an error. Anything not handled above is a bug or a
+      // config from a newer version; say so.
+      throw new Error(`automation message: "${directType}" is not a message type this app can send.`);
     }
     // Consume any pending delay set by an upstream Delay node (BullMQ holds the job).
     const directDelayMs = context.__pendingSendDelayMs || 0;
@@ -815,283 +889,11 @@ async function executeMessageNode(client, executionId, node, context) {
   return step;
 }
 
-/**
- * Payment node — raise a Razorpay payment link, send it on this conversation,
- * and (optionally) hold the flow until the money actually arrives.
- *
- * The link carries our lead id and request id in its Razorpay `notes`, so when
- * the payment lands the webhook resolves it back to exactly this person and
- * this node. That is what makes "this chat person completed the payment" a
- * fact rather than an amount-matching guess.
- *
- * Output handles:
- *   waitForPayment off → `default`
- *   waitForPayment on  → `paid` when it settles, `unpaid` when the wait runs out
- */
-async function executePaymentNode(client, executionId, node, context) {
-  const paymentFlow = require('../services/paymentFlow');
-  const waNumber = context.trigger_data?.wa_number || null;
-  const contactNumber = context.contact_number;
-
-  if (!waNumber || !contactNumber) {
-    return logStep(client, executionId, node, { nodeId: node.id }, { note: 'No conversation to raise a payment on.' },
-      'error', 'Payment node needs a WhatsApp conversation (business number + contact).');
-  }
-
-  // ── Amount. An automation amount was typed by an admin at build time, so a
-  //    custom figure is trusted here — unlike the agent path, where an LLM
-  //    produces it and a cap applies.
-  const amountArg = node.paymentSource === 'product' ? null : node.amount;
-  const resolved = await paymentFlow.resolveAmount({
-    courseId: node.paymentSource === 'product' ? node.courseId : null,
-    amount: amountArg != null && amountArg !== '' ? resolveVariables(String(amountArg), context) : null,
-    allowCustom: true,
-  });
-  if (resolved.error) {
-    return logStep(client, executionId, node, { nodeId: node.id }, { error: resolved.error }, 'error', resolved.error);
-  }
-
-  const kind = ['fixed', 'partial', 'open'].includes(node.paymentKind) ? node.paymentKind : 'fixed';
-  const created = await paymentFlow.createPaymentForChat({
-    waNumber,
-    contactNumber,
-    contactName: context.contact?.name || context.contact?.profile_name || null,
-    amountPaise: resolved.amountPaise,
-    courseId: resolved.product?.id || null,
-    purpose: node.purpose ? resolveVariables(node.purpose, context) : null,
-    description: node.paymentDescription ? resolveVariables(node.paymentDescription, context) : null,
-    kind,
-    minAmountPaise: kind === 'partial' ? paymentFlow.toPaise(node.minAmount) : null,
-    expiryHours: node.linkExpiryHours ? parseInt(node.linkExpiryHours, 10) : null,
-    source: 'automation',
-    automationId: context.__automationId || null,
-    executionId,
-    nodeId: node.id,
-    createdBy: 'automation',
-  });
-
-  if (created.error) {
-    return logStep(client, executionId, node,
-      { nodeId: node.id, amount: paymentFlow.toRupees(resolved.amountPaise) },
-      { error: created.error, requestId: created.requestId || null },
-      'error', created.error);
-  }
-
-  const request = created.request;
-
-  // ── Deliver the link on this thread ──────────────────────────────────────
-  // Sent even when the node was re-entered and reused an existing link: the
-  // customer may never have received the first one.
-  //
-  // `auto` (the default) sends free-form text while the 24-hour window is open
-  // and falls back to the approved template when it is shut. The operator
-  // cannot know at build time which it will be, and picking wrong is either a
-  // send WhatsApp refuses or a template message paid for unnecessarily.
-  const mode = ['text', 'template', 'auto'].includes(node.deliveryMode) ? node.deliveryMode : 'auto';
-  const messageText = node.messageText || 'Here is your payment link for {{product}} — ₹{{amount}}.';
-  const sent = await paymentFlow.deliverPaymentLink({
-    waNumber, contactNumber, request, mode,
-    text: resolveVariables(messageText, context),
-    templateId: node.paymentTemplateId || null,
-    // Body variables for the template, in {{1}},{{2}},… order. Resolved through
-    // the automation's own variable engine first so {{name}} etc. still work.
-    templateVariables: (Array.isArray(node.templateVariables) ? node.templateVariables : [])
-      .map(v => paymentFlow.fillPaymentVars(resolveVariables(String(v ?? ''), context), { request, contactName: context.contact?.name })),
-    contactName: context.contact?.name,
-  });
-
-  const output = {
-    requestId: Number(request.id),
-    reused: !!created.reused,
-    amount: paymentFlow.toRupees(request.amount_paise),
-    kind: request.kind,
-    product: request.product_label || null,
-    shortUrl: request.short_url,
-    razorpayLinkId: request.razorpay_link_id,
-    messageSent: sent.sent,
-    // Which route actually reached them — text inside the 24h window, template
-    // outside it. Surfaced so the execution log explains a template charge.
-    deliveredVia: sent.via || null,
-    messageIssue: sent.sent ? null : (sent.detail || sent.reason),
-    waiting: node.waitForPayment === true,
-  };
-
-  // A link that could not be delivered is a real failure of this node — the
-  // customer has no way to pay. Logged as an error so it is visible in the
-  // execution log rather than looking like a clean run.
-  const status = sent.sent ? 'success' : 'error';
-  const step = await logStep(client, executionId, node,
-    { amount: output.amount, kind, product: output.product },
-    output, status, sent.sent ? null : `Payment link raised but not delivered: ${output.messageIssue}`);
-
-  if (node.waitForPayment !== true) return step;
-
-  // ── Hold the flow until the money lands ──────────────────────────────────
-  const waitMinutes = Math.max(1, parseInt(node.waitMinutes || 30, 10));
-  const followUpMinutes = node.followUpEnabled ? Math.max(1, parseInt(node.followUpMinutes || 15, 10)) : null;
-
-  await paymentFlow.openWatch({
-    requestId: request.id,
-    watcherKind: 'automation',
-    executionId,
-    nodeId: node.id,
-    waNumber,
-    contactNumber,
-    followUpMinutes,
-    followUpMax: node.followUpEnabled ? Math.max(1, parseInt(node.followUpMax || 1, 10)) : 0,
-    followUpText: node.followUpText ? resolveVariables(node.followUpText, context) : null,
-    confirmText: node.confirmText ? resolveVariables(node.confirmText, context) : null,
-    expiryMinutes: waitMinutes,
-    // The reminder may fire after the 24h window shuts, so the chaser needs the
-    // same template fallback the first send had.
-    templateId: node.paymentTemplateId || null,
-  });
-
-  // ⚠ awaiting_kind='payment' is load-bearing. webhook.js resumes paused
-  // executions on the customer's next inbound message; without this marker it
-  // would consume the payment wait the moment they typed anything — and,
-  // because that path skips fresh trigger evaluation, they would also get no
-  // reply at all.
-  await client.query(
-    `UPDATE coexistence.automation_executions
-        SET status='paused',
-            awaiting_node_id=$1,
-            awaiting_kind='payment',
-            paused_at=NOW(),
-            expires_at=NOW() + ($2 || ' minutes')::INTERVAL,
-            wa_number=$3
-      WHERE id=$4`,
-    // +5 minutes of headroom: the execution row must outlive the watch, or the
-    // stale-pause sweeper would error it out moments before the payment
-    // sweeper tries to resume it.
-    [node.id, String(waitMinutes + 5), waNumber, executionId]
-  );
-  step.__pauseExecution = true;
-  return step;
-}
-
-/**
- * Resume an execution paused at a Payment node, down the `paid` or `unpaid`
- * branch. Called only by the payment sweeper.
- *
- * Deliberately separate from resumeAutomation(): that one rebuilds its context
- * from a fresh inbound message, and there is no inbound message here. This
- * rebuilds the same context from the stored execution + contact instead.
- */
-async function resumePaymentExecution(executionId, { handle = 'paid', request = null, note = null, confirmNote = null } = {}) {
-  const client = await pool.connect();
-  try {
-    const { rows: claimed } = await client.query(
-      `UPDATE coexistence.automation_executions
-          SET status='running'
-        WHERE id=$1 AND status='paused' AND awaiting_kind='payment'
-       RETURNING id, automation_id, awaiting_node_id, trigger_data, contact_number, wa_number`,
-      [executionId]
-    );
-    // Deliberately no `expires_at > NOW()` guard, unlike the reply path. The
-    // watch decides when a payment wait is over; the execution row simply
-    // carries more headroom. Refusing here would strand a payment that landed
-    // in the last few minutes of the window.
-    if (claimed.length === 0) return null;
-    const execRow = claimed[0];
-
-    const { rows: botRows } = await client.query(
-      `SELECT id, name, config FROM coexistence.chatbots WHERE id = $1`, [execRow.automation_id]);
-    if (botRows.length === 0) {
-      await updateExecutionStatus(client, executionId, 'error', 'Automation no longer exists');
-      return null;
-    }
-    const config = botRows[0].config || {};
-    const nodes = config.nodes || [];
-    const edges = config.edges || [];
-
-    const waNumber = execRow.wa_number || execRow.trigger_data?.wa_number || null;
-    const context = {
-      contact_number: execRow.contact_number,
-      message_body: '',
-      message_type: 'payment',
-      trigger_type: 'payment',
-      trigger_data: { ...(execRow.trigger_data || {}), wa_number: waNumber },
-      __automationId: execRow.automation_id,
-      payment: request ? {
-        status: request.status,
-        amount: require('../services/paymentFlow').toRupees(request.amount_paise),
-        amount_paid: require('../services/paymentFlow').toRupees(request.amount_paid_paise),
-        product: request.product_label || null,
-        link: request.short_url || null,
-        request_id: Number(request.id),
-      } : null,
-    };
-
-    try {
-      const { rows: contactRows } = await client.query(
-        `SELECT name, profile_name, tags, custom_fields FROM coexistence.contacts
-          WHERE wa_number = $1 AND contact_number = $2`,
-        [waNumber, execRow.contact_number]);
-      if (contactRows.length > 0) {
-        context.contact = {
-          name: contactRows[0].name,
-          profile_name: contactRows[0].profile_name,
-          contact_number: execRow.contact_number,
-          tags: contactRows[0].tags || [],
-          custom_fields: contactRows[0].custom_fields || {},
-        };
-      }
-    } catch { /* non-fatal */ }
-
-    try {
-      const { rows: fdRows } = await client.query(`SELECT id, name FROM coexistence.contact_field_definitions`);
-      context.field_defs = fdRows;
-    } catch { context.field_defs = []; }
-
-    const pausedNode = nodes.find(n => n.id === execRow.awaiting_node_id);
-    if (!pausedNode) {
-      await updateExecutionStatus(client, executionId, 'error',
-        `Paused node ${execRow.awaiting_node_id} no longer in automation config`);
-      return null;
-    }
-
-    // Record the outcome as its own step so the execution log shows WHY the
-    // flow took the branch it did — an empty jump to the next node would be
-    // unreadable when someone is working out why a customer was not chased.
-    await logStep(client, executionId,
-      { id: `${pausedNode.id}:outcome`, type: 'payment', title: handle === 'paid' ? 'Payment received' : 'Payment not received' },
-      { branch: handle },
-      { branch: handle, payment: context.payment, note, confirmNote },
-      handle === 'paid' ? 'success' : 'skipped');
-
-    // A branch with nothing wired to it is a legitimate design ("just chase
-    // them, the flow ends here"), so this closes cleanly rather than erroring.
-    const nextEdges = edges.filter(e => e.from === pausedNode.id && e.fromHandle === handle);
-    const startNodeId = nextEdges.length > 0 ? nextEdges[0].to : null;
-    if (!startNodeId) {
-      await client.query(
-        `UPDATE coexistence.automation_executions
-            SET status='success', awaiting_node_id=NULL, awaiting_kind='reply', completed_at=NOW()
-          WHERE id=$1`, [executionId]);
-      return execRow;
-    }
-
-    console.log(`[engine] Payment resume execution=${executionId} branch=${handle} from node=${startNodeId}`);
-    const result = await walkFrom(client, executionId, nodes, edges, startNodeId, context);
-    if (!result.paused) {
-      await client.query(
-        `UPDATE coexistence.automation_executions
-            SET status='success', awaiting_node_id=NULL, awaiting_kind='reply', completed_at=NOW()
-          WHERE id=$1`, [executionId]);
-    }
-    return execRow;
-  } catch (err) {
-    console.error(`[engine] Payment resume error for execution ${executionId}:`, err.message);
-    await pool.query(
-      `UPDATE coexistence.automation_executions
-          SET status='error', awaiting_node_id=NULL, awaiting_kind='reply', error_message=$2, completed_at=NOW()
-        WHERE id=$1`, [executionId, err.message]).catch(() => {});
-    return null;
-  } finally {
-    client.release();
-  }
-}
+// NOTE (2026-08-12): the Payment node was removed. executePaymentNode and
+// resumePaymentExecution lived here; they raised a live Razorpay link inside a
+// flow and paused the execution on awaiting_kind='payment' until the money
+// arrived. Raising a payment link from Sales → Payments is untouched — this
+// removed only the ability to do it unattended from an automation.
 
 async function executeConditionNode(client, executionId, node, context) {
   const matched = evaluateConditions(node, context);
@@ -1196,7 +998,8 @@ async function executeActionNode(client, executionId, node, context) {
           stepStatus = 'error';
           continue;
         }
-        // Verify the user exists, is active, and is a bda_sales / admin
+        // Verify the user exists and is active. Deliberately NOT filtered by
+        // role: roles are user-defined now, so a role list here would go stale.
         const { rows: uRows } = await client.query(
           `SELECT id, display_name, role, is_active FROM coexistence.forgecrm_users WHERE id = $1`,
           [userId]
@@ -1235,6 +1038,88 @@ async function executeActionNode(client, executionId, node, context) {
         bus.emit('contact-assignment-changed', {
           waNumber, contactNumber, assignedUserId: u.id, assignedUserName: u.display_name,
         });
+
+      } else if (a.kind === 'Set Funnel Stage') {
+        // Deliberately its own action rather than a flavour of tagging. A stage
+        // is what the funnel chart, the conversion maths, the cold-drop engine,
+        // every cursor over the stage-change log reads;
+        // a tag is a label on a chat. Burying this inside "Add Tag" would make
+        // the one field that drives revenue reporting look cosmetic.
+        const stageKey = String(a.value || '').trim();
+        const cfg = require('../services/funnelConfig');
+        if (!stageKey) {
+          results.push({ kind: a.kind, status: 'error', error: 'No funnel stage selected.' });
+        } else if (!cfg.isValidStage(stageKey)) {
+          // Stage keys are immutable, so an invalid one means the stage was
+          // deleted after this step was configured — say so rather than
+          // writing a value nothing downstream understands.
+          results.push({ kind: a.kind, status: 'error', error: `Funnel stage "${stageKey}" no longer exists.` });
+        } else {
+          // Capture the PREVIOUS stage in the same statement: lead_events records
+          // from_value/to_value, and reading the old value in a separate query
+          // would race any concurrent move.
+          const { rows: lr } = await client.query(
+            `UPDATE coexistence.leads l
+                SET stage = $2, updated_at = NOW()
+               FROM (SELECT id, stage AS old_stage FROM coexistence.leads
+                      WHERE right(regexp_replace(whatsapp_number, '\\D', '', 'g'), 10) = $1
+                      ORDER BY id LIMIT 1) o
+              WHERE l.id = o.id AND l.stage IS DISTINCT FROM $2
+              RETURNING l.id, o.old_stage, l.stage`,
+            // ⚠ LAST 10 DIGITS, matching every other lead lookup in this app
+            // (Sales Log, Razorpay attribution, the agent funnel gate,
+            // services/leadFields). This was an exact string match, which works
+            // on the current data only because every stored number happens to
+            // be digits-only with a country code — a lead created by a form as
+            // 9876543210 would silently never move, and "skipped" reads exactly
+            // like "already at that stage".
+            [String(contactNumber).replace(/\D/g, '').slice(-10), stageKey]
+          );
+          if (lr.length === 0) {
+            results.push({ kind: a.kind, status: 'skipped', note: 'Already at that stage, or no lead exists for this contact yet.' });
+          } else {
+            // ⚠ The audit row is NOT optional. Everything that must react to a
+            // stage change — the funnel-stage tag mirror today, and anything
+            // added later — watches lead_events rather than hooking the eight
+            // write sites. Skipping it moves the lead and silently starves
+            // every one of them.
+            // ⚠ Column names matter here: this table has from_value/to_value/actor,
+            // NOT a payload JSONB. An insert naming the wrong column fails, and
+            // because the failure is caught (a logging problem must not break
+            // the customer's flow) it would be silent — the stage would move
+            // while every downstream dispatcher starved.
+            try {
+              await client.query(
+                `INSERT INTO coexistence.lead_events (lead_id, event_type, from_value, to_value, actor)
+                 VALUES ($1, 'stage_changed', $2, $3, $4)`,
+                [lr[0].id, lr[0].old_stage || null, stageKey, `automation:${node.id}`]
+              );
+            } catch (e) {
+              console.error('[engine] lead_events insert failed:', e.message);
+            }
+            bus.emit('lead-changed', { leadId: lr[0].id, stage: stageKey });
+            results.push({ kind: a.kind, status: 'success', leadId: lr[0].id, stage: stageKey });
+          }
+        }
+
+      } else if (a.kind === 'Set Lead Field') {
+        // Stores an answer on the LEAD. `a.field` names the registry field and
+        // `a.value` is the value — usually `{{answer}}`, the message that woke
+        // this walk up, which is what an "Ask a question" step produces.
+        //
+        // Two values, so this action carries `field` alongside `value` rather
+        // than packing both into one string. A delimiter would break the first
+        // time a customer's answer contained it.
+        const fieldKey = String(a.field || '').trim();
+        if (!fieldKey) {
+          results.push({ ...base, field: null, status: 'error', error: 'No lead field selected.' });
+          stepStatus = 'error';
+          continue;
+        }
+        const resolved = resolveVariables(String(a.value == null ? '' : a.value), context);
+        const out = await applyLeadField(client, { contactNumber, fieldKey, value: resolved });
+        results.push({ ...base, field: fieldKey, resolvedValue: resolved, ...out });
+        if (out.status === 'error') stepStatus = 'error';
 
       } else if (a.kind === 'Add Tag') {
         // a.value holds the tag NAME (from the builder dropdown). Resolve it to
@@ -1305,68 +1190,6 @@ async function executeActionNode(client, executionId, node, context) {
           setImmediate(() => fireTagAppliedTriggers({ waNumber, contactNumber, tagName, direction: 'removed' }).catch(() => {}));
         }
         results.push({ ...base, status: removed ? 'applied' : 'skipped', note: removed ? 'Tag removed' : 'Contact did not have this tag' });
-
-      } else if (a.kind === 'Set Custom Field') {
-        // a.value is "Field Name = value". The contacts.custom_fields JSONB is
-        // keyed by the field DEFINITION id (e.g. cf-city), not the name — so we
-        // resolve name → id. The value is variable-resolved ({{name}} etc.).
-        const raw = String(a.value || '');
-        const ix = raw.indexOf('=');
-        const fieldName = (ix >= 0 ? raw.slice(0, ix) : raw).trim();
-        const rawVal    = ix >= 0 ? raw.slice(ix + 1).trim() : '';
-        if (!fieldName) { results.push({ ...base, status: 'error', error: 'no field selected' }); stepStatus = 'error'; continue; }
-        if (!waNumber || !contactNumber) { results.push({ ...base, status: 'error', error: 'context missing wa_number or contact_number' }); stepStatus = 'error'; continue; }
-        const { rows: fRows } = await client.query(
-          `SELECT id, name FROM coexistence.contact_field_definitions WHERE LOWER(name) = LOWER($1) LIMIT 1`,
-          [fieldName]
-        );
-        if (fRows.length === 0) { results.push({ ...base, status: 'error', error: `custom field "${fieldName}" not found` }); stepStatus = 'error'; continue; }
-        const fieldId = fRows[0].id;
-        const value = resolveVariables(rawVal, context);
-        const { rows: cur } = await client.query(
-          `SELECT custom_fields FROM coexistence.contacts WHERE wa_number = $1 AND contact_number = $2`,
-          [waNumber, contactNumber]
-        );
-        const cf = { ...((cur[0] && cur[0].custom_fields) || {}) };
-        cf[fieldId] = value;
-        await client.query(
-          `INSERT INTO coexistence.contacts (wa_number, contact_number, custom_fields, updated_at)
-           VALUES ($1, $2, $3::jsonb, NOW())
-           ON CONFLICT (wa_number, contact_number) DO UPDATE
-             SET custom_fields = EXCLUDED.custom_fields, updated_at = NOW()`,
-          [waNumber, contactNumber, JSON.stringify(cf)]
-        );
-        context.contact = context.contact || {};
-        context.contact.custom_fields = cf;
-        contactMutated = true;
-        results.push({ ...base, status: 'applied', field: { id: fieldId, name: fRows[0].name }, value, note: 'Custom field set' });
-
-      } else if (a.kind === 'Clear Custom Field') {
-        const fieldName = String(a.value || '').trim();
-        if (!fieldName) { results.push({ ...base, status: 'error', error: 'no field selected' }); stepStatus = 'error'; continue; }
-        if (!waNumber || !contactNumber) { results.push({ ...base, status: 'error', error: 'context missing wa_number or contact_number' }); stepStatus = 'error'; continue; }
-        const { rows: fRows } = await client.query(
-          `SELECT id, name FROM coexistence.contact_field_definitions WHERE LOWER(name) = LOWER($1) LIMIT 1`,
-          [fieldName]
-        );
-        if (fRows.length === 0) { results.push({ ...base, status: 'error', error: `custom field "${fieldName}" not found` }); stepStatus = 'error'; continue; }
-        const fieldId = fRows[0].id;
-        const { rows: cur } = await client.query(
-          `SELECT custom_fields FROM coexistence.contacts WHERE wa_number = $1 AND contact_number = $2`,
-          [waNumber, contactNumber]
-        );
-        if (cur.length === 0) { results.push({ ...base, status: 'skipped', note: 'No contact row — nothing to clear' }); continue; }
-        const cf = { ...(cur[0].custom_fields || {}) };
-        const had = Object.prototype.hasOwnProperty.call(cf, fieldId);
-        delete cf[fieldId];
-        await client.query(
-          `UPDATE coexistence.contacts SET custom_fields = $3::jsonb, updated_at = NOW() WHERE wa_number = $1 AND contact_number = $2`,
-          [waNumber, contactNumber, JSON.stringify(cf)]
-        );
-        context.contact = context.contact || {};
-        context.contact.custom_fields = cf;
-        if (had) contactMutated = true;
-        results.push({ ...base, status: had ? 'applied' : 'skipped', field: { id: fieldId, name: fRows[0].name }, note: had ? 'Custom field cleared' : 'Field was already empty' });
 
       } else if (a.kind === 'Send Email') {
         // a.value is "to@example.com | Subject | Body" (pipe-separated; Body
@@ -1461,27 +1284,6 @@ async function executeActionNode(client, executionId, node, context) {
         bus.emit('conversation-read', { waNumber, contactNumber });
         results.push({ ...base, status: 'applied', note: 'Conversation marked closed (cleared from the unread queue)' });
 
-      } else if (a.kind === 'Send Webhook') {
-        // Outbound HTTP POST to an external URL with a JSON contact payload.
-        const url = resolveVariables(String(a.value || ''), context).trim();
-        if (!/^https?:\/\//i.test(url)) { results.push({ ...base, status: 'error', error: 'Webhook URL must start with http:// or https://' }); stepStatus = 'error'; continue; }
-        const payload = {
-          event: 'automation.webhook',
-          contact: { wa_number: waNumber, contact_number: contactNumber, name: context.contact?.name || null, tags: context.contact?.tags || [], custom_fields: context.contact?.custom_fields || {} },
-          message: context.message_body || null,
-          sent_at: new Date().toISOString(),
-        };
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 15000);
-        try {
-          const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: controller.signal });
-          results.push({ ...base, status: res.ok ? 'applied' : 'error', httpStatus: res.status, ...(res.ok ? {} : { error: `webhook returned HTTP ${res.status}` }) });
-          if (!res.ok) stepStatus = 'error';
-        } catch (err) {
-          results.push({ ...base, status: 'error', error: err.name === 'AbortError' ? 'webhook timed out (15s)' : err.message });
-          stepStatus = 'error';
-        } finally { clearTimeout(timer); }
-
       } else if (a.kind === 'Send Internal Email') {
         // a.value is "to@example.com | Subject | Body" — notify the team via Gmail.
         const raw = resolveVariables(String(a.value || ''), context);
@@ -1516,81 +1318,11 @@ async function executeActionNode(client, executionId, node, context) {
   return logStep(client, executionId, node, { actions, contact: { waNumber, contactNumber } }, { results }, stepStatus);
 }
 
-// Read a value from a parsed JSON response by a simple dotted/JSONPath-ish path
-// like "$.data.id" or "items.0.name". Returns undefined if any hop is missing.
-function getByPath(obj, path) {
-  if (obj == null || !path) return undefined;
-  const parts = String(path).replace(/^\$\.?/, '').split('.').filter(Boolean);
-  let cur = obj;
-  for (const p of parts) {
-    if (cur == null) return undefined;
-    cur = cur[p];
-  }
-  return cur;
-}
-
-// HUMAN HANDOFF — assigns the conversation to a real user, emits the same SSE
-// the Chats/Contacts views listen for, optionally emails the agent, and stops
-// the flow (the walker breaks on handoff). `node.assigned` holds forgecrm_users
-// ids; round-robin rotates across them.
-async function executeHandoffNode(client, executionId, node, context) {
-  const waNumber = context.trigger_data?.wa_number;
-  const contactNumber = context.contact_number;
-  const assigned = Array.isArray(node.assigned) ? node.assigned : [];
-  const mode = node.assignMode || 'specific';
-  const note = resolveVariables(node.internalNote || '', context);
-
-  let pickedId = null;
-  if (assigned.length) {
-    if (mode === 'round-robin') {
-      const { rows: cnt } = await client.query(
-        `SELECT COUNT(*)::int AS c FROM coexistence.automation_execution_steps WHERE node_type='handoff' AND status='success'`
-      );
-      pickedId = assigned[(cnt[0]?.c || 0) % assigned.length];
-    } else {
-      pickedId = assigned[0];
-    }
-  }
-
-  let assignedUser = null;
-  if (pickedId && waNumber && contactNumber) {
-    const { rows: uRows } = await client.query(
-      `SELECT id, display_name, email, role, is_active FROM coexistence.forgecrm_users WHERE id = $1`, [pickedId]
-    );
-    const u = uRows[0];
-    if (u && u.is_active !== false) {
-      await client.query(
-        `INSERT INTO coexistence.contacts (wa_number, contact_number, assigned_user_id, updated_at)
-         VALUES ($1,$2,$3,NOW())
-         ON CONFLICT (wa_number, contact_number) DO UPDATE SET assigned_user_id = EXCLUDED.assigned_user_id, updated_at = NOW()`,
-        [waNumber, contactNumber, u.id]
-      );
-      assignedUser = { id: u.id, displayName: u.display_name, role: u.role };
-      bus.emit('contact-assignment-changed', { waNumber, contactNumber, assignedUserId: u.id, assignedUserName: u.display_name });
-      if (node.notifyEmail && u.email) {
-        try {
-          await gmailSend({
-            to: u.email,
-            subject: `WhatsApp handoff: ${context.contact?.name || contactNumber}`,
-            text: `You've been assigned a WhatsApp conversation with ${context.contact?.name || contactNumber} (${contactNumber}).\n\n${note ? `Note: ${note}\n\n` : ''}Open ForgeChat to take over the chat.`,
-          });
-        } catch { /* email is best-effort; never fail the handoff on it */ }
-      }
-    }
-  }
-
-  const output = {
-    assignMode: mode,
-    assignedTo: assignedUser,
-    priority: node.priority || 'normal',
-    internalNote: note || null,
-    emailed: !!(node.notifyEmail && assignedUser),
-    note: assignedUser
-      ? `Conversation handed off to ${assignedUser.displayName}`
-      : 'Handoff reached — no team member selected, conversation left for the inbox queue',
-  };
-  return logStep(client, executionId, node, { assigned, mode }, output, 'success');
-}
+// NOTE (2026-08-12): the Human Handoff node was removed. executeHandoffNode
+// lived here — it assigned the conversation to a real user, emitted the
+// contact-assignment SSE and ended the flow. The Chats-side takeover
+// (contacts.agent_paused + "Return to bot") is a PERSON acting from the inbox
+// and is untouched; only the in-flow block went.
 
 // LEGACY AI STEP — a single LLM call bound to a business task. Saves the output
 // onto the contact (a custom field) and exposes it as
@@ -1600,7 +1332,6 @@ async function executeAINode(client, executionId, node, context) {
   const aiTask = node.aiTask || 'custom';
   const goal = resolveVariables(node.aiGoal || '', context);
   const ctxText = resolveVariables(node.aiContext || '', context);
-  const saveTo = node.aiSaveTo && node.aiSaveTo !== '__new__' ? node.aiSaveTo : '';
   const fallbackMode = node.aiFallback || 'fallback_message';
   const userMessage = context.message_body || context.trigger_data?.message_body || context.trigger_data?.body || '';
 
@@ -1642,16 +1373,17 @@ async function executeAINode(client, executionId, node, context) {
     return runFallback(err.message);
   }
 
-  let saved = null;
-  if (saveTo) saved = await saveAiOutputToField(client, context, saveTo, outputText);
+  // The output is exposed downstream as {{ai_output}}. It used to also be
+  // written onto a contact custom field; those are gone, so there is nothing
+  // to persist it to and nothing that would have read it back.
+  const saved = null;
   context.contact = context.contact || {};
   context.contact.custom_fields = { ...(context.contact.custom_fields || {}), ai_output: outputText };
 
   return logStep(client, executionId, node, { aiTask, goal, model: modelId, userMessage }, { output: outputText, savedTo: saved }, 'success');
 }
 
-// EXTERNAL API REQUEST — a real, variable-resolved HTTP call. Optional retry,
-// and optional extraction of a response value (dotted path) onto a contact field.
+// EXTERNAL API REQUEST — a real, variable-resolved HTTP call, with optional retry.
 async function executeAPINode(client, executionId, node, context) {
   const method = String(node.method || 'POST').toUpperCase();
   const url = resolveVariables(node.apiUrl || node.url || '', context);
@@ -1711,13 +1443,10 @@ async function executeAPINode(client, executionId, node, context) {
     }
   }
 
-  let saved = null;
-  if (result && node.saveResponseField && node.saveResponsePath) {
-    const val = getByPath(result.json, node.saveResponsePath);
-    if (val !== undefined) {
-      saved = await saveAiOutputToField(client, context, node.saveResponseField, typeof val === 'object' ? JSON.stringify(val) : String(val));
-    }
-  }
+  // `saveResponseField` wrote onto a contact custom field; the control and the
+  // fields are both gone, so a response value is reported in the step output
+  // (visible in the Executions drawer) rather than stored on the contact.
+  const saved = null;
 
   const failed = !result || !result.ok;
   if (failed && onError === 'fail') throw new Error(`API node: ${lastErr || 'request failed'}`);
@@ -1963,40 +1692,6 @@ async function executeAgentNode(client, executionId, node, context) {
     context.contact = context.contact || {};
     context.contact.custom_fields = { ...(context.contact.custom_fields || {}), ...parsed };
 
-    // Persist extracted values that map to a real ForgeCRM custom field, keyed by
-    // the field's id — so they show up on the Contacts page, exactly like `name`.
-    // We match parsed keys to field definitions via the shared fieldVarKey()
-    // normalization (so "date_of_birth" finds the "Date of Birth" field).
-    if (context.contact_number && context.trigger_data?.wa_number) {
-      const fieldDefs = context.field_defs || [];
-      const updates = {}; // fieldId -> value
-      for (const fd of fieldDefs) {
-        if (!fd || !fd.id) continue;
-        const vk = fieldVarKey(fd.name);
-        const matchKey = Object.keys(parsed).find(k => fieldVarKey(k) === vk);
-        if (matchKey == null) continue;
-        const val = parsed[matchKey];
-        if (val === undefined || val === null || val === '') continue;
-        updates[fd.id] = typeof val === 'string' ? val : _stringifyForInterpolation(val);
-      }
-      if (Object.keys(updates).length) {
-        try {
-          const { rows: curRows } = await client.query(
-            `SELECT custom_fields FROM coexistence.contacts WHERE wa_number = $1 AND contact_number = $2`,
-            [context.trigger_data.wa_number, context.contact_number]
-          );
-          const cf = { ...((curRows[0] && curRows[0].custom_fields) || {}), ...updates };
-          await client.query(
-            `INSERT INTO coexistence.contacts (wa_number, contact_number, custom_fields)
-             VALUES ($1, $2, $3::jsonb)
-             ON CONFLICT (wa_number, contact_number) DO UPDATE
-               SET custom_fields = EXCLUDED.custom_fields`,
-            [context.trigger_data.wa_number, context.contact_number, JSON.stringify(cf)]
-          );
-          context.contact.custom_fields = { ...(context.contact.custom_fields || {}), ...updates };
-        } catch (e) { /* non-fatal — extraction still flows downstream in-memory */ }
-      }
-    }
   }
 
   // Compare declared schema against what we actually got so the Executions
@@ -2082,33 +1777,6 @@ async function executeAgentNode(client, executionId, node, context) {
 // at the top of this file) so the Chat Analyser service can reuse them without
 // pulling in the engine. Definitions are byte-identical — no behaviour change.
 
-// Persist an AI node's output onto the contact as a custom field (resolved by
-// name to its definition id, falling back to the raw key). Also mirrors into
-// context so downstream {{vars}} resolve.
-async function saveAiOutputToField(client, context, fieldName, value) {
-  const waNumber = context.trigger_data?.wa_number;
-  const contactNumber = context.contact_number;
-  if (!waNumber || !contactNumber || !fieldName) return null;
-  const { rows: fRows } = await client.query(
-    `SELECT id FROM coexistence.contact_field_definitions WHERE LOWER(name) = LOWER($1) LIMIT 1`, [fieldName]
-  );
-  const key = fRows[0]?.id || fieldName;
-  const { rows: cur } = await client.query(
-    `SELECT custom_fields FROM coexistence.contacts WHERE wa_number=$1 AND contact_number=$2`, [waNumber, contactNumber]
-  );
-  const cf = { ...((cur[0] && cur[0].custom_fields) || {}) };
-  cf[key] = value;
-  await client.query(
-    `INSERT INTO coexistence.contacts (wa_number, contact_number, custom_fields, updated_at)
-     VALUES ($1,$2,$3::jsonb,NOW())
-     ON CONFLICT (wa_number, contact_number) DO UPDATE SET custom_fields = EXCLUDED.custom_fields, updated_at = NOW()`,
-    [waNumber, contactNumber, JSON.stringify(cf)]
-  );
-  context.contact = context.contact || {};
-  context.contact.custom_fields = cf;
-  return { field: fieldName, key, value };
-}
-
 // Enqueue an approved template to the current contact (used by the AI node's
 // outside-window fallback). Enforces the same WABA guard as the Message node.
 async function sendFallbackTemplate(client, node, context, templateId) {
@@ -2145,12 +1813,10 @@ const NODE_HANDLERS = {
   condition: executeConditionNode,
   delay: executeDelayNode,
   action: executeActionNode,
-  handoff: executeHandoffNode,
   ai: executeAINode,
   ai_agent: executeAgentNode,
   api: executeAPINode,
   subflow: executeSubflowNode,
-  payment: executePaymentNode,
 };
 
 // ─── Graph Walker ────────────────────────────────────────────────────
@@ -2181,8 +1847,8 @@ async function executeAutomation(client, automation, context) {
     ]
   );
   const execution = rows[0];
-  // Which automation this walk belongs to. The Payment node stamps it onto the
-  // payment_requests row so a link can be traced back to the flow that raised it.
+  // Which automation this walk belongs to — read by node handlers that record
+  // the originating flow on a row they write.
   context.__automationId = automation.id;
 
   try {
@@ -2247,8 +1913,14 @@ async function walkFrom(client, executionId, nodes, edges, startNodeId, context,
     if (node.type === 'condition') {
       fromHandle = step.output_data.matched ? 'yes' : 'no';
     } else if (node.type === 'message' && node.messageMode === 'template' && node.buttons && node.buttons.length > 0) {
-      // For template buttons, we can't know which button was pressed during execution
-      // So we just follow the default edge
+      // Nobody has replied yet at this point in the walk, so `default` is
+      // genuinely the only honest choice — which button gets tapped is decided
+      // later, by resumeAutomation, and only when `waitForReply` is on.
+      //
+      // The failure this guards against: a node wired ONLY to `btn:N` but with
+      // `waitForReply` off. Those branches can never fire, so the walk stops
+      // here. That is correct behaviour, but it must not be SILENT — see the
+      // dead-end diagnostic below.
       fromHandle = 'default';
     } else if (node.type === 'handoff') {
       // Handoff stops the flow
@@ -2256,23 +1928,41 @@ async function walkFrom(client, executionId, nodes, edges, startNodeId, context,
     } else if (node.type === 'subflow' && node.waitMode === 'handoff') {
       // "Exit & run flow" — the sub-flow was fired detached; end this flow here.
       break;
-    } else if (node.type === 'payment') {
-      // A waiting Payment node never gets here — it pauses, and the payment
-      // sweeper resumes it down `paid`/`unpaid` via resumePaymentExecution.
-      // Reaching this line means "send the link and carry on", which is the
-      // default handle. If the operator only wired a `paid` branch (a common
-      // shape) honour that, so the flow isn't silently dead-ended.
-      fromHandle = edges.some(e => e.from === currentNodeId && (!e.fromHandle || e.fromHandle === 'default'))
-        ? 'default' : 'paid';
     }
 
     const candidateEdges = edges.filter(e =>
       e.from === currentNodeId &&
-      (fromHandle === 'default' ? (!e.fromHandle || e.fromHandle === 'default') : e.fromHandle === fromHandle)
+      (fromHandle === 'default' ? (!e.fromHandle || e.fromHandle === 'default') : e.fromHandle === fromHandle) &&
+      // ⚠ `e.to` guard. onSelectTemplate used to write {from, to:null,
+      // fromHandle:'btn:N'} placeholder rows, and live flow 4 still carries
+      // one. Without this, such a row is a valid candidate whose target is
+      // null, so the walk ends on a "next step" that does not exist.
+      e.to
     );
 
     if (candidateEdges.length > 0) {
       nextNodeId = candidateEdges[0].to;
+    } else {
+      // Dead end. Say why, rather than stopping silently — a stopped walk and a
+      // completed one were previously indistinguishable in the executions log.
+      const otherHandles = edges
+        .filter(e => e.from === currentNodeId && e.to && (e.fromHandle || 'default') !== fromHandle)
+        .map(e => e.fromHandle || 'default');
+      if (otherHandles.length > 0) {
+        await logStep(
+          client, executionId,
+          { id: node.id, type: 'routing', title: 'Flow stopped here' },
+          { wanted_handle: fromHandle },
+          {
+            matched: false,
+            wired_handles: otherHandles,
+            note: node.type === 'message' && !node.waitForReply
+              ? `This step is wired to ${otherHandles.join(', ')}, but "Wait for the customer's reply" is off — so nothing downstream can ever run. Turn the wait on.`
+              : `Nothing is wired to "${fromHandle}" on this step.`,
+          },
+          'success'
+        );
+      }
     }
 
     currentNodeId = nextNodeId;
@@ -2353,10 +2043,6 @@ async function resumeAutomation(client, executionId, record) {
   // Field definitions let resolveVariables map custom_fields (id-keyed) back to
   // their {{normalized_name}} tokens, and let executeAgentNode persist extracted
   // values to the right field id.
-  try {
-    const { rows: fdRows } = await client.query(`SELECT id, name FROM coexistence.contact_field_definitions`);
-    context.field_defs = fdRows;
-  } catch (e) { context.field_defs = []; }
 
   // Find the node we paused at. For a Message node with waitForReply we
   // resume at its CHILDREN (the reply continues the flow). For an AI Agent
@@ -2368,16 +2054,69 @@ async function resumeAutomation(client, executionId, record) {
     return null;
   }
   let startNodeId;
+  let resolvedHandle = null;
   if (pausedNode.type === 'ai_agent') {
     startNodeId = pausedNode.id;
   } else {
-    const nextEdges = edges.filter(e =>
-      e.from === execRow.awaiting_node_id && (!e.fromHandle || e.fromHandle === 'default')
+    // ⚠ THE FIX. This used to filter for `(!e.fromHandle || e.fromHandle ===
+    // 'default')` and ignore `record` entirely, so a node whose only edges were
+    // `btn:N` matched nothing and the run closed as a silent success. Ask which
+    // branch the customer actually chose, and follow it.
+    resolvedHandle = resolveReplyHandle(pausedNode, record);
+
+    // Candidate handles in priority order. `default` stays last on every
+    // waiting node so this change is ADDITIVE — an old flow wired only to
+    // `default` keeps behaving exactly as it did.
+    const candidates = [];
+    // handleAliases also accepts the legacy per-section `row:N` spelling, so a
+    // flow imported from another instance keeps routing.
+    if (resolvedHandle) candidates.push(...handleAliases(resolvedHandle));
+    candidates.push('replied', 'nomatch', 'default');
+
+    let chosen = null;
+    for (const handle of candidates) {
+      const hit = edges.find(e =>
+        e.from === execRow.awaiting_node_id &&
+        // An omitted fromHandle means 'default'. Live flow 14 has one, and the
+        // builder deliberately omits it rather than writing the string, so
+        // every reader must keep tolerating both.
+        ((e.fromHandle || 'default') === handle) &&
+        e.to
+      );
+      if (hit) { chosen = { handle, to: hit.to }; break; }
+    }
+
+    // Record WHY this branch was taken as its own step. Without it the
+    // executions viewer cannot distinguish "the customer chose option 2" from
+    // "nothing was wired", which is precisely the ambiguity that let the
+    // original defect hide for the app's whole history.
+    await logStep(
+      client, executionId,
+      { id: pausedNode.id, type: 'reply_routing', title: 'Reply received' },
+      {
+        reply_kind: record.reply_kind || 'text',
+        reply_id: record.reply_id || null,
+        reply_label: record.reply_label || record.message_body || null,
+      },
+      {
+        resolved_handle: resolvedHandle,
+        followed_handle: chosen ? chosen.handle : null,
+        matched: !!chosen,
+        note: chosen
+          ? (chosen.handle === resolvedHandle
+              ? 'Followed the branch the customer chose'
+              : `No edge on ${resolvedHandle || 'the reply'} — fell through to ${chosen.handle}`)
+          : 'Nothing wired for this reply — conversation ended here',
+      },
+      'success'
     );
-    startNodeId = nextEdges.length > 0 ? nextEdges[0].to : null;
+
+    startNodeId = chosen ? chosen.to : null;
   }
   if (!startNodeId) {
-    // Paused with nothing downstream — just close it out
+    // Paused with nothing downstream. Still a clean end (the customer replied,
+    // the author simply wired nothing for it) — but the step above now says so
+    // explicitly, rather than this closing silently as an unqualified success.
     await client.query(
       `UPDATE coexistence.automation_executions
           SET status='success', awaiting_node_id=NULL, completed_at=NOW()
@@ -2413,6 +2152,136 @@ async function resumeAutomation(client, executionId, record) {
     );
     return execRow;
   }
+}
+
+/**
+ * Resume waits that ran out of time, down their `timeout` branch.
+ *
+ * A customer not replying is the COMMONEST outcome in messaging, not a system
+ * fault — but the stale-pause sweeper marked every one of them `status='error'`
+ * with "Paused execution expired". That filled the executions log with errors
+ * (hiding real faults) and, worse, made "chase them if they go quiet" — the
+ * single most valuable thing a follow-up flow can do — inexpressible.
+ *
+ * Called by the sweeper BEFORE its blanket update, so anything wired here is
+ * resumed and anything not is closed cleanly.
+ *
+ * Returns { resumed, closed }.
+ */
+async function resumeExpiredWaits(client, limit = 50) {
+  const { rows: due } = await client.query(
+    `SELECT e.id, e.automation_id, e.awaiting_node_id, e.contact_number, e.wa_number
+       FROM coexistence.automation_executions e
+      WHERE e.status='paused'
+        AND e.expires_at < NOW()
+        AND COALESCE(e.awaiting_kind,'reply') = 'reply'
+      ORDER BY e.paused_at
+      LIMIT $1`,
+    [limit]
+  );
+
+  let resumed = 0;
+  let closed = 0;
+
+  for (const row of due) {
+    try {
+      // Same atomic claim as resumeAutomation, minus the expires_at guard —
+      // being expired is precisely why we are here. Whoever wins the UPDATE
+      // owns the row, so a concurrent tick cannot double-resume.
+      const { rows: claimed } = await client.query(
+        `UPDATE coexistence.automation_executions
+            SET status='running'
+          WHERE id=$1 AND status='paused'
+         RETURNING id`,
+        [row.id]
+      );
+      if (claimed.length === 0) continue;
+
+      const { rows: botRows } = await client.query(
+        `SELECT config FROM coexistence.chatbots WHERE id=$1`, [row.automation_id]
+      );
+      const config = (botRows[0] || {}).config || {};
+      const nodes = config.nodes || [];
+      const edges = config.edges || [];
+      const pausedNode = nodes.find(n => n.id === row.awaiting_node_id);
+
+      const timeoutEdge = pausedNode && edges.find(e =>
+        e.from === row.awaiting_node_id && e.fromHandle === 'timeout' && e.to
+      );
+
+      await logStep(
+        client, row.id,
+        { id: row.awaiting_node_id, type: 'reply_routing', title: 'No reply in time' },
+        { waited_until: 'expires_at' },
+        {
+          matched: !!timeoutEdge,
+          followed_handle: timeoutEdge ? 'timeout' : null,
+          note: timeoutEdge
+            ? 'The customer did not reply — continuing down the no-reply branch'
+            : 'The customer did not reply, and no no-reply branch is wired. Conversation ended here.',
+        },
+        'success'
+      );
+
+      if (!timeoutEdge) {
+        // Closed, not errored. Nobody failed: the customer simply went quiet
+        // and the author wired nothing for it.
+        await client.query(
+          `UPDATE coexistence.automation_executions
+              SET status='success', awaiting_node_id=NULL, completed_at=NOW()
+            WHERE id=$1`,
+          [row.id]
+        );
+        closed++;
+        continue;
+      }
+
+      const context = {
+        contact_number: row.contact_number,
+        message_body: '',
+        message_type: 'timeout',
+        trigger_type: 'timeout',
+        trigger_data: { wa_number: row.wa_number },
+      };
+      try {
+        const { rows: c } = await client.query(
+          `SELECT name, profile_name, tags, custom_fields FROM coexistence.contacts
+            WHERE wa_number=$1 AND contact_number=$2`,
+          [row.wa_number, row.contact_number]
+        );
+        if (c.length > 0) {
+          context.contact = {
+            name: c[0].name,
+            profile_name: c[0].profile_name,
+            contact_number: row.contact_number,
+            tags: c[0].tags || [],
+            custom_fields: c[0].custom_fields || {},
+          };
+        }
+      } catch (e) { /* non-fatal */ }
+
+      const result = await walkFrom(client, row.id, nodes, edges, timeoutEdge.to, context);
+      if (!result.paused) {
+        await client.query(
+          `UPDATE coexistence.automation_executions
+              SET status='success', awaiting_node_id=NULL, completed_at=NOW()
+            WHERE id=$1`,
+          [row.id]
+        );
+      }
+      resumed++;
+    } catch (err) {
+      console.error(`[engine] Timeout resume failed for execution ${row.id}:`, err.message);
+      await client.query(
+        `UPDATE coexistence.automation_executions
+            SET status='error', awaiting_node_id=NULL, error_message=$2, completed_at=NOW()
+          WHERE id=$1`,
+        [row.id, `Timeout branch failed: ${err.message}`]
+      ).catch(() => {});
+    }
+  }
+
+  return { resumed, closed };
 }
 
 // ─── Trigger Evaluation ──────────────────────────────────────────────
@@ -2471,10 +2340,6 @@ async function evaluateTriggers(messageRecord) {
     }
 
     // Field definitions for {{custom_field_name}} resolution + AI persistence.
-    try {
-      const { rows: fdRows } = await client.query(`SELECT id, name FROM coexistence.contact_field_definitions`);
-      context.field_defs = fdRows;
-    } catch (e) { context.field_defs = []; }
 
     for (const automation of automations) {
       const config = automation.config || {};
@@ -2556,20 +2421,20 @@ async function evaluateTriggers(messageRecord) {
           const execution = await executeAutomation(client, automation, context);
           if (execution) executions.push(execution);
         }
-      } else if (triggerKind === 'link' || triggerKind === 'qr') {
-        // Click-to-chat link / QR scan: the wa.me pre-filled text carries a
-        // tracking code (link) or label (qr). We fire when the inbound message
-        // body contains that code — that's how a BSP attributes the source.
-        const code = String((triggerKind === 'link' ? triggerNode.trackingCode : triggerNode.qrLabel) || '').trim();
+      } else if (triggerKind === 'link') {
+        // Click-to-chat link: the wa.me pre-filled text carries a tracking
+        // code. We fire when the inbound message body contains it — that's how
+        // a BSP attributes the source. (The QR variant was removed 2026-08-12;
+        // it was the same mechanism under a different label.)
+        const code = String(triggerNode.trackingCode || '').trim();
         const body = messageRecord.message_body || '';
         if (code && messageRecord.message_type !== 'status' && body.toLowerCase().includes(code.toLowerCase())) {
-          console.log(`[engine] ${triggerKind} code match "${code}": automation=${automation.id}`);
+          console.log(`[engine] link code match "${code}": automation=${automation.id}`);
           const execution = await executeAutomation(client, automation, context);
           if (execution) executions.push(execution);
         }
       }
-      // tagApplied fires via fireTagAppliedTriggers (tag mutations); webhook /
-      // apiEvent fire via fireWebhookTrigger (the per-automation webhook URL).
+      // tagApplied fires via fireTagAppliedTriggers (tag mutations).
     }
 
   } catch (err) {
@@ -2604,10 +2469,6 @@ async function buildContext(client, { waNumber, contactNumber, messageBody = '',
       };
     }
   } catch { /* non-fatal */ }
-  try {
-    const { rows: fd } = await client.query(`SELECT id, name FROM coexistence.contact_field_definitions`);
-    context.field_defs = fd;
-  } catch { context.field_defs = []; }
   return context;
 }
 
@@ -2657,57 +2518,6 @@ async function fireTagAppliedTriggers({ waNumber, contactNumber, tagName, direct
   return executions;
 }
 
-// WEBHOOK / API-EVENT trigger. Called by the per-automation webhook endpoint.
-// Maps the POSTed JSON into context (contact_phone → contact, each top-level
-// key → a {{var}}), optionally filtering apiEvent by event type.
-async function fireWebhookTrigger(automationId, payload = {}) {
-  const client = await pool.connect();
-  try {
-    const { rows } = await client.query(`SELECT * FROM coexistence.chatbots WHERE id=$1 AND status='active'`, [automationId]);
-    const automation = rows[0];
-    if (!automation) return { ok: false, error: 'Automation not found or inactive' };
-    const nodes = (automation.config || {}).nodes || [];
-    const trigger = nodes.find(n => n.type === 'trigger');
-    if (!trigger || (trigger.triggerKind !== 'webhook' && trigger.triggerKind !== 'apiEvent')) {
-      return { ok: false, error: 'This automation is not triggered by a webhook' };
-    }
-    // apiEvent: optional event-type filter against payload.event
-    if (trigger.triggerKind === 'apiEvent' && trigger.eventType) {
-      const evt = String(payload.event || payload.type || '');
-      if (evt && evt !== trigger.eventType) return { ok: true, skipped: `event ${evt} != ${trigger.eventType}` };
-    }
-    const contactNumber = String(payload.contact_phone || payload.phone || payload.contact_number || '').replace(/\D/g, '');
-    if (!contactNumber) return { ok: false, error: 'payload must include contact_phone' };
-    // Pick a wa_number: the trigger's first listened account, else the default account
-    let waNumber = (Array.isArray(trigger.triggerAccounts) && trigger.triggerAccounts[0]) || null;
-    if (!waNumber) {
-      const { rows: acc } = await client.query(
-        `SELECT display_phone_number FROM coexistence.whatsapp_accounts WHERE is_active=true ORDER BY is_default DESC, id ASC LIMIT 1`
-      );
-      waNumber = acc[0]?.display_phone_number || null;
-    }
-    const context = await buildContext(client, {
-      waNumber, contactNumber,
-      messageBody: String(payload.message || ''),
-      triggerType: trigger.triggerKind,
-      triggerData: { ...payload, wa_number: waNumber },
-    });
-    // expose every top-level payload field as a downstream variable
-    context.contact = context.contact || { contact_number: contactNumber, custom_fields: {} };
-    context.contact.custom_fields = { ...(context.contact.custom_fields || {}) };
-    for (const [k, v] of Object.entries(payload)) {
-      if (v != null && typeof v !== 'object') context.contact.custom_fields[k] = v;
-    }
-    if (payload.contact_name && !context.contact.name) context.contact.name = payload.contact_name;
-    const execution = await executeAutomation(client, automation, context);
-    return { ok: true, executionId: execution?.id || null };
-  } catch (err) {
-    console.error('[engine] fireWebhookTrigger error:', err.message);
-    return { ok: false, error: err.message };
-  } finally {
-    client.release();
-  }
-}
 
 // ── Outbound trigger dedup / loop guard ──────────────────────────────────────
 // An outbound message can reach us via TWO paths: (a) the send queue, right
@@ -2748,10 +2558,9 @@ module.exports = {
   markOutboundHandled,
   executeAutomation,
   resumeAutomation,
-  resumePaymentExecution,
+  resumeExpiredWaits,
   matchesKeyword,
   resolveVariables,
   evaluateConditions,
   fireTagAppliedTriggers,
-  fireWebhookTrigger,
 };

@@ -81,7 +81,7 @@ export default function LoginGate({ onLogin }) {
             />
             <div style={{ lineHeight: 1.15 }}>
               <div style={{
-                fontSize: 28,
+                fontSize: 30,
                 fontWeight: 800,
                 letterSpacing: '-0.02em',
                 color: C.headerText,
@@ -89,7 +89,7 @@ export default function LoginGate({ onLogin }) {
                 Forge<span style={{ color: C.primary }}>Growth</span>
               </div>
               <div style={{
-                fontSize: 11,
+                fontSize: 13,
                 fontWeight: 700,
                 color: C.headerMuted,
                 letterSpacing: '0.1em',
@@ -112,7 +112,7 @@ export default function LoginGate({ onLogin }) {
             Manage conversations at scale
           </h1>
           <p style={{
-            fontSize: 16,
+            fontSize: 18,
             color: C.headerMuted,
             lineHeight: 1.6,
             marginBottom: 40,
@@ -131,7 +131,7 @@ export default function LoginGate({ onLogin }) {
             maxWidth: 340,
           }}>
             <Shield size={20} color={C.primary} />
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#d4d4d8' }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: '#d4d4d8' }}>
               Enterprise-grade security & compliance
             </span>
           </div>
@@ -141,9 +141,9 @@ export default function LoginGate({ onLogin }) {
           position: 'absolute',
           bottom: 32,
           left: 64,
-          fontSize: 10,
+          fontSize: 12,
           fontWeight: 600,
-          color: '#52525b',
+          color: 'var(--c-x52525b, #52525b)',
           letterSpacing: '.06em',
           textTransform: 'uppercase',
         }}>
@@ -171,7 +171,7 @@ export default function LoginGate({ onLogin }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
             <Lock size={14} color={C.primary} />
             <span style={{
-              fontSize: 11,
+              fontSize: 13,
               fontWeight: 700,
               color: C.primary,
               letterSpacing: '0.08em',
@@ -181,7 +181,7 @@ export default function LoginGate({ onLogin }) {
             </span>
           </div>
           <h2 style={{
-            fontSize: 24,
+            fontSize: 26,
             fontWeight: 700,
             color: C.text,
             marginBottom: 28,
@@ -193,7 +193,7 @@ export default function LoginGate({ onLogin }) {
           <form onSubmit={handleSubmit}>
             <label style={{ display: 'block', marginBottom: 18 }}>
               <div style={{
-                fontSize: 11,
+                fontSize: 13,
                 fontWeight: 700,
                 color: C.textSecondary,
                 letterSpacing: '0.07em',
@@ -213,7 +213,7 @@ export default function LoginGate({ onLogin }) {
                   padding: '11px 14px',
                   borderRadius: 10,
                   border: `1.5px solid ${C.border}`,
-                  fontSize: 14,
+                  fontSize: 15,
                   fontFamily: FONT,
                   outline: 'none',
                   background: C.cardBg,
@@ -227,7 +227,7 @@ export default function LoginGate({ onLogin }) {
 
             <label style={{ display: 'block', marginBottom: 24 }}>
               <div style={{
-                fontSize: 11,
+                fontSize: 13,
                 fontWeight: 700,
                 color: C.textSecondary,
                 letterSpacing: '0.07em',
@@ -247,7 +247,7 @@ export default function LoginGate({ onLogin }) {
                     padding: '11px 38px 11px 14px',
                     borderRadius: 10,
                     border: `1.5px solid ${C.border}`,
-                    fontSize: 14,
+                    fontSize: 15,
                     fontFamily: FONT,
                     outline: 'none',
                     background: C.cardBg,
@@ -281,10 +281,10 @@ export default function LoginGate({ onLogin }) {
             {error && (
               <div style={{
                 background: C.primaryLight,
-                color: '#A32D2D',
+                color: 'var(--c-dangerText, #A32D2D)',
                 borderRadius: 8,
                 padding: '10px 14px',
-                fontSize: 13,
+                fontSize: 15,
                 marginBottom: 16,
                 fontWeight: 500,
               }}>
@@ -302,7 +302,7 @@ export default function LoginGate({ onLogin }) {
                 border: 'none',
                 background: C.primary,
                 color: '#fff',
-                fontSize: 14,
+                fontSize: 15,
                 fontWeight: 600,
                 cursor: loading ? 'not-allowed' : 'pointer',
                 opacity: loading ? 0.7 : 1,

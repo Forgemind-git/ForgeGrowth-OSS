@@ -46,9 +46,13 @@ export default function AccountHealthBanner({ accountId, phone, style }) {
   // Worst severity drives the banner color: any BLOCKED → error red.
   const anyBlocked = problems.some(p => p.canSend === 'BLOCKED');
   const level = anyBlocked ? 'error' : 'warn';
-  const bg = level === 'error' ? C.primaryLight : '#FEF9E7';
-  const fg = level === 'error' ? C.primary : '#92680B';
-  const bd = level === 'error' ? '#F3C6C6' : '#F5E4B0';
+  // ⚠ Use the semantic PAIR, never one half. The background and border here
+  // were hardcoded literals while the foreground was a token, so in dark mode
+  // the amber text (#F0BC4A) sat on a pale cream (#FEF9E7) at 1.66:1 —
+  // unreadable. A half-tokenised pair is worse than tokenising neither.
+  const bg = level === 'error' ? C.dangerBg : C.warnBg;
+  const fg = level === 'error' ? C.dangerText : C.warnText;
+  const bd = level === 'error' ? C.dangerBorder : C.warnBorder;
 
   return (
     <div style={{
@@ -61,12 +65,12 @@ export default function AccountHealthBanner({ accountId, phone, style }) {
           const sev = SEVERITY[p.canSend] || SEVERITY.UNKNOWN;
           return (
             <div key={p.id} style={{ marginTop: i ? 8 : 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: fg }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: fg }}>
                 {sev.label}
                 {p.displayName ? ` — ${p.displayName}` : ''}
                 {p.displayPhoneNumber ? ` (${p.displayPhoneNumber})` : ''}
               </div>
-              <div style={{ fontSize: 12.5, color: fg, opacity: 0.9, marginTop: 2, lineHeight: 1.45 }}>
+              <div style={{ fontSize: 14, color: fg, opacity: 0.9, marginTop: 2, lineHeight: 1.45 }}>
                 {p.reason || 'Meta reports this account cannot currently send business-initiated messages.'}
                 {p.solution ? ` ${p.solution}` : ''}
               </div>
@@ -74,7 +78,7 @@ export default function AccountHealthBanner({ accountId, phone, style }) {
           );
         })}
         <a href={BILLING_HUB} target="_blank" rel="noopener noreferrer"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, fontSize: 12.5, fontWeight: 700, color: fg, textDecoration: 'none' }}>
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, fontSize: 14, fontWeight: 700, color: fg, textDecoration: 'none' }}>
           Open Meta billing settings <ExternalLink size={13} />
         </a>
       </div>

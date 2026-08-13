@@ -120,10 +120,19 @@ function buildTemplateComponents(template, variableMapping, recipient, headerMed
   // media as a runtime parameter (resolved to a per-account Meta media id);
   // omitting it causes Meta error 132012. TEXT headers only need a parameter
   // when they contain a {{1}} variable. Static TEXT / NONE need no header param.
-  const ht = String(template.header_type || 'NONE').toUpperCase();
-  if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(ht) && headerMediaId) {
-    const key = ht.toLowerCase(); // image | video | document
-    components.push({ type: 'header', parameters: [{ type: key, [key]: { id: headerMediaId } }] });
+  // Shared with the automation engine (services/templateComponents.js) rather
+  // than kept as a private copy — the engine's missing header component is
+  // exactly the kind of divergence a second implementation produces, and it
+  // fails at META, days later, as an opaque rejection.
+  //
+  // `headerText` is null here on purpose: a broadcast maps BODY variables only,
+  // so it has no value for a {{n}} TEXT header and the builder correctly emits
+  // nothing rather than a placeholder. Behaviour is byte-identical to the
+  // inline version this replaces.
+  {
+    const { buildHeaderComponent } = require('../services/templateComponents');
+    const header = buildHeaderComponent(template, headerMediaId, null);
+    if (header) components.push(header);
   }
 
   const bodyVars = Object.keys(variableMapping || {}).sort((a, b) => +a - +b);
@@ -477,6 +486,11 @@ router.get('/broadcasts/:id', async (req, res) => {
 });
 
 // POST /broadcasts — create broadcast + optional log entry
+// What "not sent yet" means, in one place — the route's own guard and the
+// atomic UPDATE below both read it, so they cannot disagree about which
+// broadcasts may still be changed.
+const EDITABLE_STATUSES = ['DRAFT', 'SCHEDULED'];
+
 router.post('/broadcasts', async (req, res) => {
   try {
     const {
@@ -568,24 +582,63 @@ router.post('/broadcasts', async (req, res) => {
   }
 });
 
-// PUT /broadcasts/:id — update (only if DRAFT)
+/**
+ * PUT /broadcasts/:id — edit a broadcast that has not gone out yet.
+ *
+ * DRAFT and SCHEDULED are both editable: a scheduled send is exactly the case
+ * where someone spots a typo and wants to fix it, and refusing that (as this
+ * route used to) forces them to delete and rebuild the whole thing.
+ *
+ * ⚠ Anything else is refused, and that is not a policy choice — a SENDING or
+ * SENT broadcast's messages are already with Meta. There is nothing an edit
+ * could change about what was delivered, so an Edit that "worked" there would
+ * be a lie. The UI offers Duplicate instead.
+ *
+ * ⚠ The status check is IN THE UPDATE, not a SELECT before it. runDueBroadcasts
+ * claims a due row with a single atomic `UPDATE … WHERE status='SCHEDULED' …
+ * RETURNING id`, so a read-then-write here could pass its check and then edit a
+ * broadcast the scheduler had already claimed and begun sending. rowCount === 0
+ * means "somebody else got there first" and answers 409.
+ */
 router.put('/broadcasts/:id', async (req, res) => {
   try {
     const { rows: existing } = await pool.query(
       'SELECT status FROM coexistence.broadcasts WHERE id = $1', [req.params.id]
     );
     if (existing.length === 0) return res.status(404).json({ error: 'Broadcast not found' });
-    if (existing[0].status !== 'DRAFT') {
-      return res.status(403).json({ error: 'Only DRAFT broadcasts can be edited' });
+    if (!EDITABLE_STATUSES.includes(existing[0].status)) {
+      return res.status(403).json({
+        error: 'This broadcast has already been sent, so it can no longer be edited. Duplicate it to send a corrected copy.',
+      });
     }
 
     const {
       from_number, recipient_numbers, template_id, test_number, name,
       variable_mapping, message_type, body, url, media_library_id, caption,
-      lead_form_id,
+      lead_form_id, scheduled_at, recipient_filter,
+      payment_course_id, payment_amount, payment_purpose,
     } = req.body;
 
-    const { rows } = await pool.query(
+    // Same future-instant rule as POST. `null` deliberately means "unschedule
+    // this, put it back to a draft"; omitting the key leaves the time alone.
+    let schedAt;
+    if (scheduled_at !== undefined) {
+      if (scheduled_at === null || scheduled_at === '') {
+        schedAt = null;
+      } else {
+        const d = new Date(scheduled_at);
+        if (isNaN(d.getTime())) return res.status(400).json({ error: 'scheduled_at is not a valid date' });
+        if (d.getTime() <= Date.now()) {
+          return res.status(400).json({ error: 'scheduled_at must be in the future' });
+        }
+        schedAt = d.toISOString();
+      }
+    }
+    // The status follows the time, exactly as it does on create — there is no
+    // separate switch to get out of step with it.
+    const nextStatus = scheduled_at === undefined ? null : (schedAt ? 'SCHEDULED' : 'DRAFT');
+
+    const { rows, rowCount } = await pool.query(
       `UPDATE coexistence.broadcasts SET
         from_number = COALESCE($1, from_number),
         recipient_numbers = COALESCE($2, recipient_numbers),
@@ -599,8 +652,16 @@ router.put('/broadcasts/:id', async (req, res) => {
         media_library_id = COALESCE($10, media_library_id),
         caption = COALESCE($11, caption),
         lead_form_id = COALESCE($12, lead_form_id),
+        -- $14 says whether scheduled_at was in the payload at all, so an
+        -- explicit null can CLEAR the time while an omitted key cannot.
+        scheduled_at = CASE WHEN $14 THEN $13::timestamptz ELSE scheduled_at END,
+        status = COALESCE($15, status),
+        recipient_filter = CASE WHEN $17 THEN $16::jsonb ELSE recipient_filter END,
+        payment_course_id = COALESCE($18, payment_course_id),
+        payment_amount_paise = COALESCE($19, payment_amount_paise),
+        payment_purpose = COALESCE($20, payment_purpose),
         updated_at = NOW()
-       WHERE id = $13
+       WHERE id = $21 AND status = ANY($22::text[])
        RETURNING *`,
       [
         from_number || null,
@@ -615,9 +676,23 @@ router.put('/broadcasts/:id', async (req, res) => {
         media_library_id || null,
         caption || null,
         lead_form_id || null,
+        schedAt === undefined ? null : schedAt,
+        scheduled_at !== undefined,
+        nextStatus,
+        recipient_filter !== undefined && recipient_filter !== null ? JSON.stringify(recipient_filter) : null,
+        recipient_filter !== undefined,
+        payment_course_id || null,
+        payment_amount != null && payment_amount !== '' ? Math.round(Number(payment_amount) * 100) : null,
+        payment_purpose || null,
         req.params.id,
+        EDITABLE_STATUSES,
       ]
     );
+    if (rowCount === 0) {
+      return res.status(409).json({
+        error: 'This broadcast started sending while you were editing it, so your changes were not saved.',
+      });
+    }
     res.json(rows[0]);
   } catch (err) {
     console.error('[broadcasts] PUT /broadcasts/:id error:', err.message);
@@ -625,7 +700,6 @@ router.put('/broadcasts/:id', async (req, res) => {
   }
 });
 
-// DELETE /broadcasts/:id
 router.delete('/broadcasts/:id', async (req, res) => {
   try {
     const { rowCount } = await pool.query(

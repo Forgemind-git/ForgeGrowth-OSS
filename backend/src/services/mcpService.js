@@ -38,7 +38,7 @@ const PROVIDER_LABELS = { anthropic: 'Anthropic Claude', openai: 'OpenAI' };
 const AREA_CAPABILITY_KEYS = [
   'area_contacts', 'area_messaging', 'area_broadcasts', 'area_automations',
   'area_admin', 'area_insights',
-  'area_leads', 'area_marketing', 'area_resources', 'area_bda',
+  'area_leads', 'area_marketing', 'area_resources',
   'area_courses', 'area_payments', 'area_leadforms',
 ];
 const CAPABILITY_KEYS = [
@@ -50,7 +50,7 @@ const CAPABILITY_KEYS = [
 // to an area and checks that area's capability before forwarding. Anything that
 // matches no area (or /mcp, /auth — blocked separately) is denied: default-deny.
 const PROXY_AREAS = [
-  { cap: 'area_contacts',   label: 'Contacts & tags',     test: /^\/(contacts|saved-contacts|contact|contact-names|contact-fields|categories|tags|team-members|numbers)(\/|$|\?)/ },
+  { cap: 'area_contacts',   label: 'Contacts & tags',     test: /^\/(contacts|saved-contacts|contact|contact-names|categories|tags|team-members|numbers)(\/|$|\?)/ },
   { cap: 'area_messaging',  label: 'Messages',            test: /^\/messages(\/|$|\?)/ },
   // PROXY_AREAS is default-deny, so a renamed path must be listed explicitly or
   // it is refused: /message-formats is the canonical name for what /wa-links
@@ -64,7 +64,7 @@ const PROXY_AREAS = [
   // CATEGORY, which is seeded from this same area so neither route is a way
   // past the other.
   { cap: 'area_broadcasts', label: 'Broadcasts & content', test: /^\/(broadcasts|templates|media-library|media|wa-links|message-formats|projects|projects-items)(\/|$|\?)/ },
-  { cap: 'area_automations', label: 'Automations',        test: /^\/(chatbots|automation-folders|automations|executions|follow-up-sequences|follow-up-steps|follow-up-enrollments)(\/|$|\?)/ },
+  { cap: 'area_automations', label: 'Automations',        test: /^\/(chatbots|automation-folders|automations|executions)(\/|$|\?)/ },
   // /razorpay/config carries the payment-gateway webhook secret (write) — it is
   // deliberately resolved to the SENSITIVE admin area, not area_payments, so
   // enabling the payment ledger never hands over the gateway credentials. This
@@ -90,7 +90,6 @@ const PROXY_AREAS = [
   { cap: 'area_leadforms',  label: 'Lead forms',          test: /^\/(lead-forms)(\/|$|\?)/ },
   { cap: 'area_marketing',  label: 'Marketing (campaigns, webinars)', test: /^\/(marketing|campaigns|webinars|webinar-registrations|ctwa)(\/|$|\?)/ },
   { cap: 'area_resources',  label: 'Resources & triggers', test: /^\/(resources|trigger-library|trigger-test)(\/|$|\?)/ },
-  { cap: 'area_bda',        label: 'BDA activity',        test: /^\/(bda-performance|bda-activity|webinar-conversion)(\/|$|\?)/ },
   // `/products` is the canonical path since the Courses -> Products rename;
   // `/courses` stays matched because the backend still answers on it, and a
   // path the proxy does not cover is REFUSED (PROXY_AREAS is default-deny).
@@ -798,7 +797,7 @@ const ENDPOINT_CATALOG = {
     'GET /saved-contacts?all=true — every saved contact (deduped)',
     'POST /contacts/save {waNumber,contactNumber,name,tags,customFields,assignedUserId}',
     'POST /contacts/import (sheet import is multipart — prefer send_bulk_message for lists)',
-    'GET /tags · POST /tags · GET /categories · GET /contact-fields · GET /team-members',
+    'GET /tags · POST /tags · GET /categories · GET /team-members',
   ],
   area_messaging: [
     'GET /messages?waNumber=&contactNumber= — chat history',
@@ -809,14 +808,12 @@ const ENDPOINT_CATALOG = {
     'POST /broadcasts/:id/send — enqueue to saved-contact audience',
     'GET /templates · GET /media-library — content for broadcasts',
     'For an UPLOADED LIST use the send_bulk_message tool (one call).',
-    'GET /projects · GET /projects/:id — campaign folders holding templates, automations, agents, follow-ups and forms (also see the list_projects tool)',
-    'POST /projects/assign {kind:"template"|"automation"|"agent"|"followup"|"form", ids:[], projectId} — file items into a project, projectId null unfiles (also see the move_to_project tool)',
+    'GET /projects · GET /projects/:id — campaign folders holding templates, automations, agents and forms (also see the list_projects tool)',
+    'POST /projects/assign {kind:"template"|"automation"|"agent"|"form", ids:[], projectId} — file items into a project, projectId null unfiles (also see the move_to_project tool)',
     'GET /projects-items/:kind — every item of one kind with the project it is currently in',
   ],
   area_automations: [
     'GET /chatbots · POST /chatbots · GET /chatbots/:id/executions',
-    'GET /follow-up-sequences — timed follow-up sequences (stage-entry auto-enroll + manual) · POST /follow-up-sequences · PUT/DELETE /follow-up-sequences/:id',
-    'POST /follow-up-sequences/:id/steps · GET /follow-up-sequences/:id/enrollments · POST /follow-up-sequences/:id/enroll {leadIds} · POST /follow-up-enrollments/:id/stop · GET /follow-up-sequences/:id/log',
   ],
   area_admin: [
     'GET /users · POST /users (admin) — SENSITIVE',
@@ -868,16 +865,11 @@ const ENDPOINT_CATALOG = {
     'GET /ctwa/ads/:sourceId — one ad drill-in: every click, the creatives shown, and the leads it produced',
   ],
   area_resources: ['GET /resources · GET /trigger-library · POST /trigger-test'],
-  area_bda: [
-    'GET /bda-performance?period=week|month|all — conversion leaderboard (also see get_bda_activity tool)',
-    'GET /bda-activity?bda=&action=&days= — raw activity log',
-    'GET /webinar-conversion — per-batch cohort funnel + close leaderboard',
-  ],
   area_courses: [
     // A product is anything sold: a course, consulting, a template pack, a
     // webinar. /courses still answers as a deprecated alias of every path here.
     'GET /products — catalog, each with its default price, payment links + revenue (also see list_products tool)',
-    'GET /products/revenue — revenue/paid/failed per product + unattributed (also see get_product_revenue tool)',
+    'GET /products/revenue — sales/payments/revenue per product, read from the Sales Log, + the two gap buckets (also see get_product_revenue tool)',
     'POST /products {name,description,thumbnailUrl,defaultPrice} · PUT /products/:id · DELETE /products/:id — defaultPrice is in RUPEES and optional (null clears it)',
     'POST /products/:id/links {label,amountRupees,matchText,url} · PUT /payment-links/:id · DELETE /payment-links/:id — a link matches a real payment by exact amount; the default price is the headline price and pre-fills a manual sale',
   ],
@@ -1052,7 +1044,7 @@ async function sendBulkMessage({ fromNumber, name, messageType, templateId, text
 /* --------------- leads / marketing / BDA funnel dedicated tools ---------- */
 // Thin read (+ one write) helpers over the AI Academy funnel tables, backing
 // the list_leads / move_lead_stage / get_campaign_performance / list_webinars /
-// get_bda_activity MCP tools. Mirror the query shapes in routes/leads.js,
+// MCP tools. Mirror the query shapes in routes/leads.js,
 // routes/marketing.js and routes/bda.js rather than diverging from them.
 
 const funnelCfg = require('./funnelConfig');
@@ -1162,43 +1154,6 @@ async function listWebinars() {
   };
 }
 
-// BDA leaderboard + recent raw activity, optionally scoped to one bda id.
-async function getBdaActivity({ bdaId, limit } = {}) {
-  const cap = Math.max(1, Math.min(500, parseInt(limit || 100, 10)));
-  const { rows: leaderboardRows } = await pool.query(
-    `SELECT assigned_bda AS bda, COUNT(*)::int AS leads_handled, COUNT(*) FILTER (WHERE stage='enrolled')::int AS converted
-       FROM coexistence.leads WHERE assigned_bda IS NOT NULL GROUP BY assigned_bda`,
-  );
-  const { rows: roster } = await pool.query(`SELECT id, name FROM coexistence.team_members`);
-  const nameById = {};
-  for (const t of roster) nameById[t.id] = t.name;
-  const leaderboard = leaderboardRows.map(r => ({
-    bda: r.bda, name: nameById[r.bda] || r.bda, leadsHandled: r.leads_handled, converted: r.converted,
-    conversionPct: r.leads_handled ? Math.round((r.converted / r.leads_handled) * 100) : 0,
-  })).sort((a, b) => b.converted - a.converted);
-
-  const params = [];
-  const where = [];
-  if (bdaId) { params.push(String(bdaId)); where.push(`a.bda = $${params.length}`); }
-  params.push(cap);
-  const { rows: activity } = await pool.query(
-    `SELECT a.ts, a.bda, tm.name AS bda_name, a.action, a.note, l.name AS lead_name, l.whatsapp_number
-       FROM coexistence.bda_activity_log a
-       LEFT JOIN coexistence.leads l ON l.id = a.lead_id
-       LEFT JOIN coexistence.team_members tm ON tm.id = a.bda
-       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-       ORDER BY a.ts DESC LIMIT $${params.length}`,
-    params,
-  );
-  return {
-    leaderboard,
-    activity: activity.map(a => ({
-      ts: a.ts, bda: a.bda_name || a.bda, action: a.action, note: a.note,
-      leadName: a.lead_name, whatsappNumber: a.whatsapp_number,
-    })),
-  };
-}
-
 /* ------------------------- courses + payments --------------------------- */
 
 const paise = n => Number(n || 0);
@@ -1218,12 +1173,20 @@ async function listCourses() {
        LEFT JOIN coexistence.razorpay_events e ON e.payment_link_id = pl.id
       GROUP BY pl.id ORDER BY pl.amount_paise DESC`,
   );
+  const { productTotals } = require('./productSales');
+  const totals = {};
+  for (const t of await productTotals()) totals[t.id] = t;
   const byCourse = {};
   for (const l of links) (byCourse[l.course_id] = byCourse[l.course_id] || []).push(l);
   const products = courses.map(c => ({
       id: Number(c.id), name: c.name, description: c.description, active: c.active,
       // null means no default price set — distinct from a price of 0.
       defaultPriceRupees: c.default_price_paise == null ? null : rupees(c.default_price_paise),
+      // Sales-Log totals. A link's own paidCount below counts only payments
+      // amount-matched to THAT link, so it is not a share of these.
+      salesCount: totals[c.id]?.sales_count ?? 0,
+      paymentCount: totals[c.id]?.payment_count ?? 0,
+      revenueRupees: rupees(totals[c.id]?.revenue_paise ?? 0),
       links: (byCourse[c.id] || []).map(l => ({
         id: Number(l.id), label: l.label, url: l.url, active: l.active,
         priceRupees: rupees(l.amount_paise),
@@ -1236,31 +1199,36 @@ async function listCourses() {
   return { currency: 'INR', products, courses: products };
 }
 
-// Revenue leaderboard per product + the payments that matched no product.
+// Revenue leaderboard per product. Read from the SALES LOG via the shared
+// service, so this tool reports the same numbers the Products page shows —
+// this used to be a third private copy of an amount-matching query and was
+// therefore free to disagree with both pages.
 async function getCourseRevenue() {
-  const { rows } = await pool.query(
-    `SELECT c.id, c.name, c.active,
-            COALESCE(SUM(e.amount_paise) FILTER (WHERE e.event_type = 'payment.captured'), 0)::bigint AS revenue_paise,
-            COUNT(DISTINCT e.payment_id) FILTER (WHERE e.status = 'captured')::int AS paid_count,
-            COUNT(DISTINCT e.payment_id) FILTER (WHERE e.status = 'failed')::int   AS failed_count
-       FROM coexistence.courses c
-       LEFT JOIN coexistence.razorpay_events e ON e.course_id = c.id
-      GROUP BY c.id ORDER BY revenue_paise DESC, c.name`,
-  );
-  const { rows: [unattr] } = await pool.query(
-    `SELECT COALESCE(SUM(amount_paise) FILTER (WHERE event_type = 'payment.captured'), 0)::bigint AS revenue_paise,
-            COUNT(DISTINCT payment_id) FILTER (WHERE status = 'captured')::int AS paid_count
-       FROM coexistence.razorpay_events WHERE course_id IS NULL`,
-  );
+  const { productTotals, unattributedTotals } = require('./productSales');
+  const rows = await productTotals();
+  const { unattributed, outsideSalesLog } = await unattributedTotals();
+  const products = rows.map(r => ({
+    id: r.id, name: r.name, active: r.active,
+    revenueRupees: rupees(r.revenue_paise),
+    salesCount: r.sales_count,          // customers in the Sales Log
+    paymentCount: r.payment_count,      // their transactions
+  }));
   return {
     currency: 'INR',
-    courses: rows.map(r => ({
-      id: Number(r.id), name: r.name, active: r.active,
-      revenueRupees: rupees(r.revenue_paise),
-      paidCount: r.paid_count, failedCount: r.failed_count,
-    })),
-    unattributed: { revenueRupees: rupees(unattr.revenue_paise), paidCount: unattr.paid_count },
-    totalRevenueRupees: rupees(rows.reduce((s, r) => s + paise(r.revenue_paise), 0) + paise(unattr.revenue_paise)),
+    products, courses: products,        // `courses` = deprecated alias
+    unattributed: {
+      revenueRupees: rupees(unattributed.revenue_paise),
+      salesCount: unattributed.sales_count, paymentCount: unattributed.payment_count,
+      note: 'In the Sales Log but with no Product set on the sale.',
+    },
+    outsideSalesLog: {
+      revenueRupees: rupees(outsideSalesLog.revenue_paise),
+      paymentCount: outsideSalesLog.payment_count,
+      note: 'Captured gateway payments not attached to any Sales Log sale.',
+    },
+    totalRevenueRupees: rupees(
+      rows.reduce((s, r) => s + paise(r.revenue_paise), 0) + paise(unattributed.revenue_paise),
+    ),
   };
 }
 
@@ -1603,7 +1571,7 @@ async function listFormSubmissions({ formId, page, pageSize } = {}) {
 }
 
 /* ── Projects — the campaign folder a template / automation / agent /
-   follow-up / form is filed under ────────────────────────────────────────── */
+   form is filed under ────────────────────────────────────────────────────── */
 
 // Required lazily inside the functions: routes/projects pulls in the DB pool,
 // and a top-level require here would drag it into every consumer of this
@@ -1655,11 +1623,11 @@ module.exports = {
   listConversations, getChatHistory, sendTextMessage, sendTemplateMessage,
   sendMediaMessage, sendInteractiveMessage,
   proxyRequest, listEndpoints, sendBulkMessage,
-  listLeads, moveLeadStage, getCampaignPerformance, listWebinars, getBdaActivity,
+  listLeads, moveLeadStage, getCampaignPerformance, listWebinars,
   listCourses, getCourseRevenue, listPayments,
   uploadMediaFromSource, createTemplate, submitTemplate, syncTemplate,
   createAutomation, createWaLink, createLeadForm, listLeadForms, listFormSubmissions,
   projectKinds, listProjects, moveToProject,
-  // Shared with the follow-up engine — one literal component builder, not a fourth copy.
+  // One literal component builder, shared rather than copied per sender.
   buildLiteralTemplateComponents,
 };
