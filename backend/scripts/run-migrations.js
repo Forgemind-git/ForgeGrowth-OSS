@@ -83,6 +83,26 @@ async function connectWithRetry(attempts = 30, delayMs = 2000) {
       return client;
     } catch (err) {
       await client.end().catch(() => {});
+      // 28P01 = invalid_password. Retrying cannot fix a wrong password, and
+      // waiting 60 seconds to say so buries the one fact that matters: Postgres
+      // applies POSTGRES_PASSWORD only when it FIRST creates its data
+      // directory. Point a new .env at an existing volume — which is what a
+      // second install in a second folder used to do — and the database keeps
+      // the old password forever while every message here blames the network.
+      if (err.code === '28P01') {
+        throw new Error(
+          'the database rejected the password (28P01).\n\n' +
+          '  POSTGRES_PASSWORD is only applied when the database is FIRST created, so a\n' +
+          '  new value in .env has no effect on data that already exists. This usually\n' +
+          '  means .env was regenerated, or a second install is pointing at the first\n' +
+          "  install's volume.\n\n" +
+          '  Either restore the .env this database was created with,\n' +
+          '  or set the role to match the current .env:\n' +
+          "    docker compose exec postgres psql -U postgres -c \\\n" +
+          "      \"ALTER ROLE <user> WITH PASSWORD '<POSTGRES_PASSWORD from .env>'\"\n" +
+          '  Check which install owns this data with: docker compose ls'
+        );
+      }
       if (i === attempts) {
         // err.code, not just err.message: a refused connection surfaces as
         // ECONNREFUSED with an EMPTY message, so reporting the message alone

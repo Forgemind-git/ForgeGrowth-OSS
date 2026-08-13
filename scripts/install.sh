@@ -108,9 +108,14 @@ fi
 step 'Configuring'
 
 ENV_FILE="$ROOT/.env"
+# Whether this run is starting from scratch. It decides whether a database that
+# already exists on this machine may be adopted: an .env we just generated has
+# secrets that no existing database can match (see "which install is this?").
+FRESH_ENV=0
 if [ ! -f "$ENV_FILE" ]; then
   [ -f "$ROOT/.env.example" ] || die ".env.example is missing — is this a complete checkout?"
   cp "$ROOT/.env.example" "$ENV_FILE"
+  FRESH_ENV=1
   ok "created .env from .env.example"
 else
   ok "using the existing .env (values already set are left alone)"
@@ -147,11 +152,110 @@ needs_value() {
   esac
 }
 
-if [ -z "$WEB_PORT" ]; then
-  current=$(get_env WEB_PORT); current=${current:-8080}
-  WEB_PORT=$(ask 'Host port for the web UI' "$current")
+# ── which install is this? ───────────────────────────────────────────────────
+#
+# ⚠ THE COMPOSE PROJECT NAME IS THE ONLY THING SEPARATING TWO INSTALLS ON ONE
+# MACHINE. It prefixes the containers *and* the volumes, so two checkouts that
+# share a name share a database — and the second install.sh then points freshly
+# generated secrets at the first one's data.
+#
+# That failure is silent at install time and ugly later. Postgres reads
+# POSTGRES_PASSWORD only when it first creates its data directory, so the new
+# password is ignored and the backend loops on an authentication error naming
+# the database rather than the real cause. FORGECRM_ENCRYPTION_KEY is worse: it
+# would decrypt nothing that the first install stored.
+#
+# docker-compose.yml pins `name: forgegrowth`, which is right for the ordinary
+# one-install-per-machine case. COMPOSE_PROJECT_NAME in .env overrides it, so a
+# second install claims its own name and the published compose file needs no
+# change at all.
+#
+# Who already holds a project name: 'me' (containers created from THIS
+# directory), 'other' (another directory's), 'orphan' (no containers, but a
+# database volume outlived them — `docker compose down` keeps volumes), or
+# empty when the name is free.
+project_owner() {
+  local name="$1" dirs
+  dirs=$(docker ps -a --filter "label=com.docker.compose.project=$name" \
+           --format '{{.Label "com.docker.compose.project.working_dir"}}' 2>/dev/null | sort -u)
+  if [ -n "$dirs" ]; then
+    if [ "$dirs" = "$ROOT" ]; then echo me; else echo other; fi
+    return
+  fi
+  if docker volume ls --format '{{.Name}}' 2>/dev/null | grep -qx "${name}_pgdata"; then
+    echo orphan; return
+  fi
+  echo ''
+}
+
+# An explicit COMPOSE_PROJECT_NAME in the environment wins, so the suggestion
+# printed by the guard below actually works; .env is where it then lives.
+PROJECT=${COMPOSE_PROJECT_NAME:-}
+[ -n "$PROJECT" ] || PROJECT=$(get_env COMPOSE_PROJECT_NAME)
+if [ -n "$PROJECT" ]; then
+  set_env COMPOSE_PROJECT_NAME "$PROJECT"
+  ok "install name '$PROJECT'  ${DIM}(named already — upgrading this install in place)${N}"
+else
+  # No name recorded yet: either the first install ever, or one made before
+  # install.sh started recording it. Walk up until a name is free or provably
+  # ours, and never adopt data we cannot show belongs to this directory.
+  candidate=forgegrowth; n=1; stepped=''; mine=0
+  while : ; do
+    case "$(project_owner "$candidate")" in
+      '') break ;;
+      # Containers created from THIS directory: not a collision at all, this is
+      # the install we belong to. Anything we stepped over on the way is
+      # somebody else's business and not worth reporting.
+      me) mine=1; stepped=''; break ;;
+      orphan)
+        # An .env that survived a `docker compose down` is this directory's own
+        # record of that stack, secrets included — so the data really is ours.
+        # A brand-new .env cannot make that claim about anybody's data.
+        [ "$FRESH_ENV" = 0 ] && { mine=1; stepped=''; break; }
+        stepped="a stopped install named '$candidate' still holds a database here"
+        ;;
+      other) stepped="'$candidate' belongs to another install on this machine" ;;
+    esac
+    n=$((n + 1)); candidate="forgegrowth-$n"
+  done
+  PROJECT="$candidate"
+  set_env COMPOSE_PROJECT_NAME "$PROJECT"
+  if [ "$mine" = 1 ]; then
+    ok "install name '$PROJECT'  ${DIM}(this directory's existing install)${N}"
+  elif [ -n "$stepped" ]; then
+    warn "$stepped"
+    ok "install name '$PROJECT'  ${DIM}(a separate install — its own containers, database and volumes)${N}"
+    warn "to upgrade that other install instead, run this script from ITS directory."
+  else
+    ok "install name '$PROJECT'"
+  fi
 fi
-case "$WEB_PORT" in ''|*[!0-9]*) die "--port must be a number (got '$WEB_PORT')" ;; esac
+# Exported so every `docker compose` below resolves the same project even if the
+# shell is invoked from elsewhere; .env carries it for every later manual run.
+export COMPOSE_PROJECT_NAME="$PROJECT"
+
+# Belt and braces for the one case the walk above cannot route around: this
+# directory's containers exist (owner 'me') but its .env has been lost, so the
+# secrets are new and the database they must open is not.
+if [ "$FRESH_ENV" = 1 ] && docker volume ls --format '{{.Name}}' 2>/dev/null | grep -qx "${PROJECT}_pgdata"; then
+  # Suggest a name that is actually free — pointing at a taken one would send
+  # the reader straight back into this same error.
+  free=forgegrowth; fn=1
+  while [ -n "$(project_owner "$free")" ]; do fn=$((fn + 1)); free="forgegrowth-$fn"; done
+  # .env came from .env.example moments ago and has no data behind it; leaving
+  # it would make the NEXT run look like an upgrade of a database it cannot open.
+  rm -f "$ENV_FILE"
+  die "install '$PROJECT' already has a database, but this .env was just generated,
+  so its POSTGRES_PASSWORD and FORGECRM_ENCRYPTION_KEY do not match it. Postgres
+  only applies POSTGRES_PASSWORD when it first creates its data, and the
+  encryption key decrypts credentials stored under the old one.
+
+  Nothing was changed, and the generated .env has been removed.
+
+  Either restore that install's original .env here and re-run,
+  or start a separate install:   COMPOSE_PROJECT_NAME=$free ./scripts/install.sh
+  or discard the old data:       docker volume rm ${PROJECT}_pgdata   (deletes it permanently)"
+fi
 
 # Refuse a port already in use rather than letting `compose up` fail later with
 # a bind error buried in the output. Each tool here exists on a different
@@ -168,13 +272,30 @@ port_in_use() {
     return 1
   fi
 }
-# ...but the port being busy is EXPECTED when re-running against a stack that
-# is already up — that container is the one holding it. Only object when the
-# listener is somebody else's.
+# ...but the port being busy is EXPECTED when re-running against a stack that is
+# already up — that container is the one holding it. Only object when the
+# listener is somebody else's. Resolved through COMPOSE_PROJECT_NAME above, so
+# it asks about THIS install and not a namesake.
 ours_running=0
 if docker compose ps --status running --services 2>/dev/null | grep -qx web; then
   ours_running=1
 fi
+
+if [ -z "$WEB_PORT" ]; then
+  current=$(get_env WEB_PORT); current=${current:-8080}
+  # A second install on one machine always collides on 8080, and "port in use,
+  # re-run with --port" is a dead end the script can just walk past. Only the
+  # SUGGESTION moves: --port is still obeyed exactly, and a busy port chosen by
+  # hand still fails below rather than being silently changed underneath you.
+  if [ "$ours_running" = 0 ] && port_in_use "$current"; then
+    busy=$current
+    while port_in_use "$current"; do current=$((current + 1)); done
+    warn "port $busy is in use — suggesting $current instead"
+  fi
+  WEB_PORT=$(ask 'Host port for the web UI' "$current")
+fi
+case "$WEB_PORT" in ''|*[!0-9]*) die "--port must be a number (got '$WEB_PORT')" ;; esac
+
 if [ "$ours_running" = 0 ] && port_in_use "$WEB_PORT"; then
   die "port $WEB_PORT is already in use by another process. Re-run with --port <other>."
 fi
@@ -298,6 +419,7 @@ cat <<EOF
 
     URL       ${PUBLIC_URL}
     Sign in   ${ADMIN_EMAIL}
+    Install   ${PROJECT}   ${DIM}(this machine may hold several; commands below act on this one)${N}
 EOF
 
 if [ -n "$ADMIN_PASSWORD" ]; then
@@ -322,11 +444,12 @@ cat <<EOF
     Point Meta's webhook at     ${PUBLIC_URL}/api/webhook/whatsapp
     with the verify token in    .env → META_WEBHOOK_VERIFY_TOKEN
 
-  ${DIM}Managing the stack${N}
+  ${DIM}Managing the stack${N} ${DIM}— run these from this directory; that is what picks the install${N}
     Logs      docker compose logs -f backend
     Stop      docker compose down
     Upgrade   git pull && ./scripts/install.sh
     Remove    ./scripts/uninstall.sh          ${DIM}(deletes all data)${N}
+    List all  docker compose ls
 
   ${Y}Back up FORGECRM_ENCRYPTION_KEY from .env.${N} It decrypts every stored Meta,
   Google and payment-gateway credential. Lose it and they must all be re-entered.

@@ -121,6 +121,30 @@ or placeholder values get filled in — and every migration is idempotent, so:
 git pull && ./scripts/install.sh
 ```
 
+### More than one install on one machine
+
+Each install is a Compose *project*, and that name is what prefixes its containers **and its
+volumes** — so the project name, not the directory, is what keeps two installs apart.
+
+The installer handles this for you. The first install is `forgegrowth`; a second one, in a second
+directory, sees the name taken and claims `forgegrowth-2` (then `-3`, and so on), recording it as
+`COMPOSE_PROJECT_NAME` in its own `.env` and moving to the next free port. Each gets its own
+database, queue and object storage, and every later `docker compose` command run from that
+directory acts only on that install. `docker compose ls` shows them all.
+
+Re-running the script in a directory that already has an `.env` always upgrades *that* install
+rather than creating another.
+
+Two things to know if you manage these by hand:
+
+- **Set the name before the first start, not after.** Renaming an existing install points it at
+  fresh, empty volumes; the old data is still there under the old name, but the app will not see it.
+- **`.env` and the database are a pair.** `POSTGRES_PASSWORD` is only applied when Postgres first
+  creates its data directory, and `FORGECRM_ENCRYPTION_KEY` is the only thing that decrypts stored
+  Meta, Google and payment credentials. A regenerated `.env` cannot open an existing database, so
+  the installer refuses that combination instead of starting up and failing later. Keep a backup of
+  `.env` alongside any backup of the data.
+
 ### Installing without the script
 
 The script only automates these steps; you can run them yourself from any shell, PowerShell
