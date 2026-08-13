@@ -201,15 +201,42 @@ docker compose logs backend | grep -A5 "FIRST-RUN ADMIN"
 
 | | |
 |---|---|
+| Start | `./scripts/up.sh` — brings it up, then checks the public URL really answers |
+| Rebuild and start | `./scripts/up.sh --build` |
+| Stop (keep data) | `./scripts/down.sh` |
 | Logs | `docker compose logs -f backend` |
-| Stop | `docker compose down` |
 | Upgrade | `git pull && ./scripts/install.sh` |
 | Remove (keep data) | `./scripts/uninstall.sh` |
 | Remove everything | `./scripts/uninstall.sh --purge` |
+| List every install here | `docker compose ls` |
+
+`up.sh` is `docker compose up -d` plus the check people skip: fetching the address a browser will
+actually use. Five healthy containers and a 404 is a real state — it is what a missing reverse-proxy
+config looks like from inside the machine — and no container health check will ever report it.
+
+`down.sh` refuses `-v`, which is one letter away from the ordinary command and deletes your database
+with no undo. It prints the backup command instead.
 
 > **Back up `FORGECRM_ENCRYPTION_KEY` from `.env`.** It decrypts every stored Meta, Google and
 > payment-gateway credential. Losing it means re-entering all of them; changing it turns the
 > existing rows into garbage rather than re-encrypting them.
+>
+> Back up the whole `.env` alongside any backup of the data, in fact. `POSTGRES_PASSWORD` is only
+> applied when Postgres first creates its data directory, so a regenerated `.env` cannot open an
+> existing database — the symptom is an authentication loop that appears to blame the network.
+
+### Running behind a reverse proxy you already have
+
+Skip `--domain` and point your proxy at `WEB_PORT`. If that proxy is configured through an extra
+compose file, put it in `COMPOSE_FILE` in your `.env` rather than exporting it in your shell:
+
+```
+COMPOSE_FILE=/path/to/docker-compose.yml:/path/to/your-proxy.yml
+```
+
+Compose reads that automatically, so every later `docker compose` command picks up both files. Left
+in a shell variable it will eventually be forgotten, and the install that follows comes up healthy
+with no domain attached.
 
 Deploying to a host you already run, behind an existing reverse proxy? See
 [`DEPLOY.md`](./DEPLOY.md).

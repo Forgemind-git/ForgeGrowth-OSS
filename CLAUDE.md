@@ -97,6 +97,44 @@ through as `area_marketing` and then delivered it to `/api/users`. Canonicalise 
 the result. Any change there must keep "the path we check" identical to "the path the server
 receives".
 
+### One machine can hold several installs, and only the project name separates them
+
+`docker-compose.yml` pins `name: forgegrowth`, and that name prefixes the containers **and the
+volumes**. Two checkouts sharing it are not two installs — the second adopts the first one's
+database, then points its own freshly generated secrets at it. `install.sh` records
+`COMPOSE_PROJECT_NAME` per directory (`forgegrowth`, `forgegrowth-2`, …) to keep them apart;
+`COMPOSE_PROJECT_NAME` in `.env` overrides the compose file's `name:`, which is why that file needs
+no change.
+
+Anything that inspects "the stack" must resolve the project the same way the user's shell does —
+from the directory they are in — or it reports on somebody else's install.
+
+### `.env` and the database are a pair
+
+`POSTGRES_PASSWORD` is applied **only** when Postgres first creates its data directory, and
+`FORGECRM_ENCRYPTION_KEY` is the only thing that decrypts stored third-party credentials. So a
+regenerated `.env` cannot open an existing database, and the failure names the wrong thing: an
+authentication error against the host, thirty retries deep, that reads as a network problem.
+`run-migrations.js` treats `28P01` as terminal and explains it for exactly this reason — do not
+turn it back into a retry.
+
+Never generate fresh secrets over data that already exists. `install.sh` refuses that combination
+rather than starting and failing later.
+
+### Deployment config belongs in `.env`, not in a shell variable
+
+Extra compose files — a reverse-proxy overlay, anything server-specific — go in `COMPOSE_FILE`
+inside `.env`, which Compose reads on every invocation. Exported in a shell instead, it is
+eventually forgotten, and the install that follows comes up **healthy with no domain attached**:
+every container green, the site 404. Nothing in the stack can detect that, because from the inside
+nothing is wrong. It is the reason `scripts/up.sh` finishes by fetching the public URL rather than
+trusting container health.
+
+The same shape recurs: a green signal that does not cover the thing that broke. A successful
+install that hijacked another one; a passing CI job publishing an image nobody can pull; a
+migration runner blaming the network for a wrong password. When adding a check, check the
+**outcome** — can this be reached, can this be pulled, does this page load — not the step.
+
 ## Security rules
 
 - **All SQL parameterised.** `pool.query('… WHERE id = $1', [id])`. No string interpolation, ever.
@@ -113,12 +151,15 @@ receives".
 
 ```bash
 ./scripts/install.sh          # full stack from nothing; safe to re-run
+./scripts/install.sh --domain crm.example.com   # …with HTTPS, certificate included
+./scripts/up.sh               # start, then verify the public URL answers
+./scripts/down.sh             # stop; keeps the data (refuses -v)
 ./scripts/migrate.sh          # apply migrations
 cd backend  && npm test       # node:test; DB-backed tests skip without a database
 cd backend  && npm run lint   # eslint, zero-problem bar
 cd frontend && npm run test:unit
 cd frontend && npm run lint
-docker compose logs -f frontend
+docker compose logs -f web    # the frontend service is called `web`
 ```
 
 **A green `npm test` without a database means less than it looks like.** 129 of the 334 backend tests
@@ -168,7 +209,8 @@ frontend/src/
   components/      chat UI, automation builder, agent editor
   pages/           marketing/ · sales/ · admin · chats
 supabase/migrations/   numbered SQL
-scripts/               install · uninstall · migrate · generate-secrets
+caddy/Caddyfile        HTTPS in front of `web`; only used when the `tls` profile is on
+scripts/               install · up · down · uninstall · migrate · generate-secrets
 ```
 
 When a capability must be reachable from both the UI and MCP, implement it once in `services/` and

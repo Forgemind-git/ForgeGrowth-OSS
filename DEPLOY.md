@@ -1,223 +1,244 @@
 # Forge Growth — Deployment Guide
 
-Standalone deployment instructions for spinning Forge Growth up on a fresh host. Follow this end-to-end and the dashboard will be live behind TLS with all features working —
-webhooks, queues, media, automations, template lifecycle, analytics, plus the Forge Growth funnel
-(Meta Ads sync, click-to-WhatsApp attribution, Conversions API, Razorpay payments and ledger).
+Running Forge Growth in production: what the containers are, what has to be backed up, what breaks
+if a cron job is missing, and how to prove a fresh deployment actually works.
 
-> **Isolation:** Forge Growth is separated from other instances of this codebase **per-database**,
-> not per-schema — the schema name `coexistence` is hardcoded throughout. It uses database
-> `forgegrowth`, Redis DB **1** (BullMQ queue names are hardcoded, so the DB index is what keeps its
-> queues apart), and the MinIO bucket `forgegrowth-media`.
+**If you just want it running, this is not the document you need.** The two install paths in
+[`README.md`](./README.md) — published images, or `./scripts/install.sh` — do everything here for
+you, including HTTPS. Come back when you want to know what they did, run against infrastructure you
+already have, or operate it long-term.
 
-The current production deployment co-exists with other apps inside `/root/docker-compose.yml` on the Hostinger VPS — this document captures the *minimum* container set, env vars, volumes, and one-time setup so a fresh deployment doesn't accidentally drop a dependency.
+> **Isolation:** the schema name `coexistence` is hardcoded throughout, so two deployments are
+> separated **per-database**, not per-schema. BullMQ queue names are hardcoded too, so two
+> deployments sharing one Redis server need different database indexes (`redis://redis:6379/0` vs
+> `/1`), or they will consume each other's outbound sends.
+>
+> **One machine, several installs:** the compose project name prefixes the containers *and* the
+> volumes, so it — not the directory — is what separates them. `install.sh` records
+> `COMPOSE_PROJECT_NAME` in each install's `.env`. See "More than one install on one machine" in the
+> README before putting a second one on a host.
 
 ---
 
-## 1. Container topology (5 required services)
+## 1. Containers
 
-| Container | Image | Port | Purpose |
-|---|---|---|---|
-| `forgegrowth-backend` | built from `backend/Dockerfile` (`node:20-alpine` + apk `ffmpeg`) | 3013 internal | Express API + BullMQ workers |
-| `forgegrowth-frontend` | built from `frontend/Dockerfile` (`nginx:alpine` after `vite build`) | 80 internal | React SPA, nginx proxies `/api` + `/uploads` + `/media` to backend |
-| `supabase-db` | `supabase/postgres:15.8.1.085` (or any Postgres 15 with the Supabase roles preset — see §5) | 5432 (localhost only) | All ForgeChat data lives in the `coexistence` schema |
-| `redis` | `redis:6` or newer | 6379 (internal only) | BullMQ send queue (60 msg/sec rate-limited) + media-download queue (concurrency 2) |
-| `minio` | `minio/minio:latest` | 9000 (internal) + 9001 (console) | S3-compatible object store for the Media Library (one shared file → many per-WABA Meta media IDs) |
-| `traefik` | `traefik:v2.x` | 80 / 443 | TLS termination via Let's Encrypt + host-based routing |
+The bundled `docker-compose.yml` brings up five services, plus one optional:
 
-All five must be on the same Docker network (production uses `root_default`).
+| Service | Image | Purpose |
+|---|---|---|
+| `backend` | built from `backend/Dockerfile` (`node:20-alpine` + ffmpeg) | Express API, BullMQ workers, migrations at startup |
+| `web` | built from `frontend/Dockerfile` (`nginx:alpine` after `vite build`) | React SPA; nginx proxies `/api`, `/uploads`, `/media` to the backend |
+| `postgres` | `postgres:16-alpine` | every table, in the `coexistence` schema |
+| `redis` | `redis:7-alpine` | BullMQ: sends (rate-limited to 60/sec), media downloads, agent runs |
+| `minio` | `minio/minio` | object store for the Media Library |
+| `caddy` *(optional)* | `caddy:2-alpine` | HTTPS. Off unless the `tls` profile is on — see §4 |
 
-### Not required
-- **Other Supabase services** (`kong`, `auth`, `rest`, `realtime`, `studio`, `supavisor`, etc.) — backend speaks raw SQL via the `pg` Pool, doesn't use PostgREST / Realtime / Auth
-- **n8n** — historically forwarded Meta webhooks. Meta now posts directly to ForgeChat, so n8n is no longer in the path
-- The dozens of other apps in the production compose (NocoDB, Metabase, Evolution, ForgeChat, etc.) are unrelated
+The frontend service is called **`web`**, not `frontend`. `docker compose logs -f web`.
 
-## 2. Volumes (persistent state)
+Only `web` (or `caddy`, with TLS on) publishes a host port. Postgres, Redis and MinIO stay on the
+internal Docker network and are never reachable from outside.
 
-| Volume | Mount point in container | Purpose | Backup priority |
-|---|---|---|---|
-| `forgegrowth-uploads` | `forgegrowth-backend:/app/uploads` | Team-member profile pictures | Low |
-| `forgegrowth-media` | `forgegrowth-backend:/app/media` | Downloaded WhatsApp media (image/video/audio/document) — cleaned up at 180 days by cron | Medium |
-| Postgres data | `supabase-db:/var/lib/postgresql/data` (bind-mount recommended: `/srv/forgegrowth/pgdata`) | **All CRM data** including AES-encrypted Meta access tokens | **Critical** — back up daily |
-| `redis_data` | `redis:/data` | BullMQ queue state (survives restarts so jobs don't drop) | Medium |
-| Traefik certs | `traefik:/letsencrypt` | TLS certs (avoids hitting Let's Encrypt rate limits on restart) | Low (regenerable) |
+### Using infrastructure you already have
+
+To point at an existing Postgres, Redis or MinIO instead of the bundled ones, set the matching
+variables in §3 and don't start those services. The backend cares only about the connection
+details; nothing assumes the bundled containers.
+
+---
+
+## 2. Persistent state
+
+| Volume | Holds | Criticality |
+|---|---|---|
+| `pgdata` | **everything** — chats, leads, templates, automations, and the AES-encrypted Meta tokens | **Critical.** Back up daily |
+| `miniodata` | Media Library originals | High — re-uploadable, but tedious |
+| `media` | downloaded WhatsApp media | Medium — re-fetchable within Meta's retention window |
+| `uploads` | profile pictures | Low |
+| `redisdata` | queue state | Low — in-flight jobs only |
+| `caddydata` | issued certificates | Low, but keep it: without it every restart re-issues, and Let's Encrypt rate-limits to five per week per domain |
+
+`./scripts/down.sh` and `./scripts/uninstall.sh` keep all of these. Only `uninstall.sh --purge` and
+`docker compose down -v` delete them.
+
+> **`.env` is part of your backup.** `POSTGRES_PASSWORD` is applied only when Postgres first creates
+> its data directory, so a regenerated `.env` cannot open an existing database — the symptom is an
+> authentication loop that appears to blame the network. `FORGECRM_ENCRYPTION_KEY` is the only thing
+> that decrypts stored Meta, Google and payment credentials; lose it and they must all be re-entered.
+> A database backup without the `.env` that goes with it is half a backup.
+
+---
 
 ## 3. Environment variables
 
-ForgeChat reads from `backend/.env` (or process env in Docker). Use `backend/.env.example` as a starting template.
+`.env.example` is the authoritative list and documents each one. The ones without a workable
+default:
 
-### Required
-```bash
-PORT=3013                        # Matches docker compose port mapping
-NODE_ENV=production
-
-# Database
-SUPABASE_DATABASE_URL=postgresql://postgres:<password>@supabase-db:5432/postgres
-POSTGRES_SSL=false               # true if connecting over public network
-
-# Auth
-FORGECRM_JWT_SECRET=<random-64-char-hex>     # openssl rand -hex 32
-CORS_ORIGIN=https://crm.yourdomain.com
-
-# Cookie domain — must be a parent of CORS_ORIGIN for cookies to stick
-COOKIE_PARENT_DOMAINS=.yourdomain.com
-
-# Encryption for stored Meta access tokens (AES-256-GCM)
-FORGECRM_ENCRYPTION_KEY=<random-64-char-hex>  # openssl rand -hex 32 — DIFFERENT from JWT secret
-
-# Meta webhook verify token (whatever string you configure in Meta's webhook settings)
-FORGECRM_META_WEBHOOK_VERIFY_TOKEN=<your-chosen-string>
-META_API_VERSION=v21.0
-
-# Queues / Redis
-REDIS_URL=redis://redis:6379
-MEDIA_QUEUE_CONCURRENCY=2
-MEDIA_QUEUE_ATTEMPTS=5
-MEDIA_RETENTION_DAYS=180
-
-# Storage paths inside the backend container (match volume mounts)
-MEDIA_DIR=/app/media
-
-# MinIO (Media Library object store)
-MINIO_ENDPOINT=minio
-MINIO_PORT=9000
-MINIO_USE_SSL=false
-MINIO_ACCESS_KEY=<minio root user>
-MINIO_SECRET_KEY=<minio root password>
-FORGECRM_MEDIA_BUCKET=forgegrowth-media
-```
-
-### Optional (with sensible defaults if omitted)
-```bash
-ANALYTICS_SYNC_DAYS=30           # template analytics window
-WEBHOOK_RETENTION_DAYS=30        # webhook_events table retention
-```
-
-### Where to keep them
-**Never commit** any env file with real values. Production keeps everything in `/root/.env` (gitignored). For a new host, either bind-mount an env file or pass via `docker compose --env-file`.
-
-## 4. DNS + TLS
-
-| Step | Action |
+| | |
 |---|---|
-| 1 | Point an A record `crm.<yourdomain>` at the host IP |
-| 2 | Open ports 80 and 443 to the world for Traefik |
-| 3 | Configure Traefik with a cert resolver (production uses `mytlschallenge` on Let's Encrypt) |
-| 4 | Backend gets two Traefik routers: `Host(crm.<yourdomain>) && PathPrefix(/api)` priority 20 + `Host(crm.<yourdomain>)` priority 10 → frontend |
+| `FORGECRM_JWT_SECRET` | signs login cookies |
+| `FORGECRM_ENCRYPTION_KEY` | 64 hex characters (32 bytes). AES-256-GCM for stored credentials |
+| `META_WEBHOOK_VERIFY_TOKEN` | must match what you type into Meta's webhook setup |
+| `POSTGRES_PASSWORD` | |
+| `MINIO_ROOT_PASSWORD` | |
+| `CORS_ORIGIN` | the exact origin the browser uses. A mismatch surfaces as a generic 500, not a CORS error |
+| `FORGECRM_DOMAIN` | cookie domain — the host part of `CORS_ORIGIN` |
 
-Exact Traefik labels live in `/root/docker-compose.yml` under the `forgegrowth-backend` and `forgegrowth-frontend` services on the production VPS; copy them verbatim and swap the domain.
+`./scripts/install.sh` generates all five secrets. `./scripts/generate-secrets.sh` prints a set if
+you are filling `.env` in by hand.
 
-## 5. Database setup (one-time)
+Optional, with sensible defaults: `META_API_VERSION`, `WEB_PORT`, `PORT`, `REDIS_URL`,
+`FORGECRM_MEDIA_BUCKET`, `POSTGRES_SSL`, `WEBHOOK_EXTRA_ALLOWED_WABAS`, the `MINIO_*` connection
+details, and the LLM keys (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`) if you use AI agents.
 
-The migrations expect Supabase-specific roles (`anon`, `authenticated`, `service_role`). If using vanilla Postgres 15, pre-create them:
+Keep `.env` at the repo root, `chmod 600`. Never commit it.
 
-```sql
-CREATE ROLE anon NOLOGIN;
-CREATE ROLE authenticated NOLOGIN;
-CREATE ROLE service_role NOLOGIN BYPASSRLS;
-CREATE SCHEMA IF NOT EXISTS coexistence;
-```
+---
 
-Then apply all migrations in order:
+## 4. DNS and TLS
+
+**With the bundled proxy** — one flag, and the certificate is handled:
 
 ```bash
-createdb-style step first — Forge Growth lives in its OWN database:
-docker exec -i supabase-db psql -U postgres -c 'CREATE DATABASE forgegrowth'
-
-for f in $(ls supabase/migrations/*.sql | sort); do
-  docker exec -i supabase-db psql -U postgres -d forgegrowth < "$f"
-done
+./scripts/install.sh --domain crm.example.com
 ```
 
-⚠ The target is `-d forgegrowth`, **not** `-d postgres`. Applying these to `postgres` would write the
-`coexistence` schema into whichever instance already owns it.
+Requirements, both checked before anything starts: ports **80 and 443 free** (the certificate
+challenge arrives on 80), and the domain's **DNS already pointing at this host**. It writes
+`COMPOSE_PROFILES=tls` into `.env`, so later `docker compose up -d` keeps HTTPS on.
 
-Latest migration as of writing: `088_mcp_oauth.sql`. The CI workflow at `.github/workflows/ci.yml` already runs this against a fresh Postgres 15 on every push, so any migration drift will fail CI before reaching prod.
+**Behind a proxy you already run** — skip `--domain`, point your proxy at `WEB_PORT`. Route
+everything to the `web` container; nginx inside it already splits `/api` from the SPA, so you do not
+need two routes.
+
+> If your proxy is configured through an extra compose file, put it in `COMPOSE_FILE` **in `.env`**:
+>
+> ```
+> COMPOSE_FILE=/path/to/docker-compose.yml:/path/to/your-proxy.yml
+> ```
+>
+> Compose reads that on every invocation. Exported in a shell instead, it gets forgotten, and the
+> next `docker compose up -d` brings the stack up **healthy with no domain attached** — every
+> container green, the site 404. Nothing detects that from inside the machine.
+
+---
+
+## 5. Database setup
+
+None. The backend applies every migration in `supabase/migrations/` at startup, in filename order,
+under an advisory lock so parallel replicas cannot race. Migrations are idempotent — re-running them
+is the normal upgrade path.
+
+Set `AUTO_MIGRATE=0` to turn that off, for when migrations are applied by a CI step or a DBA and the
+app's database user should not hold DDL rights. Then apply them yourself with `./scripts/migrate.sh`
+or by feeding the directory to `psql` in order.
+
+Upgrading: `git pull && ./scripts/install.sh`, or `docker compose pull && docker compose up -d` on
+the published-images path.
+
+---
 
 ## 6. Bootstrap order
 
-```bash
-docker compose up -d traefik              # always first — handles TLS for everything
-docker compose up -d redis supabase-db    # data layer
-# wait for supabase-db to be ready, then apply migrations (§5)
-docker compose up -d forgegrowth-backend     # depends on db + redis; runs ensureTables() on startup
-docker compose up -d forgegrowth-frontend    # nginx proxies to backend
-```
+`docker compose up -d` handles it — the backend waits on Postgres, Redis and MinIO healthchecks, and
+migrates before serving. Use `./scripts/up.sh` instead and it also fetches the public URL afterwards,
+which is the only check that distinguishes "containers healthy" from "site works".
 
-Verify each service:
-```bash
-docker compose ps                                 # all five should be "Up"
-curl -fsS https://crm.<yourdomain>/api/health     # → {"ok":true,"ts":...}
-docker logs forgegrowth-backend | tail               # should show "Backend running on port 3013"
-                                                  # + "[mediaQueue] worker started, concurrency=2"
-                                                  # + "[sendQueue] worker started, concurrency=5, rate=60/1000ms"
-```
+---
 
-## 7. Host cron jobs (run as root, NOT inside containers)
+## 7. Cron jobs on the host
+
+Run these from the install directory so the right project is picked up:
 
 ```cron
-0  3  * * *  docker exec forgegrowth-backend node scripts/cleanupMedia.js          >> /var/log/forgegrowth-media-cleanup.log 2>&1
-0  */4 * * * docker exec forgegrowth-backend node scripts/syncTemplates.js         >> /var/log/forgegrowth-template-sync.log 2>&1
-0  2  * * *  docker exec forgegrowth-backend node scripts/syncTemplateAnalytics.js >> /var/log/forgegrowth-analytics-sync.log 2>&1
-30 3  * * *  docker exec forgegrowth-backend node scripts/cleanupWebhookEvents.js  >> /var/log/forgegrowth-webhook-cleanup.log 2>&1
-0  4  * * *  docker exec forgegrowth-backend node scripts/syncMediaResync.js       >> /var/log/forgegrowth-media-resync.log 2>&1
+0  3  * * *  cd /srv/forgegrowth && docker compose exec -T backend node scripts/cleanupMedia.js
+0  */4 * * * cd /srv/forgegrowth && docker compose exec -T backend node scripts/syncTemplates.js
+0  2  * * *  cd /srv/forgegrowth && docker compose exec -T backend node scripts/syncTemplateAnalytics.js
+30 3  * * *  cd /srv/forgegrowth && docker compose exec -T backend node scripts/cleanupWebhookEvents.js
+0  4  * * *  cd /srv/forgegrowth && docker compose exec -T backend node scripts/syncMediaResync.js
 ```
 
-Without these, you'll still get inbound webhooks + manual sends + manual refresh, but: media disk grows forever, template status drifts from Meta's truth, analytics doesn't update, and `webhook_events` grows unbounded.
+Without them the app still works — inbound webhooks, sends, manual refresh — but media disk grows
+forever, template status drifts from Meta's, analytics stop updating, and `webhook_events` grows
+unbounded.
 
-## 8. Initial app setup (after first deploy)
+---
 
-1. **Log in** to `https://crm.<yourdomain>` as the first-run admin. There is no
-   default password: set `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` in `.env`
-   before the first start, or let the backend generate one and print it **once** to its log:
+## 8. First-run setup
+
+1. **Sign in.** There is no default password. Either set `BOOTSTRAP_ADMIN_EMAIL` /
+   `BOOTSTRAP_ADMIN_PASSWORD` before the first start, or let one be generated and printed **once**:
 
    ```bash
    docker compose logs backend | grep -A5 'FIRST-RUN ADMIN'
    ```
 
-   That block is printed only on the run that creates the account. If you miss it, delete the
-   user row and restart the backend to have another generated.
-2. **Admin Settings → WhatsApp Accounts → Add** — paste:
-   - Display Phone Number (digits only — see normalization rule below)
-   - Phone Number ID (from Meta's WABA dashboard)
-   - WABA ID
-   - Meta App ID
-   - Access Token (Meta System User token; encrypted at rest with AES-256-GCM)
-3. **Configure the Meta webhook** in Meta Business Suite → WhatsApp → Configuration:
-   - Callback URL: `https://crm.<yourdomain>/api/webhook/whatsapp`
-   - Verify token: must match `FORGECRM_META_WEBHOOK_VERIFY_TOKEN`
-   - Subscribe to: `messages` (covers messages + statuses + echoes + template events)
-4. **Test the wiring** — Admin Settings → Webhooks → "Send Test Webhook" with the "Incoming text message" template. A row should appear in the audit log with `processed` status, records_extracted=1.
-5. **(Optional) Enable Template Insights** in Meta Business Suite → WhatsApp Accounts → Insights → Enable. Without this, the Analytics drawer's "Refresh from Meta" returns subcode 4182004 (the UI shows a banner explaining the fix).
-
-## 9. Backup strategy
-
-Daily `pg_dump` of `supabase-db` is non-negotiable — it contains the encrypted Meta access tokens, chat history, contacts, templates, automations, and webhook audit log. Production uses `/root/backup-system/scripts/backup-postgres.sh` (2-day retention, cron-driven). For a new host, do at minimum:
-
-```bash
-0 4 * * * docker exec supabase-db pg_dump -U postgres forgegrowth | gzip > /srv/backups/forgegrowth-$(date +\%Y\%m\%d).sql.gz
-# + sync /srv/backups off-host (rsync, S3, Backblaze, whatever)
-```
-
-## 10. Universal rules (deviation = bugs)
-
-- **Phone numbers are digits-only everywhere.** Backend normalizes on insert (`normalizePhone()` in `routes/webhook.js`); display sites never prepend `+`. Mixing formats causes duplicate chat threads.
-- **Meta access tokens never leave the encrypted column unencrypted.** Decrypt only at use-time inside `getAccountWithToken()`; never log decrypted tokens.
-- **JWT secret and webhook verify token are separate env vars.** Reusing one for both leaks the verify token in any JWT-related debug path.
-- **`webhook.js` returns 200 even on parser failure** — Meta retries non-200 responses, which amplifies bugs. Failures are captured in `webhook_events.processing_error` instead.
-- **Per-project docker-compose files are forbidden.** Merge ForgeChat's 5 services into the host's shared compose. (Stems from the same Traefik/network sharing constraint that affects all Forge projects.)
-- **Container restarts of Supabase services break Kong upstream IPs** — if you ever migrate to the full Supabase stack, never restart individual Supabase containers; use `NOTIFY pgrst, 'reload schema'` for PostgREST instead.
-
-## 11. Verifying a fresh deployment end-to-end
-
-After §6 + §8, send a real WhatsApp message to the configured business number. Within ~3 seconds you should see:
-
-1. A new row in **Admin Settings → Webhooks** with `MESSAGES · TEXT · processed · <your message body>`
-2. A new chat in **Chats** under the right BDA, with the message bubble rendered
-3. Reply from the chat composer — outbound bubble appears optimistically, then gets the WhatsApp delivered-tick when Meta echoes the status
-4. The status webhook arrives at the Webhooks tab as `STATUSES · DELIVERED · …`
-
-If all four happen, every layer is working: Meta integration, parser, audit log, chat_history insert, automation engine, BullMQ send queue, status callback, and the chat UI.
+   Only on the run that creates the account. Miss it and you can delete the user row and restart to
+   get another.
+2. **Admin Settings → WhatsApp Accounts → Add**: display phone number (digits only), Phone Number
+   ID, WABA ID, Meta App ID, and a Meta System User access token. The token is encrypted at rest.
+3. **Meta Business Suite → WhatsApp → Configuration**:
+   - Callback URL `https://<your-domain>/api/webhook/whatsapp`
+   - Verify token: exactly your `META_WEBHOOK_VERIFY_TOKEN`
+   - Subscribe to `messages` — that one field covers messages, statuses, echoes and template events
+4. **Test it**: Admin Settings → Webhooks → *Send Test Webhook* → "Incoming text message". A row
+   should appear with `processed` and `records_extracted=1`.
+5. *(Optional)* Enable Template Insights in Meta Business Suite, or the Analytics drawer's refresh
+   returns subcode 4182004 — the UI explains the fix when it happens.
 
 ---
 
-For day-to-day operations and architecture details, see [`README.md`](./README.md). For the comprehensive low-level design, see [`LLD.md`](./LLD.md).
+## 9. Backups
+
+A daily dump is not optional: that database holds the encrypted Meta tokens, every conversation, and
+your whole funnel.
+
+```cron
+0 4 * * * cd /srv/forgegrowth && docker compose exec -T postgres \
+  pg_dump -U forgegrowth -d forgegrowth -Fc > /srv/backups/forgegrowth-$(date +\%F).dump
+```
+
+Then get `/srv/backups` **off the host** — rsync, S3, Backblaze, whatever you already trust. And
+back up `.env` with it, for the reason in §2.
+
+Restore into an empty database:
+
+```bash
+docker compose exec -T postgres pg_restore -U forgegrowth -d forgegrowth --clean --if-exists < backup.dump
+```
+
+---
+
+## 10. Rules that produce bugs when broken
+
+- **Phone numbers are digits-only everywhere.** Normalised on insert by `normalizePhone()`; display
+  never prepends `+`. Mixing formats splits one person into two chat threads.
+- **Meta tokens are decrypted only at use time**, inside `getAccountWithToken()`. Never logged.
+- **The JWT secret and the webhook verify token are separate variables.** Reusing one for both leaks
+  the verify token into any JWT debug path.
+- **The webhook returns 200 even when parsing fails.** Meta retries non-2xx and times out at 20
+  seconds, so a bug that returns 500 amplifies itself. Failures are recorded in
+  `webhook_events.processing_error` instead.
+- **Never point freshly generated secrets at an existing database.** See §2.
+- **Check outcomes, not steps.** An install that reports success can have adopted another install's
+  database; a green publish job can leave an image nobody can pull; five healthy containers can
+  serve a 404. Verify the thing you actually wanted — the page loads, the image pulls, the site
+  answers on its domain.
+
+---
+
+## 11. Proving a fresh deployment works
+
+Send a real WhatsApp message to the connected business number. Within a few seconds:
+
+1. **Admin Settings → Webhooks** shows `MESSAGES · TEXT · processed` with your text
+2. **Chats** shows the conversation, with the bubble rendered
+3. Replying from the composer posts optimistically, then gets the delivered tick when Meta echoes
+4. A `STATUSES · DELIVERED` row lands in the Webhooks tab
+
+All four means every layer is working: Meta integration, parser, audit log, insert, automation
+engine, send queue, status callback, and the UI.
+
+---
+
+Day-to-day operation and architecture: [`README.md`](./README.md). Conventions and invariants for
+changing the code: [`CLAUDE.md`](./CLAUDE.md).
