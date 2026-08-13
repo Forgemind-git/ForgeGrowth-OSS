@@ -113,11 +113,41 @@ pressing return. To skip the questions entirely:
 | Flag | |
 |---|---|
 | `--port <n>` | host port for the UI (default 8080) |
+| `--domain <host>` | serve HTTPS on this domain, certificate and renewal included |
+| `--tls-email <addr>` | certificate contact (default: the admin email; `internal` self-signs) |
 | `--url <origin>` | public origin the browser will use; sets CORS and the cookie domain |
 | `--admin-email <addr>` | first-run admin |
 | `--admin-password <pw>` | first-run password (omit and one is generated) |
 | `--no-build` | skip the image build |
 | `--yes` / `-y` | accept every default, never prompt |
+
+### HTTPS on a real domain
+
+```bash
+./scripts/install.sh --domain crm.example.com
+```
+
+That is the whole thing. It starts a bundled [Caddy](https://caddyserver.com) that obtains a Let's
+Encrypt certificate and renews it, sets the public URL and cookie domain to match, and closes the
+plain-HTTP port to the outside so the site is not also served without a certificate. There is no
+resolver to configure and no certificate file to create.
+
+Two requirements, both checked before anything starts:
+
+- **Ports 80 and 443 must be free.** The certificate is issued through a challenge that arrives on
+  port 80. If something else holds them, the installer says so and stops.
+- **The domain's DNS must already point at this machine.** The installer warns if it does not
+  resolve, and the certificate cannot be issued until it does.
+
+It sticks: `COMPOSE_PROFILES=tls` is written into `.env`, so a later plain `docker compose up -d`
+keeps HTTPS on. Re-running the installer without `--domain` turns it back off.
+
+For a hostname with no public DNS — a LAN address, or a test — `--tls-email internal` self-signs
+instead, so the whole path can be exercised without a public challenge. Browsers will warn, which is
+the correct response to a self-signed certificate.
+
+**Already running your own reverse proxy?** Don't pass `--domain`. Leave the app serving plain HTTP
+on `WEB_PORT` and point your proxy there, which is the default behaviour.
 
 **Re-running is safe and is the upgrade path.** An existing `.env` is never overwritten — only empty
 or placeholder values get filled in — and every migration is idempotent, so:

@@ -1,0 +1,40 @@
+# HTTPS in front of the web container. Used only when the `tls` profile is on
+# (see docker-compose.yml); `install.sh --domain <host>` turns it on.
+#
+# Everything here is driven by two environment variables, so this file is
+# identical on every server — which is the point. Nothing below names a host, a
+# network or a certificate authority.
+
+{$TLS_DOMAIN} {
+	# One directive, two behaviours, because that is what Caddy's `tls` takes:
+	#   an email address  -> get a real certificate from Let's Encrypt, and use
+	#                        the address for expiry warnings
+	#   the word internal -> sign it locally instead
+	#
+	# `internal` exists for a domain that is not publicly resolvable, where the
+	# Let's Encrypt challenge could never succeed — a LAN hostname, or a test.
+	# The browser warns about a self-signed certificate; that is correct.
+	#
+	# install.sh always sets this (defaulting to the admin email), because `tls`
+	# with an empty argument is a config error rather than a sane fallback.
+	tls {$TLS_EMAIL}
+
+	# No header_up lines here on purpose. The app needs X-Forwarded-Proto and
+	# X-Forwarded-Host to build absolute URLs — payment links, the public form
+	# page — but Caddy already sets both, and restating them makes
+	# `caddy validate` warn about config that does nothing.
+	reverse_proxy web:80
+
+	# Media uploads pass through here, and Caddy's default body limit would
+	# reject a video the app itself accepts. Kept finite rather than unlimited.
+	request_body {
+		max_size 100MB
+	}
+
+	encode gzip
+
+	log {
+		output stdout
+		format console
+	}
+}

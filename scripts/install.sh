@@ -14,6 +14,12 @@
 #
 # Flags (all optional; without them the script asks, or uses the default):
 #   --port <n>            host port for the web UI          (default 8080)
+#   --domain <host>       serve HTTPS on this domain, with a Let's Encrypt
+#                         certificate obtained and renewed automatically.
+#                         Needs ports 80 and 443 free, and the domain's DNS
+#                         already pointing at this machine. Implies --url.
+#   --tls-email <addr>    contact address for the certificate
+#                         (default: the admin email; "internal" self-signs)
 #   --url <origin>        public origin, e.g. https://crm.example.com
 #                         (default http://localhost:<port>)
 #   --admin-email <addr>  first-run admin                   (default admin@example.com)
@@ -39,11 +45,14 @@ die()  { printf '\n%sInstall failed:%s %s\n\n' "$R" "$N" "$1" >&2; exit 1; }
 
 # ── arguments ────────────────────────────────────────────────────────────────
 WEB_PORT=''; PUBLIC_URL=''; ADMIN_EMAIL=''; ADMIN_PASSWORD=''
+DOMAIN=''; TLS_EMAIL=''
 ASSUME_YES=0; DO_BUILD=1
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --port)           WEB_PORT="${2:-}"; shift 2 ;;
+    --domain)         DOMAIN="${2:-}"; shift 2 ;;
+    --tls-email)      TLS_EMAIL="${2:-}"; shift 2 ;;
     --url)            PUBLIC_URL="${2:-}"; shift 2 ;;
     --admin-email)    ADMIN_EMAIL="${2:-}"; shift 2 ;;
     --admin-password) ADMIN_PASSWORD="${2:-}"; shift 2 ;;
@@ -300,12 +309,104 @@ if [ "$ours_running" = 0 ] && port_in_use "$WEB_PORT"; then
   die "port $WEB_PORT is already in use by another process. Re-run with --port <other>."
 fi
 
+# ── HTTPS ────────────────────────────────────────────────────────────────────
+#
+# --domain is the whole public-address story: it turns on the bundled caddy
+# (compose profile `tls`), which obtains and renews a Let's Encrypt certificate
+# knowing nothing but the domain. No resolver to configure, no acme.json, and
+# nothing in this repo that names one particular server — which is what made
+# the previous arrangement, a hand-written proxy file living outside the repo,
+# impossible to reproduce anywhere else.
+#
+# COMPOSE_PROFILES goes into .env rather than being passed here, so every later
+# plain `docker compose up -d` from this directory still brings HTTPS up.
+[ -n "$DOMAIN" ] || DOMAIN=$(get_env TLS_DOMAIN)      # sticky across re-runs
+DOMAIN=${DOMAIN#http://}; DOMAIN=${DOMAIN#https://}; DOMAIN=${DOMAIN%%/*}
+
+if [ -n "$DOMAIN" ]; then
+  case "$DOMAIN" in
+    *' '*|*/*|'') die "--domain takes a bare hostname, e.g. crm.example.com (got '$DOMAIN')" ;;
+    *.*) : ;;
+    *) die "--domain needs a full hostname with a dot, e.g. crm.example.com (got '$DOMAIN')" ;;
+  esac
+
+  # 80 is not optional: the certificate challenge arrives on it. Failing here
+  # beats failing inside Caddy, where the reason is a stack trace about binding.
+  tls_running=0
+  if docker compose ps --status running --services 2>/dev/null | grep -qx caddy; then tls_running=1; fi
+  if [ "$tls_running" = 0 ]; then
+    for p in 80 443; do
+      if port_in_use "$p"; then
+        die "port $p is in use, and HTTPS needs both 80 and 443.
+  Something else — another web server, or a reverse proxy — is already there.
+  Either stop it, or drop --domain and point that proxy at port $WEB_PORT instead."
+      fi
+    done
+  fi
+
+  [ -n "$TLS_EMAIL" ] || TLS_EMAIL=$(get_env TLS_EMAIL)
+  # Defaulting to the admin address keeps this to ONE required argument. Let's
+  # Encrypt only uses it to warn before a renewal failure expires the site.
+  [ -n "$TLS_EMAIL" ] || TLS_EMAIL=${ADMIN_EMAIL:-$(get_env BOOTSTRAP_ADMIN_EMAIL)}
+  [ -n "$TLS_EMAIL" ] || TLS_EMAIL='internal'
+
+  set_env TLS_DOMAIN "$DOMAIN"
+  set_env TLS_EMAIL "$TLS_EMAIL"
+  set_env COMPOSE_PROFILES tls
+  # With caddy in front, the plain-HTTP port must not also be public, or the
+  # site is reachable twice and once of those has no certificate.
+  set_env WEB_BIND 127.0.0.1
+  export COMPOSE_PROFILES=tls
+  PUBLIC_URL=${PUBLIC_URL:-https://$DOMAIN}
+
+  if [ "$TLS_EMAIL" = internal ]; then
+    ok "HTTPS on $DOMAIN  ${DIM}(self-signed — browsers will warn)${N}"
+  else
+    ok "HTTPS on $DOMAIN  ${DIM}(Let's Encrypt, renewed automatically)${N}"
+    # A certificate cannot be issued for a name that does not point here, and
+    # the failure otherwise appears minutes later in Caddy's log. A warning and
+    # not an error: split-horizon DNS and a proxied A record both look wrong
+    # from inside the machine yet work perfectly from outside.
+    resolved=''
+    if command -v getent >/dev/null 2>&1; then
+      resolved=$(getent ahostsv4 "$DOMAIN" 2>/dev/null | awk 'NR==1{print $1}')
+    elif command -v dig >/dev/null 2>&1; then
+      resolved=$(dig +short A "$DOMAIN" 2>/dev/null | head -1)
+    fi
+    if [ -z "$resolved" ]; then
+      warn "$DOMAIN does not resolve yet — add its DNS record, or the certificate will not be issued."
+    else
+      ok "$DOMAIN resolves to $resolved"
+    fi
+  fi
+else
+  # No domain: make sure a previous --domain run does not leave HTTPS half-on.
+  if [ -n "$(get_env COMPOSE_PROFILES)" ]; then
+    set_env COMPOSE_PROFILES ''
+    set_env WEB_BIND '0.0.0.0'
+    warn 'HTTPS turned off — re-run with --domain <host> to bring it back.'
+  fi
+fi
+
 if [ -z "$PUBLIC_URL" ]; then
   current=$(get_env CORS_ORIGIN); current=${current:-http://localhost:$WEB_PORT}
   case "$current" in *localhost*) current="http://localhost:$WEB_PORT" ;; esac
   PUBLIC_URL=$(ask 'Public URL the browser will use' "$current")
 fi
 PUBLIC_URL=${PUBLIC_URL%/}
+
+# An https:// address with nothing terminating TLS is the failure this flag
+# exists to remove: the summary would print a URL the script has done nothing
+# to make work, which is exactly what happened before --domain existed.
+case "$PUBLIC_URL" in
+  https://*)
+    if [ -z "$DOMAIN" ]; then
+      warn "the public URL is https:// but nothing here terminates HTTPS."
+      warn "Either pass --domain $(printf '%s' "${PUBLIC_URL#https://}" | cut -d/ -f1), or put your own"
+      warn "reverse proxy in front of port $WEB_PORT — the app itself serves plain HTTP."
+    fi
+    ;;
+esac
 
 if [ -z "$ADMIN_EMAIL" ]; then
   current=$(get_env BOOTSTRAP_ADMIN_EMAIL); current=${current:-admin@example.com}
@@ -408,6 +509,34 @@ if [ "$code" = 200 ]; then
   ok "web UI responding on http://localhost:${WEB_PORT}/"
 else
   warn "the web UI returned HTTP ${code:-none} — check: docker compose logs web backend"
+fi
+
+# With --domain, "the app is up" is only half the answer: the address people
+# will actually type has to work too. Checking it here is the difference
+# between an install that prints an https:// URL and one that has verified it.
+if [ -n "$DOMAIN" ]; then
+  printf '  waiting for the certificate'
+  tls_code=''
+  # Up to ~2 minutes: issuance is usually seconds, but a cold ACME challenge on
+  # a busy server is slower, and this must not fail an install that will be
+  # fine a minute later.
+  for i in $(seq 1 40); do
+    # --insecure so a self-signed (TLS_EMAIL=internal) certificate still counts
+    # as "serving"; this is checking reachability, not trust.
+    tls_code=$(curl -sk -o /dev/null -w '%{http_code}' "https://${DOMAIN}/" 2>/dev/null || echo 000)
+    if [ "$tls_code" = 200 ]; then break; fi
+    printf '.'; sleep 3
+  done
+  echo
+  if [ "$tls_code" = 200 ]; then
+    ok "https://${DOMAIN}/ responding"
+  else
+    warn "https://${DOMAIN}/ returned HTTP ${tls_code:-none}."
+    warn "The app itself is up; this is the certificate or the DNS. Check:"
+    warn "  docker compose logs caddy"
+    warn "Most often: the domain does not point at this machine yet, or port 80"
+    warn "is blocked by a firewall so the certificate challenge cannot arrive."
+  fi
 fi
 
 # ── 8. credentials ───────────────────────────────────────────────────────────
