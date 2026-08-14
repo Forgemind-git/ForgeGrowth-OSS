@@ -1,16 +1,25 @@
 # Forge Growth — run from published images, with NO source code on the machine.
 #
-# This file is the whole install. You need it and a .env, nothing else:
+# This file is the whole install. You need it, a .env, and the two scripts:
 #
 #   curl -o docker-compose.yml https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/docker-compose.images.yml
 #   curl -o .env               https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/.env.example
+#   curl -O https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/scripts/up.sh
+#   curl -O https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/scripts/down.sh
+#   chmod +x up.sh down.sh
 #   # edit .env — at minimum POSTGRES_PASSWORD, MINIO_ROOT_PASSWORD,
 #   #             FORGECRM_JWT_SECRET, FORGECRM_ENCRYPTION_KEY (32-byte hex),
 #   #             META_WEBHOOK_VERIFY_TOKEN
-#   docker compose up -d
+#   ./up.sh
 #
 # Then read the generated admin password out of the log:
 #   docker compose logs backend | grep -A5 "FIRST-RUN ADMIN"
+#
+# Start and stop with ./up.sh and ./down.sh, not with `docker compose` directly.
+# They are not conveniences: up.sh fetches the page a browser will really load
+# (five healthy containers and a 404 look identical from inside), and both
+# refuse to run when another install on this machine already owns this one's
+# name — the failure that otherwise ends with two installs sharing one database.
 #
 # The backend applies its own migrations at startup (they are baked into the
 # image), so there is no migrate step and no psql needed on the host.
@@ -20,6 +29,12 @@
 #   most common way a self-hosted deployment gets compromised.
 #
 # To pin a version instead of tracking latest, set FORGEGROWTH_TAG in .env.
+#
+# Memory ceilings default to a total of ~1.5 GB so this can share a small server
+# without starving whatever else runs there. Raise them in .env on a bigger box;
+# the defaults are a floor that works, not a recommendation. A container that
+# reaches its ceiling is killed and restarted, so a limit set below what the
+# service really needs shows up as a container that restarts forever.
 
 name: forgegrowth
 
@@ -27,6 +42,9 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    # Comfortably above the 128 MB default shared_buffers. If you raise
+    # shared_buffers, raise this first — Postgres does not check it can fit.
+    mem_limit: ${POSTGRES_MEM_LIMIT:-512m}
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-forgegrowth}
       POSTGRES_USER: ${POSTGRES_USER:-forgegrowth}
@@ -44,6 +62,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    mem_limit: ${REDIS_MEM_LIMIT:-128m}
     # AOF on: a queued-but-unsent WhatsApp message should survive a restart.
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -57,6 +76,7 @@ services:
   minio:
     image: minio/minio:latest
     restart: unless-stopped
+    mem_limit: ${MINIO_MEM_LIMIT:-256m}
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-forgegrowth}
@@ -74,6 +94,9 @@ services:
     # the literal host `backend:3013`. Renaming this service 502s the whole UI.
     image: ghcr.io/forgemind-git/forgegrowth-backend:${FORGEGROWTH_TAG:-latest}
     restart: unless-stopped
+    # The one to raise first. Node's heap grows with concurrent agent runs and
+    # media handling; a busy install wants 1g.
+    mem_limit: ${BACKEND_MEM_LIMIT:-512m}
     depends_on:
       postgres: { condition: service_healthy }
       redis:    { condition: service_healthy }
@@ -101,6 +124,8 @@ services:
   web:
     image: ghcr.io/forgemind-git/forgegrowth-web:${FORGEGROWTH_TAG:-latest}
     restart: unless-stopped
+    # Static files through nginx — it does not need more than this.
+    mem_limit: ${WEB_MEM_LIMIT:-64m}
     depends_on: [backend]
     ports:
       - "${WEB_PORT:-8080}:80"

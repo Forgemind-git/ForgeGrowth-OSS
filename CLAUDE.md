@@ -109,6 +109,31 @@ no change.
 Anything that inspects "the stack" must resolve the project the same way the user's shell does —
 from the directory they are in — or it reports on somebody else's install.
 
+### Start and stop go through `up.sh` / `down.sh`, and both layouts must keep working
+
+Raw `docker compose up -d` skips the only two checks that catch the failures this
+codebase actually suffers: a site that 404s while every container reports healthy, and a
+second folder quietly adopting this install's database. Both scripts therefore verify the
+public URL and refuse to run when another directory already owns this install's name.
+
+They must work **beside `docker-compose.yml`** (an install running published images, which
+has no `scripts/`) as well as **inside `scripts/`** (a source checkout). The name-resolution
+helper is duplicated verbatim in both scripts rather than sourced from a third file — an
+image-only install downloads them individually, and a third required file is a third chance
+to end up with a broken install. Change one, change the other.
+
+### A limit or a fix belongs in BOTH compose files
+
+`docker-compose.yml` is the source path; `docker-compose.images.yml` is what a customer
+actually runs. A memory ceiling, an env var or a service change added only to the first
+reaches nobody who installed from images — which is every customer. The published file is
+not a secondary copy; for the people paying for this, it is the whole product.
+
+Memory ceilings default to ~1.5 GB total and are overridable per service from `.env`
+(`BACKEND_MEM_LIMIT` and friends). A container that reaches its ceiling is killed and
+restarted, so a limit set too low presents as a container that never finishes starting —
+`up.sh` says so in its failure output rather than leaving that to be guessed.
+
 ### `.env` and the database are a pair
 
 `POSTGRES_PASSWORD` is applied **only** when Postgres first creates its data directory, and
