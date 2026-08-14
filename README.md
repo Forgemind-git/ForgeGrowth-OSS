@@ -39,10 +39,11 @@ ports with `lsof` rather than `ss`). Apple Silicon is fine; the images build nat
   Windows drive is dramatically slower and can confuse file-watching during development.
 - **Git Bash** also works for the install itself.
 
-There is no PowerShell or `.bat` installer. If you would rather not use a shell at all, run the
-[published images](#run-it-from-published-images--no-source-code) instead — that path is two
-downloads and `docker compose up -d`, with nothing to build and no bash anywhere, so it works from
-PowerShell as-is.
+There is no PowerShell or `.bat` installer. If you would rather not build anything, run the
+[published images](#run-it-from-published-images--no-source-code) instead — that path downloads four
+small files and starts them, with nothing to compile. Its `up.sh` / `down.sh` are bash, so on Windows
+run them from **Git Bash** or WSL. `docker compose up -d` does work on its own from PowerShell, but
+you lose the two checks those scripts exist to perform — see the note in that section.
 
 ## Quick start
 
@@ -50,21 +51,33 @@ Two ways in. Pick the first if you only want to *run* it, the second if you want
 
 ### Run it from published images — no source code
 
-Nothing is cloned and nothing is built. You need two files and Docker:
+Nothing is cloned and nothing is built. You need four files and Docker:
 
 ```bash
 mkdir forge-growth && cd forge-growth
 curl -o docker-compose.yml https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/docker-compose.images.yml
 curl -o .env               https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/.env.example
+curl -O https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/scripts/up.sh
+curl -O https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/scripts/down.sh
+chmod +x up.sh down.sh
 ```
 
 Edit `.env` and set five values — `POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD`, `FORGECRM_JWT_SECRET`,
 `FORGECRM_ENCRYPTION_KEY` (32 bytes of hex) and `META_WEBHOOK_VERIFY_TOKEN`. Then:
 
 ```bash
-docker compose up -d
+./up.sh                                                    # start
 docker compose logs backend | grep -A5 "FIRST-RUN ADMIN"   # the generated admin password
+./down.sh                                                  # stop, keeping the data
 ```
+
+**Start and stop with these two scripts rather than `docker compose` directly.** They are not
+wrappers for their own sake. `up.sh` finishes by loading the page a browser would actually open,
+because an install can have every container reporting healthy and still serve a 404 — from the
+inside, those look the same. And both refuse to run when another folder on the same machine already
+uses this install's name, which is the mistake that otherwise ends with two installs quietly sharing
+one database. They work whether they sit beside `docker-compose.yml` (this path) or in `scripts/`
+(a source checkout).
 
 Open `http://localhost:8080`. **There is no migrate step**: the migrations are baked into the backend
 image and applied at startup, which is the whole reason this path needs no repository. Upgrading is
