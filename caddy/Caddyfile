@@ -1,9 +1,35 @@
 # HTTPS in front of the web container. Used only when the `tls` profile is on
 # (see docker-compose.yml); `install.sh --domain <host>` turns it on.
 #
-# Everything here is driven by two environment variables, so this file is
-# identical on every server — which is the point. Nothing below names a host, a
-# network or a certificate authority.
+# Everything here is driven by environment variables, so this file is identical
+# on every server — which is the point. Nothing below names a host, a network or
+# a certificate authority.
+#
+# Two ways a hostname gets a certificate:
+#   1. the domain given at install time, in the {$TLS_DOMAIN} block below
+#   2. any domain an admin later adds in Admin Settings -> Domain, handled by the
+#      catch-all at the end using on-demand TLS
+{
+	# On-demand TLS obtains a certificate during the FIRST TLS handshake for a
+	# hostname, rather than at startup from a fixed list. That is the whole
+	# mechanism behind Admin Settings -> Domain: an admin adds the domain, points
+	# DNS at this server, and the certificate appears on the first visit. No file
+	# is edited, no container is restarted, and the app is never given control of
+	# the host to do it.
+	#
+	# ⚠ `ask` is a security boundary, not a nicety. Without it, anyone who pointed
+	# a hostname at this machine could make it request a certificate on their
+	# behalf. Those requests fail, failures are rate-limited per account, and a
+	# few thousand of them leave the legitimate domains unable to renew. The
+	# backend answers 200 only for hostnames an admin has actually added; see
+	# routes/domains.js.
+	#
+	# If the backend is unreachable it answers nothing, Caddy treats that as "no",
+	# and no certificate is issued — the safe direction to fail in.
+	on_demand_tls {
+		ask {$TLS_ASK_URL:http://backend:3013/api/public/tls-check}
+	}
+}
 
 {$TLS_DOMAIN} {
 	# One directive, two behaviours, because that is what Caddy's `tls` takes:
@@ -27,6 +53,38 @@
 
 	# Media uploads pass through here, and Caddy's default body limit would
 	# reject a video the app itself accepts. Kept finite rather than unlimited.
+	request_body {
+		max_size 100MB
+	}
+
+	encode gzip
+
+	log {
+		output stdout
+		format console
+	}
+}
+
+# Every other hostname that reaches this server over HTTPS — i.e. the domains
+# added from Admin Settings -> Domain after install.
+#
+# A named site above always wins over this one, so the install-time domain keeps
+# its own explicit configuration and this only catches what is left.
+#
+# The body of this block is deliberately identical to the named site's. Two
+# blocks that serve the same app must not drift: a 100MB limit or a header fixed
+# in one and forgotten in the other produces a bug that appears only on the
+# custom domain, which is the hardest place to notice it.
+https:// {
+	# No email argument here on purpose. On-demand issuance is gated by the `ask`
+	# endpoint in the global block above, and the account details come from the
+	# same Caddy storage the named site uses.
+	tls {
+		on_demand
+	}
+
+	reverse_proxy web:80
+
 	request_body {
 		max_size 100MB
 	}

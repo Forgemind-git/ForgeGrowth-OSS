@@ -720,6 +720,9 @@ if [ "$SHAPE" = domain ]; then
   set_env TLS_DOMAIN "$DOMAIN"
   set_env TLS_EMAIL "$TLS_EMAIL"
   set_env COMPOSE_PROFILES tls
+  # Admin Settings -> Domain can add more domains later and caddy will obtain
+  # their certificates on first visit, because this install owns 80 and 443.
+  set_env TLS_MODE caddy
   # With caddy in front, the plain-HTTP port must not also be public, or the
   # site is reachable twice and once of those has no certificate.
   set_env WEB_BIND 127.0.0.1
@@ -759,6 +762,35 @@ else
     set_env TLS_DOMAIN ''
     set_env WEB_BIND '0.0.0.0'
     warn 'HTTPS turned off — re-run with --domain <host> to bring it back.'
+  fi
+
+  # ── can this install add domains for itself later? ───────────────────────
+  #
+  # Admin Settings -> Domain lets someone add a domain long after installing,
+  # and the bundled caddy obtains its certificate on the first visit. That only
+  # works if THIS install is the thing answering on 80 and 443, and on a shared
+  # server it will not be — another install, or a reverse proxy, already has
+  # them. There is no way to share a port, so the honest thing is to work out
+  # which situation this is now and let the app say so plainly, rather than
+  # offering a button that silently does nothing on half of all servers.
+  #
+  # `proxy` is not a lesser install. Adding a domain there still widens the
+  # allow-list immediately, which is half of what makes a domain work; only the
+  # certificate has to come from whatever already owns the ports.
+  if [ "$SHAPE" = proxy ]; then
+    # Told explicitly that something else terminates TLS. Believe it, and do not
+    # start a caddy that would fight the proxy for the ports.
+    set_env TLS_MODE proxy
+  elif port_in_use 80 || port_in_use 443; then
+    set_env TLS_MODE proxy
+    ok "another program owns ports 80/443  ${DIM}(domains added later need it pointed here)${N}"
+  else
+    # Free ports: run caddy now, with no domain of its own, purely so a domain
+    # added later needs nothing but DNS. It costs 64 MB and binds 80/443.
+    set_env COMPOSE_PROFILES tls
+    set_env TLS_MODE caddy
+    export COMPOSE_PROFILES=tls
+    ok "HTTPS ready  ${DIM}(add a domain in Admin Settings → Domain whenever you like)${N}"
   fi
 fi
 

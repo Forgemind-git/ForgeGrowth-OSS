@@ -42,6 +42,10 @@ const { router: salesLogRouter, ensureSalesLogTables } = require('./routes/sales
 const { router: marketingRouter, syncMetaAds, ensureAdSetTables } = require('./routes/marketing');
 const { router: resourcesRouter } = require('./routes/resources');
 const { router: leadFormsRouter, publicRouter: leadFormsPublicRouter, ensureLeadFormTables } = require('./routes/leadForms');
+// Custom domains: the allow-list behind Admin Settings -> Domain, consulted by
+// the CORS check above and by Caddy's on-demand-TLS `ask` endpoint.
+const { router: domainsRouter, publicRouter: domainsPublicRouter, ensureDomainTables } = require('./routes/domains');
+const domainService = require('./services/domainService');
 const { router: ctwaRouter, ensureCtwaTables } = require('./routes/ctwa');
 const { router: integrationsRouter, publicRouter: integrationsPublicRouter } = require('./routes/integrations');
 const { router: agentsRouter } = require('./routes/agents');
@@ -106,7 +110,21 @@ app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
     if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-    callback(new Error('Not allowed by CORS'));
+    // Domains added in Admin Settings -> Domain widen this list without a
+    // restart. They have to be consulted HERE and not merged into
+    // ALLOWED_ORIGINS at startup, because the whole point of that screen is that
+    // a domain starts working the moment it is added — CORS_ORIGIN comes from
+    // .env, which the container cannot re-read while it is running.
+    //
+    // Served from a ten-second cache in domainService, so this is a Set lookup
+    // on all but the first request. A failure resolves to "not allowed", which
+    // is the same answer the line above would have given.
+    domainService.allowedOriginsFromDb()
+      .then((extra) => {
+        if (extra.includes(origin)) return callback(null, true);
+        callback(new Error('Not allowed by CORS'));
+      })
+      .catch(() => callback(new Error('Not allowed by CORS')));
   },
 }));
 
@@ -166,6 +184,9 @@ app.use('/', payLinkPublicRouter);
 app.use('/api', integrationsPublicRouter);
 // Lead Forms — public fill/submit endpoints (no auth; visitors reach these from a shared link)
 app.use('/api', leadFormsPublicRouter);
+// Caddy's on-demand-TLS check. Must be public: it is called during the TLS
+// handshake, before any session or even a completed HTTPS connection exists.
+app.use('/api', domainsPublicRouter);
 // MCP API — authenticates via its OWN bearer middleware (not the JWT cookie)
 app.use('/api/mcp/v1', mcpApiRouter);
 // MCP OAuth 2.1 — discovery, authorize, token, register. Public by necessity:
@@ -194,6 +215,8 @@ app.use('/api', authMiddleware, chatbotsRouter);
 app.use('/api', authMiddleware, mediaRouter);
 app.use('/api', authMiddleware, mediaLibraryRouter);
 app.use('/api', authMiddleware, whatsappAccountsRouter);
+// Admin Settings -> Domain. Every route inside is adminOnly.
+app.use('/api', authMiddleware, domainsRouter);
 app.use('/api', authMiddleware, aiModelsRouter);
 app.use('/api', authMiddleware, usersRouter);
 app.use('/api', authMiddleware, eventsRouter);
@@ -285,6 +308,8 @@ async function start() {
   await ensureSalesLogTables().catch(err =>
     console.error('[salesLog] table ensure failed (apply migration 064):', err.message)
   );
+  await ensureDomainTables().catch(err =>
+    console.error('[startup] ensureDomainTables failed:', err.message));
   await ensureLeadFormTables().catch(err =>
     console.error('[leadForms] table ensure failed (apply migration 066):', err.message)
   );

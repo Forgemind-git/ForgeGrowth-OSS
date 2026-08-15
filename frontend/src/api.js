@@ -516,6 +516,19 @@ export const api = {
     },
     assignees: () => req('/deal-assignees'),
   },
+  // Admin Settings -> Domain. The allow-list that both CORS and Caddy's
+  // on-demand TLS read, so a domain added here takes effect without a restart.
+  domains: {
+    list: () => req('/domains'),
+    // What the browser actually used vs what this install is configured for.
+    // Every address bug on that screen turns out to be those two disagreeing,
+    // so they are fetched together rather than shown apart.
+    status: () => req('/domains/status'),
+    add: (hostname) => req('/domains', { method: 'POST', body: JSON.stringify({ hostname }) }),
+    setActive: (id, isActive) =>
+      req(`/domains/${id}`, { method: 'PATCH', body: JSON.stringify({ isActive }) }),
+    remove: (id) => req(`/domains/${id}`, { method: 'DELETE' }),
+  },
   integrations: {
     listCredentials: () => req('/integrations/credentials'),
     saveCredentials: (data) =>

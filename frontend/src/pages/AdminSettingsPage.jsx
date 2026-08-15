@@ -5,7 +5,7 @@ import {
   LogOut, Trash2, Moon, Sun, Monitor,
   ArrowLeft, Plus, X, ChevronLeft, Eye, EyeOff, Phone, Mail, MapPin, BadgeCheck, User,
   Loader2, MessageSquare, Star, Key, Webhook, RefreshCw, Search, Play, AlertCircle, CheckCircle2,
-  Bot, Copy, Check, Plug, Calendar as CalendarIcon, FileSpreadsheet, Link2, Unplug,
+  Bot, Copy, Check, Plug, Globe, Calendar as CalendarIcon, FileSpreadsheet, Link2, Unplug,
   ChevronRight, ExternalLink, Sheet, Table2, Inbox, PlugZap, Terminal,
   IndianRupee, CreditCard, Link as LinkIcon, SlidersHorizontal,
   ChevronDown, Wrench, ShieldAlert, Package, Download, Shield,
@@ -32,6 +32,7 @@ const TABS = [
   { key: 'integrations', label: 'Integrations', icon: Plug },
   { key: 'mcp', label: 'MCP Tools', icon: PlugZap },
   { key: 'users', label: 'Users', icon: User },
+  { key: 'domains', label: 'Domain', icon: Globe },
   { key: 'webhooks', label: 'Webhooks', icon: Webhook },
 ];
 
@@ -78,6 +79,213 @@ function PlaceholderTab({ label }) {
         <div style={{ fontWeight: 600, color: C.text, marginBottom: 4 }}>{label}</div>
         <div style={{ fontSize: 15 }}>This section is coming soon.</div>
       </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Domain                                                             */
+/* ------------------------------------------------------------------ */
+// Where an admin points a real domain at this install without touching a server.
+//
+// The important half of this screen is the diagnosis at the top, not the list
+// underneath. Every address problem is the same shape — what the browser used
+// disagrees with what the install was configured for — and none of it surfaces
+// as an error a user could act on. A Secure cookie over plain HTTP just looks
+// like "it logs me out"; an address missing from CORS just looks like a 500.
+function DomainTab() {
+  const [rows, setRows] = useState([]);
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [hostname, setHostname] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(null);
+
+  async function load() {
+    try {
+      const [list, st] = await Promise.all([api.domains.list(), api.domains.status()]);
+      setRows(list.domains || []);
+      setStatus(st);
+    } catch (err) {
+      showError(err.message || 'Could not load the domain settings');
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function add(e) {
+    e.preventDefault();
+    if (!hostname.trim() || saving) return;
+    setSaving(true);
+    try {
+      await api.domains.add(hostname.trim());
+      setHostname('');
+      showSuccess('Domain added. Point its DNS at this server and open it in a browser.');
+      await load();
+    } catch (err) {
+      showError(err.message || 'Could not add that domain');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove(row) {
+    try {
+      await api.domains.remove(row.id);
+      showSuccess(`${row.hostname} removed`);
+      await load();
+    } catch (err) {
+      showError(err.message || 'Could not remove that domain');
+    } finally {
+      setPendingDelete(null);
+    }
+  }
+
+  const card = {
+    background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 10,
+    padding: 18, marginBottom: 16,
+  };
+
+  if (loading) {
+    return (
+      <div style={{ padding: 24, fontFamily: FONT }}>
+        <div style={{ height: 74, background: C.surfaceSubtle, borderRadius: 10, marginBottom: 16 }} />
+        <div style={{ height: 180, background: C.surfaceSubtle, borderRadius: 10 }} />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: 24, fontFamily: FONT, overflowY: 'auto', flex: 1 }}>
+      {/* Diagnosis first: this is the part that explains a broken login. */}
+      {(status?.warnings || []).map((w, i) => (
+        <div key={i} style={{
+          ...card, marginBottom: 12, display: 'flex', gap: 12, alignItems: 'flex-start',
+          background: w.level === 'error' ? C.dangerBgSoft : C.warnBgSoft,
+          border: `1px solid ${w.level === 'error' ? C.dangerBorder : C.warnBorder}`,
+        }}>
+          <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 1 }}
+            color={w.level === 'error' ? C.dangerText : C.warnText} />
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4,
+              color: w.level === 'error' ? C.dangerText : C.warnText }}>{w.title}</div>
+            <div style={{ fontSize: 13, color: C.textSecondary, lineHeight: 1.55 }}>{w.detail}</div>
+          </div>
+        </div>
+      ))}
+
+      {status && !(status.warnings || []).length && (
+        <div style={{ ...card, marginBottom: 12, display: 'flex', gap: 10, alignItems: 'center',
+          background: C.successBgSoft, border: `1px solid ${C.successBorder}` }}>
+          <CheckCircle2 size={18} color={C.successText} />
+          <div style={{ fontSize: 13.5, color: C.textSecondary }}>
+            This address is set up correctly.
+          </div>
+        </div>
+      )}
+
+      <div style={card}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 10, color: C.text }}>
+          How you are reaching this right now
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 18px', fontSize: 13.5 }}>
+          <span style={{ color: C.textMuted }}>Address</span>
+          <span style={{ fontFamily: MONO, color: C.text }}>
+            {status?.protocol}://{status?.requestHost || '—'}
+          </span>
+          <span style={{ color: C.textMuted }}>Login cookie</span>
+          <span style={{ color: C.text }}>
+            {status?.secureCookies ? 'Secure — HTTPS only' : 'Not marked Secure — works over HTTP'}
+          </span>
+          <span style={{ color: C.textMuted }}>Set at install</span>
+          <span style={{ fontFamily: MONO, color: C.textSecondary }}>
+            {status?.corsOrigin || 'not set'}
+          </span>
+        </div>
+      </div>
+
+      <div style={card}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4, color: C.text }}>
+          Extra domains
+        </div>
+        {/* The two kinds of server need different instructions, and describing
+            both the same way is how someone ends up waiting for a certificate
+            that nothing on this machine is able to fetch. */}
+        <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 14, lineHeight: 1.55 }}>
+          {status?.tlsMode === 'caddy' ? (
+            <>Add a domain, point its DNS at this server, then open it in a browser.
+            The HTTPS certificate is obtained on that first visit — nothing to restart
+            and nothing else to configure.</>
+          ) : (
+            <>Adding a domain here makes this install accept it straight away. Because
+            another program on this server owns ports 80 and 443, the certificate has to
+            come from that one — point it at this install
+            {status?.requestHost ? ' the same way the current address reaches it' : ''}.
+            The row below turns to “In use” once a request actually arrives on the new
+            domain, so you can tell when it has worked.</>
+          )}
+        </div>
+
+        <form onSubmit={add} style={{ display: 'flex', gap: 8, marginBottom: rows.length ? 16 : 0 }}>
+          <input
+            value={hostname}
+            onChange={(e) => setHostname(e.target.value)}
+            placeholder="crm.example.com"
+            style={{
+              flex: 1, padding: '9px 12px', borderRadius: 8, fontSize: 14, fontFamily: MONO,
+              border: `1px solid ${C.border}`, background: C.surface, color: C.text, outline: 'none',
+            }}
+          />
+          <button type="submit" disabled={saving || !hostname.trim()} style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 8,
+            border: 'none', fontSize: 14, fontWeight: 600, fontFamily: FONT,
+            background: hostname.trim() ? C.primary : C.surfaceMuted,
+            color: hostname.trim() ? C.primaryText : C.textMuted,
+            cursor: hostname.trim() && !saving ? 'pointer' : 'default',
+          }}>
+            {saving ? <Loader2 size={15} className="spin" /> : <Plus size={15} />} Add
+          </button>
+        </form>
+
+        {rows.map((r) => (
+          <div key={r.id} style={{
+            display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0',
+            borderTop: `1px solid ${C.rowSep}`,
+          }}>
+            <Globe size={16} color={C.textMuted} style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: MONO, fontSize: 13.5, color: C.text }}>{r.hostname}</div>
+              <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                {/* Nothing having asked for a certificate is the usual sign that DNS
+                    is not pointing here yet, so it is worth saying rather than
+                    leaving the row looking simply idle. */}
+                {r.lastSeenAt ? 'In use'
+                  : r.lastAskedAt ? 'Certificate requested — finishing'
+                  : 'Waiting for its first visit. Check the DNS points here.'}
+              </div>
+            </div>
+            <button onClick={() => setPendingDelete(r)} title={`Remove ${r.hostname}`} style={{
+              display: 'flex', alignItems: 'center', padding: 7, borderRadius: 7,
+              border: `1px solid ${C.border}`, background: 'transparent',
+              color: C.dangerText, cursor: 'pointer',
+            }}>
+              <Trash2 size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {pendingDelete && (
+        <DeleteConfirmModal
+          open
+          title="Remove this domain?"
+          message={`${pendingDelete.hostname} will stop being accepted. Anyone using it will `
+                 + 'be refused, and its certificate will not be renewed.'}
+          onConfirm={() => remove(pendingDelete)}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1230,6 +1438,7 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
     }
     switch (activeTab) {
       case 'general': return <GeneralTab onLogout={onLogout} user={user} />;
+      case 'domains': return <DomainTab />;
       case 'tags': return (
         <TagsTab
           categories={categories}
