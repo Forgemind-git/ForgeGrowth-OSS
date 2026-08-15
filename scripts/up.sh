@@ -84,6 +84,29 @@ EOF
   fi
 fi
 
+# --- HTTPS needs a file, not just a profile -----------------------------------
+# The tls profile bind-mounts ./caddy/Caddyfile. When that file is absent Docker
+# does not complain — it creates a DIRECTORY at the path and Caddy exits with
+# "is a directory", which names the symptom and nothing else. Checked here as
+# well as in install.sh because this is the script people actually run twice.
+case ",$(get_env COMPOSE_PROFILES)," in
+  *,tls,*)
+    if [ ! -f "$ROOT/caddy/Caddyfile" ]; then
+      cat >&2 <<EOF
+Refusing to start: HTTPS is on, but $ROOT/caddy/Caddyfile is missing.
+
+Docker would create a directory at that path and Caddy would refuse to start.
+Fetch it back:
+
+  mkdir -p caddy && curl -fsSL -o caddy/Caddyfile \\
+    https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/caddy/Caddyfile
+
+Nothing has been changed.
+EOF
+      exit 1
+    fi ;;
+esac
+
 # --- the address to verify ----------------------------------------------------
 # In order of how public it is: a TLS domain if HTTPS is on, else whatever origin
 # the app was told to expect, else the host port.
@@ -101,7 +124,9 @@ code=000
 for _ in $(seq 1 45); do
   # -k so a self-signed certificate (TLS_EMAIL=internal) still counts as
   # serving: this is a reachability check, not a trust check.
-  code=$(curl -sk -o /dev/null -w '%{http_code}' "$URL/" 2>/dev/null || echo 000)
+  # `|| code=000` not `|| echo 000`: curl prints its own 000 on a failed
+  # connection, and echoing a second one concatenated into "HTTP 000000".
+  code=$(curl -sk -o /dev/null -w '%{http_code}' "$URL/" 2>/dev/null) || code=000
   [ "$code" = 200 ] && break
   printf '.'; sleep 2
 done
@@ -109,6 +134,28 @@ echo
 
 if [ "$code" = 200 ]; then
   echo "up: $URL"
+  # ⚠ A second address that also answers, and quietly breaks signing in.
+  #
+  # When the public origin is https, the login cookie is marked Secure. If the
+  # plain-HTTP port is ALSO published to the world, the site answers there too —
+  # and a browser discards a Secure cookie delivered over plain HTTP. Login
+  # returns 200 and the app renders, then every request after it is a 401. It
+  # looks like "logged out on every refresh", never like a URL problem, and no
+  # log anywhere records it. Reported here because this is the check nothing
+  # else performs: every container is healthy and the real URL works.
+  BIND=$(get_env WEB_BIND); BIND=${BIND:-0.0.0.0}
+  case "$URL" in
+    https://*)
+      if [ "$BIND" = 0.0.0.0 ] && [ -z "$(get_env TLS_DOMAIN)" ]; then
+        PORT=$(get_env WEB_PORT); PORT=${PORT:-8080}
+        echo
+        echo "warning: this install also answers on http://<this-host>:$PORT."
+        echo "  Signing in there appears to work and then fails on the next click:"
+        echo "  the login cookie is Secure, so a browser drops it over plain HTTP."
+        echo "  Close it by keeping the port to this machine:"
+        echo "    echo 'WEB_BIND=127.0.0.1' >> .env && ./up.sh"
+      fi ;;
+  esac
 else
   echo "the site returned HTTP $code" >&2
   echo "  docker compose logs --tail 40 backend web" >&2

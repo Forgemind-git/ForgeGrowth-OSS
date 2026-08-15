@@ -1,18 +1,20 @@
 # Forge Growth — run from published images, with NO source code on the machine.
 #
-# This file is the whole install. You need it, a .env, and the two scripts:
+# You do not fetch this file yourself. The installer downloads it, writes a .env
+# with every secret generated, and starts the stack:
 #
-#   curl -o docker-compose.yml https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/docker-compose.images.yml
-#   curl -o .env               https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/.env.example
-#   curl -O https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/scripts/up.sh
-#   curl -O https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/scripts/down.sh
-#   chmod +x up.sh down.sh
-#   # edit .env — at minimum POSTGRES_PASSWORD, MINIO_ROOT_PASSWORD,
-#   #             FORGECRM_JWT_SECRET, FORGECRM_ENCRYPTION_KEY (32-byte hex),
-#   #             META_WEBHOOK_VERIFY_TOKEN
-#   ./up.sh
+#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/scripts/install.sh)"
 #
-# Then read the generated admin password out of the log:
+# Add `-- --domain crm.example.com` for HTTPS, and it asks nothing at all.
+# Re-running the install.sh it leaves behind is the upgrade.
+#
+# By hand instead, if you would rather see every step: download this file as
+# docker-compose.yml, .env.example as .env, caddy/Caddyfile, up.sh and down.sh,
+# then fill in the five empty values in .env — POSTGRES_PASSWORD,
+# MINIO_ROOT_PASSWORD, FORGECRM_JWT_SECRET, FORGECRM_ENCRYPTION_KEY (32-byte
+# hex) and META_WEBHOOK_VERIFY_TOKEN — and run ./up.sh. The admin password is
+# then printed once, in the log:
+#
 #   docker compose logs backend | grep -A5 "FIRST-RUN ADMIN"
 #
 # Start and stop with ./up.sh and ./down.sh, not with `docker compose` directly.
@@ -128,7 +130,58 @@ services:
     mem_limit: ${WEB_MEM_LIMIT:-64m}
     depends_on: [backend]
     ports:
-      - "${WEB_PORT:-8080}:80"
+      # WEB_BIND is 0.0.0.0 unless TLS is on, when install.sh sets it to
+      # 127.0.0.1: with caddy terminating in front, the plain-HTTP port should
+      # not also be reachable from outside — otherwise the site is served twice,
+      # once without a certificate.
+      - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-8080}:80"
+
+  # HTTPS for a public domain. Off unless COMPOSE_PROFILES=tls, which
+  # `install.sh --domain <host>` writes into .env — so every later
+  # `docker compose up -d` keeps it on without remembering a flag.
+  #
+  # Caddy is here rather than Traefik or nginx because a certificate is the
+  # whole job: given a domain it obtains and renews one from Let's Encrypt with
+  # no configuration, no resolver to define and no acme.json to create. On a
+  # server that ALREADY runs a reverse proxy, leave this off and point that
+  # proxy at WEB_PORT instead.
+  #
+  # ⚠ Ports 80 and 443 must be free and reachable from the internet: the
+  # certificate is issued by a challenge that Let's Encrypt makes to this host
+  # over port 80. install.sh checks both before starting.
+  #
+  # ⚠ Unlike every other service here, this one needs a file on disk:
+  # ./caddy/Caddyfile. install.sh downloads it. If it is missing, Docker creates
+  # a DIRECTORY at that path and Caddy fails with "is a directory" — which is
+  # why install.sh and up.sh both check for it before starting.
+  caddy:
+    image: caddy:2-alpine
+    profiles: [tls]
+    restart: unless-stopped
+    mem_limit: ${CADDY_MEM_LIMIT:-64m}
+    depends_on: [web]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # Consumed by ./caddy/Caddyfile.
+      #
+      # ⚠ Plain defaults, NOT `${TLS_DOMAIN:?...}`. Compose interpolates every
+      # service when it loads the file — including ones whose profile is off —
+      # so a required-variable marker here would break `docker compose up` for
+      # everybody who never asked for HTTPS. Both values are always written by
+      # `install.sh --domain`; setting the profile by hand without them is what
+      # the fallback below reports.
+      TLS_DOMAIN: ${TLS_DOMAIN:-tls-domain-not-set.invalid}
+      # An email address gets a real Let's Encrypt certificate; the word
+      # "internal" self-signs instead, for a domain with no public DNS.
+      TLS_EMAIL: ${TLS_EMAIL:-internal}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates live here. Without this volume every recreate re-issues,
+      # and Let's Encrypt rate-limits that to five per week per domain.
+      - caddydata:/data
+      - caddyconfig:/config
 
 volumes:
   pgdata:
@@ -136,3 +189,5 @@ volumes:
   miniodata:
   uploads:
   media:
+  caddydata:
+  caddyconfig:
