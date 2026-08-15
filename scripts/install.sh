@@ -541,16 +541,44 @@ fi
 if   [ -n "$DOMAIN" ];     then ADDRESS=$DOMAIN
 elif [ -n "$PUBLIC_URL" ]; then ADDRESS=$PUBLIC_URL
 else
-  # Sticky across re-runs: an address already configured is the default, so
-  # re-running to change something else cannot quietly move the site.
-  current=$(get_env TLS_DOMAIN)
-  if [ -z "$current" ]; then
-    current=$(get_env CORS_ORIGIN)
-    current=${current#*://}; current=${current%%/*}
-    case "$current" in localhost*|127.0.0.1*) current='' ;; esac
+  # An install that already has an address KEEPS it, without asking. Re-running
+  # this script is how you upgrade, and an upgrade must not need somebody at a
+  # keyboard — nor quietly move the site. --domain and --url are how it moves.
+  #
+  # Reconstructed so the shape comes out the same as last time, which CORS_ORIGIN
+  # alone cannot tell you: https://crm.example.com is a caddy install when
+  # TLS_DOMAIN names it and somebody else's proxy when it does not, and those two
+  # differ in whether this stack should start caddy at all.
+  keep_tls=$(get_env TLS_DOMAIN)
+  keep_origin=$(get_env CORS_ORIGIN)
+  reuse=''
+  if [ "$FRESH_ENV" = 0 ]; then
+    if [ -n "$keep_tls" ]; then reuse=tls
+    else
+      case "$keep_origin" in
+        https://*) reuse=proxy ;;
+        http://*)  reuse=plain ;;
+      esac
+    fi
   fi
-  ADDRESS=$(ask 'Domain people will use to reach this (blank for localhost)' \
-                "${current:-localhost}" --domain)
+  case "$reuse" in
+    tls)   DOMAIN=$keep_tls; ADDRESS=$keep_tls
+           ok "address https://$keep_tls  ${DIM}(unchanged)${N}" ;;
+    proxy) PUBLIC_URL=$keep_origin; URL_GIVEN=1; ADDRESS=$keep_origin
+           ok "address $keep_origin  ${DIM}(unchanged)${N}" ;;
+    plain)
+      # A plain-HTTP origin on a real hostname can only have come from --url —
+      # nothing here terminates TLS for it — so it has to come back as `proxy`,
+      # or the dots in that name would read as a domain and start caddy for it.
+      case "${keep_origin#http://}" in
+        localhost*|127.0.0.1*) ADDRESS=${keep_origin#*://} ;;
+        *) PUBLIC_URL=$keep_origin; URL_GIVEN=1; ADDRESS=$keep_origin ;;
+      esac
+      ok "address $keep_origin  ${DIM}(unchanged)${N}" ;;
+    *)
+      ADDRESS=$(ask 'Domain people will use to reach this (blank for localhost)' \
+                    localhost --domain) ;;
+  esac
 fi
 
 # Normalise first: a scheme, a trailing path and a trailing dot all describe the
