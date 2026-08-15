@@ -146,6 +146,24 @@ turn it back into a retry.
 Never generate fresh secrets over data that already exists. `install.sh` refuses that combination
 rather than starting and failing later.
 
+### The session cookie's `Secure` flag follows the URL, not `NODE_ENV`
+
+Both compose files pin `NODE_ENV: production`, including on an install served over plain HTTP. A
+`Secure` cookie sent to an `http://` origin is discarded by the browser with no error anywhere:
+login returns 200, the SPA renders from the response body, and the *next* request arrives with no
+cookie and gets 401. It reads as "logged out on refresh", never as a cookie problem.
+
+`util/session.js` therefore derives `secure` from `TLS_DOMAIN` / `CORS_ORIGIN` — the address the
+browser actually uses — with `COOKIE_SECURE` as the override for TLS terminated somewhere the
+container cannot see. An unknown answer resolves to **false**: guessing wrong that way only loses
+hardening, while guessing wrong the other way locks everyone out.
+
+That file is also the single definition of the session signing key. It reads `FORGECRM_JWT_SECRET`
+— the name every installer writes — and refuses to boot in production rather than falling back to
+the development key, which is published here. When it was read as `JWT_SECRET` at three separate
+call sites, real installs signed with that published key while `mcpOAuth.js` verified with the
+generated one, so the two halves disagreed and neither said so. Sign and verify from this module.
+
 ### Deployment config belongs in `.env`, not in a shell variable
 
 Extra compose files — a reverse-proxy overlay, anything server-specific — go in `COMPOSE_FILE`

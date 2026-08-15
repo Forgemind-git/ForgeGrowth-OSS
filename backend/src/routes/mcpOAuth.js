@@ -525,7 +525,7 @@ function readSession(req) {
     const jwt = require('jsonwebtoken');
     const raw = req.cookies?.[process.env.FORGECRM_COOKIE_NAME || 'forgecrm_token'];
     if (!raw) return null;
-    const p = jwt.verify(raw, process.env.FORGECRM_JWT_SECRET || process.env.JWT_SECRET);
+    const p = jwt.verify(raw, require('../util/session').JWT_SECRET);
     return { id: p.id, name: p.displayName || p.username, role: p.role };
   } catch { return null; }
 }

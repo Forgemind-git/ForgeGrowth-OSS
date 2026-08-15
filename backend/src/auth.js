@@ -29,7 +29,7 @@ async function loadUserSession(userId) {
   };
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || 'forgecrm-dev-secret-change-me';
+const { JWT_SECRET, cookieOptions } = require('./util/session');
 const COOKIE_NAME = 'forgecrm_token';
 const TOKEN_EXPIRY = '24h';
 
@@ -128,12 +128,7 @@ router.post('/auth/login', async (req, res) => {
       return res.status(403).json({ error: 'Account is disabled. Contact an administrator.' });
     }
     const token = signToken(user);
-    res.cookie(COOKIE_NAME, token, {
-      httpOnly: true,
-      sameSite: 'strict',
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 24 * 60 * 60 * 1000,
-    });
+    res.cookie(COOKIE_NAME, token, { ...cookieOptions(), maxAge: 24 * 60 * 60 * 1000 });
     // Best-effort: stamp last_login_at; don't fail login if this errors.
     pool.query(`UPDATE coexistence.forgecrm_users SET last_login_at = NOW() WHERE id = $1`, [user.id]).catch(() => {});
     const session = await loadUserSession(user.id);
@@ -149,11 +144,11 @@ router.get('/auth/me', authMiddleware, async (req, res) => {
   try {
     const session = await loadUserSession(req.user.id);
     if (!session) {
-      res.clearCookie(COOKIE_NAME);
+      res.clearCookie(COOKIE_NAME, cookieOptions());
       return res.status(401).json({ error: 'User not found' });
     }
     if (session.isActive === false) {
-      res.clearCookie(COOKIE_NAME);
+      res.clearCookie(COOKIE_NAME, cookieOptions());
       return res.status(403).json({ error: 'Account disabled' });
     }
     res.json({ user: session });
@@ -165,7 +160,7 @@ router.get('/auth/me', authMiddleware, async (req, res) => {
 
 // POST /api/auth/logout
 router.post('/auth/logout', (req, res) => {
-  res.clearCookie(COOKIE_NAME);
+  res.clearCookie(COOKIE_NAME, cookieOptions());
   res.json({ ok: true });
 });
 
