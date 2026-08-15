@@ -1000,6 +1000,26 @@ if [ -n "$DOMAIN" ]; then
   echo
   if [ "$tls_code" = 200 ]; then
     ok "https://${DOMAIN}/ responding"
+    # Responding is not the same claim as trusted. The loop above passes on a
+    # self-signed certificate — a proxy's built-in default, or an ACME failure
+    # that left one behind — and every browser then shows a warning page, while
+    # Meta refuses the webhook outright. So ask the question a browser asks,
+    # once, WITHOUT -k. Only when a real certificate was the goal: TLS_EMAIL of
+    # "internal" means self-signed was the intention.
+    if [ "$TLS_EMAIL" != internal ]; then
+      if curl -s -o /dev/null --max-time 15 "https://${DOMAIN}/" 2>/dev/null; then
+        ok "certificate is publicly trusted"
+      else
+        warn "the certificate is NOT publicly trusted — a browser will warn, and"
+        warn "Meta will refuse a webhook on it. The site itself is serving fine."
+        warn "Usually one of:"
+        warn "  · issuance has not finished yet — re-check in a minute"
+        warn "  · the domain is proxied (Cloudflare's orange cloud), so the"
+        warn "    challenge never reaches this machine; use DNS-only while it issues"
+        warn "  · the Let's Encrypt account is rate-limited from earlier failures"
+        warn "Check with:  docker compose logs caddy | grep -i acme"
+      fi
+    fi
   else
     warn "https://${DOMAIN}/ returned HTTP ${tls_code:-none}."
     warn "The app itself is up; this is the certificate or the DNS. Check:"

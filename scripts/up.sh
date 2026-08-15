@@ -134,6 +134,19 @@ echo
 
 if [ "$code" = 200 ]; then
   echo "up: $URL"
+  # The fetch above used -k, so it says "reachable", not "trusted". Those look
+  # identical from here and completely different in a browser, which is the
+  # whole reason this script exists. Ask again the way a browser would.
+  case "$URL" in
+    https://*)
+      if ! curl -s -o /dev/null --max-time 15 "$URL/" 2>/dev/null; then
+        echo
+        echo "warning: serving with a certificate browsers do not trust."
+        echo "  Visitors get an interstitial, and Meta will refuse a webhook on it."
+        echo "  Usually: issuance unfinished, the domain proxied through Cloudflare"
+        echo "  so the challenge cannot reach here, or an ACME rate limit."
+      fi ;;
+  esac
   # ⚠ A second address that also answers, and quietly breaks signing in.
   #
   # When the public origin is https, the login cookie is marked Secure. If the
