@@ -291,9 +291,15 @@ if [ "$MODE" = images ]; then
   # would be silently moved onto whatever is on main that day.
   FETCH_REF=$PIN_REF
   PINNED_REF=$PIN_REF
-  if [ -z "$FETCH_REF" ] && [ -f "$STAMP" ]; then
-    FETCH_REF=$(sed -n 's/^ref=//p' "$STAMP" | head -1)
-    PINNED_REF=$FETCH_REF
+  if [ -f "$STAMP" ]; then
+    # Two different facts, and collapsing them was a bug. `ref` is where the
+    # FILES came from; it sticks so a bare re-run cannot jump an install off the
+    # branch or tag it was put on. `version` records an explicit --version, and
+    # ONLY that may dictate the image tag — a branch is a fine source of files
+    # and publishes no image of its own, so treating every remembered ref as a
+    # pin sent `docker compose pull` after a tag that was never built.
+    [ -n "$FETCH_REF" ]  || FETCH_REF=$(sed -n 's/^ref=//p' "$STAMP" | head -1)
+    [ -n "$PINNED_REF" ] || PINNED_REF=$(sed -n 's/^version=//p' "$STAMP" | head -1)
   fi
   # ⚠ FORGEGROWTH_REF deliberately does NOT feed PINNED_REF, and therefore does
   # not become the image tag. Git refs and image tags are different namespaces:
@@ -347,6 +353,7 @@ if [ "$MODE" = images ]; then
     echo '# .forgegrowth-install — written by install.sh, safe to delete'
     echo 'mode=images'
     echo "ref=$FETCH_REF"
+    echo "version=$PINNED_REF"
     echo "installed=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   } > "$STAMP"
 fi
@@ -826,8 +833,14 @@ if [ "$MODE" = images ]; then
   if [ -n "$PINNED_REF" ] && [ "$PINNED_REF" != main ]; then
     IMAGE_TAG=$PINNED_REF
   else
-    IMAGE_TAG=$(get_env FORGEGROWTH_TAG); IMAGE_TAG=${IMAGE_TAG:-latest}
+    IMAGE_TAG=$(get_env FORGEGROWTH_TAG)
   fi
+  # A git ref is not an image tag. `refs/heads/my-branch` in this field makes
+  # `docker compose pull` fail with "invalid reference format", which names the
+  # format and not the field — so drop anything that cannot be a tag and fall
+  # back, instead of leaving somebody to hand-edit .env to escape it.
+  case "$IMAGE_TAG" in */*|*' '*|*:*) IMAGE_TAG='' ;; esac
+  IMAGE_TAG=${IMAGE_TAG:-latest}
   set_env FORGEGROWTH_TAG "$IMAGE_TAG"
 fi
 ok "web on port $WEB_PORT, public URL $PUBLIC_URL"
@@ -894,8 +907,8 @@ elif [ "$MODE" = images ]; then
   Whoever owns $REPO needs to publish both packages, once:
     Packages -> forgegrowth-backend, then forgegrowth-web
     -> Package settings -> Change visibility -> Public" ;;
-      *manifest*nknown*|*ot\ found*)
-        die "nothing is published under the tag '$IMAGE_TAG'.
+      *manifest*nknown*|*ot\ found*|*invalid\ reference\ format*)
+        die "no images are published as '$IMAGE_TAG'.
   Check the version, or leave --version off to take the current release." ;;
       *)
         die "could not download the images — the error above is Docker's." ;;
