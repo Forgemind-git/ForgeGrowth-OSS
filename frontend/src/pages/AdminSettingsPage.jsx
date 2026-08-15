@@ -100,6 +100,8 @@ function DomainTab() {
   const [hostname, setHostname] = useState('');
   const [saving, setSaving] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [checking, setChecking] = useState(null);   // id currently being checked
+  const [checks, setChecks] = useState({});         // id -> result of the last check
 
   async function load() {
     try {
@@ -127,6 +129,23 @@ function DomainTab() {
       showError(err.message || 'Could not add that domain');
     } finally {
       setSaving(false);
+    }
+  }
+
+  // The only control on this screen that reports reality rather than
+  // configuration: the server fetches this install's own public address and says
+  // what came back. Deliberately a button and not something the page does on
+  // load — it is a real round-trip through whatever sits in front of this
+  // install, and it can take several seconds per domain.
+  async function check(row) {
+    setChecking(row.id);
+    try {
+      const result = await api.domains.check(row.id);
+      setChecks((c) => ({ ...c, [row.id]: result }));
+    } catch (err) {
+      showError(err.message || 'Could not check that domain');
+    } finally {
+      setChecking(null);
     }
   }
 
@@ -222,8 +241,10 @@ function DomainTab() {
             another program on this server owns ports 80 and 443, the certificate has to
             come from that one — point it at this install
             {status?.requestHost ? ' the same way the current address reaches it' : ''}.
-            The row below turns to “In use” once a request actually arrives on the new
-            domain, so you can tell when it has worked.</>
+            {' '}<code style={{ fontFamily: MONO, fontSize: 12.5 }}>docs/reverse-proxy.md</code>
+            {' '}has a Traefik and an nginx example. Then press <strong>Check</strong> on the
+            row below: it fetches the domain from the outside and says which part is not
+            working yet.</>
           )}
         </div>
 
@@ -248,32 +269,67 @@ function DomainTab() {
           </button>
         </form>
 
-        {rows.map((r) => (
-          <div key={r.id} style={{
-            display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0',
-            borderTop: `1px solid ${C.rowSep}`,
-          }}>
-            <Globe size={16} color={C.textMuted} style={{ flexShrink: 0 }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: MONO, fontSize: 13.5, color: C.text }}>{r.hostname}</div>
-              <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
-                {/* Nothing having asked for a certificate is the usual sign that DNS
-                    is not pointing here yet, so it is worth saying rather than
-                    leaving the row looking simply idle. */}
-                {r.lastSeenAt ? 'In use'
-                  : r.lastAskedAt ? 'Certificate requested — finishing'
-                  : 'Waiting for its first visit. Check the DNS points here.'}
+        {rows.map((r) => {
+          const res = checks[r.id];
+          const tone = !res ? null
+            : res.level === 'ok' ? { bg: C.successBgSoft, border: C.successBorder, text: C.successText }
+            : res.level === 'warn' ? { bg: C.warnBgSoft, border: C.warnBorder, text: C.warnText }
+            : { bg: C.dangerBgSoft, border: C.dangerBorder, text: C.dangerText };
+          return (
+            <div key={r.id} style={{ padding: '11px 0', borderTop: `1px solid ${C.rowSep}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <Globe size={16} color={C.textMuted} style={{ flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: MONO, fontSize: 13.5, color: C.text }}>{r.hostname}</div>
+                  <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+                    {/* Nothing having asked for a certificate is the usual sign that DNS
+                        is not pointing here yet, so it is worth saying rather than
+                        leaving the row looking simply idle. */}
+                    {r.lastSeenAt ? 'In use'
+                      : r.lastAskedAt ? 'Certificate requested — finishing'
+                      : 'Waiting for its first visit. Check the DNS points here.'}
+                  </div>
+                </div>
+                <button onClick={() => check(r)} disabled={checking === r.id}
+                  title={`Check whether ${r.hostname} reaches this install`} style={{
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '7px 11px',
+                    borderRadius: 7, border: `1px solid ${C.border}`, background: 'transparent',
+                    fontSize: 13, fontFamily: FONT, color: C.textSecondary,
+                    cursor: checking === r.id ? 'default' : 'pointer',
+                  }}>
+                  {checking === r.id
+                    ? <Loader2 size={14} className="spin" />
+                    : <RefreshCw size={14} />} Check
+                </button>
+                <button onClick={() => setPendingDelete(r)} title={`Remove ${r.hostname}`} style={{
+                  display: 'flex', alignItems: 'center', padding: 7, borderRadius: 7,
+                  border: `1px solid ${C.border}`, background: 'transparent',
+                  color: C.dangerText, cursor: 'pointer',
+                }}>
+                  <Trash2 size={14} />
+                </button>
               </div>
+
+              {res && (
+                <div style={{
+                  display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 10,
+                  padding: '10px 12px', borderRadius: 8,
+                  background: tone.bg, border: `1px solid ${tone.border}`,
+                }}>
+                  {res.level === 'ok'
+                    ? <CheckCircle2 size={16} color={tone.text} style={{ flexShrink: 0, marginTop: 1 }} />
+                    : <AlertCircle size={16} color={tone.text} style={{ flexShrink: 0, marginTop: 1 }} />}
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: tone.text }}>{res.title}</div>
+                    <div style={{ fontSize: 12.5, color: C.textSecondary, lineHeight: 1.55, marginTop: 3 }}>
+                      {res.detail}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            <button onClick={() => setPendingDelete(r)} title={`Remove ${r.hostname}`} style={{
-              display: 'flex', alignItems: 'center', padding: 7, borderRadius: 7,
-              border: `1px solid ${C.border}`, background: 'transparent',
-              color: C.dangerText, cursor: 'pointer',
-            }}>
-              <Trash2 size={14} />
-            </button>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {pendingDelete && (

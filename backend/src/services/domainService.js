@@ -125,6 +125,230 @@ async function allowedOriginsFromDb() {
   return out;
 }
 
+/* ------------------------------------------------------- reachability check */
+
+// Everything above answers "what is configured". None of it answers the only
+// question an admin actually has, which is "does this address reach this
+// install". Those are different, and the gap between them is silent: DNS can be
+// perfect, the certificate valid, every container healthy, and the hostname
+// still land on a reverse proxy that routes it somewhere else entirely. It
+// presents as a 404 with nothing wrong anywhere.
+//
+// So this checks the outcome rather than the steps: fetch this install's own
+// `ask` endpoint from the outside, over the public address, and see what comes
+// back. A 200 is proof of the whole chain at once — DNS resolved, the proxy
+// routed it, the container answered, and it was THIS install's database that
+// approved the hostname. Nothing else can return 200 for that hostname.
+//
+// ⚠ This is a server-side fetch to an admin-supplied host, so it is worth being
+//   exact about the exposure. The host has already passed validateHostname (no
+//   IP literals, no localhost, must be a dotted name), the path and method are
+//   fixed, and only the numeric status code is returned to the caller — never a
+//   body, a header or a redirect target. What an admin can learn from it is
+//   "does that name answer, and with what status", which they can learn from any
+//   browser. It is not a general-purpose fetcher and must not grow into one.
+
+const PROBE_TIMEOUT_MS = 8000;
+
+function probeErrorCode(err) {
+  if (err && err.name === 'AbortError') return 'ETIMEDOUT';
+  return (err && (err.cause?.code || err.code)) || 'EUNKNOWN';
+}
+
+// Pure, so the whole decision table is testable without a network or a database.
+// Kept as one function rather than scattered through the route because these
+// messages are the entire value of the feature: an admin who reads "404" learns
+// nothing, and an admin who reads "something answered, but it is not routed to
+// this install" knows exactly which of their three moving parts to look at.
+function interpretReachability({ scheme, status, errorCode, isActive = true }) {
+  if (errorCode) {
+    switch (errorCode) {
+      case 'ENOTFOUND':
+      case 'EAI_AGAIN':
+        return {
+          level: 'error',
+          title: 'That domain does not resolve',
+          detail: 'DNS has no address for it yet. Add an A record pointing at this '
+                + 'server, then try again — new records can take a few minutes.',
+        };
+      case 'ECONNREFUSED':
+        return {
+          level: 'error',
+          title: 'The domain resolves, but nothing answered',
+          detail: 'It points at a machine that is refusing the connection. Either it '
+                + 'is the wrong address, or nothing is listening on that port there.',
+        };
+      case 'ETIMEDOUT':
+      case 'UND_ERR_CONNECT_TIMEOUT':
+      case 'UND_ERR_HEADERS_TIMEOUT':
+        return {
+          level: 'warn',
+          title: 'No answer within a few seconds',
+          detail: 'A firewall may be blocking it. This can also be a false alarm: some '
+                + 'networks stop a server from reaching its own public address, in which '
+                + 'case visitors are fine. Open the domain from another device to be sure.',
+        };
+      case 'DEPTH_ZERO_SELF_SIGNED_CERT':
+      case 'SELF_SIGNED_CERT_IN_CHAIN':
+      case 'UNABLE_TO_VERIFY_LEAF_SIGNATURE':
+      case 'CERT_HAS_EXPIRED':
+      case 'ERR_TLS_CERT_ALTNAME_INVALID':
+        return {
+          level: 'error',
+          title: 'The HTTPS certificate is not valid for this domain',
+          detail: 'It was reached, but the certificate would make a browser refuse the '
+                + 'page. Whatever terminates HTTPS in front of this install needs a '
+                + 'certificate covering this exact name.',
+        };
+      default:
+        return {
+          level: 'error',
+          title: 'Could not reach this domain',
+          detail: `The connection failed (${errorCode}). Check that its DNS points at `
+                + 'this server and that nothing is blocking the port.',
+        };
+    }
+  }
+
+  if (status === 200) {
+    // http-only is deliberately NOT 'ok'. It resolves, it routes and it answers,
+    // so every step passed — and the install still cannot receive a Meta webhook
+    // or serve a public form link, both of which require https. Grading it green
+    // because the request succeeded would be reporting the step instead of the
+    // outcome, which is the mistake this whole check exists to stop making.
+    return {
+      level: scheme === 'https' ? 'ok' : 'warn',
+      title: scheme === 'https'
+        ? 'Working — this domain reaches this install over HTTPS'
+        : 'Reachable, but only over plain HTTP',
+      detail: scheme === 'https'
+        ? 'DNS, the certificate and the routing are all correct, and the request '
+        + 'arrived at this install rather than another one.'
+        : 'It reaches this install, but not over https://. Meta refuses a webhook '
+        + 'address that is not https, and public form links are built as https. '
+        + 'Give whatever sits in front of this install a certificate for this name.',
+    };
+  }
+
+  // The subtle one, and the reason the check is worth having at all. A 403 means
+  // something running this same software answered — and said it does not know
+  // this hostname. Since this install plainly does know it, the answer came from
+  // a DIFFERENT install. Two checkouts on one machine is exactly how that
+  // happens, and no other symptom distinguishes it from a routing mistake.
+  if (status === 403) {
+    if (!isActive) {
+      return {
+        level: 'warn',
+        title: 'Reached this install, and the domain is switched off',
+        detail: 'That is the expected answer while it is inactive. Turn it back on to '
+              + 'start accepting it again.',
+      };
+    }
+    return {
+      level: 'error',
+      title: 'Another install answered',
+      detail: 'The request reached a different copy of this software, which does not '
+            + 'know this domain. If more than one install runs on that server, the '
+            + 'domain is pointed at the wrong one.',
+    };
+  }
+
+  if (status === 503) {
+    return {
+      level: 'error',
+      title: 'Reached the app, but it could not check its database',
+      detail: 'The request arrived here, so DNS and routing are right. The database '
+            + 'is the problem — see the backend logs.',
+    };
+  }
+
+  if (status === 404) {
+    return {
+      level: 'error',
+      title: 'Something answered, but it is not this install',
+      detail: 'Usually a reverse proxy that has no route for this domain and served '
+            + 'its catch-all instead. Point it at this install, then check again.',
+    };
+  }
+
+  // 401 is what the check meets most often in practice, and it is not a
+  // mysterious edge case: it is any app whose login sits in front of this path.
+  // A different product entirely, or an older copy of this one from before the
+  // check existed — either way the domain is not pointed at this install.
+  if (status === 401) {
+    return {
+      level: 'error',
+      title: 'A different application answered',
+      detail: 'Something is running on this domain, but it is not this install — it '
+            + 'asked for a login where this install answers publicly. It may also be '
+            + 'an older copy of this software. Point the domain here, or upgrade that '
+            + 'install if it is the one you meant.',
+    };
+  }
+
+  // Never followed, and this is the reason. An app that redirects to its own
+  // login page would end up at a 200, and a check that reports "working" for
+  // somebody else's login screen is worse than no check at all — it is a green
+  // light for the exact mistake it exists to catch.
+  if (status >= 300 && status < 400) {
+    return {
+      level: 'error',
+      title: 'The domain redirects somewhere else',
+      detail: 'Something answered and sent the request on elsewhere instead of serving '
+            + 'this install. Check what the domain is routed to.',
+    };
+  }
+
+  return {
+    level: 'error',
+    title: `Something answered with HTTP ${status}`,
+    detail: 'Whatever replied is not this install. Check that the domain is routed '
+          + 'here and not to another site on the same server.',
+  };
+}
+
+// https first, because that is the address that has to work. Falling back to
+// http is not a courtesy — an install behind a proxy that has not been given a
+// certificate yet is reachable but not usable, and "reachable over http only" is
+// a completely different instruction from "not reachable".
+async function checkReachability(hostname, isActive = true) {
+  const host = normalizeHostname(hostname);
+  const path = `/api/public/tls-check?domain=${encodeURIComponent(host)}`;
+  let firstError = null;
+
+  for (const scheme of ['https', 'http']) {
+    try {
+      const res = await fetch(`${scheme}://${host}${path}`, {
+        method: 'GET',
+        // Manual, deliberately — see the 3xx branch in interpretReachability.
+        // Following a redirect can turn another app's login page into a 200 and
+        // report a domain as working when it points somewhere else entirely.
+        redirect: 'manual',
+        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      });
+      return { scheme, status: res.status, ...interpretReachability({ scheme, status: res.status, isActive }) };
+    } catch (err) {
+      const errorCode = probeErrorCode(err);
+      // Keep the https failure: it is the more informative one to report if the
+      // http attempt fails too, and a certificate error names the real problem
+      // where a plain connection error would not.
+      if (!firstError) firstError = errorCode;
+    }
+  }
+
+  return { scheme: 'https', status: null, ...interpretReachability({ scheme: 'https', errorCode: firstError, isActive }) };
+}
+
+async function checkDomainById(id) {
+  const { rows } = await pool.query(
+    'SELECT id, hostname, is_active AS "isActive" FROM coexistence.custom_domains WHERE id = $1',
+    [id]
+  );
+  if (!rows[0]) return null;
+  const result = await checkReachability(rows[0].hostname, rows[0].isActive);
+  return { hostname: rows[0].hostname, ...result };
+}
+
 /* ------------------------------------------------------------------ writes */
 
 async function listDomains() {
@@ -200,6 +424,9 @@ module.exports = {
   ensureDomainTables,
   normalizeHostname,
   validateHostname,
+  interpretReachability,
+  checkReachability,
+  checkDomainById,
   isApproved,
   allowedOriginsFromDb,
   activeHostnames,

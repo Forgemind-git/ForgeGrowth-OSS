@@ -142,6 +142,27 @@ router.get('/domains/status', adminOnly, async (req, res) => {
   }
 });
 
+// Does this domain actually reach this install? Everything else on this screen
+// reports configuration; this one reports the outcome, which is the only thing
+// that distinguishes "set up" from "working". POST rather than GET because it
+// makes a real outbound request and stamps a row — it is not a cacheable read.
+//
+// Slow by nature (up to two attempts, eight seconds each), so it is a button an
+// admin presses rather than something the page does on load.
+router.post('/domains/:id/check', adminOnly, async (req, res) => {
+  if (!/^\d+$/.test(String(req.params.id))) {
+    return res.status(400).json({ error: 'Unknown domain' });
+  }
+  try {
+    const result = await domains.checkDomainById(req.params.id);
+    if (!result) return res.status(404).json({ error: 'Domain not found' });
+    res.json(result);
+  } catch (err) {
+    console.error('[domains] check error:', err.message);
+    res.status(500).json({ error: 'Could not check that domain' });
+  }
+});
+
 router.post('/domains', adminOnly, async (req, res) => {
   try {
     const row = await domains.addDomain(req.body?.hostname, req.user?.id);

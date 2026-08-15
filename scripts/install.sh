@@ -784,6 +784,7 @@ else
   elif port_in_use 80 || port_in_use 443; then
     set_env TLS_MODE proxy
     ok "another program owns ports 80/443  ${DIM}(domains added later need it pointed here)${N}"
+    ok "   ${DIM}how: docs/reverse-proxy.md — then Admin Settings → Domain → Check${N}"
   else
     # Free ports: run caddy now, with no domain of its own, purely so a domain
     # added later needs nothing but DNS. It costs 64 MB and binds 80/443.

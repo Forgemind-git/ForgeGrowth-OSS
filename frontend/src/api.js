@@ -525,6 +525,11 @@ export const api = {
     // so they are fetched together rather than shown apart.
     status: () => req('/domains/status'),
     add: (hostname) => req('/domains', { method: 'POST', body: JSON.stringify({ hostname }) }),
+    // Fetches this install's own public address from the server side to find out
+    // whether the domain reaches it. Takes up to ~16s in the worst case (https
+    // then http, eight seconds each), so callers show a spinner rather than
+    // assuming it returns promptly.
+    check: (id) => req(`/domains/${id}/check`, { method: 'POST' }),
     setActive: (id, isActive) =>
       req(`/domains/${id}`, { method: 'PATCH', body: JSON.stringify({ isActive }) }),
     remove: (id) => req(`/domains/${id}`, { method: 'DELETE' }),

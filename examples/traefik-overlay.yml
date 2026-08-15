@@ -1,0 +1,74 @@
+# Traefik routing for an install that does not own ports 80/443.
+#
+# Copy this somewhere OUTSIDE the install directory, change the two hostnames and
+# the network name, then wire it in through .env:
+#
+#     COMPOSE_FILE=docker-compose.yml:/opt/forge-growth-proxy.yml
+#
+# …and `docker compose up -d web`. Traefik picks the labels up off the Docker
+# socket, so it is never restarted and no Traefik file is edited.
+#
+# Full explanation, including the nginx equivalent: docs/reverse-proxy.md
+#
+# ⚠ Keep this file out of the install directory and out of the repo. It names
+#   your server's domains, network and certificate resolver — none of which
+#   belong in a compose file that ships to other people.
+#
+# ⚠ COMPOSE_FILE belongs in .env, never `export`ed in a shell. Exported, it is
+#   eventually forgotten, and the next `docker compose up -d` brings the stack up
+#   HEALTHY WITH NO DOMAIN ATTACHED: every container green, the site a 404.
+#   Nothing in the stack can detect that, because from the inside nothing is
+#   wrong. It is why ./up.sh finishes by fetching the public URL.
+
+services:
+  web:
+    # `default` keeps the install's own private network; the second entry is the
+    # network Traefik is on. Check yours with:
+    #     docker inspect <traefik-container> \
+    #       --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}'
+    networks: [default, proxy_default]
+
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy_default
+
+      # ⚠ ONE service, named explicitly on EVERY router below.
+      #
+      # Traefik links a router to a service automatically only when the container
+      # declares exactly one. Declare two — the obvious way to write two routers —
+      # and it can no longer choose, so it discards BOTH routers with
+      # "cannot be linked automatically with multiple Services" in its log and
+      # nothing else. Every container stays healthy and every hostname answers 404
+      # from Traefik's catch-all, including one that worked a minute earlier.
+      - traefik.http.services.forgegrowth.loadbalancer.server.port=80
+
+      # ---------------------------------------------------------------- router 1
+      # A hostname whose DNS points straight at this server. Traefik can complete
+      # the TLS-ALPN-01 challenge, so it gets a real certificate of its own.
+      - "traefik.http.routers.forgegrowth.rule=Host(`crm.example.com`)"
+      - traefik.http.routers.forgegrowth.entrypoints=websecure
+      - traefik.http.routers.forgegrowth.tls=true
+      - traefik.http.routers.forgegrowth.tls.certresolver=myresolver
+      - traefik.http.routers.forgegrowth.priority=10
+      - traefik.http.routers.forgegrowth.service=forgegrowth
+
+      # ---------------------------------------------------------------- router 2
+      # A hostname behind a CDN that terminates TLS itself (Cloudflare's orange
+      # cloud, and anything like it). DELETE THIS BLOCK if you have no such name.
+      #
+      # ⚠ No certresolver here, deliberately. The ACME challenge connection stops
+      #   at the CDN and can never reach Traefik, so it fails on every attempt
+      #   forever — and those failures are rate-limited per ACME ACCOUNT, so
+      #   enough of them leave every OTHER domain on this server unable to renew.
+      #   Traefik serves its self-signed default to the CDN, the CDN accepts it
+      #   (SSL mode Full, not strict) and hands the browser its own certificate.
+      #   The browser never sees the self-signed one.
+      - "traefik.http.routers.forgegrowth-cdn.rule=Host(`crm-alt.example.com`)"
+      - traefik.http.routers.forgegrowth-cdn.entrypoints=web,websecure
+      - traefik.http.routers.forgegrowth-cdn.tls=true
+      - traefik.http.routers.forgegrowth-cdn.priority=10
+      - traefik.http.routers.forgegrowth-cdn.service=forgegrowth
+
+networks:
+  proxy_default:
+    external: true

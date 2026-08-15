@@ -303,6 +303,14 @@ Compose reads that automatically, so every later `docker compose` command picks 
 in a shell variable it will eventually be forgotten, and the install that follows comes up healthy
 with no domain attached.
 
+**[`docs/reverse-proxy.md`](./docs/reverse-proxy.md) is the full version** — a ready-to-edit Traefik
+overlay ([`examples/traefik-overlay.yml`](./examples/traefik-overlay.yml)), the nginx equivalent,
+when a `certresolver` is actively harmful, and the two mistakes that produce a 404 while every
+container reports healthy.
+
+After routing the domain, add it in **Admin Settings → Domain** and press **Check** — the server
+fetches the address from the outside and tells you which link in the chain is broken, if any.
+
 Deploying to a host you already run, behind an existing reverse proxy? See
 [`DEPLOY.md`](./DEPLOY.md).
 
