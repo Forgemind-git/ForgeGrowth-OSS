@@ -691,10 +691,10 @@ async function proxyAdmin() {
 
 function mintAdminToken(user) {
   const jwt = require('jsonwebtoken');
-  const SECRET = process.env.JWT_SECRET || 'forgecrm-dev-secret-change-me'; // must match auth.js
+  const { JWT_SECRET } = require('../util/session'); // one definition; auth.js verifies with the same
   return jwt.sign(
     { id: user.id, username: user.username, displayName: user.display_name, role: 'admin' },
-    SECRET, { expiresIn: '5m' },
+    JWT_SECRET, { expiresIn: '5m' },
   );
 }
 
