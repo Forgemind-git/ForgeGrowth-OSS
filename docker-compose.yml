@@ -107,6 +107,12 @@ services:
       MINIO_PORT: "9000"
       PORT: "3013"
       NODE_ENV: production
+      # The image bakes in supabase/migrations (backend/Dockerfile) and applies
+      # them from docker-entrypoint.sh before the app starts, on this path too —
+      # so `scripts/migrate.sh` is a second way to do the same thing, not the
+      # only one. Set to 0 where migrations are applied by something else and the
+      # app's database user should not hold DDL rights.
+      AUTO_MIGRATE: ${AUTO_MIGRATE:-1}
     volumes:
       - uploads:/app/uploads   # team profile pictures
       - media:/app/media       # downloaded WhatsApp media

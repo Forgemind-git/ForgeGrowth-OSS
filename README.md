@@ -40,10 +40,11 @@ ports with `lsof` rather than `ss`). Apple Silicon is fine; the images build nat
 - **Git Bash** also works for the install itself.
 
 There is no PowerShell or `.bat` installer. If you would rather not build anything, run the
-[published images](#run-it-from-published-images--no-source-code) instead — that path downloads four
-small files and starts them, with nothing to compile. Its `up.sh` / `down.sh` are bash, so on Windows
-run them from **Git Bash** or WSL. `docker compose up -d` does work on its own from PowerShell, but
-you lose the two checks those scripts exist to perform — see the note in that section.
+[published images](#run-it-from-published-images--no-source-code) instead — one command, nothing to
+compile, and the 2 GB build peak never happens. That installer and its `up.sh` / `down.sh` are bash,
+so on Windows run them from **Git Bash** or WSL. `docker compose up -d` does work on its own from
+PowerShell, but you lose the two checks those scripts exist to perform — see the note in that
+section.
 
 ## Quick start
 
@@ -51,25 +52,43 @@ Two ways in. Pick the first if you only want to *run* it, the second if you want
 
 ### Run it from published images — no source code
 
-Nothing is cloned and nothing is built. You need four files and Docker:
+Nothing is cloned and nothing is built. One command:
 
 ```bash
-mkdir forge-growth && cd forge-growth
-curl -o docker-compose.yml https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/docker-compose.images.yml
-curl -o .env               https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/.env.example
-curl -O https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/scripts/up.sh
-curl -O https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/scripts/down.sh
-chmod +x up.sh down.sh
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/scripts/install.sh)"
 ```
 
-Edit `.env` and set five values — `POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD`, `FORGECRM_JWT_SECRET`,
-`FORGECRM_ENCRYPTION_KEY` (32 bytes of hex) and `META_WEBHOOK_VERIFY_TOKEN`. Then:
+It asks one question — the address people will use — and derives the rest. To answer that up front
+and have it ask nothing at all, and to pin the version, which is what you want on a server you are
+handing to somebody:
 
 ```bash
-./up.sh                                                    # start
-docker compose logs backend | grep -A5 "FIRST-RUN ADMIN"   # the generated admin password
-./down.sh                                                  # stop, keeping the data
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v1.4.0/scripts/install.sh)" -- \
+  --version v1.4.0 --domain crm.example.com
 ```
+
+Give it a domain whose DNS already points at the machine and it obtains a Let's Encrypt certificate
+on the way up, then verifies the certificate actually works before telling you it is done. Both
+halves of the pinned form matter: the URL fixes which *script* runs, `--version` fixes what that
+script then downloads and pulls.
+
+The installer generates every secret, so there is nothing to edit. It creates `./forge-growth`,
+leaves a copy of itself there, and prints the admin password once. Afterwards:
+
+```bash
+cd forge-growth
+./up.sh          # start — and check the public URL really answers
+./down.sh        # stop, keeping the data
+./install.sh     # upgrade: re-fetch, pull, restart
+```
+
+Run `--help` for the full flag list.
+
+> **What this command is.** It downloads a shell script over HTTPS and runs it. There is no
+> signature, and a checksum published on the same server would prove nothing. What it does have:
+> `curl --fail` so a partial download cannot execute, a sanity check on the compose file before it is
+> used, and `--version` so you can pin a reviewed release rather than tracking `main`. If you would
+> rather read it first, download it, read it, then run it — it behaves identically.
 
 **Start and stop with these two scripts rather than `docker compose` directly.** They are not
 wrappers for their own sake. `up.sh` finishes by loading the page a browser would actually open,
@@ -79,15 +98,48 @@ uses this install's name, which is the mistake that otherwise ends with two inst
 one database. They work whether they sit beside `docker-compose.yml` (this path) or in `scripts/`
 (a source checkout).
 
-Open `http://localhost:8080`. **There is no migrate step**: the migrations are baked into the backend
-image and applied at startup, which is the whole reason this path needs no repository. Upgrading is
-`docker compose pull && docker compose up -d`.
+**There is no migrate step**: the migrations are baked into the backend image and applied at
+startup, which is the whole reason this path needs no repository.
 
 | | |
 |---|---|
-| Pin a version | set `FORGEGROWTH_TAG=v1.2.3` in `.env` (default `latest`) |
-| Change the port | set `WEB_PORT` in `.env` |
-| Apply migrations yourself | set `AUTO_MIGRATE=0`; the container then only serves |
+| Upgrade | `./install.sh` — or `./install.sh --version v1.5.0` to move deliberately |
+| Pin a version | `--version v1.2.3`, remembered in `.forgegrowth-install` so later runs stay put |
+| Change the port | `./install.sh --port 9000` |
+| Change the address | `./install.sh --domain new.example.com` |
+| Apply migrations yourself | set `AUTO_MIGRATE=0` in `.env`; the container then only serves |
+
+Downgrading is not supported: migrations run forward at boot, so pinning back to an older tag runs
+old code against a newer schema. Take a dump first — `down.sh` prints the command.
+
+<details>
+<summary>Doing it by hand, without the installer</summary>
+
+Four files and a `.env` you fill in yourself:
+
+```bash
+mkdir forge-growth && cd forge-growth
+curl -o docker-compose.yml https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/docker-compose.images.yml
+curl -o .env               https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/.env.example
+curl -O https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/scripts/up.sh
+curl -O https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/scripts/down.sh
+chmod +x up.sh down.sh
+./scripts/generate-secrets.sh >> .env   # or fill in the five empty values yourself
+```
+
+Set `CORS_ORIGIN` and `FORGECRM_DOMAIN` to the address the browser will use, then `./up.sh`. The
+admin password is printed once:
+
+```bash
+docker compose logs backend | grep -A5 "FIRST-RUN ADMIN"
+```
+
+For HTTPS you also need `caddy/Caddyfile` from the repo, plus `TLS_DOMAIN`, `TLS_EMAIL`,
+`COMPOSE_PROFILES=tls` and `WEB_BIND=127.0.0.1` in `.env`. This is the part the installer exists to
+get right — if `caddy/Caddyfile` is missing, Docker creates a *directory* at that path and Caddy
+fails with a message about none of this.
+
+</details>
 
 Images are published to GHCR on every push to `main`, as
 `ghcr.io/forgemind-git/forgegrowth-backend` and `-web`, tagged `latest`, the release version, and
