@@ -210,6 +210,47 @@ usually the right answer. That form is also the portable one: it works on any
 machine without you knowing its address or which port is free, because it picks
 the port first and then builds the address around it.
 
+### Running it on your laptop
+
+Same one-liner, and `--yes` correctly resolves to localhost here because a laptop has no public
+address of its own:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/scripts/install.sh)" -- --yes
+```
+
+It creates `~/forge-growth`, serves on port 8080 — or the next free one, which it tells you — and
+prints the admin password once. To read it back:
+
+```bash
+cd ~/forge-growth
+grep '^BOOTSTRAP_ADMIN_PASSWORD=' .env
+```
+
+**macOS** — Docker Desktop, OrbStack or Colima. Apple Silicon and Intel both work; the published
+images carry `linux/amd64` and `linux/arm64`, so nothing is emulated.
+
+**Windows** — run it inside **WSL2** (or Git Bash):
+
+```powershell
+wsl --install          # PowerShell as Administrator, then reboot
+```
+
+Then enable *Docker Desktop → Settings → Resources → WSL integration* for your distro, and install
+from the Ubuntu terminal. **Use `~/forge-growth`, not `/mnt/c/...`** — a location on the Windows
+drive is dramatically slower and confuses file-watching. Open the folder from Explorer with
+`explorer.exe .`, or at `\\wsl$\Ubuntu\home\<user>\forge-growth`.
+
+Everyday commands, from the install directory:
+
+```bash
+./up.sh                          # start, then verify the URL answers
+./down.sh                        # stop, keeping all data
+docker compose logs -f backend   # follow the backend
+```
+
+The first download is about 350 MB and its progress is shown as it goes.
+
 ### HTTPS on a real domain
 
 ```bash
@@ -357,6 +398,60 @@ access token**.
 
 Multiple numbers are supported; each carries its own encrypted token and its own webhook verify
 token.
+
+### Connecting WhatsApp to a laptop — ngrok
+
+Meta will not accept a `localhost` or plain-HTTP callback, so a laptop needs a public HTTPS address
+borrowed from a tunnel.
+
+**Use Meta's test number, not a live one.** Every Meta app includes one free, on its own WhatsApp
+Business Account — and since `override_callback_uri` is set per WABA rather than per phone number,
+that keeps it independent of any production number. A laptop also sleeps, and inbound messages
+arriving then are lost rather than queued.
+
+```bash
+brew install ngrok                        # macOS; on Windows install it inside WSL2
+ngrok config add-authtoken <your-token>   # dashboard.ngrok.com → Your Authtoken
+```
+
+**Claim a static domain** at *dashboard.ngrok.com → Domains → New Domain* — the free tier includes
+one. Without it the URL changes on every restart and you re-point the Meta webhook each time.
+
+```bash
+ngrok http --url=your-name.ngrok-free.app 8080     # use the port your install reported
+```
+
+**Run Meta's handshake yourself before touching Meta.** This is byte-for-byte the request it sends
+when you press *Verify and save*, and it turns a slow silent failure into a one-second answer:
+
+```bash
+cd ~/forge-growth
+TOKEN=$(grep '^META_WEBHOOK_VERIFY_TOKEN=' .env | cut -d= -f2-)
+curl -s "https://your-name.ngrok-free.app/api/webhook/whatsapp?hub.mode=subscribe&hub.verify_token=$TOKEN&hub.challenge=42"
+```
+
+It should print exactly `42`. This works with **no WhatsApp account configured yet** — the check
+falls back to the token in `.env` — so you can prove the tunnel before credentials are involved,
+which separates "my tunnel is wrong" from "my credentials are wrong".
+
+Then in Meta → WhatsApp → Configuration:
+
+| Field | Value |
+|---|---|
+| Callback URL | `https://your-name.ngrok-free.app/api/webhook/whatsapp` |
+| Verify token | the `META_WEBHOOK_VERIFY_TOKEN` you just used |
+| Subscribe to | `messages` |
+
+Watch every delivery arrive at `http://127.0.0.1:4040` — ngrok's inspector shows each request with
+its full body and lets you replay them. It is the most useful tool in this loop by a distance.
+
+**If you open the interface through the tunnel** rather than through `localhost`, add
+`your-name.ngrok-free.app` in **Admin Settings → Domain**. Otherwise API calls from that origin are
+refused, and the refusal reaches the login screen as *"Incorrect email or password"*.
+
+Two more things that bite: closing the ngrok terminal kills the tunnel silently, and the token on
+Meta's API Setup screen expires after **24 hours** — when inbound stops for no apparent reason,
+that is usually why.
 
 ---
 
