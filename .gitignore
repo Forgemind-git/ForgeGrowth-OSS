@@ -56,6 +56,11 @@ scratch/
 # PDFs / large generated artifacts
 ForgeCRM_LLD.html
 *.pdf
+# …except documentation we ship. This rule exists to keep stray exports and
+# scratch renders out of the repo, and it silently swallowed the installation
+# guide too — `git add` reported nothing and the commit went through with only
+# the README that links to it. Anything under docs/ is deliberate.
+!docs/*.pdf
 
 # Local Claude memory (machine-specific)
 .claude/
