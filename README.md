@@ -63,6 +63,11 @@ section.
 
 Two ways in. Pick the first if you only want to *run* it, the second if you want to change it.
 
+> Installing on someone else's machine, or walking a non-technical person through it?
+> [`docs/ForgeGrowth-Installation-Guide.pdf`](./docs/ForgeGrowth-Installation-Guide.pdf) is the
+> printable version — every install route end to end, plus attaching a domain, connecting WhatsApp,
+> and what the confusing errors actually mean.
+
 ### Run it from published images — no source code
 
 Nothing is cloned and nothing is built. One command:
