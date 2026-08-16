@@ -347,6 +347,13 @@ function DomainTab() {
             <>Add a domain, point its DNS at this server, then open it in a browser.
             The HTTPS certificate is obtained on that first visit — nothing to restart
             and nothing else to configure.</>
+          ) : status?.autoRouting ? (
+            // The proxy on this server publishes routes from a directory this
+            // install can write to, so the manual step does not exist here.
+            <>Add a domain and point its DNS at this server. The route is published to
+            this server’s reverse proxy automatically — nothing to restart and no file
+            to edit. The certificate comes from that proxy, or from a CDN if one sits
+            in front. Press <strong>Check</strong> below once DNS has propagated.</>
           ) : (
             <>Adding a domain here makes this install accept it straight away. Because
             another program on this server owns ports 80 and 443, the certificate has to
@@ -404,7 +411,7 @@ function DomainTab() {
                 {/* Only on installs where something else owns 80/443. Where the
                     bundled caddy owns them, adding the domain really is the whole
                     job and offering a proxy config would invent work. */}
-                {status?.tlsMode !== 'caddy' && (
+                {status?.tlsMode !== 'caddy' && !status?.autoRouting && (
                   <button onClick={() => showOverlay(r)} disabled={overlayLoading === r.id}
                     title={`Configuration your reverse proxy needs for ${r.hostname}`} style={{
                       display: 'flex', alignItems: 'center', gap: 6, padding: '7px 11px',

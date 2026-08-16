@@ -113,7 +113,19 @@ services:
       # only one. Set to 0 where migrations are applied by something else and the
       # app's database user should not hold DDL rights.
       AUTO_MIGRATE: ${AUTO_MIGRATE:-1}
+      # Optional: let this install publish its own routes to a reverse proxy that
+      # already owns ports 80/443, so a domain added in Admin Settings -> Domain
+      # needs no shell. BOTH must be set or the feature stays off — a guessed
+      # directory is either useless or writes into somebody else's proxy, and
+      # neither failure announces itself. See docs/reverse-proxy.md.
+      TRAEFIK_DYNAMIC_DIR: ${TRAEFIK_DYNAMIC_DIR:-}
+      PROXY_UPSTREAM: ${PROXY_UPSTREAM:-}
     volumes:
+      # The route directory for the optional auto-routing above is NOT mounted
+      # here. It is server-specific — the path exists only on a machine whose
+      # reverse proxy watches it — and it belongs in the same overlay that adds
+      # the proxy's own flags, so the two halves cannot drift apart. See
+      # docs/reverse-proxy.md for a complete one.
       - uploads:/app/uploads   # team profile pictures
       - media:/app/media       # downloaded WhatsApp media
       # The Claude plugin, served as a .zip from Admin Settings -> MCP Tools.

@@ -11,6 +11,7 @@
 // this lives in the database rather than in .env.
 
 const pool = require('../db');
+const traefik = require('./traefikDynamic');
 
 /* ------------------------------------------------------------------ table */
 
@@ -36,6 +37,9 @@ async function ensureDomainTables() {
   } finally {
     client.release();
   }
+  // A restart is also a repair: if the directory was wiped, remounted or the
+  // install moved, this puts the routes back without anyone touching the UI.
+  traefik.reconcile().catch(() => {});
 }
 
 /* -------------------------------------------------------------- normalise */
@@ -566,6 +570,10 @@ async function addDomain(rawHost, userId) {
     [hostname, userId || null]
   );
   invalidateCache();
+  // Publish the route immediately where this install is allowed to. Not awaited
+  // for its result beyond logging: a routing directory that is unmounted or
+  // read-only must not turn "add a domain" into a failed request.
+  traefik.reconcile().catch(() => {});
   return rows[0];
 }
 
@@ -578,6 +586,7 @@ async function setActive(id, isActive) {
     [id, !!isActive]
   );
   invalidateCache();
+  traefik.reconcile().catch(() => {});
   return rows[0] || null;
 }
 
@@ -587,6 +596,9 @@ async function removeDomain(id) {
     [id]
   );
   invalidateCache();
+  // Removing the domain removes its route file too, or the hostname keeps
+  // reaching an install that no longer accepts it — a 500 with no explanation.
+  traefik.reconcile().catch(() => {});
   return rowCount > 0;
 }
 

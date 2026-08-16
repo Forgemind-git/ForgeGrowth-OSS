@@ -154,6 +154,112 @@ server {
 
 ---
 
+---
+
+## Optional: let the app publish its own routes
+
+Everything above is per-domain manual work. If this server's Traefik is yours to
+configure, one setup makes it automatic: adding a domain in Admin Settings → Domain
+then needs no shell at all, the same as on a server that owns ports 80/443.
+
+Traefik can watch a **directory** for route files alongside the container labels it
+already reads. Give it one this install can write to, and the app publishes a route
+per domain you add — and deletes it when you remove the domain.
+
+### What it can and cannot do
+
+This matters more than the setup, because the directory is honoured by a Traefik
+that also serves your other sites.
+
+| | |
+|---|---|
+| Routes are generated from | `custom_domains` only — nothing reachable from a request, header or webhook |
+| Route priority | **1**, the lowest Traefik accepts |
+| Can it take a hostname another site already serves? | **No.** A router's default priority is its rule length (~30), so any existing router wins. The route applies only where nothing else claims the name |
+| Can it delete other route files? | **No.** Only files carrying this install's own prefix, which is derived from its upstream container |
+| Certificates | never requested on this path — a file-provider route cannot tell whether a CDN fronts the name, and guessing wrong burns a per-account ACME rate limit |
+
+So it takes the domain you entered, and cannot take anybody else's.
+
+### Setup — once per server
+
+**1. Give Traefik a file provider.** Add to its flags:
+
+```
+--providers.file.directory=/dynamic
+--providers.file.watch=true
+```
+
+and mount the directory into it:
+
+```yaml
+    volumes:
+      - /opt/forgegrowth-routes:/dynamic
+```
+
+Traefik has to restart once for the flags (about five seconds). It keeps its
+certificates — they live in its own volume.
+
+**2. Point this install at the same directory**, in your `.env`:
+
+```bash
+TRAEFIK_DYNAMIC_DIR=/dynamic
+PROXY_UPSTREAM=http://forgegrowth-web-1:80
+PROXY_ROUTES_DIR=/opt/forgegrowth-routes
+```
+
+`PROXY_UPSTREAM` is how Traefik reaches this install over the shared network —
+use the **container name**, not the compose service name. A service alias is not
+unique once two installs share a network, and `web` would then resolve to
+whichever container answered first.
+
+Find it with:
+
+```bash
+docker compose ps --format '{{.Name}}' | grep web
+```
+
+**3. Mount the directory into this install** and join the proxy network, in an
+overlay kept outside the install directory:
+
+```yaml
+# /opt/forgegrowth-routing.yml
+services:
+  backend:
+    volumes:
+      - ${PROXY_ROUTES_DIR}:${TRAEFIK_DYNAMIC_DIR}
+  web:
+    networks: [default, proxy_default]
+
+networks:
+  proxy_default:
+    external: true
+```
+
+```bash
+echo 'COMPOSE_FILE=docker-compose.yml:/opt/forgegrowth-routing.yml' >> .env
+docker compose up -d
+```
+
+The route directory is deliberately **not** mounted by the shipped compose files:
+the path exists only on a server whose proxy watches it, and it belongs in the same
+overlay that adds the proxy's own flags so the two halves cannot drift apart.
+
+### Confirming it is on
+
+Admin Settings → Domain no longer offers a **Setup file** button, and the wording
+changes to say routes are published automatically. Add a domain, point its DNS
+here, press **Check**.
+
+If a route does not appear, the backend log says why — a directory that is
+read-only or unmounted is reported there and never turned into a failed request:
+
+```bash
+docker compose logs backend | grep '\[traefik\]'
+```
+
+---
+
 ## Finish in the app, then verify
 
 1. **Admin Settings → Domain → add the hostname.** Until you do, the API refuses browser requests

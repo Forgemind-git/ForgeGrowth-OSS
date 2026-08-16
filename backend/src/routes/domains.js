@@ -112,6 +112,11 @@ router.get('/domains/status', adminOnly, async (req, res) => {
     // certificates it cannot deliver would be the worse error.
     const tlsMode = String(process.env.TLS_MODE || '').trim() === 'caddy' ? 'caddy' : 'proxy';
 
+    // Whether this install can publish its own routes to the reverse proxy. When
+    // it can, adding a domain is the whole job here too and the screen must not
+    // send someone to paste a file that is already being written for them.
+    const autoRouting = require('../services/traefikDynamic').enabled();
+
     if (!tlsDomain && proto !== 'https') {
       warnings.push({
         level: 'warn',
@@ -121,8 +126,11 @@ router.get('/domains/status', adminOnly, async (req, res) => {
               + (tlsMode === 'caddy'
                 ? 'Add a domain below and point its DNS here — the certificate is obtained '
                 + 'on the first visit.'
-                : 'Something else on this server owns ports 80 and 443, so add the domain '
-                + 'below and then point that reverse proxy at this install.'),
+                : autoRouting
+                  ? 'Add a domain below and point its DNS here — the route is published to '
+                  + 'this server\'s reverse proxy automatically.'
+                  : 'Something else on this server owns ports 80 and 443, so add the domain '
+                  + 'below and then point that reverse proxy at this install.'),
       });
     }
 
@@ -133,6 +141,7 @@ router.get('/domains/status', adminOnly, async (req, res) => {
       corsOrigin,
       tlsDomain: tlsDomain || null,
       tlsMode,
+      autoRouting,
       approved,
       warnings,
     });
