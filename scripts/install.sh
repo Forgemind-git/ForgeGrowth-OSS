@@ -68,14 +68,19 @@ Accounts and certificates:
 
 Other:
   --no-build            Skip the image build (source installs only).
-  --yes, -y             Never ask. With no address flag that means localhost,
-                        which is not a public install.
+  --yes, -y             Never ask. With no address flag it takes this machine's
+                        own public address when it has one, and localhost when it
+                        does not (behind NAT, or a laptop).
   --help, -h            This text.
 EOF
 }
 
 # ── arguments ────────────────────────────────────────────────────────────────
 WEB_PORT=''; PUBLIC_URL=''; ADMIN_EMAIL=''; ADMIN_PASSWORD=''
+# A second accepted browser origin, set only where the address given is genuinely
+# ambiguous about its port. Empty in every other case. See the proxy branch of
+# the derived-address block.
+CORS_EXTRA=''
 DOMAIN=''; TLS_EMAIL=''
 ASSUME_YES=0; DO_BUILD=1
 MODE=''; INSTALL_DIR=''; PIN_REF=''
@@ -204,11 +209,13 @@ ask() { # ask <prompt> <default> <flag-that-supplies-it> -> echoes the answer
   if [ "$INTERACTIVE" = 0 ]; then
     die "nothing here can answer \"$prompt\", and this run has no terminal.
 
-  Guessing gives you an install on http://localhost — reachable by nobody — with
-  that address stored in its database as the one to build public links from.
+  The address is stored in the database as the one every public link is built
+  from, so a wrong answer here surfaces much later as links that 404 — and as
+  browser requests refused by CORS, which arrive at the login screen as
+  \"Incorrect email or password\".
 
-  Either supply it:     $SELF $flag <value>
-  or accept localhost:  $SELF --yes"
+  Either supply it:      $SELF $flag <value>
+  or take the default:   $SELF --yes   ${DIM}(currently: $default)${N}"
   fi
   printf '  %s [%s]: ' "$prompt" "$default" >&2
   read -r reply <&3 || reply=''
@@ -537,6 +544,64 @@ if docker compose ps --status running --services 2>/dev/null | grep -qx web; the
   ours_running=1
 fi
 
+is_ipv4() {
+  case "$1" in ''|*[!0-9.]*) return 1 ;; esac
+  local octet rest="$1" count=0
+  while [ -n "$rest" ]; do
+    octet=${rest%%.*}
+    case "$rest" in *.*) rest=${rest#*.} ;; *) rest='' ;; esac
+    [ -n "$octet" ] || return 1
+    [ "$octet" -le 255 ] 2>/dev/null || return 1
+    count=$((count + 1))
+  done
+  [ "$count" = 4 ]
+}
+
+# Addresses that exist on the machine but are NOT how anyone reaches it: RFC1918
+# behind NAT, loopback, link-local, and 100.64/10 — the carrier-grade range that
+# Tailscale also uses, so a box on a tailnet has one of these sitting right next
+# to its real address.
+is_private_ipv4() {
+  case "$1" in
+    10.*|127.*|169.254.*|192.168.*|0.*|255.*)  return 0 ;;
+    172.1[6-9].*|172.2[0-9].*|172.3[01].*)     return 0 ;;
+    100.6[4-9].*|100.[7-9][0-9].*|100.1[01][0-9].*|100.12[0-7].*) return 0 ;;
+  esac
+  return 1
+}
+
+# The address this machine is actually reachable at, asked of the kernel rather
+# than of a stranger: "which source address would you use to reach the internet?"
+#
+# Deliberately NOT `curl ifconfig.me`. That needs the network, trusts a third
+# party, and on a dual-stack host answers with the IPv6 address — verified: this
+# project's own server returns 2a02:4780:12:a474::1, which builds a URL that
+# works for nobody. `hostname -I` is no better: on that same box it lists nine
+# addresses, seven of them docker bridges.
+#
+# Silent unless the answer is a PUBLIC IPv4. Behind NAT the machine's own address
+# is not the address people type, and offering 10.x as "the address people will
+# use" is a confident wrong answer — worse than the localhost it replaces,
+# because localhost at least looks obviously unfinished.
+detect_public_ipv4() {
+  local ip='' iface=''
+  if command -v ip >/dev/null 2>&1; then
+    ip=$(ip -4 route get 1.1.1.1 2>/dev/null \
+         | sed -n 's/.*[[:space:]]src[[:space:]]*\([0-9.]*\).*/\1/p' | head -1)
+  fi
+  if [ -z "$ip" ] && command -v route >/dev/null 2>&1; then
+    # macOS has no `ip`: ask for the default route's interface, then its address.
+    iface=$(route -n get default 2>/dev/null \
+            | sed -n 's/.*interface:[[:space:]]*\([^[:space:]]*\).*/\1/p' | head -1)
+    if [ -n "$iface" ] && command -v ipconfig >/dev/null 2>&1; then
+      ip=$(ipconfig getifaddr "$iface" 2>/dev/null)
+    fi
+  fi
+  is_ipv4 "$ip" || return 1
+  is_private_ipv4 "$ip" && return 1
+  printf '%s' "$ip"
+}
+
 # ── the one question ─────────────────────────────────────────────────────────
 #
 # Everything about the public address comes from a single answer: the CORS
@@ -583,8 +648,27 @@ else
       esac
       ok "address $keep_origin  ${DIM}(unchanged)${N}" ;;
     *)
-      ADDRESS=$(ask 'Domain people will use to reach this (blank for localhost)' \
-                    localhost --domain) ;;
+      # A server that has a public address should not have to be told its own
+      # address. Offered as the DEFAULT rather than chosen silently: it is still
+      # visible, still one keypress to accept, and still overridable by typing a
+      # domain — but nobody ends up with a localhost install on a machine whose
+      # entire purpose is being reachable.
+      #
+      # This is also what --yes now means on such a machine. It used to mean
+      # localhost, which the die() text three functions up already argues against:
+      # "an install on http://localhost — reachable by nobody — with that address
+      # stored in its database as the one to build public links from". Guessing
+      # localhost was still a guess; it was just a guess that always lost.
+      DETECTED=$(detect_public_ipv4 || true)
+      if [ -n "$DETECTED" ]; then
+        ADDRESS=$(ask 'Domain people will use to reach this' "$DETECTED" --domain)
+        if [ "$ADDRESS" = "$DETECTED" ]; then
+          ok "address $DETECTED  ${DIM}(this machine's own public address)${N}"
+        fi
+      else
+        ADDRESS=$(ask 'Domain people will use to reach this (blank for localhost)' \
+                      localhost --domain)
+      fi ;;
   esac
 fi
 
@@ -594,19 +678,6 @@ ADDRESS=${ADDRESS#*://}; ADDRESS=${ADDRESS%%/*}; ADDRESS=${ADDRESS%.}
 ADDR_PORT=''
 case "$ADDRESS" in *:[0-9]*) ADDR_PORT=${ADDRESS##*:}; ADDRESS=${ADDRESS%:*} ;; esac
 ADDRESS=$(printf '%s' "$ADDRESS" | tr '[:upper:]' '[:lower:]')
-
-is_ipv4() {
-  case "$1" in ''|*[!0-9.]*) return 1 ;; esac
-  local octet rest="$1" count=0
-  while [ -n "$rest" ]; do
-    octet=${rest%%.*}
-    case "$rest" in *.*) rest=${rest#*.} ;; *) rest='' ;; esac
-    [ -n "$octet" ] || return 1
-    [ "$octet" -le 255 ] 2>/dev/null || return 1
-    count=$((count + 1))
-  done
-  [ "$count" = 4 ]
-}
 
 # ⚠ The order of these tests matters. 203.0.113.4 has dots in it and is NOT a
 # domain — checking for a dot first would send the installer off to obtain a
@@ -813,7 +884,39 @@ fi
 # ── the derived address ──────────────────────────────────────────────────────
 case "$SHAPE" in
   domain) PUBLIC_URL="https://$ADDRESS" ;;
-  proxy)  PUBLIC_URL=${PUBLIC_URL%/} ;;
+  proxy)  PUBLIC_URL=${PUBLIC_URL%/}
+    # ⚠ `--url http://host` with no port, on a site served from a port that is
+    #   not 80. The browser will send Origin: http://host:8080; CORS_ORIGIN says
+    #   http://host; they do not match, the request is refused, and the refusal
+    #   arrives as a bare 500 that the login screen renders as "Incorrect email
+    #   or password". Hours get spent on a password that was right all along.
+    #
+    #   It cannot simply be corrected, because the same spelling is also right:
+    #   a reverse proxy listening on port 80 and forwarding here means people
+    #   really do type http://host with no port. Guessing either way breaks the
+    #   other, so BOTH are accepted — CORS_ORIGIN takes a comma-separated list —
+    #   and the ambiguity is named out loud instead of resolved by coin flip.
+    #
+    #   FORGECRM_DOMAIN keeps what was typed: that is the address the operator
+    #   said people would use, and it is what public links get built from.
+    case "$PUBLIC_URL" in
+      http://*)
+        url_host=${PUBLIC_URL#http://}
+        case "$url_host" in
+          *:[0-9]*) : ;;                       # a port was given — nothing to do
+          *)
+            if [ "$WEB_PORT" != 80 ]; then
+              # Kept OUT of PUBLIC_URL on purpose: that variable is also the URL
+              # this script fetches to prove the site answers, the source of
+              # FORGECRM_DOMAIN, and what the summary prints. A comma-separated
+              # list belongs in CORS_ORIGIN and nowhere else.
+              CORS_EXTRA="http://$url_host:$WEB_PORT"
+              warn "http://$url_host has no port, but this serves on $WEB_PORT."
+              warn "  Accepting both origins. If people reach it at $CORS_EXTRA,"
+              warn "  re-run with --url $CORS_EXTRA so public links are built with it."
+            fi ;;
+        esac ;;
+    esac ;;
   # WEB_PORT already absorbed any port in the address, so there is one source
   # of truth for it rather than two that can disagree.
   *)      PUBLIC_URL="http://$ADDRESS:$WEB_PORT" ;;
@@ -865,7 +968,11 @@ if [ -z "$ADMIN_PASSWORD" ] && needs_value BOOTSTRAP_ADMIN_PASSWORD; then
 fi
 
 set_env WEB_PORT "$WEB_PORT"
-set_env CORS_ORIGIN "$PUBLIC_URL"
+# CORS_ORIGIN is the one setting that may hold a list — backend/src/index.js
+# splits it on commas. CORS_EXTRA is set only when the given --url omits a port
+# the site is actually served on, where both spellings are legitimate and
+# refusing one produces a login failure reported as a wrong password.
+set_env CORS_ORIGIN "${PUBLIC_URL}${CORS_EXTRA:+,$CORS_EXTRA}"
 # NOT a cookie domain — util/session.js sets no cookie domain at all. This is the
 # fallback host for building absolute links (the public lead-form page, the MCP
 # connector URL) when a request arrives with no Host header. Those are built as

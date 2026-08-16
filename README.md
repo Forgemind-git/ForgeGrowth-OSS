@@ -198,11 +198,17 @@ pressing return. To skip the questions entirely:
 | `--port <n>` | host port for the UI (default 8080) |
 | `--domain <host>` | serve HTTPS on this domain, certificate and renewal included |
 | `--tls-email <addr>` | certificate contact (default: the admin email; `internal` self-signs) |
-| `--url <origin>` | public origin the browser will use; sets CORS and the cookie domain |
+| `--url <origin>` | public origin the browser will use; sets CORS. **Include the port** if people reach it on one — `http://203.0.113.10:8080`, not `http://203.0.113.10` |
 | `--admin-email <addr>` | first-run admin |
 | `--admin-password <pw>` | first-run password (omit and one is generated) |
 | `--no-build` | skip the image build |
-| `--yes` / `-y` | accept every default, never prompt |
+| `--yes` / `-y` | never prompt. Takes this machine's own public address when it has one, localhost when it does not |
+
+Run it with no address flag at all and it asks one question, offering the
+machine's public address as the default — so on a server, pressing return is
+usually the right answer. That form is also the portable one: it works on any
+machine without you knowing its address or which port is free, because it picks
+the port first and then builds the address around it.
 
 ### HTTPS on a real domain
 
