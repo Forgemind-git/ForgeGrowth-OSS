@@ -19,6 +19,8 @@ const {
   normalizeHostname,
   validateHostname,
   interpretReachability,
+  routerNameFor,
+  buildTraefikOverlay,
 } = require('../src/services/domainService');
 
 test('normalizeHostname reduces every spelling of one host to the same value', async (t) => {
@@ -202,6 +204,94 @@ test('every outcome is renderable: level, title and detail are always present', 
       assert.ok(r.detail && r.detail.length > 30, 'needs an actionable sentence');
     });
   }
+});
+
+/* -------------------------------------------------- generated proxy config */
+
+// The generated file exists to remove two specific mistakes that the documented
+// example reliably produces. Both cost an afternoon each when made by hand, and
+// both fail in ways that point at the wrong thing — so they are what is tested,
+// not the YAML's cosmetics.
+
+test('router name is derived from the host and safe for Traefik', async (t) => {
+  const cases = [
+    ['crm.example.com', 'crm'],
+    ['my-crm.example.co.uk', 'my-crm'],
+    ['UPPER.example.com', 'upper'],
+    ['weird_name.example.com', 'weirdname'],
+  ];
+  for (const [host, expected] of cases) {
+    await t.test(`${host} -> ${expected}`, () => {
+      assert.strictEqual(routerNameFor(normalizeHostname(host)), expected);
+    });
+  }
+});
+
+test('exactly one service is declared, whatever the CDN verdict', async (t) => {
+  // Declaring a service per router is the obvious way to write this by hand, and
+  // it makes Traefik discard EVERY router on the container — 404 from the
+  // catch-all, one line in a log, every container still healthy.
+  for (const behindCdn of [true, false, null]) {
+    await t.test(`behindCdn=${behindCdn}`, () => {
+      const yaml = buildTraefikOverlay({ hostname: 'crm.example.com', behindCdn, network: 'proxy_net' });
+      const services = yaml.match(/loadbalancer\.server\.port/g) || [];
+      assert.strictEqual(services.length, 1, 'exactly one service');
+      assert.match(yaml, /routers\.crm\.service=crm/, 'router names its service explicitly');
+    });
+  }
+});
+
+test('the detected CDN is named in the file, not called "a CDN"', () => {
+  // detectCdn returns { behindCdn, name } while the builder takes `cdnName`, so
+  // spreading one into the other drops the name and the generated comment reads
+  // "A CDN terminates TLS" — true, unhelpful, and the reason someone re-derives
+  // by hand what the file already knew.
+  const yaml = buildTraefikOverlay({
+    hostname: 'crm.example.com', behindCdn: true, cdnName: 'Cloudflare', network: 'n',
+  });
+  assert.match(yaml, /Cloudflare terminates TLS/);
+  assert.doesNotMatch(yaml, /A CDN terminates TLS/);
+});
+
+test('a CDN-fronted host gets NO certresolver', () => {
+  // The resolver would issue an ACME challenge that cannot reach Traefik, retry
+  // forever, and burn a per-ACCOUNT rate limit — taking unrelated domains on the
+  // same server down with it.
+  const yaml = buildTraefikOverlay({
+    hostname: 'crm.example.com', behindCdn: true, cdnName: 'Cloudflare', network: 'proxy_net',
+  });
+  assert.doesNotMatch(yaml, /^\s*-\s*traefik\.http\.routers\.crm\.tls\.certresolver/m);
+  assert.match(yaml, /Cloudflare/);
+});
+
+test('a directly-resolving host does get one, as an active line', () => {
+  const yaml = buildTraefikOverlay({
+    hostname: 'crm.example.com', behindCdn: false, network: 'proxy_net', certResolver: 'myresolver',
+  });
+  assert.match(yaml, /^\s*-\s*traefik\.http\.routers\.crm\.tls\.certresolver=myresolver$/m);
+});
+
+test('an unknown CDN verdict comments the resolver out rather than guessing', () => {
+  // Folding "could not tell" into "no CDN" would emit a live certresolver for a
+  // host that may be behind one — the expensive direction to be wrong in.
+  const yaml = buildTraefikOverlay({ hostname: 'crm.example.com', behindCdn: null, network: 'proxy_net' });
+  assert.doesNotMatch(yaml, /^\s*-\s*traefik\.http\.routers\.crm\.tls\.certresolver/m);
+  assert.match(yaml, /^\s*#\s*-\s*traefik\.http\.routers\.crm\.tls\.certresolver/m);
+  assert.match(yaml, /unknown/i);
+});
+
+test('the host is quoted so a Host() rule survives being pasted', () => {
+  // Backticks inside an unquoted YAML value are how a copied rule silently stops
+  // matching.
+  const yaml = buildTraefikOverlay({ hostname: 'crm.example.com', behindCdn: true, network: 'n' });
+  assert.match(yaml, /- "traefik\.http\.routers\.crm\.rule=Host\(`crm\.example\.com`\)"/);
+});
+
+test('a missing network name leaves a placeholder, never a plausible guess', () => {
+  // The container has no Docker socket, so it cannot know this. A wrong-but-
+  // plausible name produces a stack that starts and is unreachable.
+  const yaml = buildTraefikOverlay({ hostname: 'crm.example.com', behindCdn: true, network: '' });
+  assert.match(yaml, /REPLACE_WITH_YOUR_PROXY_NETWORK/);
 });
 
 test('validation runs on the normalised value, not the raw input', () => {

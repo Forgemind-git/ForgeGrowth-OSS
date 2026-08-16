@@ -349,6 +349,193 @@ async function checkDomainById(id) {
   return { hostname: rows[0].hostname, ...result };
 }
 
+/* --------------------------------------------- reverse-proxy configuration */
+
+// On a server where this install owns ports 80 and 443, a domain added in the UI
+// needs nothing else: the bundled Caddy obtains its certificate on the first
+// visit. On a server that already runs something on those ports, it cannot —
+// the app has no access to the configuration of a program it does not run.
+//
+// What it CAN do is write out the exact file that program needs, filled in, so
+// the remaining step is copy-and-paste rather than reading a document and
+// adapting an example. Everything below is about removing the two mistakes that
+// example reliably produces: a service declared per router, and a certresolver
+// on a hostname whose ACME challenge can never succeed.
+
+// A Traefik router name. Derived from the first label so it reads like the site,
+// and stripped to what Traefik accepts.
+function routerNameFor(hostname) {
+  const first = String(hostname || '').split('.')[0].replace(/[^a-z0-9-]/g, '');
+  return first || 'forgegrowth';
+}
+
+// Is this hostname served through a CDN that terminates TLS itself?
+//
+// This is the one decision in the generated file that cannot be guessed, and
+// getting it wrong is not cosmetic: a certresolver on a CDN-fronted host issues
+// an ACME challenge that can NEVER succeed, retries forever, and those failures
+// are rate-limited per ACME account — enough of them stop unrelated domains on
+// the same server from renewing.
+//
+// Detected rather than asked, because the signal is unambiguous: every response
+// through Cloudflare carries a cf-ray header, and other CDNs identify themselves
+// in `server` just as plainly. A null answer means "could not tell" and the
+// caller says so rather than picking a side.
+async function detectCdn(hostname) {
+  const host = normalizeHostname(hostname);
+  if (!host) return { behindCdn: null, name: null };
+  try {
+    const res = await fetch(`https://${host}/`, {
+      method: 'HEAD',
+      redirect: 'manual',
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+    });
+    const server = String(res.headers.get('server') || '').toLowerCase();
+    if (res.headers.get('cf-ray') || server.includes('cloudflare')) {
+      return { behindCdn: true, name: 'Cloudflare' };
+    }
+    for (const [needle, label] of [
+      ['akamai', 'Akamai'], ['fastly', 'Fastly'], ['cloudfront', 'CloudFront'], ['sucuri', 'Sucuri'],
+    ]) {
+      if (server.includes(needle)) return { behindCdn: true, name: label };
+    }
+    return { behindCdn: false, name: null };
+  } catch {
+    // Unreachable tells us nothing about a CDN, and inventing an answer here is
+    // how the wrong certresolver decision gets baked into a file someone pastes.
+    return { behindCdn: null, name: null };
+  }
+}
+
+const NETWORK_PLACEHOLDER = 'REPLACE_WITH_YOUR_PROXY_NETWORK';
+
+// Pure: same inputs, same file. Kept separate from detectCdn so the whole
+// decision table is testable without a network.
+function buildTraefikOverlay({ hostname, behindCdn, cdnName, network, certResolver }) {
+  const host = normalizeHostname(hostname);
+  const name = routerNameFor(host);
+  const net = network || NETWORK_PLACEHOLDER;
+  const resolver = certResolver || 'YOUR_CERT_RESOLVER';
+
+  // Three states, because "could not tell" must not silently become "no CDN".
+  const certLines = behindCdn === true
+    ? [
+      '      # No certresolver, deliberately.',
+      `      # ${cdnName || 'A CDN'} terminates TLS at its edge, so a TLS-ALPN-01 challenge`,
+      '      # can never reach Traefik. It would fail on every attempt forever, and those',
+      '      # failures are rate-limited per ACME ACCOUNT — enough of them stop unrelated',
+      '      # domains on this server from renewing. Traefik serves its self-signed default',
+      `      # to ${cdnName || 'the CDN'}, which accepts it and gives the browser a valid certificate.`,
+    ]
+    : behindCdn === false
+      ? [
+        `      - traefik.http.routers.${name}.tls.certresolver=${resolver}`,
+        '      # ⚠ Replace the resolver name with the one your Traefik defines. It is NOT',
+        '      #   always "letsencrypt" — a name that does not exist yields no certificate',
+        '      #   and no error. Check with:',
+        "      #     docker inspect <traefik> --format '{{join .Config.Cmd \"\\n\"}}' | grep certificatesresolvers",
+      ]
+      : [
+        `      # - traefik.http.routers.${name}.tls.certresolver=${resolver}`,
+        '      # ⚠ Could not reach this hostname, so whether a CDN fronts it is unknown.',
+        '      #   If DNS points straight at this server, uncomment the line above and set',
+        '      #   your resolver name. If a CDN (Cloudflare and the like) terminates TLS,',
+        '      #   leave it commented — its challenge could never succeed, and the failures',
+        '      #   are rate-limited per ACME account.',
+      ];
+
+  return [
+    `# Traefik routing for ${host} -> this Forge Growth install.`,
+    '#',
+    '# Generated by Admin Settings -> Domain. Save it OUTSIDE the install directory:',
+    '# install.sh re-downloads and overwrites docker-compose.yml on every upgrade, so',
+    '# labels added there survive until the next upgrade and then vanish, months later,',
+    '# with nothing connecting cause to effect.',
+    '',
+    'services:',
+    '  web:',
+    `    networks: [default, ${net}]`,
+    '    labels:',
+    '      - traefik.enable=true',
+    `      - traefik.docker.network=${net}`,
+    '',
+    '      # ⚠ ONE service, named explicitly on the router below.',
+    '      #   Traefik links a router to a service automatically only when the container',
+    '      #   declares exactly one. Declare two — the obvious way to write two routers —',
+    '      #   and it discards EVERY router on this container, answering 404 from its',
+    '      #   catch-all, with one line in its log and nothing else.',
+    `      - traefik.http.services.${name}.loadbalancer.server.port=80`,
+    '',
+    `      - "traefik.http.routers.${name}.rule=Host(\`${host}\`)"`,
+    `      - traefik.http.routers.${name}.entrypoints=web,websecure`,
+    `      - traefik.http.routers.${name}.tls=true`,
+    `      - traefik.http.routers.${name}.priority=10`,
+    `      - traefik.http.routers.${name}.service=${name}`,
+    ...certLines,
+    '',
+    'networks:',
+    `  ${net}:`,
+    '    external: true',
+    '',
+  ].join('\n');
+}
+
+// The steps around the file. Assembled here rather than in the UI so the file
+// and the commands that apply it cannot drift apart.
+function overlayInstructions({ hostname, network }) {
+  const host = normalizeHostname(hostname);
+  const path = `/opt/forgegrowth-${host}.yml`;
+  const needsNetwork = !network;
+  return {
+    path,
+    commands: [
+      ...(needsNetwork
+        ? [{
+          label: 'Find the network your reverse proxy is on, and put its name in the file',
+          cmd: "docker inspect <your-traefik-container> \\\n"
+             + "  --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{\"\\n\"}}{{end}}'",
+        }]
+        : []),
+      {
+        label: 'Save the file above, then point this install at it',
+        cmd: `echo 'COMPOSE_FILE=docker-compose.yml:${path}' >> .env`,
+      },
+      {
+        label: 'Apply it — only the web container is recreated, Traefik is not restarted',
+        cmd: 'docker compose up -d web',
+      },
+    ],
+    notes: [
+      'COMPOSE_FILE belongs in .env, never exported in a shell. Exported it is eventually '
+      + 'forgotten, and the next `docker compose up -d` brings the stack up healthy with no '
+      + 'domain attached — every container green, the site a 404.',
+      'Traefik reads these labels from the Docker socket, so it is never restarted and no '
+      + 'other site on the server is affected.',
+      'After applying, press Check on this domain. It fetches the address from outside and '
+      + 'says which part of the chain is still broken, if any.',
+    ],
+  };
+}
+
+async function buildOverlayFor(hostname, network) {
+  const host = normalizeHostname(hostname);
+  const cdn = await detectCdn(host);
+  return {
+    hostname: host,
+    routerName: routerNameFor(host),
+    behindCdn: cdn.behindCdn,
+    cdnName: cdn.name,
+    networkPlaceholder: network ? null : NETWORK_PLACEHOLDER,
+    // `cdnName`, not a spread of `cdn`: detectCdn returns { behindCdn, name },
+    // and spreading it drops the name silently — the file then says "A CDN"
+    // where it should name the one actually in front of this host.
+    yaml: buildTraefikOverlay({
+      hostname: host, behindCdn: cdn.behindCdn, cdnName: cdn.name, network,
+    }),
+    ...overlayInstructions({ hostname: host, network }),
+  };
+}
+
 /* ------------------------------------------------------------------ writes */
 
 async function listDomains() {
@@ -427,6 +614,10 @@ module.exports = {
   interpretReachability,
   checkReachability,
   checkDomainById,
+  routerNameFor,
+  buildTraefikOverlay,
+  buildOverlayFor,
+  detectCdn,
   isApproved,
   allowedOriginsFromDb,
   activeHostnames,

@@ -530,6 +530,10 @@ export const api = {
     // then http, eight seconds each), so callers show a spinner rather than
     // assuming it returns promptly.
     check: (id) => req(`/domains/${id}/check`, { method: 'POST' }),
+    // The reverse-proxy file this domain needs, already filled in — hostname,
+    // router name, and whether a certresolver belongs on it. Only shown on
+    // installs that do not own ports 80/443, where the app cannot do it itself.
+    overlay: (id) => req(`/domains/${id}/overlay`),
     setActive: (id, isActive) =>
       req(`/domains/${id}`, { method: 'PATCH', body: JSON.stringify({ isActive }) }),
     remove: (id) => req(`/domains/${id}`, { method: 'DELETE' }),

@@ -163,6 +163,36 @@ router.post('/domains/:id/check', adminOnly, async (req, res) => {
   }
 });
 
+// The reverse-proxy file this domain needs, filled in. Only meaningful when
+// something other than this install owns ports 80/443 — where the app cannot
+// configure the proxy itself and the operator has to paste a file. Generating it
+// here rather than documenting it removes the two mistakes the documented
+// example reliably produces: a service declared per router, and a certresolver
+// on a hostname whose ACME challenge can never succeed.
+//
+// GET rather than POST: it creates nothing. The outbound HEAD it makes to spot a
+// CDN is the same request the Check button already makes.
+router.get('/domains/:id/overlay', adminOnly, async (req, res) => {
+  if (!/^\d+$/.test(String(req.params.id))) {
+    return res.status(400).json({ error: 'Unknown domain' });
+  }
+  try {
+    const { rows } = await require('../db').query(
+      'SELECT hostname FROM coexistence.custom_domains WHERE id = $1',
+      [req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Domain not found' });
+    // PROXY_NETWORK is an escape hatch for an operator who already knows the
+    // name: the container cannot discover it, having no access to the Docker
+    // socket, so the file ships a placeholder and the command to fill it.
+    const network = String(process.env.PROXY_NETWORK || '').trim() || null;
+    res.json(await domains.buildOverlayFor(rows[0].hostname, network));
+  } catch (err) {
+    console.error('[domains] overlay error:', err.message);
+    res.status(500).json({ error: 'Could not build the configuration file' });
+  }
+});
+
 router.post('/domains', adminOnly, async (req, res) => {
   try {
     const row = await domains.addDomain(req.body?.hostname, req.user?.id);

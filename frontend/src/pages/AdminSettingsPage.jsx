@@ -93,6 +93,90 @@ function PlaceholderTab({ label }) {
 // disagrees with what the install was configured for — and none of it surfaces
 // as an error a user could act on. A Secure cookie over plain HTTP just looks
 // like "it logs me out"; an address missing from CORS just looks like a 500.
+// The generated reverse-proxy configuration for one domain.
+//
+// Split out because it is the only part of this screen that exists to be copied
+// rather than read, and copyable content has different rules: nothing that would
+// break when pasted, every command on its own line, and the one judgement the
+// generator made — whether a certificate resolver belongs on this hostname —
+// stated in the open rather than buried in a comment inside the file.
+function OverlayPanel({ data, copiedKey, onCopy }) {
+  if (!data) return null;
+
+  const block = {
+    fontFamily: MONO, fontSize: 12, lineHeight: 1.55, whiteSpace: 'pre',
+    overflowX: 'auto', background: C.surfaceSubtle, border: `1px solid ${C.border}`,
+    borderRadius: 7, padding: '10px 12px', margin: 0, color: C.text,
+  };
+  const copyBtn = (key, text) => (
+    <button onClick={() => onCopy(key, text)} style={{
+      display: 'flex', alignItems: 'center', gap: 5, padding: '5px 9px', borderRadius: 6,
+      border: `1px solid ${C.border}`, background: C.surface, fontSize: 12,
+      fontFamily: FONT, color: C.textSecondary, cursor: 'pointer', flexShrink: 0,
+    }}>
+      {copiedKey === key ? <Check size={13} color={C.successText} /> : <Copy size={13} />}
+      {copiedKey === key ? 'Copied' : 'Copy'}
+    </button>
+  );
+
+  // Three states, and "could not tell" is deliberately not folded into "no".
+  // Putting a certificate resolver on a CDN-fronted hostname produces an ACME
+  // challenge that can never succeed, retried forever, and the failures are
+  // rate-limited per account — so they take unrelated domains down with them.
+  const verdict = data.behindCdn === true
+    ? { tone: 'ok', text: `${data.cdnName || 'A CDN'} is in front of this domain, so it supplies the `
+        + 'certificate. The file below leaves the resolver out, on purpose.' }
+    : data.behindCdn === false
+      ? { tone: 'warn', text: 'This domain appears to point straight at this server, so the file '
+        + 'includes a certificate resolver — set it to the name your Traefik actually defines.' }
+      : { tone: 'warn', text: 'Could not reach this hostname, so whether a CDN sits in front is '
+        + 'unknown. The resolver line is commented out with a note on which way to go.' };
+
+  return (
+    <div style={{
+      marginTop: 10, padding: '12px 14px', borderRadius: 8,
+      background: C.surface, border: `1px solid ${C.border}`,
+    }}>
+      <div style={{ fontWeight: 600, fontSize: 13.5, color: C.text, marginBottom: 6 }}>
+        Configuration for the program that owns ports 80 and 443
+      </div>
+      <div style={{
+        fontSize: 12.5, lineHeight: 1.55, marginBottom: 12, padding: '8px 10px', borderRadius: 6,
+        color: C.textSecondary,
+        background: verdict.tone === 'ok' ? C.successBgSoft : C.warnBgSoft,
+        border: `1px solid ${verdict.tone === 'ok' ? C.successBorder : C.warnBorder}`,
+      }}>{verdict.text}</div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+        <span style={{ fontSize: 12.5, color: C.textMuted, flex: 1 }}>
+          Save as <code style={{ fontFamily: MONO }}>{data.path}</code>
+          {' '}— outside the install directory, which is overwritten on every upgrade.
+        </span>
+        {copyBtn('yaml', data.yaml)}
+      </div>
+      <pre style={{ ...block, marginBottom: 14 }}>{data.yaml}</pre>
+
+      {(data.commands || []).map((c, i) => (
+        <div key={i} style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 5 }}>
+            <span style={{ fontSize: 12.5, color: C.textSecondary, flex: 1 }}>
+              {i + 1}. {c.label}
+            </span>
+            {copyBtn(`cmd${i}`, c.cmd)}
+          </div>
+          <pre style={block}>{c.cmd}</pre>
+        </div>
+      ))}
+
+      <ul style={{ margin: '4px 0 0 0', paddingLeft: 16 }}>
+        {(data.notes || []).map((n, i) => (
+          <li key={i} style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.55, marginBottom: 4 }}>{n}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function DomainTab() {
   const [rows, setRows] = useState([]);
   const [status, setStatus] = useState(null);
@@ -102,6 +186,9 @@ function DomainTab() {
   const [pendingDelete, setPendingDelete] = useState(null);
   const [checking, setChecking] = useState(null);   // id currently being checked
   const [checks, setChecks] = useState({});         // id -> result of the last check
+  const [overlay, setOverlay] = useState(null);     // { id, data } — the open setup panel
+  const [overlayLoading, setOverlayLoading] = useState(null);
+  const [copiedKey, setCopiedKey] = useState('');
 
   async function load() {
     try {
@@ -147,6 +234,30 @@ function DomainTab() {
     } finally {
       setChecking(null);
     }
+  }
+
+  // On an install that does not own ports 80/443, the app cannot route a
+  // hostname to itself — it has no access to the configuration of whatever does.
+  // It can still write out that configuration, filled in, which turns "read the
+  // documentation and adapt the example" into three commands.
+  async function showOverlay(row) {
+    if (overlay?.id === row.id) { setOverlay(null); return; }
+    setOverlayLoading(row.id);
+    try {
+      setOverlay({ id: row.id, data: await api.domains.overlay(row.id) });
+    } catch (err) {
+      showError(err.message || 'Could not build the configuration file');
+    } finally {
+      setOverlayLoading(null);
+    }
+  }
+
+  async function copy(key, text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(''), 1500);
+    } catch { /* clipboard blocked — the text is on screen to select by hand */ }
   }
 
   async function remove(row) {
@@ -290,6 +401,23 @@ function DomainTab() {
                       : 'Waiting for its first visit. Check the DNS points here.'}
                   </div>
                 </div>
+                {/* Only on installs where something else owns 80/443. Where the
+                    bundled caddy owns them, adding the domain really is the whole
+                    job and offering a proxy config would invent work. */}
+                {status?.tlsMode !== 'caddy' && (
+                  <button onClick={() => showOverlay(r)} disabled={overlayLoading === r.id}
+                    title={`Configuration your reverse proxy needs for ${r.hostname}`} style={{
+                      display: 'flex', alignItems: 'center', gap: 6, padding: '7px 11px',
+                      borderRadius: 7, border: `1px solid ${C.border}`,
+                      background: overlay?.id === r.id ? C.surfaceMuted : 'transparent',
+                      fontSize: 13, fontFamily: FONT, color: C.textSecondary,
+                      cursor: overlayLoading === r.id ? 'default' : 'pointer',
+                    }}>
+                    {overlayLoading === r.id
+                      ? <Loader2 size={14} className="spin" />
+                      : <Terminal size={14} />} Setup file
+                  </button>
+                )}
                 <button onClick={() => check(r)} disabled={checking === r.id}
                   title={`Check whether ${r.hostname} reaches this install`} style={{
                     display: 'flex', alignItems: 'center', gap: 6, padding: '7px 11px',
@@ -326,6 +454,10 @@ function DomainTab() {
                     </div>
                   </div>
                 </div>
+              )}
+
+              {overlay?.id === r.id && (
+                <OverlayPanel data={overlay.data} copiedKey={copiedKey} onCopy={copy} />
               )}
             </div>
           );
