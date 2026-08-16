@@ -87,8 +87,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Sanitise the platform for use in a filename
-        run: echo "PLATFORM_PAIR=${{ matrix.platform }}" | tr '/' '-' >> "$GITHUB_ENV"
+      # ⚠ IMAGE_REF must be lowercased here and cannot be assembled inline.
+      #   github.repository_owner is `Forgemind-git`, and a registry path with a
+      #   capital in it is rejected outright:
+      #     failed to parse ref "ghcr.io/Forgemind-git/…": must be lowercase
+      #   metadata-action lowercases its own output, which is why the `images:`
+      #   input below can stay as-is — but `outputs:` on the build step names the
+      #   repository directly and gets no such help.
+      - name: Derive the lowercase image reference and a filename-safe platform
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          echo "IMAGE_REF=${{ env.REGISTRY }}/${OWNER,,}/${{ matrix.image }}" >> "$GITHUB_ENV"
+          echo "PLATFORM_PAIR=$(echo '${{ matrix.platform }}' | tr '/' '-')" >> "$GITHUB_ENV"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -117,7 +128,7 @@ jobs:
           file: ${{ matrix.dockerfile }}
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ env.IMAGE_REF }},push-by-digest=true,name-canonical=true,push=true
           # Cache in the registry so a one-line change does not rebuild
           # node_modules and (for web) the whole Vite bundle. Scoped per
           # component AND per architecture: one shared scope would have the two
@@ -161,6 +172,12 @@ jobs:
           - component: web
             image: forgegrowth-web
     steps:
+      # Same lowercasing requirement as the build job — see the note there.
+      - name: Derive the lowercase image reference
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: echo "IMAGE_REF=${{ env.REGISTRY }}/${OWNER,,}/${{ matrix.image }}" >> "$GITHUB_ENV"
+
       - uses: actions/download-artifact@v4
         with:
           path: /tmp/digests
@@ -193,7 +210,7 @@ jobs:
         run: |
           docker buildx imagetools create \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}@sha256:%s ' *)
+            $(printf '${{ env.IMAGE_REF }}@sha256:%s ' *)
 
       # Checking the outcome, not the step: a push that succeeded still leaves a
       # customer stuck if the architecture they run is missing. This fails the
@@ -201,7 +218,7 @@ jobs:
       - name: Verify both architectures are present
         run: |
           arches=$(docker buildx imagetools inspect --raw \
-            "${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}:${{ steps.meta.outputs.version }}" \
+            "${{ env.IMAGE_REF }}:${{ steps.meta.outputs.version }}" \
             | jq -r '.manifests[].platform | select(.os != "unknown") | .os + "/" + .architecture' | sort -u)
           echo "$arches"
           echo "$arches" | grep -qx 'linux/amd64' || { echo "::error::amd64 missing"; exit 1; }
