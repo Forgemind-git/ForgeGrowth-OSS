@@ -6,8 +6,19 @@
 #   <version>       for a tag push like v1.2.3  ->  1.2.3, 1.2, 1
 #   sha-<short>     always, so a deploy can pin an exact build
 #
-# No secrets to configure: GITHUB_TOKEN can push to this repo's own GHCR
-# namespace given the `packages: write` permission below.
+# Architectures produced: linux/amd64 AND linux/arm64.
+#
+# ⚠ arm64 is not optional and is not a nicety. Apple Silicon has been the only
+# Mac sold since 2020, so an amd64-only image means the documented one-command
+# install fails on every current Mac with:
+#
+#     no matching manifest for linux/arm64/v8 in the manifest list entries
+#
+# and — because Compose pulls concurrently and reports one failure against every
+# service — the error names postgres, redis, minio and caddy, which are all
+# innocent multi-arch images. The two images at fault are the two built here.
+# That is why this file builds both architectures rather than whatever the
+# runner happens to be.
 #
 # ⚠ ONE MANUAL STEP, ONCE PER PACKAGE. A GHCR package does NOT inherit the
 # repository's visibility — it is created PRIVATE even when the repo is public,
@@ -20,8 +31,10 @@
 #   Packages -> forgegrowth-backend -> Package settings -> Change visibility
 #   Packages -> forgegrowth-web     -> Package settings -> Change visibility
 #
-# Verify from a logged-out shell:
-#   docker pull ghcr.io/forgemind-git/forgegrowth-web:latest
+# Verify from a logged-out shell, and check the ARCHES too — a green run here
+# proves a push happened, not that the thing a customer needs can be pulled:
+#   docker manifest inspect ghcr.io/forgemind-git/forgegrowth-web:latest \
+#     | grep architecture
 
 name: Publish images
 
@@ -35,29 +48,47 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  publish:
-    name: ${{ matrix.name }}
-    runs-on: ubuntu-latest
+  # One job per (component, architecture). Each pushes an untagged image
+  # identified only by its digest; the merge job below binds the tags to a
+  # manifest list of both. Tagging here instead would make the two
+  # architectures race, and whichever finished last would win the tag —
+  # producing a single-arch `latest` that looks correct in the UI.
+  build:
+    name: ${{ matrix.component }} · ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
     strategy:
       fail-fast: false
       matrix:
+        component: [backend, web]
+        platform: [linux/amd64, linux/arm64]
         include:
+          # Native runners rather than QEMU. The web image runs a full Vite
+          # build, which under emulation takes tens of minutes and can be
+          # OOM-killed; `ubuntu-24.04-arm` is free for public repositories and
+          # builds it at native speed.
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
           # ⚠ The backend context is the REPO ROOT, not ./backend — its image
           #   bakes in supabase/migrations and forge-growth-plugin, which live
           #   outside ./backend. See backend/Dockerfile.
-          - name: backend
+          - component: backend
             image: forgegrowth-backend
             context: .
             dockerfile: backend/Dockerfile
-          - name: web
+          - component: web
             image: forgegrowth-web
             context: ./frontend
             dockerfile: ./frontend/Dockerfile
     steps:
       - uses: actions/checkout@v4
+
+      - name: Sanitise the platform for use in a filename
+        run: echo "PLATFORM_PAIR=${{ matrix.platform }}" | tr '/' '-' >> "$GITHUB_ENV"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -68,7 +99,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Derive tags and labels
+      - name: Derive labels
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -77,6 +108,79 @@ jobs:
           # must be lowercase or the push is rejected. Hence the compose file
           # refers to ghcr.io/forgemind-git/… in lower case.
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
+          # Cache in the registry so a one-line change does not rebuild
+          # node_modules and (for web) the whole Vite bundle. Scoped per
+          # component AND per architecture: one shared scope would have the two
+          # architectures evicting each other's layers on every run.
+          cache-from: type=gha,scope=${{ matrix.component }}-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}-${{ matrix.platform }}
+
+      # The filename is the digest with its "sha256:" prefix stripped — a colon
+      # is legal in a Linux filename but not in an uploaded artifact path. The
+      # strip has to happen in the shell: ${{ }} is GitHub's expression syntax
+      # and does not do parameter expansion.
+      - name: Export the digest
+        run: |
+          mkdir -p /tmp/digests
+          digest='${{ steps.build.outputs.digest }}'
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.component }}-${{ env.PLATFORM_PAIR }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Bind the tags to a manifest list containing both architectures. Until this
+  # runs, the images exist in the registry but no tag points at them.
+  merge:
+    name: manifest · ${{ matrix.component }}
+    runs-on: ubuntu-latest
+    needs: [build]
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [backend, web]
+        include:
+          - component: backend
+            image: forgegrowth-backend
+          - component: web
+            image: forgegrowth-web
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-${{ matrix.component }}-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{version}}
@@ -84,15 +188,21 @@ jobs:
             type=semver,pattern={{major}}
             type=sha,prefix=sha-
 
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          # Cache in the registry so a one-line change does not rebuild
-          # node_modules and (for web) the whole Vite bundle.
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Create the manifest list and push it
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}@sha256:%s ' *)
+
+      # Checking the outcome, not the step: a push that succeeded still leaves a
+      # customer stuck if the architecture they run is missing. This fails the
+      # job when it is.
+      - name: Verify both architectures are present
+        run: |
+          arches=$(docker buildx imagetools inspect --raw \
+            "${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}:${{ steps.meta.outputs.version }}" \
+            | jq -r '.manifests[].platform | select(.os != "unknown") | .os + "/" + .architecture' | sort -u)
+          echo "$arches"
+          echo "$arches" | grep -qx 'linux/amd64' || { echo "::error::amd64 missing"; exit 1; }
+          echo "$arches" | grep -qx 'linux/arm64' || { echo "::error::arm64 missing"; exit 1; }

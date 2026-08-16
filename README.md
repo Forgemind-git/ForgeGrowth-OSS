@@ -29,7 +29,20 @@ Nothing else — no Node, Postgres, Redis or MinIO on the host. Everything runs 
 
 **macOS** — works as written, with Docker Desktop, OrbStack or Colima. The installer detects the
 platform differences it cares about (it reads memory via `sysctl` rather than `/proc`, and checks
-ports with `lsof` rather than `ss`). Apple Silicon is fine; the images build natively for arm64.
+ports with `lsof` rather than `ss`). Apple Silicon is fine: the published images carry both
+`linux/amd64` and `linux/arm64`, and building from source produces arm64 natively.
+
+If a pull ever fails with `no matching manifest for linux/arm64/v8`, an arm64 image is genuinely
+missing rather than mis-detected. Compose pulls concurrently and reports one failure against every
+service, so the error will name `postgres`, `redis`, `minio` and `caddy` — all of which are
+multi-arch and none of which are the cause. Check the two images this project publishes:
+
+```bash
+docker manifest inspect ghcr.io/forgemind-git/forgegrowth-web:latest | grep architecture
+```
+
+To carry on regardless, run the amd64 images under Rosetta —
+`export DOCKER_DEFAULT_PLATFORM=linux/amd64` before installing — or build from source.
 
 **Windows** — the installer is a shell script, so run it inside a Unix shell:
 
