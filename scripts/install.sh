@@ -757,11 +757,19 @@ if [ "$SHAPE" = domain ]; then
 else
   # Make sure a previous domain run does not leave HTTPS half-on: the profile
   # would still start caddy, now for a domain this install no longer answers to.
+  #
+  # ⚠ Say nothing here. The branch below may switch caddy straight back on, and
+  #   announcing the clear at this point printed a flat contradiction two lines
+  #   apart:
+  #       ! HTTPS turned off — re-run with --domain <host> to bring it back.
+  #       ✓ HTTPS ready  (add a domain in Admin Settings → Domain whenever you like)
+  #   What is actually lost is the certificate for a specific host, not HTTPS —
+  #   so remember the host and report it once the state has settled.
+  DROPPED_TLS_DOMAIN=$(get_env TLS_DOMAIN)
   if [ -n "$(get_env COMPOSE_PROFILES)" ]; then
     set_env COMPOSE_PROFILES ''
     set_env TLS_DOMAIN ''
     set_env WEB_BIND '0.0.0.0'
-    warn 'HTTPS turned off — re-run with --domain <host> to bring it back.'
   fi
 
   # ── can this install add domains for itself later? ───────────────────────
@@ -792,6 +800,13 @@ else
     set_env TLS_MODE caddy
     export COMPOSE_PROFILES=tls
     ok "HTTPS ready  ${DIM}(add a domain in Admin Settings → Domain whenever you like)${N}"
+  fi
+
+  # Reported last, and only when a named host really was dropped — this address
+  # no longer carries a certificate for it, whatever the lines above said about
+  # HTTPS in general. Naming the host makes the fix copy-pasteable.
+  if [ -n "$DROPPED_TLS_DOMAIN" ]; then
+    warn "no longer serving $DROPPED_TLS_DOMAIN — re-run with --domain $DROPPED_TLS_DOMAIN to bring that back."
   fi
 fi
 
@@ -922,12 +937,27 @@ if [ "$MODE" = source ] && [ "$DO_BUILD" = 1 ]; then
 elif [ "$MODE" = images ]; then
   step "Downloading images ($IMAGE_TAG)"
   pull_log=$(mktemp "${TMPDIR:-/tmp}/forgegrowth-pull.XXXXXX")
-  if docker compose pull 2>"$pull_log"; then
+  # ⚠ Compose writes its progress display to STDERR. Capturing stderr for the
+  #   error handler below therefore also hides every "Downloading 45%" line, and
+  #   this is the longest step of a first install — several hundred MB. The
+  #   screen sits on one heading for minutes with no cursor movement, which reads
+  #   as a hang, and the honest report from someone watching it is "it's stuck".
+  #
+  #   `tee` keeps both: the reader sees progress, the handler still gets the text
+  #   to match on. Piped rather than run through a process substitution so the
+  #   shell waits for tee to finish writing before the file is read below —
+  #   otherwise the error text is occasionally empty and the diagnosis is lost
+  #   exactly when it is needed. PIPESTATUS because the pipeline's own status is
+  #   tee's, which is always 0.
+  docker compose pull 2>&1 | tee "$pull_log"
+  pull_status=${PIPESTATUS[0]}
+  if [ "$pull_status" = 0 ]; then
     rm -f "$pull_log"
     ok 'images downloaded'
   else
+    # Not re-printed: tee already put it on screen above. It is read here only
+    # so the cases below can turn Docker's wording into something actionable.
     pull_err=$(cat "$pull_log"); rm -f "$pull_log"
-    printf '%s\n' "$pull_err" >&2
     case "$pull_err" in
       # A GHCR package is created PRIVATE even when its repository is public, and
       # the publish workflow cannot change that. So the first install from a
@@ -1083,7 +1113,15 @@ if [ -n "$ADMIN_PASSWORD" ]; then
 elif [ -n "$(get_env BOOTSTRAP_ADMIN_PASSWORD)" ]; then
   # Re-run against an existing install: we did not touch the password, and it is
   # sitting in .env — so do not send the reader to a log line that is long gone.
-  printf '    Password  %s(unchanged — see BOOTSTRAP_ADMIN_PASSWORD in .env)%s\n' "$DIM" "$N"
+  #
+  # ⚠ Print the command, not the variable name. "Unchanged" reads as "you saw it
+  #   last time", and there is a common case where nobody ever did: a first run
+  #   that generated the password into .env and then failed — on the image pull,
+  #   say — never reached this summary. The next run finds the value present,
+  #   lands here, and the password has now been reported twice without once being
+  #   shown. Someone non-technical is simply locked out at that point.
+  printf '    Password  %s(unchanged — read it with:)%s\n' "$DIM" "$N"
+  printf "                grep '^BOOTSTRAP_ADMIN_PASSWORD=' .env\n"
 else
   echo '    Password  printed once in the backend log:'
   echo '                docker compose logs backend | grep -A5 "FIRST-RUN ADMIN"'
