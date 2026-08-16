@@ -68,6 +68,11 @@ Accounts and certificates:
 
 Other:
   --no-build            Skip the image build (source installs only).
+  --proxy-routes <dir>  For a server whose reverse proxy already owns 80/443:
+                        publish routes into <dir>, which that proxy watches, so
+                        domains added in Admin Settings -> Domain need no shell.
+                        The proxy container and its network are detected. Set up
+                        the proxy's own side once first — docs/reverse-proxy.md.
   --yes, -y             Never ask. With no address flag it takes this machine's
                         own public address when it has one, and localhost when it
                         does not (behind NAT, or a laptop).
@@ -83,7 +88,7 @@ WEB_PORT=''; PUBLIC_URL=''; ADMIN_EMAIL=''; ADMIN_PASSWORD=''
 CORS_EXTRA=''
 DOMAIN=''; TLS_EMAIL=''
 ASSUME_YES=0; DO_BUILD=1
-MODE=''; INSTALL_DIR=''; PIN_REF=''
+MODE=''; INSTALL_DIR=''; PIN_REF=''; PROXY_ROUTES=''
 # --url and --domain both name the address, but they mean opposite things about
 # who terminates TLS, so which one was used has to survive into the logic.
 URL_GIVEN=0
@@ -108,6 +113,7 @@ while [ $# -gt 0 ]; do
     --images)         MODE=images; shift ;;
     --source)         MODE=source; shift ;;
     --no-build)       DO_BUILD=0; shift ;;
+    --proxy-routes)   need_arg "$@"; PROXY_ROUTES="$2"; shift 2 ;;
     -y|--yes)         ASSUME_YES=1; shift ;;
     -h|--help)        usage; exit 0 ;;
     *)                die "unknown option: $1 (try --help)" ;;
@@ -146,6 +152,19 @@ fi
 
 # ── where the install lives ──────────────────────────────────────────────────
 if [ "$MODE" = source ]; then
+  # ⚠ --dir has no meaning here and must not be quietly dropped. A source install
+  #   builds the checkout it lives in, so `--source --dir /somewhere/else` cannot
+  #   do what it says — and the install it DOES perform lands on the checkout,
+  #   which on a machine where that checkout is a running service means editing a
+  #   live install's .env while believing a throwaway one was created. Every
+  #   symptom then points at the throwaway directory, which is empty.
+  if [ -n "$INSTALL_DIR" ]; then
+    die "--dir does not apply with --source: a source install builds the checkout
+  this script lives in, and cannot be placed elsewhere.
+
+  To install somewhere else, drop --source and use the published images:
+    ./install.sh --dir $INSTALL_DIR"
+  fi
   if   looks_like_checkout "$script_parent"; then ROOT=$script_parent
   elif looks_like_checkout "$PWD";           then ROOT=$PWD
   else die "--source needs a complete checkout beside this script: docker-compose.yml,
@@ -871,6 +890,91 @@ else
     set_env TLS_MODE caddy
     export COMPOSE_PROFILES=tls
     ok "HTTPS ready  ${DIM}(add a domain in Admin Settings → Domain whenever you like)${N}"
+  fi
+
+  # ── optional: let this install publish its own routes ──────────────────────
+  #
+  # The app cannot configure a proxy it does not run, but this script can see
+  # what the app cannot: it has Docker. So the two values the in-app generator
+  # has to leave as placeholders — which container owns 80/443, and which network
+  # it is on — are detected here and written down once.
+  if [ -n "$PROXY_ROUTES" ]; then
+    if [ "$(get_env TLS_MODE)" = caddy ]; then
+      warn "--proxy-routes ignored: this install owns ports 80/443, so a domain added"
+      warn "  in Admin Settings → Domain already gets its certificate on the first visit."
+    else
+      # The proxy is whatever publishes 80 or 443. Identified by behaviour rather
+      # than by name, because it is Traefik here and something else elsewhere.
+      proxy_id=$(docker ps --format '{{.ID}} {{.Ports}}' 2>/dev/null \
+                 | grep -E '(^|[[:space:],])0\.0\.0\.0:(80|443)->' | head -1 | cut -d' ' -f1)
+      proxy_net=''
+      if [ -n "$proxy_id" ]; then
+        # Skip bridge/host: a container on those is not reachable by name, and a
+        # route pointing at an unreachable upstream is a 502 with no explanation.
+        proxy_net=$(docker inspect "$proxy_id" \
+                    --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}' 2>/dev/null \
+                    | grep -vE '^(bridge|host|none|)$' | head -1)
+      fi
+
+      if [ -z "$proxy_net" ]; then
+        warn "could not work out which network your reverse proxy is on, so routes"
+        warn "  were not wired up. Set it by hand — docs/reverse-proxy.md."
+      else
+        mkdir -p "$PROXY_ROUTES" || die "cannot create $PROXY_ROUTES"
+        routes_abs=$(CDPATH= cd -- "$PROXY_ROUTES" && pwd)   # shellcheck disable=SC1007
+
+        # ⚠ The overlay lives BESIDE the routes directory, never inside it. That
+        #   directory is parsed by the proxy as route definitions, and a compose
+        #   file dropped in there is a parse error on every reload.
+        routing_overlay="$(dirname "$routes_abs")/forgegrowth-${PROJECT}-routing.yml"
+
+        cat > "$routing_overlay" <<YML
+# Wiring for automatic route publishing — written by install.sh.
+#
+# Mounts the directory your reverse proxy watches into this install's backend,
+# and puts the web container on the proxy's network so it can be reached.
+#
+# Kept outside the install directory: install.sh overwrites docker-compose.yml
+# on every upgrade, and this must survive that.
+services:
+  backend:
+    volumes:
+      - ${routes_abs}:/dynamic
+  web:
+    networks: [default, ${proxy_net}]
+
+networks:
+  ${proxy_net}:
+    external: true
+YML
+
+        set_env TRAEFIK_DYNAMIC_DIR /dynamic
+        set_env PROXY_ROUTES_DIR "$routes_abs"
+        # Compose names containers <project>-<service>-<n>. The CONTAINER name,
+        # not the service name: a service alias is not unique once two installs
+        # share a network, and `web` would resolve to whichever answered first.
+        set_env PROXY_UPSTREAM "http://${PROJECT}-web-1:80"
+
+        # Append without duplicating: an install may already carry an overlay.
+        existing_cf=$(get_env COMPOSE_FILE)
+        case ":$existing_cf:" in
+          *":$routing_overlay:"*) : ;;
+          *) if [ -n "$existing_cf" ]; then
+               set_env COMPOSE_FILE "$existing_cf:$routing_overlay"
+             else
+               set_env COMPOSE_FILE "docker-compose.yml:$routing_overlay"
+             fi ;;
+        esac
+        export COMPOSE_FILE
+        COMPOSE_FILE=$(get_env COMPOSE_FILE)
+
+        ok "routes published to $routes_abs  ${DIM}(proxy network: $proxy_net)${N}"
+        ok "   ${DIM}domains added in Admin Settings → Domain now need no shell${N}"
+        warn "your proxy must watch that directory. For Traefik, once:"
+        warn "  --providers.file.directory=/dynamic --providers.file.watch=true"
+        warn "  and mount $routes_abs at /dynamic inside it."
+      fi
+    fi
   fi
 
   # Reported last, and only when a named host really was dropped — this address
