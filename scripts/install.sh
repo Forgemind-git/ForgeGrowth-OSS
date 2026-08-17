@@ -368,7 +368,8 @@ if [ "$MODE" = images ]; then
   fetch scripts/up.sh      up.sh
   fetch scripts/down.sh    down.sh
   fetch scripts/install.sh install.sh
-  chmod +x up.sh down.sh install.sh
+  fetch scripts/admin-password.sh admin-password.sh
+  chmod +x up.sh down.sh install.sh admin-password.sh
   # Seeded, never overwritten. .env is created FROM this by the next step, and
   # the FRESH_ENV logic that protects an existing database depends on knowing
   # which of those two things happened.
@@ -921,7 +922,8 @@ else
         warn "  were not wired up. Set it by hand — docs/reverse-proxy.md."
       else
         mkdir -p "$PROXY_ROUTES" || die "cannot create $PROXY_ROUTES"
-        routes_abs=$(CDPATH= cd -- "$PROXY_ROUTES" && pwd)   # shellcheck disable=SC1007
+        # shellcheck disable=SC1007
+        routes_abs=$(CDPATH= cd -- "$PROXY_ROUTES" && pwd)
 
         # ⚠ The overlay lives BESIDE the routes directory, never inside it. That
         #   directory is parsed by the proxy as route definitions, and a compose
@@ -1255,6 +1257,51 @@ else
   warn "the web UI returned HTTP ${code:-none} — check: docker compose logs web backend"
 fi
 
+# ── is the password about to be printed the one that actually works? ─────────
+#
+# ⚠ Until this ran, the summary reported the CONTENTS OF A FILE as though they
+#   were the state of the database. Those agree only while the admin row was
+#   created from that value: BOOTSTRAP_ADMIN_PASSWORD is applied when the users
+#   table is EMPTY (auth.js) and never read again. So it goes stale the moment
+#   somebody changes their password in Admin Settings, and it was never true at
+#   all if this database came from an earlier install.
+#
+#   Either way the reader gets a confident, wrong password, and the value being
+#   right there in .env makes the login screen look like the broken thing. This
+#   asks the API — the only opinion that counts — and reports the answer.
+#
+#   Over loopback, never the public URL: that may be https through a proxy this
+#   script cannot see, or a domain whose DNS points elsewhere. Neither has any
+#   bearing on whether the credentials are right. And with no Origin header,
+#   CORS is not involved, so this tests the password and nothing else.
+ADMIN_LOGIN=''   # ok | stale | unknown
+admin_pw=$(get_env BOOTSTRAP_ADMIN_PASSWORD)
+admin_em=$(get_env BOOTSTRAP_ADMIN_EMAIL); admin_em=${admin_em:-admin@example.com}
+if [ "$code" = 200 ] && [ -n "$admin_pw" ]; then
+  # A generated password can contain " or \; pasted raw it builds invalid JSON
+  # and the API answers 400, which reads exactly like a rejected password.
+  json_str() { printf '"%s"' "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"; }
+  # The first admin is created during backend startup, so a moment after the web
+  # UI answers there may still be no user to log in as.
+  for i in $(seq 1 15); do
+    login_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
+      -X POST "http://localhost:${WEB_PORT}/api/auth/login" \
+      -H 'Content-Type: application/json' \
+      -d "{\"email\":$(json_str "$admin_em"),\"password\":$(json_str "$admin_pw")}" 2>/dev/null) || login_code=000
+    case "$login_code" in
+      200) ADMIN_LOGIN=ok;     break ;;
+      401) ADMIN_LOGIN=stale;  break ;;
+      *)   ADMIN_LOGIN=unknown ;;
+    esac
+    sleep 2
+  done
+  case "$ADMIN_LOGIN" in
+    ok)    ok 'admin sign-in verified' ;;
+    stale) warn 'the password in .env is NOT accepted — see the note below' ;;
+    *)     warn "could not verify the admin password (HTTP ${login_code:-none})" ;;
+  esac
+fi
+
 # With --domain, "the app is up" is only half the answer: the address people
 # will actually type has to work too. Checking it here is the difference
 # between an install that prints an https:// URL and one that has verified it.
@@ -1315,24 +1362,42 @@ cat <<EOF
     Install   ${PROJECT}   ${DIM}(this machine may hold several; commands below act on this one)${N}
 EOF
 
-if [ -n "$ADMIN_PASSWORD" ]; then
-  if [ -n "$GENERATED_PASSWORD" ]; then
-    printf '    Password  %s%s%s   %s(generated — also stored in .env)%s\n' "$B" "$ADMIN_PASSWORD" "$N" "$DIM" "$N"
-  else
-    printf '    Password  %s(the one you supplied)%s\n' "$DIM" "$N"
-  fi
+# Where admin-password.sh lives, which differs between the two layouts. Defined
+# before the summary because the password lines below reference it.
+if [ "$MODE" = source ]; then PW_CMD='./scripts/admin-password.sh'
+else                          PW_CMD='./admin-password.sh'
+fi
+
+# ⚠ The password is reported from what the API ACCEPTED, not from what is in
+#   .env. Those are the same thing only while the admin row was created from
+#   that value, and the case where they differ is the one worth getting right:
+#   the file shows a real-looking password, the login refuses it, and the value
+#   being right there makes the app look broken rather than the state stale.
+#
+#   So a verified password is printed in full — including on a re-run, where the
+#   old text sent the reader to `grep` and left them to discover the mismatch at
+#   the login screen. A password that failed is not printed at all; printing it
+#   would be repeating the exact claim that just proved false.
+if [ "$ADMIN_LOGIN" = stale ]; then
+  printf "    Password  %sNOT the one in .env — that value is stale%s\n" "$R" "$N"
+  printf '              %sthe first admin was created with a different password, or it was%s\n' "$DIM" "$N"
+  printf '              %schanged in Admin Settings. Reset it (removes all accounts):%s\n' "$DIM" "$N"
+  printf '                %s--reset\n' "$PW_CMD"
+elif [ -n "$ADMIN_PASSWORD" ] && [ -n "$GENERATED_PASSWORD" ]; then
+  suffix='(generated — also stored in .env)'
+  [ "$ADMIN_LOGIN" = ok ] && suffix='(generated — sign-in verified)'
+  printf '    Password  %s%s%s   %s%s%s\n' "$B" "$ADMIN_PASSWORD" "$N" "$DIM" "$suffix" "$N"
+elif [ "$ADMIN_LOGIN" = ok ]; then
+  # Verified, so show it. On a re-run this is the value someone came back for,
+  # and having proved it works there is no reason to make them go and look.
+  printf '    Password  %s%s%s   %s(sign-in verified)%s\n' "$B" "$(get_env BOOTSTRAP_ADMIN_PASSWORD)" "$N" "$DIM" "$N"
+elif [ -n "$ADMIN_PASSWORD" ]; then
+  printf '    Password  %s(the one you supplied)%s\n' "$DIM" "$N"
 elif [ -n "$(get_env BOOTSTRAP_ADMIN_PASSWORD)" ]; then
-  # Re-run against an existing install: we did not touch the password, and it is
-  # sitting in .env — so do not send the reader to a log line that is long gone.
-  #
-  # ⚠ Print the command, not the variable name. "Unchanged" reads as "you saw it
-  #   last time", and there is a common case where nobody ever did: a first run
-  #   that generated the password into .env and then failed — on the image pull,
-  #   say — never reached this summary. The next run finds the value present,
-  #   lands here, and the password has now been reported twice without once being
-  #   shown. Someone non-technical is simply locked out at that point.
-  printf '    Password  %s(unchanged — read it with:)%s\n' "$DIM" "$N"
-  printf "                grep '^BOOTSTRAP_ADMIN_PASSWORD=' .env\n"
+  # Present in .env but unverified — the site did not answer, so nothing can be
+  # claimed about it either way. Name the command that will settle it.
+  printf '    Password  %s(in .env, not verified — the site did not answer)%s\n' "$DIM" "$N"
+  printf '                %s\n' "$PW_CMD"
 else
   echo '    Password  printed once in the backend log:'
   echo '                docker compose logs backend | grep -A5 "FIRST-RUN ADMIN"'
@@ -1363,6 +1428,7 @@ cat <<EOF
     Start     ${STOP_CMD%down.sh}up.sh
     Stop      ${STOP_CMD}
     Upgrade   ${UPGRADE_CMD}
+    Password  ${PW_CMD}   ${DIM}(checks it works; --reset if it does not)${N}
     Remove    ${REMOVE_CMD}
     List all  docker compose ls
 
