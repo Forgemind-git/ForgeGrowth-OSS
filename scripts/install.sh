@@ -89,6 +89,10 @@ CORS_EXTRA=''
 DOMAIN=''; TLS_EMAIL=''
 ASSUME_YES=0; DO_BUILD=1
 MODE=''; INSTALL_DIR=''; PIN_REF=''; PROXY_ROUTES=''
+# Set when a download failed and an existing local copy was used instead.
+# Reported at the end of the download step: those files may be older than
+# the images about to be pulled, which is the one thing worth saying.
+FETCH_FELL_BACK=0
 # --url and --domain both name the address, but they mean opposite things about
 # who terminates TLS, so which one was used has to survive into the logic.
 URL_GIVEN=0
@@ -334,8 +338,12 @@ if [ "$MODE" = images ]; then
   # files alone is exactly what testing an unreleased branch needs.
   FETCH_REF=${FETCH_REF:-${FORGEGROWTH_REF:-main}}
 
-  fetch() { # fetch <path-in-repo> <destination>
-    local url="$RAW_BASE/$FETCH_REF/$1" tmp="$2.part.$$" rc=0
+  fetch() { # fetch <path-in-repo> <destination> [optional]
+    # `optional` marks a file the install does not need in order to work — a
+    # helper script rather than a compose file. Those must not be fatal, because
+    # a bundle built before the helper existed does not contain it, and refusing
+    # to install for the want of a convenience is the wrong trade.
+    local url="$RAW_BASE/$FETCH_REF/$1" tmp="$2.part.$$" rc=0 optional="${3:-}"
     mkdir -p "$(dirname "$2")"
     case "$DL" in
       curl) curl -fsSL --retry 3 --connect-timeout 15 -o "$tmp" "$url" || rc=$? ;;
@@ -343,11 +351,39 @@ if [ "$MODE" = images ]; then
     esac
     if [ "$rc" != 0 ] || [ ! -s "$tmp" ]; then
       rm -f "$tmp"
+      # ⚠ A failed download is only fatal when there is nothing to fall back to.
+      #   The release bundle ships these same files, and this script re-downloads
+      #   them unconditionally because that is how an upgrade works — so a bundle
+      #   user with no network, or anyone caught by GitHub rate-limiting raw
+      #   (HTTP 429, which happens and is nobody's fault), was stopped dead while
+      #   a perfectly good copy sat in the directory. Keep it and say so.
+      #
+      #   Not silent: the existing file may be older than the images about to be
+      #   pulled, and that is exactly the mismatch worth naming out loud.
+      if [ -s "$2" ]; then
+        FETCH_FELL_BACK=1
+        warn "could not download $1 — keeping the copy already here"
+        return 0
+      fi
+      if [ -n "$optional" ]; then
+        FETCH_FELL_BACK=1
+        warn "could not download $1 — carrying on without it"
+        return 0
+      fi
       die "could not download $1
   from $url
 
-  Either this machine cannot reach GitHub, or the version '$FETCH_REF' does not
-  exist. Check the version, or pass a different one with --version."
+  If this is HTTP 429, GitHub is rate-limiting anonymous downloads. It clears on
+  its own, usually within the hour. The release bundle is served from a different
+  host and is not affected:
+
+    https://github.com/Forgemind-git/ForgeGrowth-OSS/releases/latest
+
+  Download it, unzip it, open the folder for your operating system and run
+  ./install.sh from inside it — these files will already be there.
+
+  Otherwise this machine cannot reach GitHub, or the version '$FETCH_REF' does
+  not exist. Check the version, or pass a different one with --version."
     fi
     # mv rather than downloading straight onto $2: this replaces the inode, so a
     # file bash is still reading — install.sh replacing itself during an upgrade
@@ -368,13 +404,20 @@ if [ "$MODE" = images ]; then
   fetch scripts/up.sh      up.sh
   fetch scripts/down.sh    down.sh
   fetch scripts/install.sh install.sh
-  fetch scripts/admin-password.sh admin-password.sh
-  chmod +x up.sh down.sh install.sh admin-password.sh
+  fetch scripts/admin-password.sh admin-password.sh optional
+  chmod +x up.sh down.sh install.sh
+  [ -f admin-password.sh ] && chmod +x admin-password.sh
   # Seeded, never overwritten. .env is created FROM this by the next step, and
   # the FRESH_ENV logic that protects an existing database depends on knowing
   # which of those two things happened.
   [ -f "$ROOT/.env" ] || fetch .env.example .env.example
-  ok 'compose file, Caddyfile, up.sh, down.sh, install.sh'
+  if [ "$FETCH_FELL_BACK" = 1 ]; then
+    warn 'some files could not be downloaded and the local copies were used.'
+    warn '  They may be older than the images this is about to pull. Re-run when'
+    warn '  the network recovers to bring them up to date.'
+  else
+    ok 'compose file, Caddyfile, up.sh, down.sh, install.sh'
+  fi
 
   {
     echo '# .forgegrowth-install — written by install.sh, safe to delete'
@@ -1102,6 +1145,20 @@ if [ "$MODE" = images ]; then
   # back, instead of leaving somebody to hand-edit .env to escape it.
   case "$IMAGE_TAG" in */*|*' '*|*:*) IMAGE_TAG='' ;; esac
   IMAGE_TAG=${IMAGE_TAG:-latest}
+  # ⚠ Git tags this project are `v1.0.0`; the IMAGE tag is `1.0.0`. That is not
+  #   an inconsistency to tidy up — docker/metadata-action's
+  #   `type=semver,pattern={{version}}` strips the leading v, and that is the
+  #   conventional form for a container tag.
+  #
+  #   Passing the git ref through unchanged therefore asked for an image that has
+  #   never existed, and `docker compose pull` reports it as "manifest unknown" —
+  #   a message about a registry, from a value that came out of a git tag. It
+  #   broke EVERY pinned install (--version v1.0.0) and every install from the
+  #   release bundle, whose stamp records ref=v1.0.0. Found by installing from
+  #   the bundle rather than by reading either file.
+  case "$IMAGE_TAG" in
+    v[0-9]*) IMAGE_TAG=${IMAGE_TAG#v} ;;
+  esac
   set_env FORGEGROWTH_TAG "$IMAGE_TAG"
 fi
 ok "web on port $WEB_PORT, public URL $PUBLIC_URL"
