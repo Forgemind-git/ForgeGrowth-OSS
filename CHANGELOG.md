@@ -29,6 +29,18 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
   fall back to `main` when a tag predates the page they point at — a dead link inside a zip fails
   nowhere and is found by the customer holding the folder.
 
+### Removed
+
+- **The internal ForgeTask WhatsApp bridge**, which coupled this general-purpose product to a
+  specific internal one and hardcoded a real WhatsApp Business number and its Meta phone-number id
+  as fallback defaults. Neither was a credential and the bridge was inert unless
+  `FORGETASK_AGENT_WEBHOOK_URL` was set, but a real number does not belong in a public repository.
+  Gone with it: the ForgeCommand notify hook, the three phone-number-id skips in the webhook handler,
+  and the four `FORGETASK_*` keys in `.env.example`. **Images tagged `1.0.0` / `1.0` / `1` still
+  contain these values** — they were built from the tag; `latest` is rebuilt from `main` without them.
+- `MCP_SERVER_PATH` no longer defaults to an absolute path from the machine this was developed on.
+  It is displayed in a config snippet, never executed, so the default is now a placeholder.
+
 ### Changed
 
 - **The README is a map rather than a manual.** It was 773 lines, 47% of it install instructions;
