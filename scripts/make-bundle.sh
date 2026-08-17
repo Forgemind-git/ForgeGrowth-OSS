@@ -41,6 +41,24 @@ BUNDLE="forge-growth-$VERSION"
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 
+# ── which ref the documentation links point at ───────────────────────────────
+#
+# Not automatically $VERSION. A tag is cut at a moment, and a doc written after
+# it does not exist at it — v1.0.0 was tagged before docs/ was split out, so
+# every START-HERE.md linking to blob/v1.0.0/docs/whatsapp.md was a 404 shipped
+# inside the zip, where nothing would ever fail to reveal it.
+#
+# So ask the repository rather than assuming: link to the tag when the file is
+# genuinely there, and fall back to main when it is not. Checked against the git
+# object store, so it needs no network and cannot be throttled.
+DOC_PROBE=docs/whatsapp.md
+DOC_REF=$VERSION
+if [ "$DOC_REF" = main ] || ! git cat-file -e "$VERSION:$DOC_PROBE" 2>/dev/null; then
+  DOC_REF=main
+  [ "$VERSION" = main ] \
+    || printf '  note: %s is not in %s — doc links point at main\n' "$DOC_PROBE" "$VERSION"
+fi
+
 say() { printf '  %s\n' "$*"; }
 
 printf '\nBuilding %s\n\n' "$BUNDLE.zip"
@@ -159,7 +177,7 @@ A Let's Encrypt certificate is obtained and verified on the way up.
 \`\`\`
 
 Next: attach a WhatsApp number.
-https://github.com/Forgemind-git/ForgeGrowth-OSS/blob/$VERSION/docs/whatsapp.md
+https://github.com/Forgemind-git/ForgeGrowth-OSS/blob/$DOC_REF/docs/whatsapp.md
 X
 
 # macOS
@@ -208,7 +226,7 @@ free port, which it tells you.
 
 Next: attach a WhatsApp number. On a laptop this needs a public HTTPS address
 from a tunnel — the guide covers it.
-https://github.com/Forgemind-git/ForgeGrowth-OSS/blob/$VERSION/docs/whatsapp.md
+https://github.com/Forgemind-git/ForgeGrowth-OSS/blob/$DOC_REF/docs/whatsapp.md
 X
 
 # Windows
@@ -275,7 +293,7 @@ Open the folder from Explorer with \`explorer.exe .\`, or browse to
 \\\\wsl\$\\Ubuntu\\home\\<you>\\forge-growth
 
 Next: attach a WhatsApp number.
-https://github.com/Forgemind-git/ForgeGrowth-OSS/blob/$VERSION/docs/whatsapp.md
+https://github.com/Forgemind-git/ForgeGrowth-OSS/blob/$DOC_REF/docs/whatsapp.md
 X
 
 # ── the top-level note, plain text so it opens anywhere ──────────────────────
@@ -316,6 +334,21 @@ restored database with a regenerated .env cannot be opened.
 Documentation:  https://github.com/Forgemind-git/ForgeGrowth-OSS
 Licence:        MIT
 X
+
+# ── every link in the bundle must resolve at the ref it names ────────────────
+#
+# A dead link inside a zip is invisible: nothing fails, no page 404s in anyone's
+# CI, and the person who finds it is the customer holding the folder. So resolve
+# each one against the git object store before shipping.
+broken=0
+grep -rhoE 'github\.com/Forgemind-git/ForgeGrowth-OSS/blob/[^ )]+' "$STAGE/$BUNDLE" \
+  | sed 's|.*/blob/||' | sort -u | while read -r rp; do
+      [ -n "$rp" ] || continue
+      git cat-file -e "${rp%%/*}:${rp#*/}" 2>/dev/null \
+        || { echo "BROKEN LINK in bundle: blob/$rp" >&2; exit 1; }
+    done || broken=1
+[ "$broken" = 0 ] || exit 1
+say "verified: every repo link in the bundle resolves at the ref it names"
 
 # ── zip it ───────────────────────────────────────────────────────────────────
 mkdir -p "$OUTDIR"

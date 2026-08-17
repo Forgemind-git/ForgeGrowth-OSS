@@ -25,6 +25,9 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
   that platform. Built by `scripts/make-bundle.sh`, whose file list is derived from `install.sh`'s
   own `fetch` calls and verified at build time, so the bundle cannot fall behind the installer. The
   bundle ships a version stamp, which is what stops a pinned zip re-fetching `main` on its first run.
+  Documentation links in the bundle are resolved against the git object store before it is packed, and
+  fall back to `main` when a tag predates the page they point at — a dead link inside a zip fails
+  nowhere and is found by the customer holding the folder.
 
 ### Changed
 
