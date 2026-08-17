@@ -45,7 +45,7 @@ function matchesKeyword(messageBody, keyword, matchType, caseSensitive) {
  *   gate is a statement about where someone is in the funnel, and "not in the
  *   funnel at all" is not one of the chosen stages. The webhook creates a lead
  *   for every inbound customer before this runs, so in practice the only rows
- *   without one are the ForgeTask hub number and pre-funnel history.
+ *   without one are hub numbers and pre-funnel history.
  *
  * Never throws: a database hiccup here must not silence a working agent, so a
  * failure logs and falls through to "allowed" — the same fail-open reasoning

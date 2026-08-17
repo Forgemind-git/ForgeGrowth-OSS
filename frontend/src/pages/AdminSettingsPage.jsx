@@ -3931,7 +3931,7 @@ function McpToolsTab() {
               Advanced — local stdio server (development only)
             </div>
             <ol style={{ fontSize: 14, color: C.textSecondary, lineHeight: 1.8, paddingLeft: 18, margin: '0 0 16px' }}>
-              <li>Only needed if you are running the MCP server from source. Requires this repo checked out locally: <code style={{ fontFamily: MONO, fontSize: 14 }}>cd {install?.serverPath?.replace('/src/index.js', '') || '/root/ForgeGrowth/mcp-server'} && npm install</code></li>
+              <li>Only needed if you are running the MCP server from source. Requires this repo checked out locally: <code style={{ fontFamily: MONO, fontSize: 14 }}>cd {install?.serverPath?.replace('/src/index.js', '') || '/path/to/forge-growth/mcp-server'} && npm install</code></li>
               <li>Claude Desktop → <b>Settings → Developer → Edit Config</b>, add the block below, then fully quit and reopen.</li>
             </ol>
 

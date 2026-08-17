@@ -524,7 +524,7 @@ async function sendTemplateMessage({ fromNumber, toNumber, templateId, variables
 
 // Send a free-form MEDIA message by public URL (document/image/video/audio).
 // `link` must be a publicly-fetchable URL (Meta downloads it). Subject to the
-// 24h window like any free-form send. Added for the ForgeTask bridge so report
+// 24h window like any free-form send. Added for outbound bridges so report
 // PDFs etc. deliver through this number.
 // Extension → mime fallback when an inline fileBase64 arrives without a mimeType.
 const EXT_MIME = {
@@ -641,7 +641,7 @@ async function sendMediaMessage({ fromNumber, toNumber, type, link, fileBase64, 
 }
 
 // Send a free-form INTERACTIVE message — the caller passes a ready Meta
-// `interactive` object (reply buttons OR a flow). Used by the ForgeTask bridge so
+// `interactive` object (reply buttons OR a flow). Used by outbound bridges so
 // approve/reject buttons and task-create flows can route through this number.
 // Subject to the 24h window. The interactive payload (incl. button ids) is sent
 // verbatim, so round-trip ids are preserved.

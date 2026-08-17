@@ -11,90 +11,6 @@ const { ensureLeadForContact, deriveLeadSource } = require('./leads');
 const messageFormats = require('../services/messageFormats');
 const { recordCtwaReferral, linkReferralsToLead } = require('./ctwa');
 const { matchByHash } = require('../util/wamid');
-const { forgeCommandNotify } = require('../forgeCommandNotify');
-
-// ── ForgeTask WhatsApp bridge ────────────────────────────────────────────────
-// FORGECHAT is the WhatsApp hub for the shared ForgeTask number: it receives
-// inbound from Meta (stored above for visibility), forwards each message to
-// ForgeTask's agent, and sends ForgeTask's reply back out on the number (logged
-// as an outgoing message). This replaces the retired n8n ForgeTask workflow.
-// ONLY messages on the ForgeTask phone_number_id are bridged; every other number
-// keeps using CRM automations/agents untouched.
-const FORGETASK_PNID = process.env.FORGETASK_PHONE_NUMBER_ID || '565738016632106';
-const FORGETASK_FROM_NUMBER = process.env.FORGETASK_FROM_NUMBER || '916380781053';
-const FORGETASK_AGENT_WEBHOOK_URL = process.env.FORGETASK_AGENT_WEBHOOK_URL || null;
-const FORGETASK_AGENT_API_KEY = process.env.FORGETASK_AGENT_API_KEY || null;
-
-// Pull the agent-relevant payload out of a raw Meta message: plain text, a tapped
-// button id (interactive OR template quick-reply), or a voice-note media id.
-function extractForgeTaskInput(msg) {
-  if (!msg) return null;
-  if (msg.type === 'text') return { message: msg.text?.body || '' };
-  if (msg.type === 'interactive') {
-    if (msg.interactive?.type === 'button_reply') return { message: msg.interactive.button_reply.id || '' };
-    if (msg.interactive?.type === 'list_reply') return { message: msg.interactive.list_reply.id || '' };
-    return null; // nfm_reply (Flow submit) etc. — not bridged
-  }
-  if (msg.type === 'button') return { message: msg.button?.payload || msg.button?.text || '' };
-  if (msg.type === 'audio' || msg.type === 'voice') return { audio_media_id: (msg.audio || msg.voice)?.id || null };
-  return null; // images/docs/location/etc. — not bridged
-}
-
-// Forward ONE inbound ForgeTask-number message to the ForgeTask agent, then send
-// the reply via the CRM's own sender (so it's stored as outgoing → full chat
-// visibility). Never throws — a bridge failure must not affect webhook handling.
-async function forwardToForgeTask(msg, contactName) {
-  if (!FORGETASK_AGENT_WEBHOOK_URL || !FORGETASK_AGENT_API_KEY) return;
-  const from = msg.from;
-  if (!from) return;
-  const input = extractForgeTaskInput(msg);
-  if (!input || (!String(input.message || '').trim() && !input.audio_media_id)) return;
-  try {
-    const r = await fetch(FORGETASK_AGENT_WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Api-Key': FORGETASK_AGENT_API_KEY },
-      body: JSON.stringify({
-        conversation_id: `whatsapp_${String(from).replace(/\D/g, '')}`,
-        whatsapp_phone: from,
-        user_name: contactName || null,
-        platform: 'whatsapp',
-        message_id: msg.id || null,
-        ...input,
-      }),
-      signal: AbortSignal.timeout(45000),
-    });
-    if (!r.ok) { console.error(`[ft-bridge] agent webhook HTTP ${r.status}`); return; }
-    const data = await r.json().catch(() => ({}));
-    const reply = data?.reply;
-    if (reply && String(reply).trim()) {
-      const mcpService = require('../services/mcpService');
-      await mcpService.sendTextMessage({ fromNumber: FORGETASK_FROM_NUMBER, toNumber: from, text: String(reply) })
-        .catch(e => console.error('[ft-bridge] reply send failed:', e.message));
-    }
-  } catch (e) {
-    console.error('[ft-bridge] forward failed:', e.message);
-  }
-}
-
-// Walk raw Meta payload(s) and fire-and-forget a bridge for every inbound message
-// on the ForgeTask number. Reads from the raw payload (not parsed records) so
-// button ids / template payloads survive.
-function bridgeForgeTaskMessages(payloads) {
-  if (!FORGETASK_AGENT_WEBHOOK_URL) return;
-  for (const p of payloads || []) {
-    for (const entry of p?.entry || []) {
-      for (const change of entry?.changes || []) {
-        const value = change?.value || {};
-        if ((value.metadata?.phone_number_id || '') !== FORGETASK_PNID) continue;
-        const nameByWaId = {};
-        for (const c of value.contacts || []) if (c.wa_id) nameByWaId[c.wa_id] = c.profile?.name || null;
-        for (const msg of value.messages || []) {
-          forwardToForgeTask(msg, nameByWaId[msg.from] || null); // fire-and-forget
-        }
-      }
-    }
-  }
-}
 
 const router = Router();
 
@@ -672,10 +588,6 @@ router.post('/webhook/whatsapp', async (req, res) => {
       }
     }
 
-    // ForgeTask hub: forward inbound on the ForgeTask number to its agent and
-    // send the reply back out (fire-and-forget so Meta still gets a fast ack).
-    bridgeForgeTaskMessages(payloads);
-
     // Evaluate automation triggers
     // 1. For incoming messages (keyword, anyMessage, newContact triggers)
     //    First: if this conversation has paused executions awaiting a reply,
@@ -687,12 +599,11 @@ router.post('/webhook/whatsapp', async (req, res) => {
     // Bridge Chats → Leads: every inbound WhatsApp customer becomes a funnel lead.
     // Source is attributed from Meta's CTWA `referral` (Instagram Ad / Facebook Ad /
     // organic / … ), else 'Direct'. Idempotent upsert — an existing lead keeps its
-    // stage/source. Non-blocking so it never delays the Meta ack; skips ForgeTask.
+    // stage/source. Non-blocking so it never delays the Meta ack.
     {
       const seenLeadNums = new Set();
       for (const rec of incomingRecords) {
         if (!rec.contact_number || seenLeadNums.has(rec.contact_number)) continue;
-        if ((rec.phone_number_id || '') === FORGETASK_PNID) continue;
         seenLeadNums.add(rec.contact_number);
         // Click-to-WhatsApp attribution runs in the SAME chain as the lead
         // upsert, not as an independent promise. Ordering matters: the referral
@@ -744,9 +655,6 @@ router.post('/webhook/whatsapp', async (req, res) => {
     if (incomingRecords.length > 0) {
       for (const record of incomingRecords) {
         try {
-          // ForgeTask-number messages are handled by the ForgeTask bridge above —
-          // skip CRM automations/agent so the message isn't answered twice.
-          if ((record.phone_number_id || '') === FORGETASK_PNID) continue;
           // ⚠ awaiting_kind='reply' ONLY — keep this filter even though the
           // Payment node (the only other pause kind) was removed 2026-08-12.
           // It is what stops a pause that is NOT waiting for words from being
@@ -799,7 +707,6 @@ router.post('/webhook/whatsapp', async (req, res) => {
       r.direction === 'outgoing' && r.message_type !== 'status' && r.message_type !== 'reaction');
     for (const record of outboundEchoRecords) {
       try {
-        if ((record.phone_number_id || '') === FORGETASK_PNID) continue;
         await evaluateOutboundTriggers(record);
       } catch (triggerErr) {
         console.error('[webhook] Outbound echo trigger error:', triggerErr.message);
@@ -827,18 +734,6 @@ router.post('/webhook/whatsapp', async (req, res) => {
     }
 
     console.log(`[webhook] Stored ${allRecords.length} record(s)`);
-    // Notify ForgeCommand about incoming WhatsApp messages (fire-and-forget).
-    for (const r of incomingRecords) {
-      if (!r.message_body) continue;
-      const isMedia = MEDIA_TYPES.has(r.message_type);
-      forgeCommandNotify(isMedia ? 'whatsapp_media' : 'whatsapp_message', {
-        from: r.contact_number,
-        from_name: r.contact_name || r.contact_number,
-        text: r.message_body,
-        media_type: isMedia ? r.message_type : undefined,
-        wa_number: r.wa_number,
-      });
-    }
     await logWebhookProcessed(auditId, {
       status: 'processed',
       recordsExtracted: allRecords.length,

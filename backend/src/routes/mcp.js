@@ -213,7 +213,11 @@ adminRouter.get('/mcp/install', adminOnly, (req, res) => {
   const base = `${proto}://${host}`;
   const apiUrl = `${base}/api/mcp/v1`;
   const remoteUrl = `${base}/api/mcp/http/<YOUR_KEY>`;
-  const serverPath = process.env.MCP_SERVER_PATH || '/root/ForgeGrowth/mcp-server/src/index.js';
+  // Shown, never executed — it is the `args` entry of a config snippet the admin
+  // copies into their own MCP client. The default is a placeholder rather than a
+  // real path: whatever is hardcoded here is wrong for every install but the one
+  // it was written on, and set MCP_SERVER_PATH to show the true location.
+  const serverPath = process.env.MCP_SERVER_PATH || '/path/to/forge-growth/mcp-server/src/index.js';
   res.json({
     // Remote (hosted) connector — paste this URL (with a real key) into Claude's
     // "Add custom connector" dialog or any MCP client. No local files needed.
