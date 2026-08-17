@@ -1382,7 +1382,7 @@ if [ "$ADMIN_LOGIN" = stale ]; then
   printf "    Password  %sNOT the one in .env — that value is stale%s\n" "$R" "$N"
   printf '              %sthe first admin was created with a different password, or it was%s\n' "$DIM" "$N"
   printf '              %schanged in Admin Settings. Reset it (removes all accounts):%s\n' "$DIM" "$N"
-  printf '                %s--reset\n' "$PW_CMD"
+  printf '                %s --reset\n' "$PW_CMD"
 elif [ -n "$ADMIN_PASSWORD" ] && [ -n "$GENERATED_PASSWORD" ]; then
   suffix='(generated — also stored in .env)'
   [ "$ADMIN_LOGIN" = ok ] && suffix='(generated — sign-in verified)'
