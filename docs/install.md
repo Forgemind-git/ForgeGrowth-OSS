@@ -1,9 +1,16 @@
 # Installing Forge Growth
 
-Everything about getting it running: requirements, the three install routes, HTTPS, running several
+Everything about getting it running: requirements, the four install routes, HTTPS, running several
 installs on one machine, and the failures that are worth recognising on sight.
 
-New here? [`README.md`](../README.md) has the one-command version. This page is the full reference.
+New here? [`README.md`](../README.md) has the short version. This page is the full reference.
+
+| Route | Use it when |
+|---|---|
+| **[1 — download bundle](#route-1--the-download-bundle-zip)** | You are handing an install to someone else, or you'd rather not pipe a script into bash |
+| **[2 — one-line installer](#route-2--the-one-line-installer)** | Installing on a machine you control. Fastest |
+| **[3 — build from source](#route-3--build-from-source)** | You intend to change the code |
+| **[4 — by hand](#route-4--by-hand-no-installer)** | You want to see every step, or automate it yourself |
 
 > Installing on someone else's machine, or walking a non-technical person through it?
 > [`ForgeGrowth-Installation-Guide.pdf`](./ForgeGrowth-Installation-Guide.pdf) is the printable
@@ -14,9 +21,10 @@ New here? [`README.md`](../README.md) has the one-command version. This page is 
 
 - [Requirements](#requirements)
 - [Platform notes](#platform-notes)
-- [Route 1 — published images, no source code](#route-1--published-images-no-source-code)
-- [Route 2 — build from source](#route-2--build-from-source)
-- [Route 3 — by hand, no installer](#route-3--by-hand-no-installer)
+- [Route 1 — the download bundle (zip)](#route-1--the-download-bundle-zip)
+- [Route 2 — the one-line installer](#route-2--the-one-line-installer)
+- [Route 3 — build from source](#route-3--build-from-source)
+- [Route 4 — by hand, no installer](#route-4--by-hand-no-installer)
 - [HTTPS on a real domain](#https-on-a-real-domain)
 - [Behind a reverse proxy you already run](#behind-a-reverse-proxy-you-already-run)
 - [Running it on your laptop](#running-it-on-your-laptop)
@@ -91,9 +99,77 @@ exist to perform — see [Everyday commands](#everyday-commands).
 
 ---
 
-## Route 1 — published images, no source code
+## Route 1 — the download bundle (zip)
 
-Nothing is cloned and nothing is built. **This is the route most people want.**
+One file, with a self-contained folder for each operating system. **This is the route to use when you
+are handing an install to somebody else**, or when piping a script from the internet into `bash` is
+not something you want to do.
+
+### Get it
+
+Download **`forge-growth-<version>.zip`** from the
+[releases page](https://github.com/Forgemind-git/ForgeGrowth-OSS/releases/latest) — around 130 KB.
+
+```
+forge-growth-v1.0.0/
+├── READ-ME-FIRST.txt        which folder to open
+├── linux/
+│   ├── START-HERE.md        the steps, for this OS only
+│   ├── install.sh  up.sh  down.sh
+│   ├── docker-compose.yml   .env.example   generate-secrets.sh
+│   ├── caddy/Caddyfile
+│   └── .forgegrowth-install the version pin
+├── macos/                   same files, macOS instructions
+└── windows/                 same files, WSL2 instructions
+```
+
+**Each folder is complete on its own.** They hold identical install files; only `START-HERE.md`
+differs. Pick the one for your OS and ignore the other two.
+
+### Use it
+
+```bash
+cd forge-growth-v1.0.0/linux     # or macos, or windows
+chmod +x *.sh
+./install.sh
+```
+
+The `chmod` matters on Windows — unzipping there drops the executable bit.
+
+**The installer continues in place**, in the folder you unzipped, rather than creating a
+subdirectory. A directory that already holds `docker-compose.yml` is adopted as the install root, so
+what you extracted *is* the install.
+
+### What the bundle guarantees
+
+| | |
+|---|---|
+| **Pinned to its own version** | The bundled `.forgegrowth-install` names the version, so the first run cannot silently re-fetch `main`. A zip named v1.0.0 stays on v1.0.0 |
+| **Complete** | The file list is derived from `install.sh`'s own `fetch` calls and verified at build time, so it cannot fall behind the installer |
+| **Not a source checkout** | No `backend/Dockerfile` or `supabase/migrations`, so the installer correctly picks images mode and never tries to build |
+
+> **You still need the internet the first time.** The bundle contains the install files, not the
+> application images — those are about 350 MB and are pulled on the first run. This is a
+> distribution convenience, not an air-gapped installer.
+
+### Building the bundle yourself
+
+From a checkout:
+
+```bash
+./scripts/make-bundle.sh v1.0.0        # writes dist/forge-growth-v1.0.0.zip
+./scripts/make-bundle.sh               # version from the current git tag
+```
+
+Attach the result to the GitHub release. It refuses to build if any file the installer fetches is
+missing from the staged folders.
+
+---
+
+## Route 2 — the one-line installer
+
+Nothing is cloned and nothing is built. **This is the route most people want** when installing on a
+machine you control.
 
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/scripts/install.sh)"
@@ -162,7 +238,7 @@ and `-web`, tagged `latest`, the release version, and `sha-<commit>` for pinning
 
 ---
 
-## Route 2 — build from source
+## Route 3 — build from source
 
 ```bash
 git clone <your-fork-url> forge-growth
@@ -210,7 +286,7 @@ picks a free port first and builds the address around it, so it works without yo
 
 ---
 
-## Route 3 — by hand, no installer
+## Route 4 — by hand, no installer
 
 The script only automates the steps below. You can run them yourself from any shell.
 

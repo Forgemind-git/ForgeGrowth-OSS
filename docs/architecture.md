@@ -135,7 +135,8 @@ frontend/
     pages/                marketing/ · sales/ · admin · chats
 mcp-server/               stdio MCP server (development only — the hosted transport is the real one)
 supabase/migrations/      numbered SQL, applied in order; baked into the backend image
-scripts/                  install.sh · up.sh · down.sh · uninstall.sh · migrate.sh · generate-secrets.sh
+scripts/                  install.sh · up.sh · down.sh · uninstall.sh · migrate.sh
+                          generate-secrets.sh · make-bundle.sh (builds the release zip)
 docker-compose.yml        builds from this source tree
 docker-compose.images.yml runs published images, for an install with no source tree
 ```

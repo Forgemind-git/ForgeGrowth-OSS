@@ -17,7 +17,23 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **A downloadable install bundle**, attached to each release as
+  `forge-growth-<version>.zip`. One file with a self-contained folder per operating system —
+  `linux/`, `macos/`, `windows/` — each holding the install files and a `START-HERE.md` written for
+  that platform. Built by `scripts/make-bundle.sh`, whose file list is derived from `install.sh`'s
+  own `fetch` calls and verified at build time, so the bundle cannot fall behind the installer. The
+  bundle ships a version stamp, which is what stops a pinned zip re-fetching `main` on its first run.
+
+### Changed
+
+- **The README is a map rather than a manual.** It was 773 lines, 47% of it install instructions;
+  it is now ~200, with the depth moved to `docs/install.md`, `docs/whatsapp.md`, `docs/features.md`
+  and `docs/architecture.md`. Quick start now has explicit per-OS steps for Linux, macOS and Windows.
+- Corrected three stale figures in the documentation: 97 migrations (was "88"), 414 tests with 129
+  DB-backed (was "255 tests, 92"), and a pinned-install example that named `v1.4.0`, a release that
+  never existed.
 
 ## [1.0.0] — 2026-08-17
 

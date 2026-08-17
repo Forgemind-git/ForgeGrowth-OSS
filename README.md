@@ -31,23 +31,128 @@ further calls to Meta.
 
 ## Quick start
 
-One command. Nothing is cloned and nothing is built:
+Three steps. **Step 1 differs by platform; steps 2 and 3 are identical everywhere.**
+
+Nothing is cloned and nothing is compiled — the installer pulls published images.
+
+### Step 1 — Get Docker, and a shell to run it from
+
+<details>
+<summary><b>🐧 Linux</b></summary>
+
+1. Install Docker Engine with the Compose v2 plugin —
+   [docs.docker.com/engine/install](https://docs.docker.com/engine/install/).
+2. Let your user reach Docker without `sudo`, then **log out and back in** for it to take effect:
+
+   ```bash
+   sudo usermod -aG docker $USER
+   ```
+
+3. Use any terminal.
+
+</details>
+
+<details>
+<summary><b>🍎 macOS</b></summary>
+
+1. Install **[Docker Desktop](https://docs.docker.com/desktop/install/mac-install/)** — or OrbStack
+   or Colima, both of which work.
+2. Start it, and wait for the whale icon to stop animating.
+3. Use **Terminal** (or iTerm).
+
+**Apple Silicon and Intel both run natively** — the images carry `linux/arm64` and `linux/amd64`, so
+nothing is emulated.
+
+</details>
+
+<details>
+<summary><b>🪟 Windows</b></summary>
+
+The installer is a shell script, so it runs **inside WSL2** — not in PowerShell.
+
+1. In **PowerShell as Administrator**, then reboot:
+
+   ```powershell
+   wsl --install
+   ```
+
+2. Install **[Docker Desktop](https://docs.docker.com/desktop/install/windows-install/)**, then turn
+   on *Settings → Resources → WSL integration* for your distro.
+3. Open the **Ubuntu** terminal from the Start menu. **Run everything from here**, and install into
+   your Linux home (`~`) rather than `/mnt/c/...` — the Windows drive is dramatically slower.
+
+Git Bash also works if you already have it. There is no PowerShell or `.bat` installer.
+
+</details>
+
+**Check it worked** — this must print a version, on every platform:
+
+```bash
+docker compose version
+```
+
+### Step 2 — Get Forge Growth and install it
+
+Two ways in, same result. Pick either.
+
+#### Option A — download the zip
+
+Everything in one file, with a folder for each operating system.
+
+1. Download **[`forge-growth-v1.0.0.zip`](https://github.com/Forgemind-git/ForgeGrowth-OSS/releases/latest)**
+   from the releases page (~130 KB).
+2. Unzip it and open the folder for your OS — `linux/`, `macos/` or `windows/`. Each one is
+   complete on its own; ignore the other two.
+3. In your terminal, `cd` into that folder and run:
+
+   ```bash
+   chmod +x *.sh
+   ./install.sh
+   ```
+
+Each folder has a `START-HERE.md` with the same steps, so the person you hand it to does not need
+this page. The bundle is pinned to its own version — re-running `./install.sh` later upgrades within
+that pin rather than jumping to the newest build.
+
+#### Option B — one command
 
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/main/scripts/install.sh)"
 ```
 
-It asks one question — the address people will use — generates every secret, and prints the admin
-password once.
-
-**With HTTPS on a real domain**, certificate and renewal included:
+**On a server with a real domain**, pinned to a release and asking nothing at all:
 
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v1.0.0/scripts/install.sh)" -- \
   --version v1.0.0 --domain crm.example.com
 ```
 
-Then, from the install directory:
+---
+
+Either way, the installer asks one question — the address people will use — generates every secret,
+and **prints the admin password once**.
+
+Give it `--domain crm.example.com` and it obtains a Let's Encrypt certificate on the way up and
+verifies it actually works before reporting success. Point the domain's DNS at the machine first,
+and leave ports 80 and 443 free.
+
+> **You still need the internet the first time.** The zip holds the install files, not the
+> application images — those are about 350 MB and are pulled on the first run.
+
+### Step 3 — Sign in, then attach a number
+
+Open the URL the installer printed and sign in with the credentials it showed. Lost the password?
+
+```bash
+cd forge-growth
+grep '^BOOTSTRAP_ADMIN_PASSWORD=' .env
+```
+
+Then **[attach a WhatsApp number](./docs/whatsapp.md)** — the app does nothing useful without one.
+
+### Afterwards
+
+From the install directory:
 
 ```bash
 ./up.sh          # start — and verify the public URL really answers
@@ -55,13 +160,11 @@ Then, from the install directory:
 ./install.sh     # upgrade: re-fetch, pull, restart
 ```
 
-**Next:** [attach a WhatsApp number](./docs/whatsapp.md) — the app does nothing useful without one.
-
 > **Building from source instead?** `git clone`, then `./scripts/install.sh`. You need 2 GB of RAM
 > for the frontend build; the published images above skip that peak entirely.
 
-Full detail — every install route, platform notes, reverse proxies, running several installs on one
-machine — is in **[`docs/install.md`](./docs/install.md)**.
+Full detail — every install route, HTTPS, reverse proxies, running several installs on one machine —
+is in **[`docs/install.md`](./docs/install.md)**.
 
 ---
 
@@ -70,12 +173,11 @@ machine — is in **[`docs/install.md`](./docs/install.md)**.
 | | |
 |---|---|
 | **Docker** | with the Compose v2 plugin — `docker compose version` must work |
-| **Shell** | Linux, macOS, or Windows via WSL2 / Git Bash |
+| **OS** | Linux, macOS, or Windows via WSL2 — see [step 1](#step-1--get-docker-and-a-shell-to-run-it-from) |
 | **RAM** | 2 GB to build; less if you run the published images |
 | **Disk** | ~3 GB |
 
-Nothing else. No Node, Postgres, Redis or MinIO on the host — it all runs in containers. Apple
-Silicon is supported natively.
+Nothing else. No Node, Postgres, Redis or MinIO on the host — it all runs in containers.
 
 ---
 
