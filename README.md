@@ -744,13 +744,23 @@ Migrations are plain numbered SQL files. Add the next number, keep it idempotent
 - Only the web frontend publishes a host port. Postgres, Redis and MinIO stay on the internal
   Docker network.
 
-Found a vulnerability? Please report it privately rather than opening a public issue.
+Found a vulnerability? Please report it privately to <forgemind.business@gmail.com> rather than
+opening a public issue — see [`SECURITY.md`](./SECURITY.md) for what to include, what to expect, and
+what is in scope.
 
 ## Contributing
 
 Issues and pull requests are welcome. Keep changes tightly scoped — match the conventions of the
 file you are editing, and do not restyle adjacent code in the same diff. There is deliberately no
 formatter config: the diff should be the change.
+
+[`CONTRIBUTING.md`](./CONTRIBUTING.md) has the rest: how to get a development stack running, the
+checks CI will run on your branch (and why `REQUIRE_DB=1` matters), the house conventions, and the
+two rules that are easiest to get half-right. Everyone taking part follows the
+[Code of Conduct](./CODE_OF_CONDUCT.md).
+
+Released versions are listed in [`CHANGELOG.md`](./CHANGELOG.md); the people who built this are in
+[`AUTHORS.md`](./AUTHORS.md).
 
 ## License
 
