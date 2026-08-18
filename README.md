@@ -31,6 +31,37 @@ further calls to Meta.
 
 ## Quick start
 
+### Already on a server with Docker? One command.
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v1.0.0/scripts/install.sh)" -- \
+  --version v1.0.0 --domain crm.example.com --yes
+```
+
+Swap `crm.example.com` for your domain. That single command is the entire install: it pulls the
+images, generates every secret, obtains a Let's Encrypt certificate, starts the stack, **fetches the
+public URL to prove it actually answers**, and prints the admin password once. Nothing is cloned,
+nothing is compiled, and `--yes` means it asks nothing.
+
+Two things to have ready first:
+
+- the domain's **DNS already pointing at this machine** — Let's Encrypt validates over port 80, so a
+  domain that does not resolve here fails the certificate, not the install;
+- **ports 80 and 443 free.** Already running a reverse proxy that owns them? Use
+  `--url https://crm.example.com --port 8080` instead and point your proxy at 8080 —
+  [`docs/reverse-proxy.md`](./docs/reverse-proxy.md).
+
+No domain yet? Drop `--domain` and it comes up on `http://<this machine's address>:8080`, which is
+fine for a look around but not for WhatsApp — Meta requires HTTPS for webhooks.
+
+When it finishes, **[attach a WhatsApp number](./docs/whatsapp.md)**. The app does nothing useful
+without one.
+
+---
+
+The rest of this section is the same install, spelled out — for laptops, for Windows, and for handing
+a zip to someone who will not paste a command from the internet.
+
 Three steps. **Step 1 differs by platform; steps 2 and 3 are identical everywhere.**
 
 Nothing is cloned and nothing is compiled — the installer pulls published images.
@@ -99,8 +130,10 @@ Two ways in, same result. Pick either.
 
 Everything in one file, with a folder for each operating system.
 
-1. Download **[`forge-growth-v1.0.0.zip`](https://github.com/Forgemind-git/ForgeGrowth-OSS/releases/latest)**
-   from the releases page (~130 KB).
+1. Download **[`forge-growth-v1.0.0.zip`](https://github.com/Forgemind-git/ForgeGrowth-OSS/raw/main/dist/forge-growth-v1.0.0.zip)**
+   (~145 KB). It is in this repository under [`dist/`](./dist), and also attached to the
+   [releases page](https://github.com/Forgemind-git/ForgeGrowth-OSS/releases/latest) — two hosts, so
+   one of them being down or rate-limiting you is not the end of the install.
 2. Unzip it and open the folder for your OS — `linux/`, `macos/` or `windows/`. Each one is
    complete on its own; ignore the other two.
 3. In your terminal, `cd` into that folder and run:

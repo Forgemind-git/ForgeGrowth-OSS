@@ -8,6 +8,16 @@ build/
 **/dist/
 **/build/
 *.tgz
+# …except /dist/forge-growth-*.zip. That one is not build output, it is a
+# SHIPPED file: the install bundle a customer downloads. It lives in the repo so
+# raw.githubusercontent can serve it when the releases page is the thing that is
+# unreachable — the same reason install.sh keeps a local copy of files it fails
+# to download. Three lines rather than one because git cannot re-include a file
+# whose parent directory is excluded: the directory has to come back first, then
+# its contents go out again, then the zip comes back.
+!/dist/
+/dist/*
+!/dist/forge-growth-*.zip
 
 # Environment & secrets — NEVER commit
 .env
