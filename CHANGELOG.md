@@ -15,6 +15,38 @@ Upgrade with `./scripts/install.sh` (or `./install.sh` on an images install), wh
 re-run and leaves `.env` and your database alone. Pin to a specific release with
 `./install.sh --version vX.Y.Z`.
 
+## [1.0.1] — 2026-08-18
+
+Published as multi-architecture images tagged `1.0.1`, `1.0` and `1`.
+
+### Fixed
+
+- **`--version` now accepts the version in the form the install reports it.** Git tags here are
+  `v1.0.0`; the image tag is `1.0.0` — `docker/metadata-action` strips the leading `v`, which is the
+  conventional form for a container tag. `install.sh` converted the git form to the image form but
+  not the reverse, so `--version 1.0.0` — the form `.env`, `docker ps` and the release notes all show,
+  and therefore the form somebody copies back — asked `raw.githubusercontent` for a ref that does not
+  exist and failed with "the version '1.0.0' does not exist", blaming the release for a missing
+  character. A fully-qualified `refs/tags/v1.0.0` was worse: that ref IS servable, so the files
+  pinned and only the image tag was discarded as unusable, leaving 1.0.0's compose file driving
+  `latest` images. Both halves pin now, or neither.
+- **The `v1.0.0` tag could not install itself.** The strip in the other direction landed after the
+  tag was cut, so `--version v1.0.0` — the exact command the README gave for a server — passed
+  `v1.0.0` through as an image tag and `docker compose pull` answered `manifest unknown`: a message
+  about a registry, produced by a value that came out of a git tag. This is the release that carries
+  the fix, which is why it exists.
+
+### Added
+
+- **The install bundle now lives in the repository** at `dist/forge-growth-<version>.zip`, as well as
+  being attached to the release. Two hosts rather than one, for the same reason `install.sh` keeps a
+  local copy of a file it cannot download: the case worth planning for is GitHub rate-limiting or a
+  releases page that will not load.
+- **A one-command server install at the top of the README.** The route for a machine that already has
+  Docker was buried below three platform-by-platform sections it does not need. It now leads, with the
+  two prerequisites that actually fail it — DNS already pointing at the machine, ports 80 and 443
+  free — named next to the command rather than further down.
+
 ## [Unreleased]
 
 ### Added

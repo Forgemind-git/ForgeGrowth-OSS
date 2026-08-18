@@ -111,7 +111,7 @@ Download **`forge-growth-<version>.zip`** from the
 [releases page](https://github.com/Forgemind-git/ForgeGrowth-OSS/releases/latest) — around 130 KB.
 
 ```
-forge-growth-v1.0.0/
+forge-growth-v1.0.1/
 ├── READ-ME-FIRST.txt        which folder to open
 ├── linux/
 │   ├── START-HERE.md        the steps, for this OS only
@@ -129,7 +129,7 @@ differs. Pick the one for your OS and ignore the other two.
 ### Use it
 
 ```bash
-cd forge-growth-v1.0.0/linux     # or macos, or windows
+cd forge-growth-v1.0.1/linux     # or macos, or windows
 chmod +x *.sh
 ./install.sh
 ```
@@ -144,7 +144,7 @@ what you extracted *is* the install.
 
 | | |
 |---|---|
-| **Pinned to its own version** | The bundled `.forgegrowth-install` names the version, so the first run cannot silently re-fetch `main`. A zip named v1.0.0 stays on v1.0.0 |
+| **Pinned to its own version** | The bundled `.forgegrowth-install` names the version, so the first run cannot silently re-fetch `main`. A zip named v1.0.1 stays on v1.0.1 |
 | **Complete** | The file list is derived from `install.sh`'s own `fetch` calls and verified at build time, so it cannot fall behind the installer |
 | **Not a source checkout** | No `backend/Dockerfile` or `supabase/migrations`, so the installer correctly picks images mode and never tries to build |
 
@@ -157,7 +157,7 @@ what you extracted *is* the install.
 From a checkout:
 
 ```bash
-./scripts/make-bundle.sh v1.0.0        # writes dist/forge-growth-v1.0.0.zip
+./scripts/make-bundle.sh v1.0.1        # writes dist/forge-growth-v1.0.1.zip
 ./scripts/make-bundle.sh               # version from the current git tag
 ```
 
@@ -182,12 +182,12 @@ It asks one question — the address people will use — and derives everything 
 What you want on a server you are handing to somebody:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v1.0.0/scripts/install.sh)" -- \
-  --version v1.0.0 --domain crm.example.com
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v1.0.1/scripts/install.sh)" -- \
+  --version v1.0.1 --domain crm.example.com
 ```
 
 **Both halves of the pinned form matter.** The URL fixes which *script* runs; `--version` fixes what
-that script then downloads and pulls. Pin only one and you get a v1.0.0 script that fetches `main`.
+that script then downloads and pulls. Pin only one and you get a v1.0.1 script that fetches `main`.
 
 Give it a domain whose DNS already points at the machine and it obtains a Let's Encrypt certificate
 on the way up, then **verifies the certificate actually works** before reporting success.
@@ -271,7 +271,7 @@ pressing return. To skip them:
 | `--domain <host>` | serve HTTPS on this domain, certificate and renewal included |
 | `--tls-email <addr>` | certificate contact (default: the admin email; `internal` self-signs) |
 | `--url <origin>` | public origin the browser will use; sets CORS. **Include the port** if people reach it on one — `http://203.0.113.10:8080`, not `http://203.0.113.10` |
-| `--version <ref>` | pin the files and image tag together. `v1.0.0` and `1.0.0` both work. Sticky — later runs stay on it |
+| `--version <ref>` | pin the files and image tag together. `v1.0.1` and `1.0.1` both work. Sticky — later runs stay on it |
 | `--images` / `--source` | published images, or build from this checkout |
 | `--dir <path>` | install here rather than `./forge-growth` |
 | `--admin-email <addr>` | first-run admin |
@@ -473,7 +473,7 @@ overwritten — only empty or placeholder values are filled in — and every mig
 ```bash
 ./install.sh                    # images install: re-fetch, pull, restart
 git pull && ./scripts/install.sh   # source install
-./install.sh --version v1.0.0   # move deliberately, and stay there
+./install.sh --version v1.0.1   # move deliberately, and stay there
 ```
 
 A pinned install **stays pinned** — the version is remembered in `.forgegrowth-install`, so

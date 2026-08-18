@@ -34,8 +34,8 @@ further calls to Meta.
 ### Already on a server with Docker? One command.
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v1.0.0/scripts/install.sh)" -- \
-  --version v1.0.0 --domain crm.example.com --yes
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v1.0.1/scripts/install.sh)" -- \
+  --version v1.0.1 --domain crm.example.com --yes
 ```
 
 Swap `crm.example.com` for your domain. That single command is the entire install: it pulls the
@@ -130,7 +130,7 @@ Two ways in, same result. Pick either.
 
 Everything in one file, with a folder for each operating system.
 
-1. Download **[`forge-growth-v1.0.0.zip`](https://github.com/Forgemind-git/ForgeGrowth-OSS/raw/main/dist/forge-growth-v1.0.0.zip)**
+1. Download **[`forge-growth-v1.0.1.zip`](https://github.com/Forgemind-git/ForgeGrowth-OSS/raw/main/dist/forge-growth-v1.0.1.zip)**
    (~145 KB). It is in this repository under [`dist/`](./dist), and also attached to the
    [releases page](https://github.com/Forgemind-git/ForgeGrowth-OSS/releases/latest) — two hosts, so
    one of them being down or rate-limiting you is not the end of the install.
@@ -156,8 +156,8 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowt
 **On a server with a real domain**, pinned to a release and asking nothing at all:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v1.0.0/scripts/install.sh)" -- \
-  --version v1.0.0 --domain crm.example.com
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v1.0.1/scripts/install.sh)" -- \
+  --version v1.0.1 --domain crm.example.com
 ```
 
 ---
