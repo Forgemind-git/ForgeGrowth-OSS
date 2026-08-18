@@ -271,7 +271,7 @@ pressing return. To skip them:
 | `--domain <host>` | serve HTTPS on this domain, certificate and renewal included |
 | `--tls-email <addr>` | certificate contact (default: the admin email; `internal` self-signs) |
 | `--url <origin>` | public origin the browser will use; sets CORS. **Include the port** if people reach it on one — `http://203.0.113.10:8080`, not `http://203.0.113.10` |
-| `--version <ref>` | pin the files and image tag together. Sticky — later runs stay on it |
+| `--version <ref>` | pin the files and image tag together. `v1.0.0` and `1.0.0` both work. Sticky — later runs stay on it |
 | `--images` / `--source` | published images, or build from this checkout |
 | `--dir <path>` | install here rather than `./forge-growth` |
 | `--admin-email <addr>` | first-run admin |

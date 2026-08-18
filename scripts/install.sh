@@ -56,8 +56,8 @@ Where it installs from:
   --source              Build from the checkout this script lives in.
   --dir <path>          Install into this directory rather than ./forge-growth.
   --version <ref>       Pin the downloaded files AND the image tag together,
-                        e.g. --version v1.4.0. Sticky: later runs stay on it
-                        until you pass a different one.
+                        e.g. --version v1.4.0 (1.4.0 works too). Sticky: later
+                        runs stay on it until you pass a different one.
 
 Accounts and certificates:
   --admin-email <addr>  First-run admin (default: admin@<your domain>).
@@ -337,6 +337,21 @@ if [ "$MODE" = images ]; then
   # pulling `:my-branch` would 404 on a branch that is otherwise fine. Moving the
   # files alone is exactly what testing an unreleased branch needs.
   FETCH_REF=${FETCH_REF:-${FORGEGROWTH_REF:-main}}
+
+  # ⚠ The same two namespaces as the image-tag strip further down, in the other
+  #   direction. Git tags here are `v1.0.0`; the IMAGE tag is `1.0.0` — and
+  #   `1.0.0` is the form .env records, `docker ps` prints and the release notes
+  #   quote, so it is the form somebody copies back into `--version`. As a git
+  #   ref it does not exist: raw.githubusercontent answers 404, and the failure
+  #   reads "the version '1.0.0' does not exist" — which blames the release for
+  #   a missing single character.
+  #
+  #   No branch in this repo begins with a digit, so a leading digit means a
+  #   release, and the ref for a release carries the `v`. PINNED_REF is left
+  #   exactly as given: as an image tag, `1.0.0` is already right.
+  case "$FETCH_REF" in
+    [0-9]*) FETCH_REF=v$FETCH_REF ;;
+  esac
 
   fetch() { # fetch <path-in-repo> <destination> [optional]
     # `optional` marks a file the install does not need in order to work — a
@@ -1143,6 +1158,13 @@ if [ "$MODE" = images ]; then
   # `docker compose pull` fail with "invalid reference format", which names the
   # format and not the field — so drop anything that cannot be a tag and fall
   # back, instead of leaving somebody to hand-edit .env to escape it.
+  #
+  # A fully-qualified tag ref is the exception: `refs/tags/v1.0.0` is a real ref
+  # that raw.githubusercontent serves, so the FILES pin succeeds and only the
+  # image tag gets thrown away — leaving 1.0.0's compose file driving `latest`
+  # images. Both halves have to pin or neither, so unwrap it rather than let the
+  # sanitiser below decide it is unusable.
+  case "$IMAGE_TAG" in refs/tags/*) IMAGE_TAG=${IMAGE_TAG#refs/tags/} ;; esac
   case "$IMAGE_TAG" in */*|*' '*|*:*) IMAGE_TAG='' ;; esac
   IMAGE_TAG=${IMAGE_TAG:-latest}
   # ⚠ Git tags this project are `v1.0.0`; the IMAGE tag is `1.0.0`. That is not
