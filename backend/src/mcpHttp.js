@@ -10,15 +10,13 @@ const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const agentService = require('./services/agentService');
 const mcpService = require('./services/mcpService');
+const { publicOrigin } = require('./util/publicUrl');
 
-// `trust proxy` is off in this app, so req.protocol reports http even on a TLS
-// request. The forwarded header is the only truthful source behind Traefik +
-// nginx, and an http URL in a WWW-Authenticate challenge is ignored by clients.
-function baseFromReq(req) {
-  const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim();
-  const host = (req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
-  return `${proto === 'http' ? 'https' : proto}://${host}`;
-}
+// The public address of this install. Resolved by util/publicUrl so the URL in
+// a WWW-Authenticate challenge is the same string the plugin download and the
+// OAuth metadata use — a client that is sent to a different host than the one
+// that issued its token reports a credentials error, not an address one.
+const baseFromReq = publicOrigin;
 
 function ok(data) { return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] }; }
 function fail(msg) { return { content: [{ type: 'text', text: `Error: ${msg}` }], isError: true }; }

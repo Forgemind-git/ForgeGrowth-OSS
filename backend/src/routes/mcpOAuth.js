@@ -30,6 +30,7 @@ const crypto = require('crypto');
 const pool = require('../db');
 const { adminOnly } = require('../middleware/access');
 const { hashApiKey } = require('../util/crypto');
+const { publicOrigin } = require('../util/publicUrl');
 
 const publicRouter = Router();
 const adminRouter = Router();
@@ -50,14 +51,11 @@ const CLAUDE_REDIRECTS = [
 const sha256 = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');
 const token = (bytes = 32) => crypto.randomBytes(bytes).toString('base64url');
 
-function baseUrl(req) {
-  // Behind Traefik + nginx. `trust proxy` is off in this app, so req.protocol
-  // reports http even on a TLS request — read the forwarded header, and pin to
-  // https otherwise. An http issuer would be rejected by the client outright.
-  const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim();
-  const host = (req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
-  return `${proto === 'http' ? 'https' : proto}://${host}`;
-}
+// The issuer, and the base of every URL in the OAuth metadata. Resolved by
+// util/publicUrl, which is also what writes the URL into the plugin download —
+// the two must be identical or the token is issued for one address and spent
+// against another.
+const baseUrl = publicOrigin;
 
 // The canonical resource identifier for this MCP server (RFC 8707). Must match
 // what the client sends as `resource`, and what the token is later validated

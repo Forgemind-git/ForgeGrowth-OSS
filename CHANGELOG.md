@@ -49,6 +49,24 @@ Published as multi-architecture images tagged `1.0.1`, `1.0` and `1`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Claude plugin now downloads with the same address the connector actually authenticates
+  against.** "What is this install's public URL" was worked out independently in four places — the
+  OAuth issuer, the Streamable HTTP transport's challenge, the **Admin Settings → MCP Tools** panel
+  and the plugin `.zip`. They disagreed in three ways: three split a multi-hop `x-forwarded-host`
+  on commas and the plugin builder did not, so an install behind two proxies wrote
+  `https://a.example.com, b.example.com` into `.mcp.json`; the plugin pinned `https://` textually,
+  so a plain-HTTP install (localhost, a LAN address, someone else's proxy in front) shipped a
+  connector it could never reach while the page above the download button displayed the working
+  `http://` one; and the environment fallbacks were spelled `FORGEGROWTH_DOMAIN` in one and
+  `FORGECRM_DOMAIN` in another. None of that presents as an address problem: the server issues an
+  OAuth token for the host the request arrived on, so a connector aimed anywhere else holds a token
+  it cannot spend and the client calls it a credentials error. All four now resolve through
+  `backend/src/util/publicUrl.js`, and the connector URL shown in Admin Settings comes from the
+  server rather than being rebuilt in the browser, so what is displayed, what is downloaded and
+  what is advertised in the OAuth metadata are one string by construction.
+
 ### Added
 
 - **A downloadable install bundle**, attached to each release as

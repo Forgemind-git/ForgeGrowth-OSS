@@ -1,6 +1,8 @@
 {
-  "//": "Forge Growth remote MCP connector. Replace YOUR-FORGE-GROWTH-HOST with your own instance's domain — that is the ONLY edit needed. Auth is OAuth: Claude registers itself and opens a browser window for you to approve, so there is no key to paste and this file never holds a secret.",
-  "//legacy": "The older key-in-URL form (https://<host>/api/mcp/http/<KEY>) still works, but it puts a long-lived credential into a URL that ends up in shell history, proxy logs and referrer headers. Prefer the OAuth URL above.",
+  "//": "Forge Growth remote MCP connector. The address below is filled in with your own instance's when you download this plugin from Admin Settings -> MCP Tools, so there is normally nothing to edit. If you took this folder from the repository instead, replace https://YOUR-FORGE-GROWTH-HOST with the address you open Forge Growth at — scheme included, since a local install is served over http.",
+  "//same-address": "It must be the SAME address you sign in at. The server issues the OAuth token for the host the request arrives on, so a connector pointed at a second domain that reaches the same install gets a token for one address and spends it against another — which the client reports as a credentials problem and is not one.",
+  "//host": "Avoid a hostname behind a proxy that challenges datacenter traffic. A CDN/WAF in front of this app can pass OAuth discovery and the token exchange and then silently drop the authenticated MCP request, which again looks exactly like a credentials problem.",
+  "//legacy": "The older key-in-URL form (https://<host>/api/mcp/http/<KEY>) still works for clients that do not speak OAuth, but it puts a long-lived credential into a URL that ends up in shell history, proxy logs and referrer headers. Prefer the OAuth URL above.",
   "mcpServers": {
     "forge-growth": {
       "type": "http",

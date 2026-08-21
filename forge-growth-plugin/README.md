@@ -17,13 +17,23 @@ showing you a preview and asking for a yes before anything goes live.
 
 ### 1. Point the connector at your instance
 
-Edit `.mcp.json` and replace `YOUR-FORGE-GROWTH-HOST` with your own domain. **That is the
-only edit.** There is no key to paste — authentication is OAuth, so nothing secret ever
-goes in this file.
+If you downloaded this from **Admin Settings → MCP Tools**, this is already done — the
+server wrote its own address into `.mcp.json` on the way out:
 
 ```
-https://your-instance.example.com/api/mcp
+https://YOUR-FORGE-GROWTH-HOST/api/mcp
 ```
+
+If you took the folder from the repository instead, the URL in `.mcp.json` is still the
+placeholder — replace it with the address you open Forge Growth at.
+Include the scheme: a local or LAN install is served over `http://`, and a connector pinned
+to `https://` there fails in a way that reads as a login problem. **That is the only edit** —
+there is no key to paste, authentication is OAuth, and nothing secret ever goes in this file.
+
+Use the *same* address you sign in at. Where one install answers on two domains, the OAuth
+token is issued for whichever host the request arrived on, so a connector aimed at the other
+one holds a token for an address it never talks to — and the client calls that a credentials
+error.
 
 ### 2. Turn MCP on and choose what Claude may do
 
@@ -61,7 +71,8 @@ first use Claude registers itself with your server and opens a browser window to
 You must already be signed in to Forge Growth in that browser.
 
 **claude.ai** — Settings → Connectors → **Add custom connector**, and paste
-`https://your-instance.example.com/api/mcp`. If it asks for credentials, create an OAuth
+`https://YOUR-FORGE-GROWTH-HOST/api/mcp` (Admin Settings → MCP Tools shows the exact URL
+with a copy button). If it asks for credentials, create an OAuth
 client in Admin Settings → MCP Tools (the secret is shown **once**) and paste the Client ID
 and Secret under *Advanced settings*.
 

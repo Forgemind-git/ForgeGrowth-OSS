@@ -97,6 +97,19 @@ through as `area_marketing` and then delivered it to `/api/users`. Canonicalise 
 the result. Any change there must keep "the path we check" identical to "the path the server
 receives".
 
+### The public address has one definition
+
+`util/publicUrl.js` decides what URL the outside world reaches this install on. The OAuth issuer,
+the Streamable HTTP challenge, the MCP Tools panel and the plugin `.zip` all read it from there,
+and the plugin download substitutes the whole **origin** — scheme included — not just the hostname.
+
+Four hand-written copies of that logic disagreed on comma-joined `x-forwarded-host`, on whether
+`https` was pinned, and on which env var to fall back to. What makes it worth an invariant is how
+it fails: the server issues an OAuth token for the host the request arrived on, so a connector
+aimed at any other address for the same install holds a token it cannot spend, and every client
+reports that as a **credentials** error. Nobody looks at the URL. Do not derive a public URL
+anywhere else — including in the frontend from `window.location`.
+
 ### One machine can hold several installs, and only the project name separates them
 
 `docker-compose.yml` pins `name: forgegrowth`, and that name prefixes the containers **and the

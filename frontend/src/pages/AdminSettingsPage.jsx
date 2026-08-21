@@ -3877,13 +3877,18 @@ function McpToolsTab() {
               <li>Paste the server URL below into <b>Remote MCP server URL</b>, then open <b>Advanced settings</b> and paste the <b>OAuth Client ID</b> and <b>OAuth Client Secret</b>.</li>
               <li>Press <b>Add</b>, then <b>Connect</b> — a Forge Growth window opens asking you to allow access. You must already be signed in to Forge Growth in that browser.</li>
             </ol>
-            {install?.remoteUrl && (
+            {/* install.mcpUrl, not a URL rebuilt from window.location: the server
+                resolves this once and writes the same string into the plugin
+                download and the OAuth metadata. A page that derived its own
+                could show an address the server would never have issued a token
+                for, and the mismatch surfaces as a login failure. */}
+            {install?.mcpUrl && (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8 }}>
                 <code style={{ flex: 1, ...codeBox, whiteSpace: 'nowrap', overflowX: 'auto', padding: '10px 12px' }}>
-                  {install.remoteUrl.replace(/\/http\/<YOUR_KEY>$/, '')}
+                  {install.mcpUrl}
                 </code>
                 <button
-                  onClick={() => copy(install.remoteUrl.replace(/\/http\/<YOUR_KEY>$/, ''), 'oauthurl')}
+                  onClick={() => copy(install.mcpUrl, 'oauthurl')}
                   style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1px solid ${C.border}`, borderRadius: 7, padding: '8px 10px', fontSize: 14, cursor: 'pointer', color: C.text, fontFamily: FONT }}
                 >
                   {copied === 'oauthurl' ? <Check size={13} /> : <Copy size={13} />}
@@ -3989,9 +3994,9 @@ function McpToolsTab() {
               <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.textMuted, marginBottom: 5 }}>Remote MCP server URL</div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <code style={{ flex: 1, ...codeBox, whiteSpace: 'nowrap', overflowX: 'auto', padding: '11px 13px' }}>
-                  {`${window.location.origin}/api/mcp`}
+                  {install?.mcpUrl || `${window.location.origin}/api/mcp`}
                 </code>
-                <button onClick={() => copy(`${window.location.origin}/api/mcp`, 'curl')}
+                <button onClick={() => copy(install?.mcpUrl || `${window.location.origin}/api/mcp`, 'curl')}
                   style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, padding: '0 14px', fontSize: 15, cursor: 'pointer', color: C.text, fontFamily: FONT }}>
                   {copied === 'curl' ? <Check size={14} /> : <Copy size={14} />}
                 </button>

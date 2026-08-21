@@ -19,6 +19,7 @@ const pool = require('../db');
 const { makeZip } = require('../util/zip');
 const { adminOnly } = require('../middleware/access');
 const { hashApiKey } = require('../util/crypto');
+const { publicOrigin, publicHost, mcpUrl } = require('../util/publicUrl');
 const agentService = require('../services/agentService');
 const mcpService = require('../services/mcpService');
 
@@ -158,7 +159,16 @@ adminRouter.delete('/mcp/keys/:id', adminOnly, async (req, res) => {
 // own domain already written into .mcp.json. Every customer runs their own Forge
 // Growth, so a checked-in plugin would make "edit this file before it works" the
 // first step of every install — the worst possible place for a manual step.
+//
+// The substitution is on the ORIGIN, scheme included, not just the hostname.
+// Writing the host into a hardcoded `https://` prefix is how a plain-HTTP
+// install (localhost, a LAN address, an install behind someone else's proxy)
+// ended up with a plugin it could never connect with, while the same page
+// displayed the working http:// URL a few centimetres above the download
+// button. util/publicUrl decides the whole origin, once, for the plugin and
+// for the OAuth metadata alike.
 const PLUGIN_DIR = process.env.FORGEGROWTH_PLUGIN_DIR || '/app/plugin';
+const PLUGIN_ORIGIN_PLACEHOLDER = 'https://YOUR-FORGE-GROWTH-HOST';
 const PLUGIN_HOST_PLACEHOLDER = 'YOUR-FORGE-GROWTH-HOST';
 
 // Walk the plugin directory into [{ name, data }] with forward-slash paths.
@@ -183,12 +193,23 @@ adminRouter.get('/mcp/plugin.zip', adminOnly, (req, res) => {
         error: 'The plugin files are not available on this server. Mount the forge-growth-plugin directory at ' + PLUGIN_DIR + ' and try again.',
       });
     }
-    const host = req.headers['x-forwarded-host'] || req.headers.host || process.env.FORGEGROWTH_DOMAIN || '';
+    const origin = publicOrigin(req);
+    const host = publicHost(req);
+    if (!origin) {
+      return res.status(500).json({
+        error: 'Could not work out this instance\'s public address, so the plugin would download unusable. Set TLS_DOMAIN or CORS_ORIGIN and try again.',
+      });
+    }
     const files = collectPluginFiles(PLUGIN_DIR);
     if (!files.length) return res.status(404).json({ error: 'No plugin files found to package.' });
 
-    // Write this instance's real host in, so the download needs no editing.
+    // Write this instance's real address in, so the download needs no editing.
+    // Scheme-qualified first: the bare-host pass must not leave a stale
+    // `https://` in front of an origin that is served over http.
     for (const f of files) {
+      if (f.data.includes(PLUGIN_ORIGIN_PLACEHOLDER)) {
+        f.data = f.data.split(PLUGIN_ORIGIN_PLACEHOLDER).join(origin);
+      }
       if (f.data.includes(PLUGIN_HOST_PLACEHOLDER)) {
         f.data = f.data.split(PLUGIN_HOST_PLACEHOLDER).join(host);
       }
@@ -208,9 +229,10 @@ adminRouter.get('/mcp/plugin.zip', adminOnly, (req, res) => {
 });
 
 adminRouter.get('/mcp/install', adminOnly, (req, res) => {
-  const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0];
-  const host = req.headers['x-forwarded-host'] || req.headers.host || (process.env.FORGECRM_DOMAIN || '');
-  const base = `${proto}://${host}`;
+  // Same resolver as the plugin .zip and the OAuth metadata: what this panel
+  // shows and what the download contains are the same string by construction,
+  // not by two pieces of code happening to agree.
+  const base = publicOrigin(req);
   const apiUrl = `${base}/api/mcp/v1`;
   const remoteUrl = `${base}/api/mcp/http/<YOUR_KEY>`;
   // Shown, never executed — it is the `args` entry of a config snippet the admin
@@ -219,6 +241,10 @@ adminRouter.get('/mcp/install', adminOnly, (req, res) => {
   // it was written on, and set MCP_SERVER_PATH to show the true location.
   const serverPath = process.env.MCP_SERVER_PATH || '/path/to/forge-growth/mcp-server/src/index.js';
   res.json({
+    // The OAuth connector URL — the one the plugin ships and the one the admin
+    // pastes into Claude. Served rather than rebuilt in the browser so the page
+    // cannot show an address the server would not have written.
+    mcpUrl: mcpUrl(req),
     // Remote (hosted) connector — paste this URL (with a real key) into Claude's
     // "Add custom connector" dialog or any MCP client. No local files needed.
     remoteUrl,
