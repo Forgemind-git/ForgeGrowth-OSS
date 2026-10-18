@@ -42,7 +42,11 @@ ALTER TABLE coexistence.chatbots          DROP COLUMN IF EXISTS project_id;
 ALTER TABLE coexistence.message_templates DROP COLUMN IF EXISTS project_id;
 ALTER TABLE coexistence.agents            DROP COLUMN IF EXISTS project_id;
 DROP TABLE IF EXISTS coexistence.projects;
--- automation_folders was renamed to projects by 094; drop a leftover too.
+-- automation_folders was renamed to projects by 094 — unless the boot-time
+-- ensureProjectTables() had already created `projects`, in which case 094 left
+-- both tables and chatbots.folder_id still points at the old one. Drop that
+-- column (unused since 094) first, or the DROP TABLE fails on its foreign key.
+ALTER TABLE coexistence.chatbots DROP COLUMN IF EXISTS folder_id;
 DROP TABLE IF EXISTS coexistence.automation_folders;
 
 -- Page keys -------------------------------------------------------------------
