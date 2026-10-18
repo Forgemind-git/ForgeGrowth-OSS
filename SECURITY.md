@@ -8,16 +8,16 @@ unless you go looking for one. Watch this repository's releases if you run it in
 
 | Version | Supported |
 |---|---|
-| `1.0.x` | ✅ Security fixes |
+| `2.0.x` | ✅ Security fixes |
+| `1.0.x` | ❌ Upgrade to 2.0 — see the upgrade notes in `CHANGELOG.md` |
 | `main` | ✅ Fixes land here first |
-| Anything older | ❌ Nothing older exists yet — `v1.0.0` is the first tagged release |
 
 There is no long-term-support branch. The upgrade path is to re-run the installer, which is safe to
 re-run and leaves `.env` and your database alone:
 
 ```bash
 ./install.sh                  # move to the current release
-./install.sh --version v1.0.0 # or pin to a specific one
+./install.sh --version v2.0.0 # or pin to a specific one
 ```
 
 ## Reporting a vulnerability
