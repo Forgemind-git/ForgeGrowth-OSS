@@ -34,8 +34,8 @@ further calls to Meta.
 ### Already on a server with Docker? One command.
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v1.0.1/scripts/install.sh)" -- \
-  --version v1.0.1 --domain crm.example.com --yes
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v2.0.0/scripts/install.sh)" -- \
+  --version v2.0.0 --domain crm.example.com --yes
 ```
 
 Swap `crm.example.com` for your domain. That single command is the entire install: it pulls the
@@ -156,8 +156,8 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowt
 **On a server with a real domain**, pinned to a release and asking nothing at all:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v1.0.1/scripts/install.sh)" -- \
-  --version v1.0.1 --domain crm.example.com
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v2.0.0/scripts/install.sh)" -- \
+  --version v2.0.0 --domain crm.example.com
 ```
 
 ---

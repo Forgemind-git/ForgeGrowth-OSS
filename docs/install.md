@@ -182,12 +182,12 @@ It asks one question — the address people will use — and derives everything 
 What you want on a server you are handing to somebody:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v1.0.1/scripts/install.sh)" -- \
-  --version v1.0.1 --domain crm.example.com
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v2.0.0/scripts/install.sh)" -- \
+  --version v2.0.0 --domain crm.example.com
 ```
 
 **Both halves of the pinned form matter.** The URL fixes which *script* runs; `--version` fixes what
-that script then downloads and pulls. Pin only one and you get a v1.0.1 script that fetches `main`.
+that script then downloads and pulls. Pin only one and you get a v2.0.0 script that fetches `main`.
 
 Give it a domain whose DNS already points at the machine and it obtains a Let's Encrypt certificate
 on the way up, then **verifies the certificate actually works** before reporting success.
@@ -271,7 +271,7 @@ pressing return. To skip them:
 | `--domain <host>` | serve HTTPS on this domain, certificate and renewal included |
 | `--tls-email <addr>` | certificate contact (default: the admin email; `internal` self-signs) |
 | `--url <origin>` | public origin the browser will use; sets CORS. **Include the port** if people reach it on one — `http://203.0.113.10:8080`, not `http://203.0.113.10` |
-| `--version <ref>` | pin the files and image tag together. `v1.0.1` and `1.0.1` both work. Sticky — later runs stay on it |
+| `--version <ref>` | pin the files and image tag together. `v2.0.0` and `2.0.0` both work. Sticky — later runs stay on it |
 | `--images` / `--source` | published images, or build from this checkout |
 | `--dir <path>` | install here rather than `./forge-growth` |
 | `--admin-email <addr>` | first-run admin |
@@ -470,7 +470,7 @@ overwritten — only empty or placeholder values are filled in — and every mig
 ```bash
 ./install.sh                    # images install: re-fetch, pull, restart
 git pull && ./scripts/install.sh   # source install
-./install.sh --version v1.0.1   # move deliberately, and stay there
+./install.sh --version v2.0.0   # move deliberately, and stay there
 ```
 
 A pinned install **stays pinned** — the version is remembered in `.forgegrowth-install`, so
