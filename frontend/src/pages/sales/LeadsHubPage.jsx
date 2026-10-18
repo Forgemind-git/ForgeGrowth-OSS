@@ -1,7 +1,7 @@
-// Sales → Leads — TWO tabs over one leads model:
+// Sales → Contacts (route key still `leads`) — two tabs over one model:
 //
-//   funnel  — the funnel-shaped chart with stage drill-down   (the default)
-//   list    — the leads themselves, rendered either as a table or as a board
+//   funnel  — the funnel, with stage drill-down                (the default)
+//   list    — the contacts themselves, as a table or as a board
 //
 // Pipeline is deliberately NOT a third tab. It was one, and that made the same
 // leads look like two different features sitting side by side; it is a way of
@@ -15,6 +15,8 @@
 //   #/leads              funnel
 //   #/leads/list         All Leads, table
 //   #/leads/list/board   All Leads, board
+//   #/leads/list/source/<label>   All Contacts filtered to one source
+//   #/leads/my[/…]       legacy → #/follow-ups[/…] (Follow-up has its own nav item)
 // Legacy `#/leads/funnel` and `#/leads/pipeline` still resolve.
 //
 // Each view keeps its own PageShell (title/subtitle/actions differ) and renders
@@ -23,10 +25,11 @@ import { C, FONT } from '../../constants.js';
 import PipelinePage from './PipelinePage.jsx';
 import FunnelViewerPage from './FunnelViewerPage.jsx';
 import LeadsPage from './LeadsPage.jsx';
+import { useEffect } from 'react';
 
 const TABS = [
   { key: 'funnel', label: 'Funnel' },
-  { key: 'list', label: 'All Leads' },
+  { key: 'list', label: 'All Contacts' },
 ];
 
 export function LeadsTabs({ tab, setTab }) {
@@ -51,20 +54,27 @@ export default function LeadsHubPage({ user, navigate, subParts = [] }) {
   // 'pipeline' is a legacy hash from when the board was its own tab; it now
   // opens All Leads on the board rather than 404ing into the default.
   const isBoard = first === 'pipeline' || (first === 'list' && subParts[1] === 'board');
-  const tab = (first === 'list' || first === 'pipeline') ? 'list' : 'funnel';
+  const tab = (first === 'list' || first === 'pipeline') ? 'list' : first === 'my' ? 'my' : 'funnel';
+  const initialSource = first === 'list' && subParts[1] === 'source' ? (subParts[2] || '') : '';
 
-  const setTab = (t) => navigate && (t === 'funnel' ? navigate('leads') : navigate('leads', 'list'));
+  const setTab = (t) => navigate && (t === 'funnel' ? navigate('leads') : navigate('leads', t));
   // The board/table choice is routed too, so a refresh — or a link someone
   // pastes to a colleague — keeps the view they were looking at.
   const setView = (v) => navigate && (v === 'board' ? navigate('leads', 'list', 'board') : navigate('leads', 'list'));
   const tabs = <LeadsTabs tab={tab} setTab={setTab} />;
 
+  // Follow-up moved to its own page; old #/leads/my links (Google Calendar
+  // events made before the move) still land on the right chat.
+  useEffect(() => {
+    if (first === 'my' && navigate) navigate('follow-ups', ...subParts.slice(1));
+  }, [first]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (tab === 'my') return null;
   if (tab === 'list') {
     // Both renderings are the SAME tab, so both get the same tab strip and the
     // same view toggle — switching between them must not feel like navigating.
     return isBoard
       ? <PipelinePage user={user} navigate={navigate} tabs={tabs} view="board" onChangeView={setView} />
-      : <LeadsPage user={user} navigate={navigate} tabs={tabs} view="list" onChangeView={setView} />;
+      : <LeadsPage user={user} navigate={navigate} tabs={tabs} view="list" onChangeView={setView} initialSource={initialSource} />;
   }
-  return <FunnelViewerPage user={user} tabs={tabs} />;
+  return <FunnelViewerPage user={user} navigate={navigate} tabs={tabs} />;
 }

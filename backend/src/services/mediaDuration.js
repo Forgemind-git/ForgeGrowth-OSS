@@ -1,7 +1,7 @@
 // How long is this audio/video file, really?
 //
 // Used to enforce an agent's "longest voice note" cap BEFORE the file is handed
-// to OpenAI Whisper — Whisper bills per minute of audio, so a cap applied after
+// to speech-to-text — transcription bills per second of audio, so a cap applied after
 // transcription would protect nothing.
 //
 // ⚠ THE DURATION HAS TO BE MEASURED, NOT ESTIMATED. Meta's webhook audio object

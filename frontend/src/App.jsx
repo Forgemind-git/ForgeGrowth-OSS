@@ -9,6 +9,7 @@ import LoginGate from './components/LoginGate.jsx';
 import FeedbackModal from './components/FeedbackModal.jsx';
 import PageErrorBoundary from './components/PageErrorBoundary.jsx';
 import Topbar from './components/Topbar.jsx';
+import AutomationHub, { hubOf } from './components/AutomationHub.jsx';
 import Sidebar from './components/Sidebar.jsx';
 import ChatsPage from './components/ChatsPage.jsx';
 import HomePage from './pages/HomePage.jsx';
@@ -18,37 +19,47 @@ import BulkMessagePage from './pages/BulkMessagePage.jsx';
 import AdminSettingsPage from './pages/AdminSettingsPage.jsx';
 import MediaLibraryPage from './pages/MediaLibraryPage.jsx';
 import MessageFormatsPage from './pages/MessageFormatsPage.jsx';
-import ProjectsPage from './pages/ProjectsPage.jsx';
-import MessageCostsPage from './pages/MessageCostsPage.jsx';
 import PipelinesPage from './pages/PipelinesPage.jsx';
 import AiAgentBuilderPage from './pages/AiAgentBuilderPage.jsx';
 // AI Academy — Marketing
 import MarketingOverviewPage from './pages/marketing/OverviewPage.jsx';
 import CampaignsPage from './pages/marketing/CampaignsPage.jsx';
 import CtwaPage from './pages/marketing/CtwaPage.jsx';
-import PlaceholderPage from './components/PlaceholderPage.jsx';
+import ConversionApiPage from './pages/marketing/ConversionApiPage.jsx';
+import CloPage from './pages/marketing/CloPage.jsx';
+import MessageCostsPage from './pages/MessageCostsPage.jsx';
 // AI Academy — Sales
 import LeadsHubPage from './pages/sales/LeadsHubPage.jsx';
 import PaymentsPage from './pages/sales/PaymentsPage.jsx';
 import OnboardingPage from './pages/sales/OnboardingPage.jsx';
+import ChatAnalyzerPage from './pages/sales/ChatAnalyzerPage.jsx';
+// Workflow agents (migration 121) — Claude agents over the CRM's data.
+import WorkflowAgentsPage from './pages/workflowAgents/WorkflowAgentsPage.jsx';
+import WorkflowApprovalsPage from './pages/workflowAgents/ApprovalsPage.jsx';
+import MyListPage from './pages/sales/MyListPage.jsx';
+import { PAGE_ALIASES } from './components/Sidebar.jsx';
 // AI Academy — Chats additive
-import LeadFormsPage from './pages/LeadFormsPage.jsx';
-import PublicLeadFormPage from './pages/PublicLeadFormPage.jsx';
+// Social — the ported ForgeSocial app, its own header tab (2026-10-11).
+import SocialSection, { socialNavId, socialPublicPage } from './social/SocialSection.jsx';
 
 const VALID_PAGES = new Set([
   'home', 'chatbot-builder', 'template-builder', 'chats',
   'bulk-message', 'admin-settings', 'media-library', 'wa-links',
-  'pipelines', 'ai-agent-builder', 'lead-forms', 'projects',
+  'pipelines', 'ai-agent-builder',
   // Marketing
-  'mkt-overview', 'campaigns', 'ctwa-ads', 'conversion-api',
+  'mkt-overview', 'campaigns', 'ctwa-ads', 'conversion-api', 'clo',
   // Sales — 'sales-pipeline' and 'sales-funnel' are legacy keys kept so old
   // links and any stored permission override keep resolving; both land on the
   // Leads hub. 'bda-performance' and 'contacts' were removed with their pages.
-  'sales-pipeline', 'leads', 'payments', 'onboarding',
+  'sales-pipeline', 'leads', 'payments', 'onboarding', 'chat-analyzer',
   'sales-funnel',
   // Message costs — a full-width dashboard; its configuration lives in
   // Admin Settings -> Message Costs.
   'message-costs',
+  // Workflow agents: the agents + builder, the approvals queue, a rep's worklist.
+  'workflow-agents', 'workflow-agent-approvals', 'follow-ups',
+  // Social — one page key; everything after #/social/ is the Social section's own route.
+  'social',
 ]);
 
 // Which header section (Marketing / Sales) owns each page. The hash is the
@@ -59,14 +70,20 @@ const VALID_PAGES = new Set([
 // Sales: everything else IS Sales, so the fallback below does the work and a new
 // Sales page cannot be forgotten here and land in the wrong workspace.
 const MARKETING_PAGES = new Set([
-  'mkt-overview', 'campaigns', 'ctwa-ads', 'conversion-api',
+  'mkt-overview', 'campaigns', 'ctwa-ads', 'conversion-api', 'clo',
+  // Moved from Sales 2026-10-16: where leads come from, not the sales flow.
+  'wa-links',
 ]);
-const sectionOf = (page) => (MARKETING_PAGES.has(page) ? 'marketing' : 'sales');
+const sectionOf = (page) => {
+  if (MARKETING_PAGES.has(page)) return 'marketing';
+  if (page === 'social') return 'social';
+  return 'sales';
+};
 
 // The landing page when a section tab is clicked. Sales opens on the Leads hub,
 // which itself opens on the Funnel; Home stays the login landing page and is
 // reachable from the pinned item above the groups.
-const SECTION_FIRST_PAGE = { marketing: 'mkt-overview', sales: 'leads' };
+const SECTION_FIRST_PAGE = { marketing: 'mkt-overview', sales: 'leads', social: 'social' };
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -76,30 +93,22 @@ export default function App() {
 
   const page = VALID_PAGES.has(routeParts[0]) ? routeParts[0] : 'home';
   const subParts = routeParts.slice(1);
-  const setPage = (p) => navigate(p);
+  // A Social sidebar id is a full route ('social/inbox'), so split it into parts.
+  const setPage = (p) => navigate(...String(p).split('/'));
   // Header workspace tab is derived from the current page, so the hash is the
   // single source of truth (a refresh keeps you in the right workspace).
   // admin-settings keeps whatever section it was reached from — but the tabs are
   // hidden there anyway, so 'chats' is a harmless default.
   const section = sectionOf(page);
+  // The nav key the sidebar and the tab hubs work on: a Social view is its
+  // full route ('social/<view>'), everything else its page key.
+  const navKey = page === 'social' ? socialNavId(subParts) : page;
   const changeSection = (s) => navigate(SECTION_FIRST_PAGE[s] || 'home');
 
-  // Path-based public lead-form route (no '#'): WhatsApp/Meta template URL
-  // buttons reject '#' fragments ("Invalid parameter"), so per-recipient form
-  // links are real paths (/f/<slug>/<token>) that nginx's SPA catch-all serves
-  // as index.html. We read slug+token from the pathname here; legacy hash links
-  // (#/f/...) still resolve via the check further down.
-  const pathForm = typeof window !== 'undefined'
-    ? window.location.pathname.match(/^\/f\/([^/]+)(?:\/([^/]+))?\/?$/)
-    : null;
-  const onPublicFormPath = !!pathForm;
-
-  // Normalize empty hash to #/home so reload always shows a valid URL — but not
-  // on a public /f/ path (that would append a stray #/home to the form URL).
+  // Normalize empty hash to #/home so reload always shows a valid URL.
   useEffect(() => {
-    if (onPublicFormPath) return;
     if (!routeParts[0]) replaceRoute('home');
-  }, [routeParts, replaceRoute, onPublicFormPath]);
+  }, [routeParts, replaceRoute]);
 
   // Page-level guard: redirect non-admin users away from pages they can't see.
   // `user.pages` is loaded by /api/auth/me and contains every page key the
@@ -113,7 +122,8 @@ export default function App() {
     const pageOk =
       page === 'home'
       || allowed.includes(page)
-      || (page === 'admin-settings' && allowed.some(p => p.startsWith('admin-settings:')));
+      || (PAGE_ALIASES[page] || []).some(k => allowed.includes(k))
+      || (page === 'admin-settings' && allowed.some(p => p.startsWith('admin-settings:') || p === 'social'));
     if (!pageOk) {
       replaceRoute('home');
     }
@@ -128,15 +138,29 @@ export default function App() {
   // whole structure rather than just the Chats nav. A manual collapse is still
   // respected: `pinned` remembers what the operator chose BEFORE the builder took
   // over, so leaving restores their preference rather than forcing it open.
+  //
+  // A phone gets the same rail: the full 248px sidebar left ~90px for the page
+  // at 390px wide, which made every page — and the reps' "My leads today" list,
+  // which is meant to be used on a phone — unreadable. Desktop is unchanged.
   const pinnedCollapse = useRef(false);
-  const inBuilder = page === 'chatbot-builder';
+  // Only the flow CANVAS (#/chatbot-builder/<id>) takes the rail — the Flows
+  // list is now the Automations hub's landing tab and keeps the full sidebar.
+  const inBuilder = page === 'chatbot-builder' && !!subParts[0] && subParts[0] !== 'folder';
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches);
   useEffect(() => {
-    if (inBuilder) {
+    const mq = window.matchMedia('(max-width: 640px)');
+    const on = () => setPhone(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  const forceRail = inBuilder || phone;
+  useEffect(() => {
+    if (forceRail) {
       setSidebarCollapsed(prev => { pinnedCollapse.current = prev; return true; });
     } else {
       setSidebarCollapsed(pinnedCollapse.current);
     }
-  }, [inBuilder]);
+  }, [forceRail]);
 
   useEffect(() => {
     api.auth.me()
@@ -145,26 +169,40 @@ export default function App() {
       .finally(() => setChecking(false));
   }, []);
 
+  // Return hop for the MCP connector's OAuth consent screen.
+  //
+  // ⚠ Claude sends the operator to /api/mcp/oauth/authorize as a CROSS-SITE
+  // navigation, and our session cookie is SameSite=Strict — so the browser
+  // withholds it and that page cannot tell a signed-in operator from a stranger.
+  // It therefore bounces here with `?next=<the authorize path>`. Going back from
+  // our own origin is SAME-SITE, the cookie is sent, and consent renders.
+  // Without this the operator loops forever: sign in, land on Home, retry from
+  // Claude, get the sign-in page again.
+  //
+  // ⚠ `next` is attacker-reachable (it is just a query param), so it is accepted
+  // ONLY as a relative path addressing this one route — never as an absolute
+  // URL, which would make this an open redirect.
+  useEffect(() => {
+    if (!user) return;
+    const next = new URLSearchParams(window.location.search).get('next');
+    if (!next || !next.startsWith('/api/mcp/oauth/authorize')) return;
+    window.location.replace(next);
+  }, [user]);
+
   const handleLogout = async () => {
     await api.auth.logout().catch(() => {});
     setUser(null);
     setPage('home');
   };
 
-  // Public Lead Form fill page — reachable with no login (shared link / a
-  // WhatsApp template button lands here). Checked before the auth gate below
-  // so a visitor never sees the login screen or the "Loading…" spinner.
-  if (pathForm) {
-    return <PublicLeadFormPage slug={decodeURIComponent(pathForm[1])} token={pathForm[2] ? decodeURIComponent(pathForm[2]) : null} />;
-  }
-  if (routeParts[0] === 'f' && routeParts[1]) { // legacy hash link (#/f/<slug>/<token>)
-    return <PublicLeadFormPage slug={routeParts[1]} token={routeParts[2] || null} />;
-  }
+  // Social's public pages: a shared report link and the privacy policy.
+  const socialPublic = socialPublicPage(routeParts);
+  if (socialPublic) return socialPublic;
 
   if (checking) {
     return (
       <div style={{
-        minHeight: '100vh',
+        minHeight: 'calc(100vh / var(--fg-zoom, 1))',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -213,21 +251,16 @@ export default function App() {
       case 'media-library': return <MediaLibraryPage />;
       case 'bulk-message': return <BulkMessagePage onNavigate={navigate} user={user} />;
       case 'chatbot-builder': return <ChatbotBuilderPage subParts={subParts} navigate={navigate} />;
-      case 'ai-agent-builder': return <AiAgentBuilderPage user={user} />;
+      case 'ai-agent-builder': return <AiAgentBuilderPage user={user} navigate={navigate} />;
       case 'admin-settings': return <AdminSettingsPage onLogout={handleLogout} onNavigate={setPage} subParts={subParts} navigate={navigate} user={user} />;
       case 'wa-links': return <MessageFormatsPage subParts={subParts} navigate={navigate} />;
-      case 'projects': return <ProjectsPage subParts={subParts} navigate={navigate} user={user} />;
-      case 'message-costs': return <MessageCostsPage user={user} navigate={navigate} subParts={subParts} />;
       case 'pipelines': return <PipelinesPage user={user} />;
-      case 'lead-forms': return <LeadFormsPage user={user} subParts={subParts} navigate={navigate} />;
       // Marketing
       case 'mkt-overview': return <MarketingOverviewPage user={user} navigate={navigate} />;
       case 'campaigns': return <CampaignsPage user={user} />;
       case 'ctwa-ads': return <CtwaPage user={user} navigate={navigate} />;
-      // Conversions API is not shipped in this release. The tab stays in the nav
-      // so the funnel story stays legible; the send path itself is absent.
-      case 'conversion-api': return <PlaceholderPage title="Conversion API" icon={Radio}
-        subtitle="Send down-funnel conversions back to Meta — Coming Soon" />;
+      case 'conversion-api': return <ConversionApiPage user={user} subParts={subParts} navigate={navigate} />;
+      case 'clo': return <CloPage user={user} subParts={subParts} navigate={navigate} />;
       // Sales — one unified Leads tab. `sales-pipeline` / `sales-funnel` are
       // legacy hashes kept so old links and permission grants keep resolving;
       // they open the hub on the matching view. Pipeline is no longer a tab of
@@ -238,30 +271,41 @@ export default function App() {
       case 'leads': return <LeadsHubPage user={user} navigate={navigate} subParts={subParts} />;
       case 'payments': return <PaymentsPage user={user} navigate={navigate} subParts={subParts} />;
       case 'onboarding': return <OnboardingPage user={user} navigate={navigate} subParts={subParts} />;
+      case 'message-costs': return <MessageCostsPage user={user} navigate={navigate} subParts={subParts} />;
+      // subParts route the view AND the open conversation:
+      //   #/chat-analyzer/cost, #/chat-analyzer/c/<source>/<key>
+      case 'chat-analyzer': return <ChatAnalyzerPage user={user} navigate={navigate} subParts={subParts} />;
+      // subParts: [] list · ['settings'] · [agentId, tab, runId?]
+      case 'workflow-agents': return <WorkflowAgentsPage user={user} navigate={navigate} subParts={subParts} />;
+      case 'workflow-agent-approvals': return <WorkflowApprovalsPage user={user} navigate={navigate} />;
+      case 'follow-ups': return <MyListPage user={user} navigate={navigate} subParts={subParts} />;
+      // opens one thread while the nav item stays highlighted.
+      case 'social': return <SocialSection user={user} navigate={navigate} subParts={subParts} />;
       default: return <HomePage user={user} onPageChange={setPage} />;
     }
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100vh',
-      fontFamily: FONT,
-      background: C.pageBg,
-    }}>
+    // THE SHELL — panels FLOAT on the page ground with a gutter all round, and
+    // never touch the viewport edge. `.fc-app` owns the gutter and the only
+    // `overflow: hidden` in the layout, so the PAGE never scrolls; the content
+    // pane scrolls inside itself. Both are in styles/forge.css rather than
+    // inline, because the header, the two panes and the gutter have to agree on
+    // one set of numbers and a literal in three files is how they stop agreeing.
+    <div className="fc-app fc-ui" style={{ fontFamily: FONT }}>
       <Topbar
         user={user}
         onLogout={handleLogout}
         onNavigate={(p) => setPage(p)}
+        navigate={navigate}
         section={section}
         onSectionChange={changeSection}
         hideSections={page === 'admin-settings'}
       />
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div className="fc-body">
         {page !== 'admin-settings' && (
           <Sidebar
-            activePage={page === 'sales-pipeline' || page === 'sales-funnel' ? 'leads' : page}
+            activePage={page === 'sales-pipeline' || page === 'sales-funnel' ? 'leads' : hubOf(navKey) ? hubOf(navKey).id : navKey}
             onPageChange={setPage}
             collapsed={sidebarCollapsed}
             setCollapsed={setSidebarCollapsed}
@@ -269,11 +313,15 @@ export default function App() {
             section={section}
           />
         )}
-        <div style={{ flex: 1, overflow: 'auto', background: C.pageBg, display: 'flex', flexDirection: 'column' }}>
+        <main className="fc-pane fc-content">
+          {/* One page crashing must not take the whole app down. Keyed on the
+              route so navigating away clears the error instead of pinning it. */}
           <PageErrorBoundary resetKey={routeParts.join('/')}>
-            {renderPage()}
+            {hubOf(navKey)
+              ? <AutomationHub page={navKey} user={user} navigate={navigate} hidden={inBuilder}>{renderPage()}</AutomationHub>
+              : renderPage()}
           </PageErrorBoundary>
-        </div>
+        </main>
       </div>
       <FeedbackModal />
     </div>

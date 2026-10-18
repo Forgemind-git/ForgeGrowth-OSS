@@ -12,7 +12,7 @@ const SOURCES = ['CTWA Ad', 'Instagram', 'YouTube', 'Referral', 'Webinar', 'What
 const CITIES = ['Bengaluru', 'Mumbai', 'Delhi', 'Hyderabad', 'Pune', 'Chennai', 'Kolkata', 'Jaipur'];
 const ROLES = ['Student', 'Working Professional', 'Freelancer', 'Business Owner', 'Job Seeker'];
 const GOALS = ['Get a job', 'Start freelancing', 'Build a product', 'Upskill', 'Career switch'];
-const STAGES = ['new', 'contacted', 'engaged', 'hot', 'enrolled', 'cold_lost'];
+const _STAGES = ['new', 'contacted', 'engaged', 'hot', 'enrolled', 'cold_lost'];
 // Weighted distribution so the funnel looks realistic (fat top, thin bottom).
 const STAGE_WEIGHTS = ['new', 'new', 'new', 'contacted', 'contacted', 'contacted', 'engaged', 'engaged', 'hot', 'hot', 'enrolled', 'cold_lost'];
 const NAMES = ['Aarav Sharma', 'Diya Patel', 'Vihaan Reddy', 'Ananya Iyer', 'Arjun Nair', 'Saanvi Rao', 'Reyansh Gupta', 'Ishaan Menon', 'Aadhya Singh', 'Kabir Khanna', 'Myra Joshi', 'Vivaan Das', 'Anika Bose', 'Advait Kulkarni', 'Kiara Shah', 'Rudra Pillai', 'Navya Malhotra', 'Shaurya Verma', 'Riya Chatterjee', 'Aryan Kapoor', 'Sara Fernandes', 'Dhruv Agarwal', 'Zara Sheikh', 'Ayaan Mirza', 'Prisha Reddy', 'Ved Bhatt', 'Aisha Qureshi', 'Krish Mehta', 'Tara Menon', 'Neil DSouza', 'Ira Saxena', 'Yuvan Raj', 'Meera Pillai', 'Om Prakash', 'Anvi Deshpande', 'Rehan Ali', 'Nitya Hegde', 'Laksh Jain', 'Pihu Sinha', 'Kian Thomas'];

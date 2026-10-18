@@ -169,7 +169,7 @@ function Steps({ run }) {
       {run.finalReply && (
         <div style={{
           padding: '10px 12px', borderRadius: 8,
-          background: 'var(--c-successBgSoft, #ECFDF5)', border: '1px solid #A7F3D0',
+          background: 'var(--c-successBgSoft, #ECFDF5)', border: '1px solid transparent',
           fontSize: 14, color: 'var(--c-s065f46, #065F46)', display: 'flex', gap: 8, alignItems: 'flex-start',
         }}>
           <MessageSquare size={13} style={{ marginTop: 1 }} />

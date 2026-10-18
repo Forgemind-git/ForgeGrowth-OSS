@@ -243,7 +243,6 @@ export default function MessageFormatsPage({ subParts = [], navigate }) {
     <div style={{ padding: '22px 26px', fontFamily: FONT, flex: 1, display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, gap: 16 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, letterSpacing: '-0.02em', color: B.t1 }}>Message Formats</h1>
           <p style={{ fontSize: 14, color: B.t5, margin: '4px 0 0', maxWidth: 720 }}>
             Give each place you advertise its own pre-filled opener and its own label. When someone taps
             the link and sends that opener, the conversation is tagged with the label — so you can tell
@@ -412,7 +411,7 @@ function CreateModal({ accounts, onClose, onCreated }) {
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 20 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, padding: '24px 28px', width: 560, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: C.shadowLg }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, padding: '24px 28px', width: 560, maxWidth: '100%', maxHeight: 'calc(90vh / var(--fg-zoom, 1))', overflowY: 'auto', boxShadow: C.shadowLg }}>
         <h2 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 700, color: B.t1 }}>New message format</h2>
         <p style={{ margin: '0 0 18px', fontSize: 14, color: B.t5 }}>
           The label is how you will recognise this traffic later. The opener is what WhatsApp pre-fills
@@ -435,7 +434,7 @@ function CreateModal({ accounts, onClose, onCreated }) {
           <textarea
             value={message} onChange={e => setMessage(e.target.value)}
             rows={3}
-            placeholder="Hi Forgemind, I saw your reel on n8n automation and want the course details"
+            placeholder="Hi Acme, I saw your reel and want the course details"
             style={{ ...inputStyle, resize: 'vertical' }}
             onFocus={e => e.currentTarget.style.borderColor = C.primary}
             onBlur={e => e.currentTarget.style.borderColor = B.cardBorder}

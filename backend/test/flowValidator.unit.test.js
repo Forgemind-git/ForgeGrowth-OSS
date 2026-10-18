@@ -24,6 +24,9 @@ const FIXTURE = [
   { name: 'direct quick_reply, waiting',
     node: { id: 'd', type: 'message', messageMode: 'direct', directType: 'quick_reply', waitForReply: true,
       directData: { buttons: [{ title: 'Yes' }, { title: 'No' }] } } },
+  { name: 'direct quick_reply, waiting, buttons only',
+    node: { id: 'd2', type: 'message', messageMode: 'direct', directType: 'quick_reply', waitForReply: true, buttonsOnly: true,
+      directData: { buttons: [{ title: 'Yes' }, { title: 'No' }] } } },
   { name: 'direct list, one section with three rows',
     node: { id: 'e', type: 'message', messageMode: 'direct', directType: 'list', waitForReply: true,
       directData: { sections: [{ title: 'S', rows: [{ title: 'r1' }, { title: 'r2' }, { title: 'r3' }] }] } } },
@@ -42,6 +45,8 @@ const FIXTURE = [
   { name: 'handoff ends the flow', node: { id: 'p', type: 'handoff' } },
   { name: 'ai agent', node: { id: 'q', type: 'ai_agent' } },
   { name: 'delay', node: { id: 'r', type: 'delay' } },
+  { name: 'whatsapp form', node: { id: 's', type: 'message', messageMode: 'direct', directType: 'flow', waitTimeoutHours: 72,
+      directData: { body: 'b', button_text: 'Start', whatsappFlowId: 1 } } },
 ];
 
 test('backend and frontend agree on every node shape', async () => {
@@ -280,6 +285,59 @@ test('a complete flow passes, and saving is never gated', () => {
   ]));
   assert.deepStrictEqual(codes(r), [], JSON.stringify(r.blocking, null, 2));
   assert.strictEqual(r.ok, true);
+});
+
+// The Applied AI enquiry funnel shape: each button saves a field, then all
+// should lead to the brochure. The third action's output was never wired.
+const reasonFlow = (wireThird) => flow([
+  { id: 't', type: 'trigger', triggerKind: 'keyword', keyword: 'hi' },
+  { id: 'q', type: 'message', messageMode: 'direct', directType: 'quick_reply', waitForReply: true,
+    directData: { body: 'Why?', buttons: [{ title: 'Skills' }, { title: 'Earn' }, { title: 'Both, honestly' }] } },
+  { id: 'g1', type: 'action', actions: [] },
+  { id: 'g2', type: 'action', actions: [] },
+  { id: 'g3', type: 'action', actions: [] },
+  { id: 'b', type: 'message', messageMode: 'direct', directType: 'text', directData: { body: 'brochure' } },
+], [
+  { from: 't', to: 'q' },
+  { from: 'q', to: 'g1', fromHandle: 'btn:0' },
+  { from: 'q', to: 'g2', fromHandle: 'btn:1' },
+  { from: 'q', to: 'g3', fromHandle: 'btn:2' },
+  { from: 'q', to: 'b', fromHandle: 'nomatch' },
+  { from: 'q', to: 'b', fromHandle: 'timeout' },
+  { from: 'g1', to: 'b' },
+  { from: 'g2', to: 'b' },
+  ...(wireThird ? [{ from: 'g3', to: 'b' }] : []),
+]);
+
+test('a button whose branch silently stops, while its siblings carry on, warns', () => {
+  const r = validateFlow(reasonFlow(false));
+  const dead = r.warnings.filter(w => w.code === 'BRANCH_DEAD_END');
+  assert.strictEqual(dead.length, 1);
+  assert.strictEqual(dead[0].handle, 'btn:2');
+  assert.match(dead[0].message, /Both, honestly/);
+  assert.ok(r.ok, 'a warning, never a block');
+});
+
+test('wiring the branch on clears the warning', () => {
+  const r = validateFlow(reasonFlow(true));
+  assert.ok(!r.warnings.some(w => w.code === 'BRANCH_DEAD_END'));
+});
+
+test('a flow that ends on an action after a message is not a dead branch', () => {
+  const r = validateFlow(flow([
+    { id: 't', type: 'trigger', triggerKind: 'keyword', keyword: 'hi' },
+    { id: 'q', type: 'message', messageMode: 'direct', directType: 'quick_reply', waitForReply: true,
+      directData: { body: 'Pick', buttons: [{ title: 'A' }, { title: 'B' }] } },
+    { id: 'a', type: 'message', messageMode: 'direct', directType: 'text', directData: { body: 'a' } },
+    { id: 'bm', type: 'message', messageMode: 'direct', directType: 'text', directData: { body: 'b' } },
+    { id: 'tag', type: 'action', actions: [] },
+  ], [
+    { from: 't', to: 'q' },
+    { from: 'q', to: 'a', fromHandle: 'btn:0' },
+    { from: 'q', to: 'bm', fromHandle: 'btn:1' },
+    { from: 'bm', to: 'tag' },
+  ]));
+  assert.ok(!r.warnings.some(w => w.code === 'BRANCH_DEAD_END'));
 });
 
 test('two edges on one handle warn but do not block', () => {

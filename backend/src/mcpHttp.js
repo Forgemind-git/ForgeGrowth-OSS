@@ -11,6 +11,9 @@ const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/ser
 const agentService = require('./services/agentService');
 const mcpService = require('./services/mcpService');
 const { publicOrigin } = require('./util/publicUrl');
+const { automationToolDescription } = require('./services/flowAuthoring');
+const { ROUTE_TOOLS, buildInputSchema } = require('./services/mcpRouteTools');
+const { runRouteTool } = require('./services/mcpRouteToolRunner');
 
 // The public address of this install. Resolved by util/publicUrl so the URL in
 // a WWW-Authenticate challenge is the same string the plugin download and the
@@ -38,9 +41,75 @@ const mediaGroupSchema = z.object({
   templateId: z.number().nullable().optional().describe('Approved template id to fire. Always confirm the template content with the user via get_template before using this.'),
 }).passthrough();
 
+/**
+ * Every agent setting an MCP client may send, shared by create_agent and
+ * update_agent so the two cannot offer different fields — they used to be two
+ * hand-typed copies, and both had fallen 15 fields behind `agentService`.
+ *
+ * ⚠ WHAT IS DELIBERATELY ABSENT: `triggerStageKeys` / `triggerTagIds`, the
+ * funnel gate deciding WHICH leads an agent is allowed to answer.
+ * `agentService.canSetFunnelTrigger()` is default-deny and refuses any caller
+ * that does not identify an admin actor — MCP does not — so listing them here
+ * would offer a control that saves cleanly and then does nothing at all
+ * (anti-pattern #20). It is a web-app decision; the tool description says so.
+ *
+ * ⚠ NULL vs OMITTED is load-bearing on every limit: omitted leaves the stored
+ * value alone, null clears it. Collapsing them would make a rename wipe an
+ * agent's ceilings. `.nullable().optional()` is what expresses both.
+ */
+function agentFields() {
+  const lim = (max, desc) => z.number().int().min(0).max(max).nullable().optional().describe(`${desc} Omit to leave unchanged, null or 0 for no limit.`);
+  return {
+    name: z.string().optional(),
+    systemPrompt: z.string().optional().describe('The persona and instructions — this IS the agent.'),
+    aiModelId: z.union([z.string(), z.number()]).nullable().optional().describe('Credential id from list_models. Required (with llmModel) before it can be active.'),
+    llmModel: z.string().nullable().optional().describe('A models[].value from list_models.'),
+    waAccountId: z.union([z.string(), z.number()]).nullable().optional().describe('WhatsApp number id from list_wa_accounts.'),
+    status: z.enum(['draft', 'active']).optional(),
+    isActive: z.boolean().optional(),
+    contextWindowMessages: z.number().int().min(1).max(100).optional().describe('How many past messages the agent sees.'),
+    maxToolIterations: z.number().int().min(1).max(20).optional().describe('How many tool calls it may chain in one reply.'),
+
+    /* what it can understand */
+    transcribeAudio: z.boolean().optional().describe('Understand voice notes (transcribed, billed per minute). Off by default.'),
+    acceptImages: z.boolean().optional().describe('See images — needs a vision-capable model. Off by default.'),
+    maxVoiceSeconds: lim(3600, 'Longest voice note it will transcribe, in seconds; a longer one is not transcribed and the agent asks for a shorter one instead of guessing.'),
+    maxImagesPerConversation: lim(1000, 'Images it will look at per conversation. WhatsApp delivers each photo as its own message, so this is per CONVERSATION, not per message.'),
+
+    /* when it engages */
+    triggerMode: z.enum(['any', 'keyword']).optional(),
+    triggerKeyword: z.string().optional(),
+    triggerMatchType: z.enum(['exact', 'contains', 'starts']).optional(),
+    triggerCaseSensitive: z.boolean().optional(),
+    triggerSessionMinutes: z.number().int().min(1).max(1440).optional().describe('Silence that ends a conversation, in minutes. Also how "one conversation" is measured for the limits below.'),
+
+    /* usage ceilings — all optional, all unlimited by default */
+    maxRepliesPerConversation: lim(500, 'Replies in one sitting before it stops.'),
+    maxRepliesPerMinute: lim(500, 'Burst throttle. Nothing is sent and nothing is recorded — the skipped message still reaches the model as context on the next reply.'),
+    maxRunsPerDay: lim(10000, 'Replies across ALL conversations in a day (IST). Guards against a broadcast backfire; silent to customers because it fires everywhere at once.'),
+    quotaReplies: lim(10000, 'Replies one person may have over a rolling window — a ceiling that refills on a CLOCK, unlike maxRepliesPerConversation which refills the moment they go quiet.'),
+    quotaConversations: lim(1000, 'Separate conversations one person may start in the window. Only ever refuses a NEW sitting, never cuts someone off mid-conversation.'),
+    quotaWindowValue: z.number().int().min(1).max(999).optional().describe('Length of the rolling window (default 1).'),
+    quotaWindowUnit: z.enum(['minutes', 'hours', 'days']).optional().describe('Unit of the rolling window (default days).'),
+    limitHandoff: z.boolean().optional().describe('On hitting a per-conversation limit, pause the bot and leave the chat for a person. Default ON — someone who asked that many questions is usually interested.'),
+    quotaHandoff: z.boolean().optional().describe('Same, for the rolling allowance. Default OFF — "come back tomorrow" is not a reason to push everyone into the inbox.'),
+    limitReachedMessage: z.string().nullable().optional().describe('One closing line sent when a limit stops it. Empty means send nothing — there is no hidden fallback.'),
+
+    /* testing */
+    testNumbers: z.array(z.object({
+      number: z.string().describe('Any format — stored digits-only and matched on the last 10.'),
+      label: z.string().optional(),
+    })).optional().describe('Numbers that can exercise this agent while it is still a DRAFT. They are also exempt from every limit above and their runs are excluded from the counts, so a day of testing does not eat the real budget. Triggers and funnel gating still apply.'),
+
+    mediaGroups: z.array(mediaGroupSchema).optional(),
+  };
+}
+
 const GUIDE = `This is ForgeGrowth — an AI Academy Marketing/Sales lead funnel with a WhatsApp Chats layer underneath it. Before assuming this is purely an agent-builder: if the user wants to inspect or act on leads, campaigns, or webinars, use the funnel tools directly (list_leads, move_lead_stage, get_campaign_performance, list_webinars, or forgechat_request for anything else in an enabled area) — you do NOT need to build an agent for that.
 
-You can also CONFIGURE the whole app from a plain-language "game plan": get a poster into the Media Library (upload_media with a public url, or list_media by name for one the user already uploaded in the web app), create + submit a WhatsApp template for Meta approval (create_template → submit_template → sync_template), build an automation flow (create_automation), make a lead form (create_lead_form) and read its submissions (list_form_submissions), generate a click-to-chat link (create_wa_link), and send/broadcast (send_message, send_template, send_media, send_bulk_message). ALWAYS summarise what you will do and get the user's explicit confirmation before any create/submit/send step.
+Social (Instagram, Facebook, Threads, YouTube, LinkedIn) has its own social_* tools: analytics and the content library (social_get_overview, social_get_platform_stats, social_list_posts), the inbox (social_list_messages, social_list_comments), Instagram automations and flows (social_list_automations, social_create_automation, social_list_flows, social_get_flow, social_create_flow — always create with active:false and switch on after the user confirms) and Social AI agents (social_list_agents, social_create_agent). Marketing reads: get_marketing_overview, get_click_to_whatsapp, get_campaign_roi. Sales reads: list_sales, get_payments_trend, get_funnel.
+
+You can also CONFIGURE the whole app from a plain-language "game plan": get a poster into the Media Library (upload_media with a public url, or list_media by name for one the user already uploaded in the web app), create + submit a WhatsApp template for Meta approval (create_template → submit_template → sync_template), build an automation flow (ALWAYS validate_automation on the graph first, then create_automation — it lands as a draft and update_automation{active:true} takes it live after a second check; get_automation_runs says what a flow actually did), generate a click-to-chat link (create_wa_link), and send/broadcast (send_message, send_template, send_media, send_bulk_message). ALWAYS summarise what you will do and get the user's explicit confirmation before any create/submit/send step.
 IMPORTANT for posters/images: you cannot upload a file the user attached in this chat — you don't have its raw bytes, and trying to inline it as base64 hangs forever. If the user's image is a local file with no public URL, tell them to upload it once in ForgeGrowth → Media Library in the web app, then reference it by name (you resolve it with list_media). Only use upload_media when you have a genuine public https URL.
 
 The rest of this guide covers creating a WhatsApp AI agent. Gather and CONFIRM the full configuration with the user before calling create_agent. Offer real options fetched from their account — never guess ids, spreadsheets, tabs, models, or numbers.
@@ -68,7 +137,21 @@ Walk this flow:
 9. On confirmation, call create_agent. Then attach any chosen tools: add_google_sheets_tool for Sheets, add_http_tool for HTTP.
 10. Report the created agent (id + recap) and offer to activate it or make edits.
 
-Notes: an ACTIVE agent needs both aiModelId and llmModel (otherwise save status:"draft"). Only one active agent per WhatsApp number. Always confirm destructive actions (delete) first.`;
+8b. Ask about USAGE LIMITS before confirming — every one defaults to unlimited, so an agent with none set will answer one person forever. Offer maxRepliesPerConversation (one sitting), quotaReplies + quotaWindowValue/quotaWindowUnit (a per-person allowance that refills on a clock), maxRepliesPerMinute (burst) and maxRunsPerDay (a broadcast backfire). Offer testNumbers too: those can talk to the agent while it is still a draft, are exempt from every limit, and their runs do not count against the budget.
+
+Notes: an ACTIVE agent needs both aiModelId and llmModel (otherwise save status:"draft"). Only one active agent per WhatsApp number. Always confirm destructive actions (delete) first. Which funnel stages or tags an agent may answer is admin-only and can only be set in the web app.`;
+
+function registerRouteTools(server, handlerFor) {
+  for (const spec of ROUTE_TOOLS) {
+    server.registerTool(spec.name, {
+      title: spec.title,
+      description: spec.description,
+      inputSchema: buildInputSchema(z, spec.params),
+      ...(spec.kind === 'read' ? { annotations: { readOnlyHint: true } } : {}),
+      ...(spec.kind === 'delete' ? { annotations: { destructiveHint: true } } : {}),
+    }, handlerFor(spec));
+  }
+}
 
 // Build a fresh server scoped to one request's settings.
 //   categories   -> gates the 44 named tools (services/mcpCatalog.js)
@@ -248,7 +331,7 @@ function buildServer({ capabilities, categories }) {
     },
   }, run(({ fromNumber, toNumber, interactive }) => mcpService.sendInteractiveMessage({ fromNumber, toNumber, interactive })));
 
-  /* config: media / templates / automations / wa-links / lead forms */
+  /* config: media / templates / automations / wa-links */
   server.registerTool('upload_media', {
     title: 'Upload media to the Media Library',
     description:
@@ -305,21 +388,75 @@ function buildServer({ capabilities, categories }) {
 
   server.registerTool('create_automation', {
     title: 'Create an automation flow',
-    description:
-      'Create a WhatsApp automation (chatbot flow) from a nodes/edges config. Lands INACTIVE. ' +
-      'The config is { nodes:[...], edges:[...] }: node types trigger|message|condition|action|delay|api|handoff|ai|ai_agent|subflow; edges are { from, to, fromHandle? } (fromHandle: default|yes|no|btn:N|row:N). ' +
-      'Build the flow to match the user\'s described chat flow, confirm it, then create. Set status:"active" later (via forgechat_request PUT /chatbots/:id) after reviewing it in the builder.',
+    // GENERATED from services/flowAuthoring.js, which builds it out of the same
+    // expectedHandles() the validator gates on. Hand-written prose here is what
+    // let the documented handle vocabulary drift from the canvas.
+    description: automationToolDescription(),
     inputSchema: {
       name: z.string().describe('Automation name.'),
       description: z.string().optional(),
-      triggerType: z.string().optional().describe('e.g. "keyword" or "anyMessage" — matches the trigger node.'),
-      status: z.enum(['draft', 'active']).optional().describe('Default draft.'),
-      nodes: z.array(z.record(z.any())).optional().describe('Flow nodes.'),
-      edges: z.array(z.record(z.any())).optional().describe('Flow edges connecting nodes.'),
+      triggerType: z.string().optional().describe('Mirrors the trigger node\'s kind, e.g. "keyword".'),
+      status: z.enum(['draft', 'active']).optional().describe('Always created as a draft; activating runs a separate check via PUT /chatbots/:id.'),
+      nodes: z.array(z.record(z.any())).optional().describe('Flow nodes. Do not send x/y — they are assigned automatically.'),
+      edges: z.array(z.record(z.any())).optional().describe('Flow edges: { from, to, fromHandle }.'),
       config: z.record(z.any()).optional().describe('Full { nodes, edges } config (alternative to passing nodes/edges separately).'),
-      folderId: z.union([z.string(), z.number()]).optional(),
+      allowIncomplete: z.boolean().optional().describe('Save a knowingly-unfinished draft even if the check finds blocking problems. Default false.'),
     },
   }, run((a) => mcpService.createAutomation(a)));
+
+  server.registerTool('validate_automation', {
+    title: 'Check an automation flow',
+    // Exists because the only previous way to learn a flow was broken was to
+    // CREATE it and look in the builder — so a wrong graph became a real row
+    // somebody had to find and delete. Checking first is free.
+    description:
+      'Check a flow graph WITHOUT saving it, or check an existing automation by id. Returns blocking[] (would be broken at ' +
+      'runtime — the flow cannot go live), warnings[] (unfinished but harmless) and danglingConnections[] (an edge naming an ' +
+      'output the step does not have — the commonest hand-authoring mistake, and invisible on the canvas). Run this before ' +
+      'create_automation, and after editing a flow through forgechat_request.',
+    inputSchema: {
+      automationId: z.union([z.string(), z.number()]).optional().describe('Check a saved automation instead of a graph.'),
+      nodes: z.array(z.record(z.any())).optional(),
+      edges: z.array(z.record(z.any())).optional(),
+      config: z.record(z.any()).optional().describe('Full { nodes, edges } config.'),
+    },
+  }, run((a) => mcpService.validateAutomation(a)));
+
+  server.registerTool('update_automation', {
+    title: 'Update or activate an automation',
+    description:
+      'Edit a saved automation: rename it, replace its flow graph, or ACTIVATE it. ' +
+      'Activating runs the same check as the app and refuses a flow that would be broken. ' +
+      'An active flow replies to real customers immediately — always confirm with the user before setting active:true.',
+    inputSchema: {
+      id: z.union([z.string(), z.number()]).describe('Automation id from list_automations / create_automation.'),
+      name: z.string().optional(),
+      description: z.string().optional(),
+      active: z.boolean().optional().describe('true = go live (checked first), false = pause it.'),
+      nodes: z.array(z.record(z.any())).optional().describe('Replaces the whole node list.'),
+      edges: z.array(z.record(z.any())).optional().describe('Replaces the whole edge list.'),
+      config: z.record(z.any()).optional().describe('Full { nodes, edges } config.'),
+    },
+  }, run((a) => mcpService.updateAutomation(a)));
+
+  server.registerTool('list_automations', {
+    title: 'List automations',
+    description: 'List the automation flows with their status and trigger. Pass an id to read one back in full, including its nodes/edges graph.',
+    inputSchema: { id: z.union([z.string(), z.number()]).optional().describe('Read one automation in full.') },
+  }, run((a) => mcpService.listAutomations(a)));
+
+  server.registerTool('get_automation_runs', {
+    title: 'Read automation runs',
+    description:
+      'Read what an automation actually DID — one row per run, each with the steps it visited, their input/output and any error. ' +
+      'When a user says a flow "did not work", read this before theorising: it usually names the step and the reason.',
+    inputSchema: {
+      automationId: z.union([z.string(), z.number()]).describe('Automation id.'),
+      executionId: z.union([z.string(), z.number()]).optional().describe('One run in full, with every step.'),
+      status: z.enum(['success', 'error', 'running', 'queued', 'paused', 'cancelled']).optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+    },
+  }, run((a) => mcpService.getAutomationRuns(a)));
 
   server.registerTool('create_wa_link', {
     title: 'Create a click-to-chat link',
@@ -331,84 +468,18 @@ function buildServer({ capabilities, categories }) {
     },
   }, run((a) => mcpService.createWaLink(a)));
 
-  server.registerTool('create_lead_form', {
-    title: 'Create a form',
-    description:
-      'Create a Google-Forms-style capture form and (optionally) attach its fields + publish in one call. ' +
-      'fields[] items: { key, label, type (text|textarea|email|phone|number|date|dropdown|radio|checkbox|boolean|rating|section), required?, mapsTo? (name|email|phone|age|profession|pincode|city|source), options? (for dropdown/radio/checkbox), placeholder? }. ' +
-      'type "rating" is a STAR RATING: add scale (3, 4, 5 or 10 — default 5), feedback:true to show an optional comment box under the stars, and feedbackLabel to word its prompt. Its answer is {rating,feedback}; required means a star must be picked (the comment stays optional), and it cannot use mapsTo. Use this instead of a dropdown of "5 Stars"/"4 Stars" — only a real rating gets an average and a star distribution on the dashboard. ' +
-      'type "section" is a display-only heading to break a long form into parts: give it a label and an optional description. It collects no answer, so it is never required and never mapped. ' +
-      'An unknown type is REJECTED (not silently turned into a text box), so use these names exactly. ' +
-      'formType "link" (default) is shared as a plain URL and the phone number is OPTIONAL — give a field mapsTo:"phone" to let people volunteer one; without it responses are stored with the phone column blank and do not create a lead. ' +
-      'formType "whatsapp" is sent through an approved Utility/Marketing template whose link captures each recipient\'s phone automatically; after publishing, call forgechat_request POST /lead-forms/<id>/template to build that template. ' +
-      'A submission upserts a CRM lead by phone whenever a phone is present. Pass publish:true to make it live immediately. Returns the form with its public slug (URL /f/<slug>).',
-    inputSchema: {
-      name: z.string().describe('Form name.'),
-      description: z.string().optional(),
-      formType: z.enum(['link', 'whatsapp']).optional().describe('How it will be shared. Default "link".'),
-      fields: z.array(z.record(z.any())).optional().describe('The form fields (see description for shape).'),
-      successMessage: z.string().optional().describe('Thank-you message shown after submit.'),
-      defaultSource: z.string().optional().describe('Lead source to tag submissions with.'),
-      publish: z.boolean().optional().describe('Publish immediately (default false = draft).'),
-    },
-  }, run((a) => mcpService.createLeadForm(a)));
-
-  server.registerTool('list_lead_forms', {
-    title: 'List lead forms',
-    description: 'List all lead-capture forms with their status, slug and submission counts.',
-    inputSchema: {},
-  }, run(() => mcpService.listLeadForms()));
-
-  server.registerTool('list_form_submissions', {
-    title: 'List lead-form submissions',
-    description:
-      'List the collected responses for one lead form (paginated), each with its answers + the matched lead. ' +
-      'A star-rating answer comes back as {rating, feedback, outOf, text} — ALWAYS quote the scale from outOf or text ("4/4"), never assume a rating is out of 5. ' +
-      'ratingFields[] describes each rating question and its scale. For averages and the star distribution use forgechat_request GET /lead-forms/<id>/dashboard rather than adding them up yourself.',
-    inputSchema: {
-      formId: z.union([z.string(), z.number()]).describe('Form id from list_lead_forms.'),
-      page: z.number().int().min(1).optional(),
-      pageSize: z.number().int().min(1).max(200).optional(),
-    },
-  }, run((a) => mcpService.listFormSubmissions(a)));
-
-  /* projects — the campaign folder something is filed under */
-  server.registerTool('list_projects', {
-    title: 'List projects',
-    description:
-      'List the campaign projects (folders) in this workspace, each with a count of the templates, automations, AI agents and forms filed under it. ' +
-      'Pass projectId to open one project and get the actual items inside it. Use this to resolve a project NAME the user said into the id move_to_project needs — never guess an id.',
-    inputSchema: {
-      projectId: z.union([z.string(), z.number()]).optional().describe('Open one project and list what it holds. Omit to list every project.'),
-    },
-  }, run((a) => mcpService.listProjects(a)));
-
-  server.registerTool('move_to_project', {
-    title: 'Move items into a project',
-    description:
-      'File one or more items into a campaign project, or take them out of one. ' +
-      "kind is 'template' | 'automation' | 'agent' | 'form' ('form' = a lead-capture form from list_lead_forms). " +
-      'ids[] are that kind\'s ids — resolve them first with list_lead_forms / list_templates / list_agents / forgechat_request, never guess. ' +
-      'Pass projectId to file them there (get it from list_projects), or projectId null to unfile them. ' +
-      'This ONLY changes which folder the items are listed under: nothing is created, edited, published, activated or sent, and no customer is contacted.',
-    inputSchema: {
-      kind: z.enum(['template', 'automation', 'agent', 'form']).describe('What kind of item is being moved.'),
-      ids: z.array(z.union([z.string(), z.number()])).describe('Ids of the items to move.'),
-      projectId: z.union([z.string(), z.number()]).nullable().optional().describe('Target project id from list_projects. null (or omitted) removes them from their current project.'),
-    },
-  }, run((a) => mcpService.moveToProject(a)));
-
   /* AI Academy funnel: leads / marketing / BDA */
   server.registerTool('list_leads', {
     title: 'List funnel leads',
-    description: "List leads from the Marketing/Sales funnel. Filter by stage (a configurable funnel stage key — call GET /funnel/config for the current set; defaults are new/contacted/engaged/hot/enrolled/cold_lost), by a saved view (view='hot' = leads that arrived within the last 24h; 'unassigned'), or by a name/number/email search. Returns id, name, whatsappNumber, stage, source, assignedUserName, createdAt.",
+    description: "List leads from the Marketing/Sales funnel. Filter by stage (a configurable funnel stage key — call GET /funnel/config for the current set; defaults are new/contacted/engaged/hot/enrolled/cold_lost), by a saved view (view='hot' = leads that arrived within the last 24h; 'unassigned'), or by a name/number/email search. COUNTING: the response carries `total` (how many match the filters, IGNORING the page limit), `returned` (rows in this response), `truncated`, and `byStage` (counts per funnel stage under the same filters). Answer \"how many leads\" from `total` and \"how many are hot/enrolled\" from `byStage` — never from the length of the `leads` array, which is capped at `limit` (default 50). There is no need to raise `limit` just to count. `leads` holds id, name, whatsappNumber, stage, source, assignedUserName, createdAt. SCOPE: `waAccount` limits the result to leads that have actually messaged ONE of our business WhatsApp numbers (id, phone number, or exact display name from list_wa_accounts). Several businesses share this funnel, so an unscoped count spans all of them. Leave it out only when the user genuinely wants every number.",
     inputSchema: {
       stage: z.string().optional().describe('Funnel stage key (configurable — see GET /funnel/config).'),
       view: z.enum(['hot', 'unassigned']).optional().describe("Saved view: 'hot' = arrived within the last 24 hours."),
-      search: z.string().optional().describe('Partial match on name, WhatsApp number, or email.'),
+      search: z.string().optional().describe('Partial match on the LEAD\'s name, WhatsApp number, or email — not our business number (see waAccount for that).'),
+      waAccount: z.union([z.string(), z.number()]).optional().describe('Limit to leads that have messaged this business WhatsApp number — its id, phone number, or exact display name from list_wa_accounts. Ambiguous names are refused rather than guessed.'),
       limit: z.number().int().min(1).max(500).optional(),
     },
-  }, run(({ stage, search, limit, view }) => mcpService.listLeads({ stage, search, limit, view })));
+  }, run(({ stage, search, limit, view, waAccount }) => mcpService.listLeads({ stage, search, limit, view, waAccount })));
 
   server.registerTool('move_lead_stage', {
     title: 'Move a lead to a new funnel stage',
@@ -425,6 +496,20 @@ function buildServer({ capabilities, categories }) {
     inputSchema: { campaignId: z.union([z.string(), z.number()]).optional().describe('Omit to list recent campaigns.') },
   }, run(({ campaignId }) => mcpService.getCampaignPerformance({ campaignId })));
 
+  server.registerTool('get_ad_conversions', {
+    title: 'Get conversions per Meta ad',
+    description: 'Which Meta ad actually produced chats and paying students, measured in ForgeGrowth (not Ads Manager). '
+      + 'Per ad id: chats (leads whose FIRST ad touch in the range was this ad — landing page ad_id or click-to-WhatsApp referral), '
+      + 'buyers (of those, captured Razorpay payment after the touch, net of refunds, or moved to enrolled), revenue in INR, conversionRate %. '
+      + 'Dates are IST YYYY-MM-DD; defaults to the last 30 days. Read-only.',
+    inputSchema: {
+      from: z.string().optional().describe('Start date, IST, YYYY-MM-DD (inclusive). Default: 29 days before `to`.'),
+      to: z.string().optional().describe('End date, IST, YYYY-MM-DD (inclusive). Default: today.'),
+      adIds: z.array(z.string()).optional().describe('Limit to these Meta ad ids.'),
+    },
+    annotations: { readOnlyHint: true },
+  }, run(({ from, to, adIds }) => require('./services/adConversions').getAdConversions({ from, to, adIds })));
+
   server.registerTool('list_webinars', {
     title: 'List webinar batches',
     description: 'List webinar/batch schedule with registrations, attendance %, and hot-lead counts.',
@@ -432,6 +517,154 @@ function buildServer({ capabilities, categories }) {
   }, run(() => mcpService.listWebinars()));
 
   /* courses + payments */
+  // ── Chat Analyzer ──
+  // No bulk tool: a bulk run costs money per conversation and nobody is
+  // watching when a chat message triggers it. It stays a click in the tab.
+  server.registerTool('list_analysed_chats', {
+    title: 'List conversations and their analysis',
+    description: 'Conversations the Chat Analyzer can read — 1:1 chats and WhatsApp groups — with whatever it has already found. `readSoFar` says which of text/audio/image/document the standing summary actually covers, so "analysed" is never mistaken for "read everything". Filter: all | never | stale | analysed | errors.',
+    inputSchema: {
+      source: z.enum(['all', 'chat', 'community']).optional().describe('chat = 1:1 conversations, community = WhatsApp groups.'),
+      filter: z.enum(['all', 'never', 'stale', 'analysed', 'errors']).optional(),
+      search: z.string().optional().describe('Match a name or phone number.'),
+      limit: z.number().optional(),
+    },
+  }, run((a) => mcpService.listAnalysedChats(a)));
+
+  server.registerTool('get_chat_analysis', {
+    title: 'Read one conversation\'s analysis',
+    description: 'The stored analysis for one conversation, plus `coverage` — how far each modality has been read. Does not analyse anything and costs nothing.',
+    inputSchema: {
+      source: z.enum(['chat', 'community']).optional(),
+      key: z.string().describe('The conversation key from list_analysed_chats.'),
+    },
+  }, run((a) => mcpService.getChatAnalysis(a)));
+
+  server.registerTool('analyze_chat', {
+    title: 'Analyse one conversation',
+    description: 'Analyse ONE conversation now and return the verdict. COSTS MONEY: the analysis call is billed by tokens, and each voice note, image or PDF is billed per item the first time it is read (cached and free afterwards). Defaults to text only — add modalities deliberately. A date range or keyword makes the run a one-off that is saved but does NOT replace the conversation\'s standing summary. Use list_analysed_chats first to get the key.',
+    inputSchema: {
+      source: z.enum(['chat', 'community']).optional(),
+      key: z.string().describe('The conversation key from list_analysed_chats.'),
+      modalities: z.array(z.enum(['text', 'audio', 'image', 'document'])).optional()
+        .describe('What to read. Omit for the workspace default (usually text only). Audio and image cost money per item.'),
+      from: z.string().optional().describe('ISO date. Makes this a filtered one-off run.'),
+      to: z.string().optional().describe('ISO date.'),
+      keyword: z.string().optional().describe('Only messages containing this word. Makes this a filtered one-off run.'),
+      incremental: z.boolean().optional().describe('Default true — read only what is new since last time. False re-reads the whole conversation and costs more.'),
+    },
+  }, run((a) => mcpService.analyzeChat(a)));
+
+  server.registerTool('get_chat_transcript', {
+    title: 'Read a conversation word for word',
+    description: 'The timestamped transcript of one conversation: text messages as sent, and voice notes as their exact transcript. This is what was SAID — use get_chat_analysis for what it MEANT. Reading costs nothing; voice notes already transcribed are returned free, and any that are not yet appear with notTranscribedYet so you can tell silence from an untranscribed note. Images and documents are listed by timestamp and caption only — their contents are NOT returned.',
+    inputSchema: {
+      source: z.enum(['chat', 'community']).optional(),
+      key: z.string().describe('The conversation key from list_analysed_chats.'),
+      from: z.string().optional().describe('ISO date — only messages on or after this.'),
+      to: z.string().optional().describe('ISO date — only messages on or before this.'),
+      audioOnly: z.boolean().optional().describe('Return only the voice notes, skipping typed messages.'),
+    },
+  }, run((a) => mcpService.getChatTranscript(a)));
+
+  server.registerTool('list_follow_ups', {
+    title: 'Read the follow-up calendar',
+    description: 'The follow-ups on the sales calendar (Sales → Follow-up): who we plan to contact on which day, with the note, owner, lead stage and whether it is mirrored to Google Calendar. Defaults to OPEN follow-ups; pass status "done", "cancelled" or "any". Dates are IST calendar days (YYYY-MM-DD).',
+    inputSchema: {
+      from: z.string().optional().describe('YYYY-MM-DD — only follow-ups due on or after this day.'),
+      to: z.string().optional().describe('YYYY-MM-DD — only follow-ups due on or before this day.'),
+      status: z.string().optional().describe('open (default) | done | cancelled | any — or a comma list.'),
+      contactNumber: z.string().optional().describe('Only this customer (any format; matched on the last 10 digits).'),
+      limit: z.number().int().min(1).max(2000).optional(),
+    },
+  }, run((a) => mcpService.listFollowUpsMcp(a)));
+
+  server.registerTool('set_follow_up', {
+    title: 'Put a lead on the follow-up calendar',
+    description: 'Schedule a follow-up with a customer on a day (and optionally a time) with a note. A person has at most ONE open follow-up per owner: calling this again RESCHEDULES it rather than adding a duplicate. If Google Calendar sync is on, the event is created there too. Confirm the date with the user first. Use suggest_follow_up_date if they want the AI to pick the day.',
+    inputSchema: {
+      contactNumber: z.string().describe('The customer\'s WhatsApp number (any format).'),
+      dueDate: z.string().describe('YYYY-MM-DD (IST calendar day).'),
+      dueTime: z.string().optional().describe('HH:MM 24h IST, only when a time of day matters.'),
+      note: z.string().optional().describe('What to say or do on that day.'),
+      waNumber: z.string().optional().describe('Our business number the chat is on. Default: the one they last wrote to.'),
+      ownerEmail: z.string().optional().describe('Put it on this team member\'s calendar (email or username). Default: whoever the lead is assigned to.'),
+    },
+  }, run((a) => mcpService.setFollowUpMcp(a)));
+
+  server.registerTool('update_follow_up', {
+    title: 'Change or finish a follow-up',
+    description: 'Reschedule a follow-up (dueDate/dueTime), change its note, mark it done or cancelled (status), or delete it (remove: true). The id comes from list_follow_ups. Google Calendar events follow the change.',
+    inputSchema: {
+      id: z.number().int().describe('Follow-up id from list_follow_ups.'),
+      dueDate: z.string().optional(),
+      dueTime: z.string().nullable().optional().describe('HH:MM, or null to make it an all-day follow-up.'),
+      note: z.string().optional(),
+      status: z.enum(['open', 'done', 'cancelled']).optional(),
+      remove: z.boolean().optional().describe('Delete it entirely.'),
+    },
+  }, run((a) => mcpService.updateFollowUpMcp(a)));
+
+  server.registerTool('suggest_follow_up_date', {
+    title: 'Ask the AI for the next follow-up date',
+    description: 'The AI-recommended day (and time, if it matters) for the next follow-up with a customer, with a one-line reason. Reuses the Chat Analyzer\'s suggestion when nothing new has arrived since the last analysis (free); otherwise makes ONE small AI call (costs a little). Does not change the calendar — call set_follow_up to apply it.',
+    inputSchema: {
+      contactNumber: z.string().describe('The customer\'s WhatsApp number (any format).'),
+      waNumber: z.string().optional(),
+    },
+  }, run((a) => mcpService.suggestFollowUpMcp(a)));
+
+  server.registerTool('transcribe_chat', {
+    title: 'Transcribe a conversation\'s voice notes',
+    description: 'Transcribe the voice notes in ONE conversation and return every voice note as text. Uses microsoft/mai-transcribe-2 via OpenRouter (multilingual — Tamil, Hindi, English and mixed speech). COSTS MONEY per new note, but each note is transcribed ONCE, ever: notes that already have a transcript are returned free and never re-sent. Call it again if `remaining` is above zero. Use list_analysed_chats first to get the key; use get_chat_transcript afterwards to read the full conversation with these transcripts in place.',
+    inputSchema: {
+      source: z.enum(['chat', 'community']).optional(),
+      key: z.string().describe('The conversation key from list_analysed_chats.'),
+      from: z.string().optional().describe('ISO date — only voice notes on or after this.'),
+      to: z.string().optional().describe('ISO date — only voice notes on or before this.'),
+    },
+  }, run((a) => mcpService.transcribeChat(a)));
+
+  // ⚠ NOT wrapped in run(): that formats every result as a JSON text block, which
+  // would hand the model a wall of base64 instead of a picture. An image must be
+  // returned as a real MCP image block or it is not an image to the model.
+  server.registerTool('get_chat_image', {
+    title: 'Look at images from a conversation',
+    description: 'Returns the actual images a customer sent, so you can see them yourself. FREE — this is a disk read, not a vision model; prefer it over analysing images when you just need to know what one shows. Get the messageId of an image from get_chat_transcript first. Up to 5 per call, images only (video and PDFs are not returned).',
+    inputSchema: {
+      source: z.enum(['chat', 'community']).optional(),
+      key: z.string().describe('The conversation key from list_analysed_chats.'),
+      messageIds: z.array(z.string()).describe('messageId values of image entries from get_chat_transcript.'),
+    },
+  }, async (args) => {
+    try {
+      const r = await mcpService.getChatImages(args || {});
+      const content = [];
+      for (const img of r.images) {
+        // Context first, then the picture: a bare image with no timestamp or
+        // sender cannot be placed in the conversation it came from.
+        content.push({ type: 'text', text: `${img.from} · ${new Date(img.at).toISOString()}${img.caption ? ` · caption: ${img.caption}` : ''}` });
+        content.push({ type: 'image', data: img.base64, mimeType: img.mimeType });
+      }
+      if (r.skipped.length) {
+        content.push({ type: 'text', text: `Not returned:\n${r.skipped.map(x => `- ${x.messageId || '(extra)'}: ${x.reason}`).join('\n')}` });
+      }
+      if (!content.length) content.push({ type: 'text', text: 'No images were returned.' });
+      return { content };
+    } catch (err) {
+      return fail(err.message || 'Could not read those images');
+    }
+  });
+
+  server.registerTool('get_chat_analysis_costs', {
+    title: 'What analysis has cost',
+    description: 'Estimated spend on chat analysis, split by media type, with run counts. Figures are ESTIMATES computed from the workspace rate card — OpenAI reports tokens, never a price.',
+    inputSchema: {
+      from: z.string().optional().describe('ISO date.'),
+      to: z.string().optional().describe('ISO date.'),
+    },
+  }, run((a) => mcpService.getChatAnalysisCosts(a)));
+
   server.registerTool('list_products', {
     title: 'List products',
     description: 'List the product catalog — a product is anything sold: a course, a consulting engagement, a template pack, a webinar. Each carries its optional default (headline) price plus its payment links with price, paid count and revenue. Amounts are in rupees; defaultPriceRupees is null when no default price is set.',
@@ -508,50 +741,23 @@ function buildServer({ capabilities, categories }) {
   server.registerTool('create_agent', {
     title: 'Create agent',
     description:
-      'Create a new ForgeChat AI agent. Gather + CONFIRM all settings with the user first. For an ACTIVE agent pass aiModelId + llmModel; otherwise status:"draft". Only one active agent per WhatsApp number. After creating, use add_google_sheets_tool to attach a Sheets tool if wanted.',
-    inputSchema: {
-      name: z.string(),
-      systemPrompt: z.string(),
-      aiModelId: z.union([z.string(), z.number()]).optional(),
-      llmModel: z.string().optional(),
-      waAccountId: z.union([z.string(), z.number()]).optional(),
-      status: z.enum(['draft', 'active']).optional(),
-      isActive: z.boolean().optional(),
-      contextWindowMessages: z.number().int().min(1).max(100).optional(),
-      maxToolIterations: z.number().int().min(1).max(20).optional(),
-      transcribeAudio: z.boolean().optional(),
-      acceptImages: z.boolean().optional(),
-      triggerMode: z.enum(['any', 'keyword']).optional(),
-      triggerKeyword: z.string().optional(),
-      triggerMatchType: z.enum(['exact', 'contains', 'starts']).optional(),
-      triggerCaseSensitive: z.boolean().optional(),
-      triggerSessionMinutes: z.number().int().min(1).max(1440).optional(),
-      mediaGroups: z.array(mediaGroupSchema).optional(),
-    },
+      'Create a new ForgeChat AI agent. Gather + CONFIRM all settings with the user first. For an ACTIVE agent pass aiModelId + llmModel; otherwise status:"draft". ' +
+      'Only one active agent per WhatsApp number. After creating, attach tools with add_google_sheets_tool / add_http_tool. ' +
+      'Usage limits and the per-person allowance are all OPTIONAL and all default to unlimited — an agent with none set will answer one person forever, so ask whether a ceiling is wanted. ' +
+      'Note: which funnel stages or tags an agent is allowed to answer can only be set in the web app — it is an admin-only decision and is ignored here.',
+    inputSchema: { ...agentFields(), name: z.string(), systemPrompt: z.string() },
   }, run((a) => agentService.createAgent(a)));
 
   server.registerTool('update_agent', {
     title: 'Update agent',
-    description: 'Update an agent. Only fields you pass change. Same validation as create_agent.',
+    description:
+      'Update an agent. ONLY the fields you pass change — omitting a field leaves it alone, so an unrelated edit never wipes a limit. ' +
+      'Pass null to clear a limit (0 also clears it; there is no way to express "may send zero replies"). Same validation as create_agent.',
     inputSchema: {
       id: z.union([z.string(), z.number()]),
+      ...agentFields(),
       name: z.string().optional(),
       systemPrompt: z.string().optional(),
-      aiModelId: z.union([z.string(), z.number()]).nullable().optional(),
-      llmModel: z.string().nullable().optional(),
-      waAccountId: z.union([z.string(), z.number()]).nullable().optional(),
-      status: z.enum(['draft', 'active']).optional(),
-      isActive: z.boolean().optional(),
-      contextWindowMessages: z.number().int().min(1).max(100).optional(),
-      maxToolIterations: z.number().int().min(1).max(20).optional(),
-      transcribeAudio: z.boolean().optional(),
-      acceptImages: z.boolean().optional(),
-      triggerMode: z.enum(['any', 'keyword']).optional(),
-      triggerKeyword: z.string().optional(),
-      triggerMatchType: z.enum(['exact', 'contains', 'starts']).optional(),
-      triggerCaseSensitive: z.boolean().optional(),
-      triggerSessionMinutes: z.number().int().min(1).max(1440).optional(),
-      mediaGroups: z.array(mediaGroupSchema).optional(),
     },
   }, run(({ id, ...patch }) => agentService.updateAgent(id, patch)));
 
@@ -600,6 +806,7 @@ function buildServer({ capabilities, categories }) {
       config: { label, description, method, url, headers: headers || [], params: params || [], timeout_ms: timeoutMs || 10000 },
     })));
 
+
   server.registerTool('add_tool', {
     title: 'Add tool (generic)',
     description: 'Attach a tool by raw toolType + config. Prefer add_google_sheets_tool for Sheets and add_http_tool for HTTP. Supported toolTypes: "google_sheets", "http_request".',
@@ -635,6 +842,11 @@ function buildServer({ capabilities, categories }) {
     description: 'Delete an agent entirely. Destructive — confirm with the user first.',
     inputSchema: { id: z.union([z.string(), z.number()]) },
   }, run(({ id }) => agentService.deleteAgent(id)));
+
+  /* tools declared as data (services/mcpRouteTools.js) — Social, Marketing,
+     Sales and the delete/rename tools. The stdio server registers the same
+     list from the same file, so the two transports cannot drift. */
+  registerRouteTools(server, (spec) => run((args) => runRouteTool(spec.name, args)));
 
   /* prompt */
   server.registerPrompt('create-forgechat-agent', {

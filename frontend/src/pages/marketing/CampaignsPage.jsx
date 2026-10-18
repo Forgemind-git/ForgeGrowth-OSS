@@ -7,22 +7,39 @@ import { useConfirm } from '../../components/ConfirmDialog.jsx';
 import SearchableSelect from '../../components/SearchableSelect.jsx';
 import { useFunnelConfig } from '../../hooks/useFunnelConfig.js';
 import { PageShell, Button, Table, Td, Badge, EmptyState, Modal, Field, inputStyle, fmtINR, fmtDate } from '../academy/shared.jsx';
-import { Card, BarChart, Shimmer } from '../../components/charts.jsx';
+import { Card, BarChart, Shimmer, KpiCard } from '../../components/charts.jsx';
+import DateRangeControl, { useMarketingRange, rangeParams, rangeLabel, SpendCoverageNote } from '../../components/DateRangeControl.jsx';
 
 const STATUS_META = { active: { c: 'var(--c-successText, #0F6E56)', b: 'var(--c-successBg, #E1F5EE)' }, paused: { c: 'var(--c-warnText, #854F0B)', b: 'var(--c-warnBg, #FAEEDA)' }, ended: { c: 'var(--c-textSecondary, #6B7280)', b: 'var(--c-surfaceMuted, #F1F1EE)' } };
 
 export default function CampaignsPage({ user }) {
   const isAdmin = user?.role === 'admin';
   const [rows, setRows] = useState(null);
+  // Everything in the response besides the list: basis, coverage, totals.
+  const [meta, setMeta] = useState(null);
   const [edit, setEdit] = useState(null);
   const [popup, setPopup] = useState(null);
   const [confirmEl, confirm] = useConfirm();
+  // Shared with Overview and Click-to-WhatsApp, and survives a refresh.
+  const [range, setRange] = useMarketingRange();
+  const paramsKey = JSON.stringify(rangeParams(range));
+  const label = rangeLabel(range);
 
   const load = useCallback(async () => {
-    try { const d = await api.campaigns.list(); setRows(d.campaigns); }
-    catch (e) { showError(e.message); }
-  }, []);
+    setRows(null);
+    try {
+      const { campaigns, ...rest } = await api.campaigns.list(JSON.parse(paramsKey));
+      setRows(campaigns); setMeta(rest);
+    } catch (e) { showError(e.message); setRows([]); setMeta(null); }
+  }, [paramsKey]);
   useEffect(() => { load(); }, [load]);
+
+  const windowed = meta?.spendBasis === 'daily';
+  // Windowed totals come from the backend and cover Meta campaigns only; the
+  // all-time totals are the stored campaign figures summed here.
+  const totals = windowed ? meta.totals : (rows || []).reduce((t, c) => ({
+    spend: t.spend + (c.spend || 0), leads: t.leads + (c.leadsGenerated || 0), campaigns: t.campaigns + 1,
+  }), { spend: 0, leads: 0, campaigns: 0 });
 
   async function del(c) {
     if (!(await confirm({ title: 'Delete campaign?', body: `“${c.name}” will be removed.`, confirmLabel: 'Delete', danger: true }))) return;
@@ -34,10 +51,35 @@ export default function CampaignsPage({ user }) {
 
   return (
     <PageShell
-      title="Campaigns"
       subtitle="Ad spend & ROI. Meta-synced campaigns come from Meta Ads Manager (connect it in Admin Settings → Integrations); add manual campaigns for other channels."
-      actions={<Button variant="primary" icon={Plus} onClick={() => setEdit({})}>New Campaign</Button>}
+      actions={<>
+        <DateRangeControl value={range} onChange={setRange} />
+        <Button variant="primary" icon={Plus} onClick={() => setEdit({})}>New Campaign</Button>
+      </>}
     >
+      {rows && meta && (
+        <>
+          <div style={{ fontSize: 14, color: C.textMuted, fontFamily: FONT, marginBottom: 10, lineHeight: 1.5 }}>
+            {windowed ? (
+              <>
+                Showing campaigns that delivered in <strong style={{ color: C.textSecondary }}>{label}</strong>. Spend, leads,
+                impressions and clicks are Meta&apos;s per-day figures for those days, not the campaign&apos;s lifetime totals.
+                {meta.hiddenNoDelivery > 0 && ` ${meta.hiddenNoDelivery} Meta campaign${meta.hiddenNoDelivery === 1 ? '' : 's'} had no spend or impressions in this range and ${meta.hiddenNoDelivery === 1 ? 'is' : 'are'} hidden.`}
+                {meta.manualExcludedFromTotals > 0 && ` Manual campaigns have no per-day data: they are listed when their dates overlap the range, show their typed totals, and are left out of the totals above.`}
+              </>
+            ) : (
+              <>All time is selected: every campaign with its lifetime figures.</>
+            )}
+          </div>
+          <SpendCoverageNote coverage={meta.spendCoverage} />
+          <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+            <KpiCard label="Spend" value={fmtINR(totals.spend)} sub={windowed ? 'Meta, for this range' : 'lifetime'} />
+            <KpiCard label="Leads" value={Number(totals.leads || 0).toLocaleString('en-IN')} sub={windowed ? 'Meta-attributed' : 'stored totals'} />
+            <KpiCard label="Cost / Lead" value={totals.leads ? fmtINR(totals.spend / totals.leads) : '—'} />
+            <KpiCard label="Campaigns" value={totals.campaigns} sub={windowed ? 'Meta, with delivery' : 'all'} />
+          </div>
+        </>
+      )}
 
       {rows && rows.length > 0 && (
         <Card title="Leads generated by campaign" style={{ marginBottom: 16 }}>
@@ -50,7 +92,9 @@ export default function CampaignsPage({ user }) {
           columns={[{ label: 'Campaign' }, { label: 'Platform' }, { label: 'Status' }, { label: 'Spend', align: 'right' },
             { label: 'Leads', align: 'right' }, { label: 'Cost/Lead', align: 'right' }, { label: 'Cost/Enroll', align: 'right' }, { label: 'Dates' }, { label: '', align: 'right' }]}
           rows={rows} keyOf={c => c.id}
-          empty={<EmptyState Icon={Megaphone} title="No campaigns yet" hint="Connect Meta Ads or add a campaign to track spend and ROI." />}
+          empty={windowed
+            ? <EmptyState Icon={Megaphone} title="No campaigns delivered in this range" hint="Pick a wider period, or All time to see every campaign." />
+            : <EmptyState Icon={Megaphone} title="No campaigns yet" hint="Connect Meta Ads or add a campaign to track spend and ROI." />}
           onRowClick={(c) => c.source === 'meta' && setPopup(c)}
           renderRow={(c) => {
             const sm = STATUS_META[c.status] || STATUS_META.active;
@@ -66,7 +110,13 @@ export default function CampaignsPage({ user }) {
                 </Td>
                 <Td color={C.textSecondary}>{c.platform || '—'}</Td>
                 <Td><Badge label={c.status} color={sm.c} bg={sm.b} style={{ textTransform: 'capitalize' }} /></Td>
-                <Td align="right" mono>{fmtINR(c.spend)}</Td>
+                <Td align="right" mono>
+                  {windowed && c.metricsBasis === 'stored' && (
+                    <span title="Manual campaign — no per-day data, so this is the typed total, not this range's spend"
+                      style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.04em', color: C.textSecondary, background: C.hover, padding: '2px 5px', borderRadius: 4, marginRight: 6 }}>STORED</span>
+                  )}
+                  {fmtINR(c.spend)}
+                </Td>
                 <Td align="right" mono>{c.leadsGenerated}</Td>
                 <Td align="right" mono>{c.costPerLead != null ? fmtINR(c.costPerLead) : '—'}</Td>
                 <Td align="right" mono>{c.costPerEnrollment != null ? fmtINR(c.costPerEnrollment) : '—'}</Td>
@@ -143,7 +193,7 @@ function CampaignAdsPopup({ campaign, onClose }) {
         @keyframes campPopIn { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
       <div onClick={e => e.stopPropagation()}
-        style={{ position: 'relative', width: 'min(940px, 100%)', maxHeight: '88vh', overflowY: 'auto',
+        style={{ position: 'relative', width: 'min(940px, 100%)', maxHeight: 'calc(88vh / var(--fg-zoom, 1))', overflowY: 'auto',
           background: C.pageBg, borderRadius: 16, boxShadow: C.shadowLg, fontFamily: FONT,
           animation: 'campPopIn .22s ease-out' }}>
         <div style={{ position: 'sticky', top: 0, background: C.headerBg, color: C.headerText,
@@ -152,8 +202,14 @@ function CampaignAdsPopup({ campaign, onClose }) {
             <div style={{ fontSize: 16, fontWeight: 700 }}>{campaign.name}</div>
             <div style={{ fontSize: 13, color: C.headerMuted, fontFamily: MONO, marginTop: 2 }}>
               {campaign.accountName || 'Meta Ads'} · {fmtINR(campaign.spend)} spend · {campaign.leadsGenerated} leads
+              {campaign.metricsBasis === 'daily' ? ' in the selected range' : ' lifetime'}
               {campaign.objective ? ` · ${campaign.objective.replace(/^OUTCOME_/, '')}` : ''}
             </div>
+            {campaign.metricsBasis === 'daily' && (
+              <div style={{ fontSize: 13, color: C.headerMuted, marginTop: 3 }}>
+                Ad set and ad figures below are lifetime totals ({fmtINR(campaign.lifetimeSpend)} campaign lifetime spend).
+              </div>
+            )}
           </div>
           <button onClick={onClose} title="Close"
             style={{ background: 'none', border: 'none', color: C.headerText, cursor: 'pointer', padding: 4 }}>

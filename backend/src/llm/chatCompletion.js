@@ -16,12 +16,14 @@
  */
 
 const { decrypt } = require('../util/crypto');
+const { applyCompletionParams } = require('./openaiCompat');
 
 const PROVIDER_DEFAULT_BASE = {
   openai: 'https://api.openai.com/v1',
   anthropic: 'https://api.anthropic.com/v1',
   kimi: 'https://api.moonshot.ai/v1',
   gemini: 'https://generativelanguage.googleapis.com/v1beta',
+  openrouter: 'https://openrouter.ai/api/v1',
 };
 
 /**
@@ -48,7 +50,11 @@ async function runChatCompletion(cred, modelId, messages, { maxTokens = 400, jso
   if (cred.provider === 'kimi' && cred.base_url && /kimi\.com/i.test(cred.base_url)) {
     extraHeaders['User-Agent'] = 'claude-code/1.0';
   }
-  const payload = { model: modelId, messages, temperature: 0, max_tokens: maxTokens };
+  const payload = applyCompletionParams(
+    { model: modelId, messages },
+    modelId,
+    { maxTokens, temperature: 0 },
+  );
   if (json && cred.provider === 'openai') payload.response_format = { type: 'json_object' };
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',

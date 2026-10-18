@@ -59,7 +59,12 @@ export function stageTextColor(color, isDark) {
   // Saturation is also lifted a little on very grey inputs so the hue survives
   // the lightness change instead of collapsing to a neutral.
   const sat = Math.max(0.25, Math.min(s, 0.85));
-  const L = isDark ? Math.max(l, 0.72) : Math.min(l, 0.34);
+  // ⚠ The clamp tightened when the badges moved onto a card fill rather than
+  // white: measured on live data, "Hot" (amber) read 3.9:1 and "Enrolled"
+  // (green) 3.29:1 at 13px against the raised surface, both under the 4.5:1 a
+  // small label needs. The hue is still the admin's; only the lightness moves,
+  // so ANY colour they pick lands somewhere readable.
+  const L = isDark ? Math.max(l, 0.78) : Math.min(l, 0.28);
   return `hsl(${Math.round(h)} ${Math.round(sat * 100)}% ${Math.round(L * 100)}%)`;
 }
 

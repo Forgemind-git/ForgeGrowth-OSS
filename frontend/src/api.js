@@ -75,6 +75,9 @@ export const api = {
   dashboardDetails: (metric, range = '7d') =>
     req(`/dashboard/details?metric=${encodeURIComponent(metric)}&range=${encodeURIComponent(range)}`),
   numbers: () => req('/numbers'),
+  // Unread conversations across every number the caller can see — what the
+  // header bell shows, and what it navigates to.
+  notifications: (limit = 20) => req(`/notifications?limit=${limit}`),
   contacts: (waNumber, timeRange) =>
     req(`/contacts?waNumber=${encodeURIComponent(waNumber)}&timeRange=${timeRange}`),
   messages: (params) => {
@@ -197,7 +200,6 @@ export const api = {
     create: (data) => req('/chatbots', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => req(`/chatbots/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     validate: (config) => req('/chatbots/validate', { method: 'POST', body: JSON.stringify({ config }) }),
-    move: (id, folderId) => req(`/chatbots/${id}`, { method: 'PUT', body: JSON.stringify({ folder_id: folderId }) }),
     duplicate: (id) => req(`/chatbots/${id}/duplicate`, { method: 'POST' }),
     delete: (id) => req(`/chatbots/${id}`, { method: 'DELETE' }),
     exportOne: (id) => req(`/chatbots/${id}/export`),
@@ -206,6 +208,7 @@ export const api = {
     // function the engine validates against, so the picker cannot offer a
     // target the write would refuse.
     leadFields: () => req('/automation-lead-fields'),
+    landingSources: () => req('/automation-landing-sources'),
     // Webhook-trigger URL + signing secret (mints on first read)
     executions: (id, { page = 1, limit = 20, status = 'all', startDate = '', endDate = '', messageStatus = 'all' } = {}) => {
       const qs = new URLSearchParams({ page: String(page), limit: String(limit) });
@@ -220,17 +223,13 @@ export const api = {
     get: (id) => req(`/executions/${id}`),
     cancel: (id) => req(`/executions/${id}/cancel`, { method: 'POST' }),
   },
-  automationFolders: {
-    list: () => req('/automation-folders'),
-    create: (name) => req('/automation-folders', { method: 'POST', body: JSON.stringify({ name }) }),
-    update: (id, name) => req(`/automation-folders/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
-    delete: (id) => req(`/automation-folders/${id}`, { method: 'DELETE' }),
-  },
   whatsappAccounts: {
     list: (activeOnly = false) => req(`/whatsapp-accounts${activeOnly ? '?activeOnly=true' : ''}`),
     get: (id, reveal = false) => req(`/whatsapp-accounts/${id}${reveal ? '?reveal=1' : ''}`),
     create: (data) => req('/whatsapp-accounts', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => req(`/whatsapp-accounts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    // Display label only (migration 133); null/'' clears it.
+    setLabel: (id, label) => req(`/whatsapp-accounts/${id}/label`, { method: 'PUT', body: JSON.stringify({ label }) }),
     delete: (id) => req(`/whatsapp-accounts/${id}`, { method: 'DELETE' }),
     // Meta send-health (can_send_message + billing/error reason). Optional
     // { accountId } / { phone } narrows to one account, else all active ones.
@@ -317,6 +316,7 @@ export const api = {
     req(`/messages/window-status?waNumber=${encodeURIComponent(waNumber)}&contactNumber=${encodeURIComponent(contactNumber)}`),
   markRead: (waNumber, contactNumber) =>
     req('/messages/mark-read', { method: 'POST', body: JSON.stringify({ waNumber, contactNumber }) }),
+  markAllRead: () => req('/messages/mark-all-read', { method: 'POST', body: '{}' }),
   sendMessage: ({ fromNumber, toNumber, text, contextMessageId }) =>
     req('/messages/send', { method: 'POST', body: JSON.stringify({ fromNumber, toNumber, text, contextMessageId }) }),
   // Forward an existing message (text OR media) to another contact. The backend
@@ -419,11 +419,26 @@ export const api = {
       const s = qs.toString();
       return req(`/razorpay/payments/summary${s ? `?${s}` : ''}`);
     },
+    // Payments dashboard: money per IST day/week/month, split by method /
+    // product / status. Same filters as payments().
+    paymentsTrend: (filters = {}) => {
+      const qs = new URLSearchParams();
+      Object.entries(filters).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
+      const s = qs.toString();
+      return req(`/razorpay/payments/trend${s ? `?${s}` : ''}`);
+    },
     syncPayments: (full = false) =>
       req('/razorpay/payments/sync', { method: 'POST', body: JSON.stringify({ full }) }),
     // Proves the OUTBOUND half works. A connected webhook says nothing about
     // API access — they are separate credentials with separate status.
     testApi: () => req('/razorpay/test-api', { method: 'POST' }),
+  },
+  // Payments dashboard: the signed-in user's saved filter combinations.
+  paymentFilterPresets: {
+    list: (scope = 'dashboard') => req(`/payment-filter-presets?scope=${encodeURIComponent(scope)}`),
+    create: (body) => req('/payment-filter-presets', { method: 'POST', body: JSON.stringify(body) }),
+    update: (id, body) => req(`/payment-filter-presets/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+    delete: (id) => req(`/payment-filter-presets/${id}`, { method: 'DELETE' }),
   },
   // Payment requests — Razorpay links minted by ForgeGrowth, each carrying our
   // lead id so the payment attributes itself instead of being guessed from its
@@ -492,7 +507,30 @@ export const api = {
     delete: (id) => req(`/media-library/${id}`, { method: 'DELETE' }),
     sync: (id, accountId) =>
       req(`/media-library/${id}/sync/${accountId}`, { method: 'POST' }),
-    downloadUrl: (id) => `/api/media-library/${id}/download`,
+    // Swap the file behind an item, keeping its id so everything using it
+    // sends the new file. Returns { media, resync: [{accountId, ok, error?}] }.
+    replace: (id, file) => {
+      const form = new FormData();
+      form.append('file', file);
+      return fetch(`/api/media-library/${id}/replace`, {
+        method: 'POST',
+        credentials: 'include',
+        body: form,
+      }).then(async res => {
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const err = new Error(body.error
+            || (res.status === 413 ? 'That file is too large.' : 'Could not replace the file. Please try again.'));
+          err.status = res.status;
+          throw err;
+        }
+        return body;
+      });
+    },
+    // `version` (the file's sha256) changes the URL when the file is replaced,
+    // so an <img> that is already on screen fetches the new picture.
+    downloadUrl: (id, version) =>
+      `/api/media-library/${id}/download${version ? `?v=${encodeURIComponent(String(version).slice(0, 16))}` : ''}`,
   },
   pipelines: {
     list: () => req('/pipelines'),
@@ -603,19 +641,6 @@ export const api = {
     update: (id, data) => req(`/wa-links/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id) => req(`/wa-links/${id}`, { method: 'DELETE' }),
   },
-  // Projects — group templates + automations + agents for one campaign.
-  projects: {
-    list: () => req('/projects'),
-    get: (id) => req(`/projects/${id}`),
-    create: (data) => req('/projects', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id, data) => req(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    delete: (id) => req(`/projects/${id}`, { method: 'DELETE' }),
-    // kind: 'template' | 'automation' | 'agent' | 'followup' | 'form'; projectId null unfiles.
-    assign: (kind, ids, projectId) => req('/projects/assign', {
-      method: 'POST', body: JSON.stringify({ kind, ids, projectId }),
-    }),
-    items: (kind) => req(`/projects-items/${kind}`),
-  },
   // ── AI Academy Dashboard ──────────────────────────────────────────────────
   leads: {
     list: (params = {}) => {
@@ -624,9 +649,20 @@ export const api = {
     },
     board: () => req('/leads/board'),
     onboarding: () => req('/leads/onboarding'),
-    sources: () => req('/lead-sources'),
+    sources: (params = {}) => {
+      const qs = new URLSearchParams();
+      Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
+      return req(`/lead-sources${qs.toString() ? `?${qs}` : ''}`);
+    },
     get: (id) => req(`/leads/${id}`),
+    // Everything known about whoever is on the other end of a chat — the lead,
+    // its payments and whether that makes them a customer — matched on the last
+    // 10 digits server-side, like every other lead lookup in this app.
+    byPhone: (number) => req(`/leads/by-phone/${encodeURIComponent(number)}`),
     timeline: (id) => req(`/leads/${id}/timeline`),
+    // The contact pop-up: system + custom fields, chat threads, automation and
+    // AI-agent runs, stage history — one round trip.
+    profile: (id) => req(`/leads/${id}/profile`),
     create: (data) => req('/leads', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => req(`/leads/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     move: (id, stage) => req(`/leads/${id}/move`, { method: 'PUT', body: JSON.stringify({ stage }) }),
@@ -652,8 +688,12 @@ export const api = {
     },
   },
   marketing: {
-    overview: (days = 30, source) => {
-      const qs = new URLSearchParams({ days });
+    // Accepts a range params object ({ days } or { from, to }, see
+    // components/DateRangeControl rangeParams) or the legacy bare `days` number.
+    overview: (range = { days: 30 }, source) => {
+      const qs = new URLSearchParams();
+      const r = typeof range === 'object' && range ? range : { days: range };
+      Object.entries(r).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
       if (source) qs.set('source', source);
       return req(`/marketing/overview?${qs}`);
     },
@@ -666,7 +706,13 @@ export const api = {
     },
   },
   campaigns: {
-    list: () => req('/campaigns'),
+    // No params = every campaign with lifetime figures; { days } or { from, to }
+    // = campaigns that delivered in the range, with per-day Meta figures.
+    list: (params = {}) => {
+      const qs = new URLSearchParams();
+      Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
+      return req(`/campaigns${qs.toString() ? `?${qs}` : ''}`);
+    },
     get: (id) => req(`/campaigns/${id}`),
     create: (data) => req('/campaigns', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => req(`/campaigns/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -685,6 +731,59 @@ export const api = {
     backfillDailySpend: (days) => req('/marketing/meta-ads/backfill-daily', { method: 'POST', body: JSON.stringify({ days }) }),
   },
 
+
+  // Meta Conversions API — send the click id back when a lead converts.
+  capi: {
+    config: () => req('/capi/config'),
+    updateConfig: (data) => req('/capi/config', { method: 'PUT', body: JSON.stringify(data) }),
+    discoverDatasets: () => req('/capi/datasets/discover', { method: 'POST' }),
+    createDataset: (wabaId) => req(`/capi/datasets/${encodeURIComponent(wabaId)}/create`, { method: 'POST' }),
+    linkDataset: (wabaId, datasetId) => req(`/capi/datasets/${encodeURIComponent(wabaId)}`, { method: 'PUT', body: JSON.stringify({ datasetId }) }),
+    createMapping: (data) => req('/capi/mappings', { method: 'POST', body: JSON.stringify(data) }),
+    updateMapping: (id, data) => req(`/capi/mappings/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteMapping: (id) => req(`/capi/mappings/${id}`, { method: 'DELETE' }),
+    events: (params = {}) => {
+      const qs = new URLSearchParams();
+      Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
+      return req(`/capi/events${qs.toString() ? `?${qs}` : ''}`);
+    },
+    resend: (id) => req(`/capi/events/${id}/resend`, { method: 'POST' }),
+    send: (leadId, opts = {}) => req('/capi/send', { method: 'POST', body: JSON.stringify({ leadId, ...opts }) }),
+    backfill: (limit) => req('/capi/backfill', { method: 'POST', body: JSON.stringify({ limit }) }),
+    test: (eventName) => req('/capi/test', { method: 'POST', body: JSON.stringify({ eventName }) }),
+    clickIds: (params = {}) => {
+      const qs = new URLSearchParams();
+      Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
+      return req(`/capi/click-ids${qs.toString() ? `?${qs}` : ''}`);
+    },
+    learning: () => req('/capi/learning'),
+    performance: () => req('/capi/performance'),
+    fieldPreview: () => req('/capi/field-preview'),
+    timing: () => req('/capi/timing'),
+  },
+
+  // Conversion Leads Optimisation — Meta Lead Ads only, separate from capi.*
+  clo: {
+    settings: () => req('/marketing/clo/settings'),
+    updateSettings: (data) => req('/marketing/clo/settings', { method: 'PUT', body: JSON.stringify(data) }),
+    stages: () => req('/marketing/clo/stages'),
+    createStage: (data) => req('/marketing/clo/stages', { method: 'POST', body: JSON.stringify(data) }),
+    updateStage: (id, data) => req(`/marketing/clo/stages/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteStage: (id) => req(`/marketing/clo/stages/${id}`, { method: 'DELETE' }),
+    reorderStages: (ids) => req('/marketing/clo/stages/reorder', { method: 'PUT', body: JSON.stringify({ ids }) }),
+    stageStats: () => req('/marketing/clo/stage-stats'),
+    testEvent: (data = {}) => req('/marketing/clo/test-event', { method: 'POST', body: JSON.stringify(data) }),
+    flush: () => req('/marketing/clo/flush', { method: 'POST' }),
+    readiness: () => req('/marketing/clo/readiness'),
+    events: (params = {}) => {
+      const qs = new URLSearchParams();
+      Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
+      return req(`/marketing/clo/events${qs.toString() ? `?${qs}` : ''}`);
+    },
+    retryEvent: (id) => req(`/marketing/clo/events/${id}/retry`, { method: 'POST' }),
+    retryBulk: (filters) => req('/marketing/clo/events/retry-bulk', { method: 'POST', body: JSON.stringify(filters) }),
+    backfill: (opts = {}) => req('/marketing/clo/backfill', { method: 'POST', body: JSON.stringify(opts) }),
+  },
 
   resources: {
     list: (dynamic) => {
@@ -718,6 +817,62 @@ export const api = {
     performance: (period = 'month') => req(`/bda-performance?period=${period}`),
     webinarConversion: () => req('/webinar-conversion'),
   },
+  // Chat Analyzer — reads conversations (1:1 and WhatsApp groups) and says what
+  // they are about. Every run costs money, so `estimate` exists to be called
+  // before `runBulk`, never after.
+  // Leads → My list (pinned chats) + the follow-up calendar.
+  myList: {
+    list: () => req('/my-list'),
+    pin: (waNumber, contactNumber) => req('/my-list', { method: 'POST', body: JSON.stringify({ waNumber, contactNumber }) }),
+    unpin: (contactNumber) => req(`/my-list${qs({ contactNumber })}`, { method: 'DELETE' }),
+  },
+  followUps: {
+    list: (params = {}) => req(`/follow-ups${qs(params)}`),
+    chat: (waNumber, contactNumber) => req(`/follow-ups/chat${qs({ waNumber, contactNumber })}`),
+    set: (data) => req('/follow-ups', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => req(`/follow-ups/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    remove: (id) => req(`/follow-ups/${id}`, { method: 'DELETE' }),
+    suggest: (waNumber, contactNumber) => req('/follow-ups/suggest', { method: 'POST', body: JSON.stringify({ waNumber, contactNumber }) }),
+    google: () => req('/follow-ups/google'),
+    googleSync: (data = {}) => req('/follow-ups/google/sync', { method: 'POST', body: JSON.stringify(data) }),
+  },
+  chatAnalyzer: {
+    list: (params = {}) => req(`/chat-analysis${qs(params)}`),
+    conversation: (source, key) => req(`/chat-analysis/conversation${qs({ source, key })}`),
+    // Business context: what we sell, read by every analysis.
+    context: {
+      get: () => req('/chat-analysis/context'),
+      saveBusiness: (business) => req('/chat-analysis/context', { method: 'PUT', body: JSON.stringify({ business }) }),
+      addProduct: (p) => req('/chat-analysis/context/products', { method: 'POST', body: JSON.stringify(p) }),
+      updateProduct: (id, p) => req(`/chat-analysis/context/products/${id}`, { method: 'PUT', body: JSON.stringify(p) }),
+      deleteProduct: (id) => req(`/chat-analysis/context/products/${id}`, { method: 'DELETE' }),
+      importProducts: () => req('/chat-analysis/context/import-products', { method: 'POST' }),
+    },
+    // What was SAID (timestamped, voice notes as their exact transcript), as
+    // opposed to `conversation`, which is what it MEANT.
+    transcript: (params = {}) => req(`/chat-analysis/transcript${qs(params)}`),
+    transcribe: (body) => req('/chat-analysis/transcribe', { method: 'POST', body: JSON.stringify(body) }),
+    // One voice note from the Chats window: its transcript, or what making one would cost.
+    voiceNote: (messageId) => req(`/chat-analysis/voice-notes/${encodeURIComponent(messageId)}`),
+    transcribeVoiceNote: (messageId) => req(`/chat-analysis/voice-notes/${encodeURIComponent(messageId)}/transcribe`, { method: 'POST' }),
+    // Replace an older model's (Whisper) transcript with the current model's.
+    retranscribeVoiceNote: (messageId) => req(`/chat-analysis/voice-notes/${encodeURIComponent(messageId)}/retranscribe`, { method: 'POST' }),
+    legacyTranscripts: () => req('/chat-analysis/retranscribe-legacy'),
+    retranscribeLegacyBatch: () => req('/chat-analysis/retranscribe-legacy', { method: 'POST' }),
+    run: (body) => req('/chat-analysis/run', { method: 'POST', body: JSON.stringify(body) }),
+    estimate: (body) => req('/chat-analysis/estimate', { method: 'POST', body: JSON.stringify(body) }),
+    runBulk: (body) => req('/chat-analysis/run-bulk', { method: 'POST', body: JSON.stringify(body) }),
+    batch: (batchId) => req(`/chat-analysis/batches/${batchId}`),
+    runs: (params = {}) => req(`/chat-analysis/runs${qs(params)}`),
+    summary: (params = {}) => req(`/chat-analysis/summary${qs(params)}`),
+    applied: (body) => req('/chat-analysis/applied', { method: 'POST', body: JSON.stringify(body) }),
+    dismiss: (body) => req('/chat-analysis/dismiss', { method: 'POST', body: JSON.stringify(body) }),
+    config: {
+      get: () => req('/chat-analysis/config'),
+      update: (data) => req('/chat-analysis/config', { method: 'PUT', body: JSON.stringify(data) }),
+    },
+  },
+
   funnel: {
     config: () => req('/funnel/config'),
     chart: (params = {}) => {
@@ -750,6 +905,9 @@ export const api = {
     list: () => req('/students'),
     installments: (id) => req(`/students/${id}/installments`),
     addInstallment: (id, data) => req(`/students/${id}/installments`, { method: 'POST', body: JSON.stringify(data) }),
+    // Money given back to the customer (amount, date, method, note) — several per sale.
+    addRefund: (id, data) => req(`/students/${id}/refunds`, { method: 'POST', body: JSON.stringify(data) }),
+    deleteRefund: (id, refundId) => req(`/students/${id}/refunds/${refundId}`, { method: 'DELETE' }),
     addSale: (data) => req('/students', { method: 'POST', body: JSON.stringify(data) }),
     delete: (id) => req(`/students/${id}`, { method: 'DELETE' }),
     exportUrl: (format = 'csv') => `/api/students/export?format=${format}`,
@@ -782,35 +940,6 @@ export const api = {
       return res.json();
     });
   },
-  // ── Lead Forms (admin) ────────────────────────────────────────────────────
-  leadForms: {
-    list: () => req('/lead-forms'),
-    get: (id) => req(`/lead-forms/${id}`),
-    create: (data) => req('/lead-forms', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id, data) => req(`/lead-forms/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    delete: (id) => req(`/lead-forms/${id}`, { method: 'DELETE' }),
-    submissions: (id, params = {}) => {
-      const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== ''));
-      return req(`/lead-forms/${id}/submissions${qs.toString() ? `?${qs}` : ''}`);
-    },
-    exportUrl: (id) => `/api/lead-forms/${id}/submissions/export`,
-    dashboard: (id) => req(`/lead-forms/${id}/dashboard`),
-    uploadAsset: async (id, kind, file) => {
-      const form = new FormData();
-      form.append('file', file);
-      const res = await fetch(`/api/lead-forms/${id}/${kind}`, { method: 'POST', credentials: 'include', body: form });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json?.error || `${res.status}`);
-      return json;
-    },
-    removeAsset: (id, kind) => req(`/lead-forms/${id}/${kind}`, { method: 'DELETE' }),
-    assetUrl: (id, kind) => `/api/lead-forms/${id}/asset/${kind}`,
-    // Templates on the form's WhatsApp number whose URL button points at it.
-    templates: (id, accountId) => req(`/lead-forms/${id}/templates${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ''}`),
-    // Builds a Utility/Marketing template with the form's link button attached,
-    // and optionally submits it to Meta for approval.
-    createTemplate: (id, data) => req(`/lead-forms/${id}/template`, { method: 'POST', body: JSON.stringify(data) }),
-  },
   // ── Message costs — what we owe Meta, per template and per message type ──
   messageCosts: {
     overview: (params = {}) => req(`/message-costs/overview${qs(params)}`),
@@ -825,12 +954,63 @@ export const api = {
     sync: (days) => req('/message-costs/sync', { method: 'POST', body: JSON.stringify({ days }) }),
     backfill: (days) => req('/message-costs/backfill', { method: 'POST', body: JSON.stringify({ days }) }),
   },
-  // ── Lead Forms (public — no auth, used by PublicLeadFormPage) ────────────
-  publicLeadForms: {
-    get: (slug, token) => req(`/public/lead-forms/${encodeURIComponent(slug)}${token ? `?t=${encodeURIComponent(token)}` : ''}`),
-    submit: (slug, answers, token) => req(`/public/lead-forms/${encodeURIComponent(slug)}/submit`, {
-      method: 'POST', body: JSON.stringify({ answers, token }),
-    }),
-    assetUrl: (slug, kind) => `/api/public/lead-forms/${encodeURIComponent(slug)}/asset/${kind}`,
+
+  // Workflow Agents (migration 121): Claude-run agents that read the CRM and
+  // propose changes for approval. The paths are /workflow-agents because
+  // /agents is the customer-facing AI Agents API above.
+  workflowAgents: {
+    catalog: () => req('/workflow-agents/catalog'),
+    presets: () => req('/workflow-agents/presets'),
+    preset: (key) => req(`/workflow-agents/presets/${encodeURIComponent(key)}`),
+    list: () => req('/workflow-agents'),
+    get: (id) => req(`/workflow-agents/${id}`),
+    create: (data) => req('/workflow-agents', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, patch) => req(`/workflow-agents/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+    delete: (id) => req(`/workflow-agents/${id}`, { method: 'DELETE' }),
+    saveVersion: (id, config, changeNote) => req(`/workflow-agents/${id}/versions`, { method: 'POST', body: JSON.stringify({ config, change_note: changeNote || null }) }),
+    versions: (id) => req(`/workflow-agents/${id}/versions`),
+    version: (id, vid) => req(`/workflow-agents/${id}/versions/${vid}`),
+    restore: (id, vid) => req(`/workflow-agents/${id}/restore/${vid}`, { method: 'POST' }),
+    audit: (id) => req(`/workflow-agents/${id}/audit`),
+
+    memory: (id, params = {}) => req(`/workflow-agents/${id}/memory${qs(params)}`),
+    createMemory: (id, data) => req(`/workflow-agents/${id}/memory`, { method: 'POST', body: JSON.stringify(data) }),
+    updateMemory: (id, mid, data) => req(`/workflow-agents/${id}/memory/${mid}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    deleteMemory: (id, mid) => req(`/workflow-agents/${id}/memory/${mid}`, { method: 'DELETE' }),
+    approveMemory: (id, mid, edits) => req(`/workflow-agents/${id}/memory/${mid}/approve`, { method: 'POST', body: JSON.stringify({ edits: edits || {} }) }),
+    rejectMemory: (id, mid) => req(`/workflow-agents/${id}/memory/${mid}/reject`, { method: 'POST' }),
+
+    // dry_run + config_override = the test playground: runs the UNSAVED config.
+    run: (id, body = {}) => req(`/workflow-agents/${id}/run`, { method: 'POST', body: JSON.stringify(body) }),
+    runs: (id, params = {}) => req(`/workflow-agents/${id}/runs${qs(params)}`),
+    results: (id, params = {}) => req(`/workflow-agents/${id}/results${qs(params)}`),
+    getRun: (rid) => req(`/workflow-agents/runs/${rid}`),
+    runSteps: (rid) => req(`/workflow-agents/runs/${rid}/steps`),
+    cancelRun: (rid) => req(`/workflow-agents/runs/${rid}/cancel`, { method: 'POST' }),
+    rerun: (rid) => req(`/workflow-agents/runs/${rid}/rerun`, { method: 'POST' }),
+    previewTool: (key, body) => req(`/workflow-agents/tools/${encodeURIComponent(key)}/preview`, { method: 'POST', body: JSON.stringify(body) }),
+
+    actions: (params = {}) => req(`/workflow-agents/actions${qs(params)}`),
+    decide: (ids, decision) => req('/workflow-agents/actions/decide', { method: 'POST', body: JSON.stringify({ ids, decision }) }),
+    approve: (aid, edits) => req(`/workflow-agents/actions/${aid}/approve`, { method: 'POST', body: JSON.stringify({ edits: edits || null }) }),
+    reject: (aid) => req(`/workflow-agents/actions/${aid}/reject`, { method: 'POST' }),
+
+    worklist: (params = {}) => req(`/workflow-agents/worklist/me${qs(params)}`),
+    sendSuggested: (body) => req('/workflow-agents/worklist/send', { method: 'POST', body: JSON.stringify(body) }),
+    feedback: (body) => req('/workflow-agents/feedback', { method: 'POST', body: JSON.stringify(body) }),
+    tasks: (status = 'open') => req(`/workflow-agents/tasks${qs({ status })}`),
+    updateTask: (tid, status) => req(`/workflow-agents/tasks/${tid}`, { method: 'PUT', body: JSON.stringify({ status }) }),
+    notifications: (unreadOnly = false) => req(`/workflow-agents/notifications${unreadOnly ? '?unread=1' : ''}`),
+    markNotificationsRead: (ids) => req('/workflow-agents/notifications/read', { method: 'POST', body: JSON.stringify({ ids: ids || [] }) }),
+
+    settings: () => req('/workflow-agents/settings'),
+    updateSettings: (patch) => req('/workflow-agents/settings', { method: 'PUT', body: JSON.stringify(patch) }),
+    team: () => req('/workflow-agents/team'),
+    saveTeam: ({ id, ...data }) => (id
+      ? req(`/workflow-agents/team/teams/${id}`, { method: 'PUT', body: JSON.stringify(data) })
+      : req('/workflow-agents/team/teams', { method: 'POST', body: JSON.stringify(data) })),
+    deleteTeam: (tid) => req(`/workflow-agents/team/teams/${tid}`, { method: 'DELETE' }),
+    updateRep: (uid, patch) => req(`/workflow-agents/team/reps/${uid}`, { method: 'PUT', body: JSON.stringify(patch) }),
+    assignNumber: (accountId, repUserId, note) => req(`/workflow-agents/team/numbers/${accountId}`, { method: 'PUT', body: JSON.stringify({ rep_user_id: repUserId, note: note || null }) }),
   },
 };

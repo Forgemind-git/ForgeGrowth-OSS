@@ -1,20 +1,24 @@
 import { useState, useCallback } from 'react';
-import { Search, ChevronLeft } from 'lucide-react';
+import { Search, ChevronLeft, Pencil } from 'lucide-react';
+import RenameNumberModal from './RenameNumberModal.jsx';
 import { usePolling } from '../hooks/usePolling.js';
 import { useServerEvents } from '../hooks/useServerEvents.js';
 import { api } from '../api.js';
 import { C, FONT, maskPhone } from '../constants.js';
 
-export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollapse }) {
+export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollapse, canRename = false }) {
   const [search, setSearch] = useState('');
+  const [renaming, setRenaming] = useState(null);
   // 30s polling as a fallback; SSE pushes most updates within ~100ms.
   const { data: numbers, loading, refetch } = usePolling(() => api.numbers(), 30000);
   useServerEvents(useCallback((ev) => {
-    if (ev.type === 'contact-assignment-changed' || ev.type === 'conversation-read') refetch();
+    if (ev.type === 'contact-assignment-changed' || ev.type === 'conversation-read' || ev.type === 'numbers-changed') refetch();
   }, [refetch]));
 
   const filtered = (numbers || []).filter(n =>
-    !search || n.wa_number.includes(search) || (n.display_name && n.display_name.toLowerCase().includes(search.toLowerCase()))
+    !search || n.wa_number.includes(search)
+      || (n.display_name && n.display_name.toLowerCase().includes(search.toLowerCase()))
+      || (n.account_name && n.account_name.toLowerCase().includes(search.toLowerCase()))
   );
 
   const getInitials = (name) => {
@@ -66,11 +70,7 @@ export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollap
 
       {/* Search */}
       <div style={{ padding: '8px 12px', background: 'var(--c-cardBg)', borderBottom: `1px solid ${C.borderDark}` }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          background: 'var(--c-chatPanel)', borderRadius: 8,
-          padding: '6px 12px',
-        }}>
+        <div className="fc-searchfield">
           <Search size={16} color={C.textMuted} />
           <input
             value={search}
@@ -99,19 +99,25 @@ export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollap
           const unread = Number(n.unread_chats) || 0;
 
           return (
-            <button
+            <div
               key={n.wa_number}
+              role="button"
+              tabIndex={0}
+              className="fc-number-row"
               onClick={() => onSelectNumber(n.wa_number)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectNumber(n.wa_number); } }}
               style={{
-                width: '100%',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 12,
-                padding: '10px 16px',
+                padding: '10px 12px',
+                margin: '0 8px 4px',
+                width: 'calc(100% - 16px)',
+                boxSizing: 'border-box',
                 border: 'none',
-                borderBottom: `1px solid ${C.border}`,
+                borderRadius: 14,
                 cursor: 'pointer',
-                background: isActive ? 'var(--c-rowActive)' : 'var(--c-cardBg)',
+                background: isActive ? 'var(--c-rowActive)' : 'transparent',
                 fontFamily: FONT,
                 textAlign: 'left',
                 transition: 'background .1s',
@@ -119,16 +125,8 @@ export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollap
               }}
               // Restore the TOKEN on leave, never a literal — see ContactList.
               onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--c-rowHover)'; }}
-              onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'var(--c-cardBg)'; }}
+              onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
             >
-              {/* Active indicator */}
-              {isActive && (
-                <div style={{
-                  position: 'absolute', left: 0, top: 0, bottom: 0,
-                  width: 4, background: C.primary,
-                }} />
-              )}
-
               {/* Avatar */}
               <div style={{
                 width: 44, height: 44, borderRadius: '50%',
@@ -179,7 +177,28 @@ export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollap
                   {unread > 99 ? '99+' : unread}
                 </span>
               )}
-            </button>
+
+              {/* Rename (admin, registered accounts only) — a display label;
+                  the real number and Meta's verified name never change. */}
+              {canRename && n.account_id && (
+                <button
+                  type="button"
+                  className="fc-number-rename"
+                  title="Rename this number"
+                  aria-label={`Rename ${displayName}`}
+                  onClick={e => { e.stopPropagation(); setRenaming(n); }}
+                  style={{
+                    flexShrink: 0, width: 30, height: 30, borderRadius: 8, border: 'none',
+                    background: 'transparent', color: C.textMuted, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--c-hover)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <Pencil size={15} />
+                </button>
+              )}
+            </div>
           );
         })}
 
@@ -189,6 +208,16 @@ export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollap
           </div>
         )}
       </div>
+      {renaming && (
+        <RenameNumberModal
+          accountId={renaming.account_id}
+          phone={renaming.wa_number}
+          currentLabel={renaming.label}
+          accountName={renaming.account_name}
+          onClose={() => setRenaming(null)}
+          onSaved={() => refetch()}
+        />
+      )}
     </aside>
   );
 }

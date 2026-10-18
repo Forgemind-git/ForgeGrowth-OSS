@@ -31,6 +31,10 @@ export const C = {
   surface: 'var(--c-surface, #ffffff)',
   surfaceAlt: 'var(--c-surfaceAlt, #F7F7F3)',
   hover: 'var(--c-hover, #EFEEE6)',
+  // A real, VISIBLE neutral fill. Disabled buttons and toggle-off tracks used
+  // to borrow `border`/`borderStrong` for this; both are transparent under the
+  // borderless system, which would have made every disabled button vanish.
+  fillMuted: 'var(--c-fillMuted, #d5d5d0)',
   // The wallpaper is a data-URI SVG: var() cannot be interpolated INSIDE the
   // encoded string, so the whole url() is the token and index.css swaps it
   // per theme. Hardcoding it here is what left light-grey squares showing
@@ -114,8 +118,12 @@ export const CHAT = {
   statusSent: 'var(--c-statusSent, #8696a0)',
 };
 
-export const FONT = "'DM Sans', system-ui, sans-serif";
-export const MONO = "'DM Mono', monospace";
+// Variable-driven so a section wrapper can re-typeset everything under it by
+// redefining --fg-font, the same way --c-* colours work. ~980 inline
+// `fontFamily: FONT` uses pick this up with no edit. The fallback IS the
+// historical value, so an unscoped surface is byte-identical to before.
+export const FONT = "var(--fg-font, 'DM Sans', system-ui, sans-serif)";
+export const MONO = "var(--fg-mono, 'DM Mono', monospace)";
 
 /**
  * TYPE SCALE — the single authority for every text size in the app.

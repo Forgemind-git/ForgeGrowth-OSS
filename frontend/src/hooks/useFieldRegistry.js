@@ -27,6 +27,7 @@ const FALLBACK = {
     sys('assigned_to', 'BDA', 'text', true, false),
     sys('paid_course', 'Product', 'text', false, true),
     sys('total_paid', 'Total Paid', 'number', false, true),
+    sys('payment_status', 'Payment Status', 'dropdown', false, true),
     sys('payment_date', 'Payment Date', 'date', false, false),
     sys('created_at', 'Arrived', 'date', true, false),
     sys('last_activity_at', 'Last Activity', 'date', true, false),

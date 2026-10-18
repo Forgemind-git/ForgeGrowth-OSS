@@ -2,24 +2,28 @@ import { useState, useEffect, useMemo } from 'react';
 import { notify, showError, showSuccess } from '../lib/feedback.js';
 import {
   Settings, Users, Tag, FolderOpen, LayoutList,
-  LogOut, Trash2, Moon, Sun, Monitor,
+  LogOut, Trash2,
   ArrowLeft, Plus, X, ChevronLeft, Eye, EyeOff, Phone, Mail, MapPin, BadgeCheck, User,
   Loader2, MessageSquare, Star, Key, Webhook, RefreshCw, Search, Play, AlertCircle, CheckCircle2,
-  Bot, Copy, Check, Plug, Globe, Calendar as CalendarIcon, FileSpreadsheet, Link2, Unplug,
+  Bot, Copy, Check, Plug, Calendar as CalendarIcon, FileSpreadsheet, Link2, Unplug,
   ChevronRight, ExternalLink, Sheet, Table2, Inbox, PlugZap, Terminal,
   IndianRupee, CreditCard, Link as LinkIcon, SlidersHorizontal,
-  ChevronDown, Wrench, ShieldAlert, Package, Download, Shield,
+  ChevronDown, Wrench, ShieldAlert, Package, Download, Shield, Mic,
+  ScrollText as ScrollTextIcon, Shield as ShieldIcon, Pencil,
 } from 'lucide-react';
 import { api } from '../api.js';
 import { C, FONT, MONO, maskPhone } from '../constants.js';
 import MaskedNumber from '../components/MaskedNumber.jsx';
 import { useTheme } from '../theme.jsx';
 import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx';
+import RenameNumberModal from '../components/RenameNumberModal.jsx';
 import SearchableSelect from '../components/SearchableSelect.jsx';
+import PillStrip from '../components/PillStrip.jsx';
 import { useTableSelection, SelectAllCheckbox, RowCheckbox, BulkDeleteButton, runBulkDelete } from '../components/TableSelection.jsx';
 import { MetaAdsPanel } from '../components/MarketingConnections.jsx';
 import { FunnelSettingsContent } from './sales/FunnelSettingsPage.jsx';
 import EntityFieldsManager from '../components/EntityFieldsManager.jsx';
+import SocialSettingsPart from '../social/SocialSettingsPart.jsx';
 
 const TABS = [
   { key: 'general', label: 'General', icon: Settings },
@@ -32,15 +36,21 @@ const TABS = [
   { key: 'integrations', label: 'Integrations', icon: Plug },
   { key: 'mcp', label: 'MCP Tools', icon: PlugZap },
   { key: 'users', label: 'Users', icon: User },
-  { key: 'domains', label: 'Domain', icon: Globe },
   { key: 'webhooks', label: 'Webhooks', icon: Webhook },
+  // Social-only tabs (were under Social → Settings). No "Sales & Chats" half.
+  { key: 'activity', label: 'Activity log', icon: ScrollTextIcon, socialOnly: true },
+  { key: 'privacy', label: 'Privacy policy', icon: ShieldIcon, socialOnly: true },
 ];
 
-const THEMES = [
-  { key: 'light', label: 'Light', icon: Sun },
-  { key: 'dark', label: 'Dark', icon: Moon },
-  { key: 'system', label: 'System', icon: Monitor },
-];
+// Main tabs that also hold a Social half (social/SocialSettingsPart.jsx), shown
+// behind a "Sales & Chats | Social" switch at the top of the tab. The value says
+// who may open that Social half: 'social' = anyone with the Social page,
+// 'admin' = admins only (it was admin-only under Social → Settings too).
+const SOCIAL_PARTS = {
+  general: 'social', integrations: 'social', privacy: 'social',
+  'ai-models': 'admin', tags: 'admin', category: 'admin', fields: 'admin', mcp: 'admin', activity: 'admin',
+};
+
 
 const TIMEZONES = [
   'Asia/Calcutta',
@@ -84,408 +94,6 @@ function PlaceholderTab({ label }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Domain                                                             */
-/* ------------------------------------------------------------------ */
-// Where an admin points a real domain at this install without touching a server.
-//
-// The important half of this screen is the diagnosis at the top, not the list
-// underneath. Every address problem is the same shape — what the browser used
-// disagrees with what the install was configured for — and none of it surfaces
-// as an error a user could act on. A Secure cookie over plain HTTP just looks
-// like "it logs me out"; an address missing from CORS just looks like a 500.
-// The generated reverse-proxy configuration for one domain.
-//
-// Split out because it is the only part of this screen that exists to be copied
-// rather than read, and copyable content has different rules: nothing that would
-// break when pasted, every command on its own line, and the one judgement the
-// generator made — whether a certificate resolver belongs on this hostname —
-// stated in the open rather than buried in a comment inside the file.
-function OverlayPanel({ data, copiedKey, onCopy }) {
-  if (!data) return null;
-
-  const block = {
-    fontFamily: MONO, fontSize: 12, lineHeight: 1.55, whiteSpace: 'pre',
-    overflowX: 'auto', background: C.surfaceSubtle, border: `1px solid ${C.border}`,
-    borderRadius: 7, padding: '10px 12px', margin: 0, color: C.text,
-  };
-  const copyBtn = (key, text) => (
-    <button onClick={() => onCopy(key, text)} style={{
-      display: 'flex', alignItems: 'center', gap: 5, padding: '5px 9px', borderRadius: 6,
-      border: `1px solid ${C.border}`, background: C.surface, fontSize: 12,
-      fontFamily: FONT, color: C.textSecondary, cursor: 'pointer', flexShrink: 0,
-    }}>
-      {copiedKey === key ? <Check size={13} color={C.successText} /> : <Copy size={13} />}
-      {copiedKey === key ? 'Copied' : 'Copy'}
-    </button>
-  );
-
-  // Three states, and "could not tell" is deliberately not folded into "no".
-  // Putting a certificate resolver on a CDN-fronted hostname produces an ACME
-  // challenge that can never succeed, retried forever, and the failures are
-  // rate-limited per account — so they take unrelated domains down with them.
-  const verdict = data.behindCdn === true
-    ? { tone: 'ok', text: `${data.cdnName || 'A CDN'} is in front of this domain, so it supplies the `
-        + 'certificate. The file below leaves the resolver out, on purpose.' }
-    : data.behindCdn === false
-      ? { tone: 'warn', text: 'This domain appears to point straight at this server, so the file '
-        + 'includes a certificate resolver — set it to the name your Traefik actually defines.' }
-      : { tone: 'warn', text: 'Could not reach this hostname, so whether a CDN sits in front is '
-        + 'unknown. The resolver line is commented out with a note on which way to go.' };
-
-  return (
-    <div style={{
-      marginTop: 10, padding: '12px 14px', borderRadius: 8,
-      background: C.surface, border: `1px solid ${C.border}`,
-    }}>
-      <div style={{ fontWeight: 600, fontSize: 13.5, color: C.text, marginBottom: 6 }}>
-        Configuration for the program that owns ports 80 and 443
-      </div>
-      <div style={{
-        fontSize: 12.5, lineHeight: 1.55, marginBottom: 12, padding: '8px 10px', borderRadius: 6,
-        color: C.textSecondary,
-        background: verdict.tone === 'ok' ? C.successBgSoft : C.warnBgSoft,
-        border: `1px solid ${verdict.tone === 'ok' ? C.successBorder : C.warnBorder}`,
-      }}>{verdict.text}</div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-        <span style={{ fontSize: 12.5, color: C.textMuted, flex: 1 }}>
-          Save as <code style={{ fontFamily: MONO }}>{data.path}</code>
-          {' '}— outside the install directory, which is overwritten on every upgrade.
-        </span>
-        {copyBtn('yaml', data.yaml)}
-      </div>
-      <pre style={{ ...block, marginBottom: 14 }}>{data.yaml}</pre>
-
-      {(data.commands || []).map((c, i) => (
-        <div key={i} style={{ marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 5 }}>
-            <span style={{ fontSize: 12.5, color: C.textSecondary, flex: 1 }}>
-              {i + 1}. {c.label}
-            </span>
-            {copyBtn(`cmd${i}`, c.cmd)}
-          </div>
-          <pre style={block}>{c.cmd}</pre>
-        </div>
-      ))}
-
-      <ul style={{ margin: '4px 0 0 0', paddingLeft: 16 }}>
-        {(data.notes || []).map((n, i) => (
-          <li key={i} style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.55, marginBottom: 4 }}>{n}</li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function DomainTab() {
-  const [rows, setRows] = useState([]);
-  const [status, setStatus] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [hostname, setHostname] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState(null);
-  const [checking, setChecking] = useState(null);   // id currently being checked
-  const [checks, setChecks] = useState({});         // id -> result of the last check
-  const [overlay, setOverlay] = useState(null);     // { id, data } — the open setup panel
-  const [overlayLoading, setOverlayLoading] = useState(null);
-  const [copiedKey, setCopiedKey] = useState('');
-
-  async function load() {
-    try {
-      const [list, st] = await Promise.all([api.domains.list(), api.domains.status()]);
-      setRows(list.domains || []);
-      setStatus(st);
-    } catch (err) {
-      showError(err.message || 'Could not load the domain settings');
-    } finally {
-      setLoading(false);
-    }
-  }
-  useEffect(() => { load(); }, []);
-
-  async function add(e) {
-    e.preventDefault();
-    if (!hostname.trim() || saving) return;
-    setSaving(true);
-    try {
-      await api.domains.add(hostname.trim());
-      setHostname('');
-      showSuccess('Domain added. Point its DNS at this server and open it in a browser.');
-      await load();
-    } catch (err) {
-      showError(err.message || 'Could not add that domain');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  // The only control on this screen that reports reality rather than
-  // configuration: the server fetches this install's own public address and says
-  // what came back. Deliberately a button and not something the page does on
-  // load — it is a real round-trip through whatever sits in front of this
-  // install, and it can take several seconds per domain.
-  async function check(row) {
-    setChecking(row.id);
-    try {
-      const result = await api.domains.check(row.id);
-      setChecks((c) => ({ ...c, [row.id]: result }));
-    } catch (err) {
-      showError(err.message || 'Could not check that domain');
-    } finally {
-      setChecking(null);
-    }
-  }
-
-  // On an install that does not own ports 80/443, the app cannot route a
-  // hostname to itself — it has no access to the configuration of whatever does.
-  // It can still write out that configuration, filled in, which turns "read the
-  // documentation and adapt the example" into three commands.
-  async function showOverlay(row) {
-    if (overlay?.id === row.id) { setOverlay(null); return; }
-    setOverlayLoading(row.id);
-    try {
-      setOverlay({ id: row.id, data: await api.domains.overlay(row.id) });
-    } catch (err) {
-      showError(err.message || 'Could not build the configuration file');
-    } finally {
-      setOverlayLoading(null);
-    }
-  }
-
-  async function copy(key, text) {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedKey(key);
-      setTimeout(() => setCopiedKey(''), 1500);
-    } catch { /* clipboard blocked — the text is on screen to select by hand */ }
-  }
-
-  async function remove(row) {
-    try {
-      await api.domains.remove(row.id);
-      showSuccess(`${row.hostname} removed`);
-      await load();
-    } catch (err) {
-      showError(err.message || 'Could not remove that domain');
-    } finally {
-      setPendingDelete(null);
-    }
-  }
-
-  const card = {
-    background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 10,
-    padding: 18, marginBottom: 16,
-  };
-
-  if (loading) {
-    return (
-      <div style={{ padding: 24, fontFamily: FONT }}>
-        <div style={{ height: 74, background: C.surfaceSubtle, borderRadius: 10, marginBottom: 16 }} />
-        <div style={{ height: 180, background: C.surfaceSubtle, borderRadius: 10 }} />
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ padding: 24, fontFamily: FONT, overflowY: 'auto', flex: 1 }}>
-      {/* Diagnosis first: this is the part that explains a broken login. */}
-      {(status?.warnings || []).map((w, i) => (
-        <div key={i} style={{
-          ...card, marginBottom: 12, display: 'flex', gap: 12, alignItems: 'flex-start',
-          background: w.level === 'error' ? C.dangerBgSoft : C.warnBgSoft,
-          border: `1px solid ${w.level === 'error' ? C.dangerBorder : C.warnBorder}`,
-        }}>
-          <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 1 }}
-            color={w.level === 'error' ? C.dangerText : C.warnText} />
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4,
-              color: w.level === 'error' ? C.dangerText : C.warnText }}>{w.title}</div>
-            <div style={{ fontSize: 13, color: C.textSecondary, lineHeight: 1.55 }}>{w.detail}</div>
-          </div>
-        </div>
-      ))}
-
-      {status && !(status.warnings || []).length && (
-        <div style={{ ...card, marginBottom: 12, display: 'flex', gap: 10, alignItems: 'center',
-          background: C.successBgSoft, border: `1px solid ${C.successBorder}` }}>
-          <CheckCircle2 size={18} color={C.successText} />
-          <div style={{ fontSize: 13.5, color: C.textSecondary }}>
-            This address is set up correctly.
-          </div>
-        </div>
-      )}
-
-      <div style={card}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 10, color: C.text }}>
-          How you are reaching this right now
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 18px', fontSize: 13.5 }}>
-          <span style={{ color: C.textMuted }}>Address</span>
-          <span style={{ fontFamily: MONO, color: C.text }}>
-            {status?.protocol}://{status?.requestHost || '—'}
-          </span>
-          <span style={{ color: C.textMuted }}>Login cookie</span>
-          <span style={{ color: C.text }}>
-            {status?.secureCookies ? 'Secure — HTTPS only' : 'Not marked Secure — works over HTTP'}
-          </span>
-          <span style={{ color: C.textMuted }}>Set at install</span>
-          <span style={{ fontFamily: MONO, color: C.textSecondary }}>
-            {status?.corsOrigin || 'not set'}
-          </span>
-        </div>
-      </div>
-
-      <div style={card}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4, color: C.text }}>
-          Extra domains
-        </div>
-        {/* The two kinds of server need different instructions, and describing
-            both the same way is how someone ends up waiting for a certificate
-            that nothing on this machine is able to fetch. */}
-        <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 14, lineHeight: 1.55 }}>
-          {status?.tlsMode === 'caddy' ? (
-            <>Add a domain, point its DNS at this server, then open it in a browser.
-            The HTTPS certificate is obtained on that first visit — nothing to restart
-            and nothing else to configure.</>
-          ) : status?.autoRouting ? (
-            // The proxy on this server publishes routes from a directory this
-            // install can write to, so the manual step does not exist here.
-            <>Add a domain and point its DNS at this server. The route is published to
-            this server’s reverse proxy automatically — nothing to restart and no file
-            to edit. The certificate comes from that proxy, or from a CDN if one sits
-            in front. Press <strong>Check</strong> below once DNS has propagated.</>
-          ) : (
-            <>Adding a domain here makes this install accept it straight away. Because
-            another program on this server owns ports 80 and 443, the certificate has to
-            come from that one — point it at this install
-            {status?.requestHost ? ' the same way the current address reaches it' : ''}.
-            {' '}<code style={{ fontFamily: MONO, fontSize: 12.5 }}>docs/reverse-proxy.md</code>
-            {' '}has a Traefik and an nginx example. Then press <strong>Check</strong> on the
-            row below: it fetches the domain from the outside and says which part is not
-            working yet.</>
-          )}
-        </div>
-
-        <form onSubmit={add} style={{ display: 'flex', gap: 8, marginBottom: rows.length ? 16 : 0 }}>
-          <input
-            value={hostname}
-            onChange={(e) => setHostname(e.target.value)}
-            placeholder="crm.example.com"
-            style={{
-              flex: 1, padding: '9px 12px', borderRadius: 8, fontSize: 14, fontFamily: MONO,
-              border: `1px solid ${C.border}`, background: C.surface, color: C.text, outline: 'none',
-            }}
-          />
-          <button type="submit" disabled={saving || !hostname.trim()} style={{
-            display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 8,
-            border: 'none', fontSize: 14, fontWeight: 600, fontFamily: FONT,
-            background: hostname.trim() ? C.primary : C.surfaceMuted,
-            color: hostname.trim() ? C.primaryText : C.textMuted,
-            cursor: hostname.trim() && !saving ? 'pointer' : 'default',
-          }}>
-            {saving ? <Loader2 size={15} className="spin" /> : <Plus size={15} />} Add
-          </button>
-        </form>
-
-        {rows.map((r) => {
-          const res = checks[r.id];
-          const tone = !res ? null
-            : res.level === 'ok' ? { bg: C.successBgSoft, border: C.successBorder, text: C.successText }
-            : res.level === 'warn' ? { bg: C.warnBgSoft, border: C.warnBorder, text: C.warnText }
-            : { bg: C.dangerBgSoft, border: C.dangerBorder, text: C.dangerText };
-          return (
-            <div key={r.id} style={{ padding: '11px 0', borderTop: `1px solid ${C.rowSep}` }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <Globe size={16} color={C.textMuted} style={{ flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: MONO, fontSize: 13.5, color: C.text }}>{r.hostname}</div>
-                  <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
-                    {/* Nothing having asked for a certificate is the usual sign that DNS
-                        is not pointing here yet, so it is worth saying rather than
-                        leaving the row looking simply idle. */}
-                    {r.lastSeenAt ? 'In use'
-                      : r.lastAskedAt ? 'Certificate requested — finishing'
-                      : 'Waiting for its first visit. Check the DNS points here.'}
-                  </div>
-                </div>
-                {/* Only on installs where something else owns 80/443. Where the
-                    bundled caddy owns them, adding the domain really is the whole
-                    job and offering a proxy config would invent work. */}
-                {status?.tlsMode !== 'caddy' && !status?.autoRouting && (
-                  <button onClick={() => showOverlay(r)} disabled={overlayLoading === r.id}
-                    title={`Configuration your reverse proxy needs for ${r.hostname}`} style={{
-                      display: 'flex', alignItems: 'center', gap: 6, padding: '7px 11px',
-                      borderRadius: 7, border: `1px solid ${C.border}`,
-                      background: overlay?.id === r.id ? C.surfaceMuted : 'transparent',
-                      fontSize: 13, fontFamily: FONT, color: C.textSecondary,
-                      cursor: overlayLoading === r.id ? 'default' : 'pointer',
-                    }}>
-                    {overlayLoading === r.id
-                      ? <Loader2 size={14} className="spin" />
-                      : <Terminal size={14} />} Setup file
-                  </button>
-                )}
-                <button onClick={() => check(r)} disabled={checking === r.id}
-                  title={`Check whether ${r.hostname} reaches this install`} style={{
-                    display: 'flex', alignItems: 'center', gap: 6, padding: '7px 11px',
-                    borderRadius: 7, border: `1px solid ${C.border}`, background: 'transparent',
-                    fontSize: 13, fontFamily: FONT, color: C.textSecondary,
-                    cursor: checking === r.id ? 'default' : 'pointer',
-                  }}>
-                  {checking === r.id
-                    ? <Loader2 size={14} className="spin" />
-                    : <RefreshCw size={14} />} Check
-                </button>
-                <button onClick={() => setPendingDelete(r)} title={`Remove ${r.hostname}`} style={{
-                  display: 'flex', alignItems: 'center', padding: 7, borderRadius: 7,
-                  border: `1px solid ${C.border}`, background: 'transparent',
-                  color: C.dangerText, cursor: 'pointer',
-                }}>
-                  <Trash2 size={14} />
-                </button>
-              </div>
-
-              {res && (
-                <div style={{
-                  display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 10,
-                  padding: '10px 12px', borderRadius: 8,
-                  background: tone.bg, border: `1px solid ${tone.border}`,
-                }}>
-                  {res.level === 'ok'
-                    ? <CheckCircle2 size={16} color={tone.text} style={{ flexShrink: 0, marginTop: 1 }} />
-                    : <AlertCircle size={16} color={tone.text} style={{ flexShrink: 0, marginTop: 1 }} />}
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: tone.text }}>{res.title}</div>
-                    <div style={{ fontSize: 12.5, color: C.textSecondary, lineHeight: 1.55, marginTop: 3 }}>
-                      {res.detail}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {overlay?.id === r.id && (
-                <OverlayPanel data={overlay.data} copiedKey={copiedKey} onCopy={copy} />
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {pendingDelete && (
-        <DeleteConfirmModal
-          open
-          title="Remove this domain?"
-          message={`${pendingDelete.hostname} will stop being accepted. Anyone using it will `
-                 + 'be refused, and its certificate will not be renewed.'}
-          onConfirm={() => remove(pendingDelete)}
-          onCancel={() => setPendingDelete(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /*  General                                                            */
 /* ------------------------------------------------------------------ */
 function GeneralTab({ onLogout, user }) {
@@ -509,7 +117,6 @@ function GeneralTab({ onLogout, user }) {
     <div style={{ flex: 1, padding: '32px 40px', overflowY: 'auto', fontFamily: FONT }}>
       <div style={{ maxWidth: '100%' }}>
         <div style={{ marginBottom: 28 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>General Settings</h1>
           <p style={{ fontSize: 14, color: C.textMuted, margin: '4px 0 0', fontFamily: FONT }}>Manage your account preferences and settings</p>
         </div>
 
@@ -517,24 +124,9 @@ function GeneralTab({ onLogout, user }) {
           <div style={{ fontSize: 15, fontWeight: 600, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
             Appearance
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            {THEMES.map(t => {
-              const Icon = t.icon;
-              const isActive = theme === t.key;
-              return (
-                <button key={t.key} onClick={() => setTheme(t.key)} style={{
-                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                  padding: '12px 16px', borderRadius: 10,
-                  border: `1.5px solid ${isActive ? C.primary : C.border}`,
-                  background: isActive ? C.primaryLight : 'var(--c-cardBg)',
-                  cursor: 'pointer', fontFamily: FONT, fontSize: 15, fontWeight: 600,
-                  color: isActive ? C.primary : C.text, transition: 'all .15s',
-                }}>
-                  <Icon size={16} /> {t.label}
-                </button>
-              );
-            })}
-          </div>
+          {/* Saved per device, like the switch in the header — the two are one setting. */}
+          <PillStrip value={theme} onChange={setTheme}
+            items={[{ id: 'light', label: 'Light' }, { id: 'dark', label: 'Dark' }]} />
         </div>
 
         <div style={{ marginBottom: 32 }}>
@@ -569,7 +161,7 @@ function GeneralTab({ onLogout, user }) {
             <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 16, marginTop: 6 }}>
               <button onClick={handleDeleteClick} style={{
                 width: 'fit-content', display: 'flex', alignItems: 'center', gap: 8,
-                padding: '10px 18px', borderRadius: 8, border: '1.5px solid #fca5a5',
+                padding: '10px 18px', borderRadius: 8, border: '1.5px solid transparent',
                 background: 'var(--c-dangerBgSoft, #fef2f2)', cursor: 'pointer', fontFamily: FONT, fontSize: 15,
                 fontWeight: 600, color: C.primary,
               }}>
@@ -632,22 +224,8 @@ function FieldsTab() {
         borderBottom: `1px solid ${C.border}`,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>Fields</h1>
-          <div style={{ display: 'inline-flex', background: 'var(--c-hover, #F1F1EE)', borderRadius: 9, padding: 3, gap: 2 }}>
-            {FIELD_SECTIONS.map(s => {
-              const id = sectionId(s);
-              const on = sectionId(activeSection) === id;
-              return (
-                <button key={id} onClick={() => setSection(id)} style={{
-                  padding: '6px 12px', borderRadius: 7, border: 'none', cursor: 'pointer',
-                  fontFamily: FONT, fontSize: 14, fontWeight: 600,
-                  background: on ? C.cardBg : 'transparent',
-                  color: on ? C.text : C.textSecondary,
-                  boxShadow: on ? '0 1px 2px rgba(0,0,0,.08)' : 'none',
-                }}>{s.label}</button>
-              );
-            })}
-          </div>
+          <PillStrip value={sectionId(activeSection)} onChange={setSection}
+            items={FIELD_SECTIONS.map(s => ({ id: sectionId(s), label: s.label }))} />
         </div>
       </div>
 
@@ -743,7 +321,7 @@ function TagsTab({ categories, tags, onRefresh }) {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         borderBottom: `1px solid ${C.border}`,
       }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>Tags</h1>
+        <div />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <SearchableSelect
             value={filterCategoryId}
@@ -1089,7 +667,7 @@ function CategoryTab({ categories, tags, onRefresh, detailId, onViewDetail, onBa
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         borderBottom: `1px solid ${C.border}`,
       }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>Categories</h1>
+        <div />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <BulkDeleteButton sel={sel} label="category" onConfirm={handleBulkDelete} />
           <button onClick={openAdd} style={{
@@ -1232,9 +810,10 @@ function WhatsappAccountsTab() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({
-    displayName: '', displayPhoneNumber: '', phoneNumberId: '', wabaId: '', metaAppId: '',
+    displayName: '', label: '', displayPhoneNumber: '', phoneNumberId: '', wabaId: '', metaAppId: '',
     accessToken: '', verifyToken: '', isDefault: false, isActive: true,
   });
+  const [renaming, setRenaming] = useState(null);
   const [showToken, setShowToken] = useState(false);
   const [revealedToken, setRevealedToken] = useState(null); // decrypted existing token, fetched on demand
   const [revealingToken, setRevealingToken] = useState(false);
@@ -1268,7 +847,7 @@ function WhatsappAccountsTab() {
 
   const startCreate = () => {
     setEditing(null);
-    setForm({ displayName: '', displayPhoneNumber: '', phoneNumberId: '', wabaId: '', metaAppId: '', accessToken: '', verifyToken: '', isDefault: accounts.length === 0, isActive: true });
+    setForm({ displayName: '', label: '', displayPhoneNumber: '', phoneNumberId: '', wabaId: '', metaAppId: '', accessToken: '', verifyToken: '', isDefault: accounts.length === 0, isActive: true });
     setShowToken(false);
     setRevealedToken(null);
     setShowForm(true);
@@ -1276,7 +855,9 @@ function WhatsappAccountsTab() {
   const startEdit = async (acc) => {
     setEditing(acc);
     setForm({
-      displayName: acc.displayName, displayPhoneNumber: acc.displayPhoneNumber,
+      // displayName = the stored account name; the label is edited separately
+      // (acc.displayName from the API is the SHOWN name, i.e. the label when set).
+      displayName: acc.accountName ?? acc.displayName, label: acc.label || '', displayPhoneNumber: acc.displayPhoneNumber,
       phoneNumberId: acc.phoneNumberId, wabaId: acc.wabaId, metaAppId: acc.metaAppId || '',
       accessToken: '', verifyToken: acc.verifyToken || '', isDefault: acc.isDefault, isActive: acc.isActive,
     });
@@ -1308,7 +889,7 @@ function WhatsappAccountsTab() {
 
   const save = async () => {
     if (!form.displayName.trim() || !form.displayPhoneNumber.trim() || !form.phoneNumberId.trim() || !form.wabaId.trim()) {
-      notify('Display name, phone, phone number ID, and WABA ID are required');
+      notify('Account name, phone, phone number ID, and WABA ID are required');
       return;
     }
     if (!editing && !form.accessToken.trim()) {
@@ -1324,7 +905,9 @@ function WhatsappAccountsTab() {
         if (!payload.accessToken || payload.accessToken === revealedToken) delete payload.accessToken;
         await api.whatsappAccounts.update(editing.id, payload);
       } else {
-        await api.whatsappAccounts.create(form);
+        const { label, ...createBody } = form;
+        const created = await api.whatsappAccounts.create(createBody);
+        if (label && label.trim() && created?.id) await api.whatsappAccounts.setLabel(created.id, label.trim());
       }
       setShowForm(false);
       await refresh();
@@ -1354,7 +937,6 @@ function WhatsappAccountsTab() {
       <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}.spin{animation:spin 1s linear infinite}`}</style>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
         <div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0 }}>WhatsApp Accounts</h2>
           <p style={{ fontSize: 14, color: C.textMuted, margin: '4px 0 0' }}>
             Business accounts (WABAs) used to send templates, broadcasts and automation messages.
           </p>
@@ -1384,7 +966,7 @@ function WhatsappAccountsTab() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--c-hover)', borderBottom: `1px solid ${C.border}` }}>
-                <th style={thStyle}>Display name</th>
+                <th style={thStyle}>Name shown in the app</th>
                 <th style={thStyle}>Phone number</th>
                 <th style={thStyle}>Phone number ID</th>
                 <th style={thStyle}>WABA ID</th>
@@ -1400,6 +982,9 @@ function WhatsappAccountsTab() {
                   <td style={tdStyle}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ fontWeight: 600 }}>{acc.displayName}</span>
+                      <button onClick={() => setRenaming(acc)} style={{ ...iconBtnStyle, width: 26, height: 26 }} title="Rename this number (display label only)" aria-label={`Rename ${acc.displayName}`}>
+                        <Pencil size={13} />
+                      </button>
                       {acc.isDefault && (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 12, padding: '2px 7px', background: 'var(--c-orangeBg, #FFF3E0)', color: 'var(--c-orangeText, #E65100)', borderRadius: 99, fontWeight: 700 }}>
                           <Star size={9} fill="currentColor" /> DEFAULT
@@ -1456,7 +1041,7 @@ function WhatsappAccountsTab() {
       {/* Form modal */}
       {showForm && (
         <div onClick={() => setShowForm(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, width: 520, maxHeight: '90vh', overflow: 'auto', boxShadow: C.shadowLg, padding: 24 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, width: 520, maxHeight: 'calc(90vh / var(--fg-zoom, 1))', overflow: 'auto', boxShadow: C.shadowLg, padding: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
               <h3 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0 }}>
                 {editing ? 'Edit WhatsApp account' : 'New WhatsApp account'}
@@ -1466,8 +1051,15 @@ function WhatsappAccountsTab() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
-                <label style={labelStyle}>Display name</label>
-                <input style={inpStyle} value={form.displayName} onChange={e => setForm({ ...form, displayName: e.target.value })} placeholder="e.g. Forgemind Main" autoFocus autoComplete="off" name="wa-display-name" />
+                <label style={labelStyle}>Account name</label>
+                <input style={inpStyle} value={form.displayName} onChange={e => setForm({ ...form, displayName: e.target.value })} placeholder="e.g. Acme Main" autoFocus autoComplete="off" name="wa-display-name" />
+              </div>
+              <div>
+                <label style={labelStyle}>Label (optional)</label>
+                <input style={inpStyle} value={form.label} maxLength={60} onChange={e => setForm({ ...form, label: e.target.value })} placeholder="e.g. Acme – Sales desk" autoComplete="off" name="wa-label" />
+                <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
+                  A short name shown everywhere you pick or see this number. It does not change the number or the name customers see on WhatsApp. Leave blank to show the account name.
+                </div>
               </div>
               <div>
                 <label style={labelStyle}>WhatsApp phone number</label>
@@ -1475,15 +1067,15 @@ function WhatsappAccountsTab() {
               </div>
               <div>
                 <label style={labelStyle}>Phone number ID (from Meta)</label>
-                <input style={{ ...inpStyle, fontFamily: 'DM Mono, monospace' }} value={form.phoneNumberId} onChange={e => setForm({ ...form, phoneNumberId: e.target.value })} placeholder="318766817983611" autoComplete="off" name="wa-phone-number-id" inputMode="numeric" />
+                <input style={{ ...inpStyle, fontFamily: 'DM Mono, monospace' }} value={form.phoneNumberId} onChange={e => setForm({ ...form, phoneNumberId: e.target.value })} placeholder="123456789012345" autoComplete="off" name="wa-phone-number-id" inputMode="numeric" />
               </div>
               <div>
                 <label style={labelStyle}>WhatsApp Business Account ID (WABA)</label>
-                <input style={{ ...inpStyle, fontFamily: 'DM Mono, monospace' }} value={form.wabaId} onChange={e => setForm({ ...form, wabaId: e.target.value })} placeholder="300804649783110" autoComplete="off" name="wa-waba-id" inputMode="numeric" />
+                <input style={{ ...inpStyle, fontFamily: 'DM Mono, monospace' }} value={form.wabaId} onChange={e => setForm({ ...form, wabaId: e.target.value })} placeholder="234567890123456" autoComplete="off" name="wa-waba-id" inputMode="numeric" />
               </div>
               <div>
                 <label style={labelStyle}>Meta App ID <span style={{ color: C.textMuted, fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(only required for media-header templates)</span></label>
-                <input style={{ ...inpStyle, fontFamily: 'DM Mono, monospace' }} value={form.metaAppId} onChange={e => setForm({ ...form, metaAppId: e.target.value })} placeholder="e.g. 1191602295745986 (15–16 digits)" autoComplete="off" name="meta-app-id" inputMode="numeric" />
+                <input style={{ ...inpStyle, fontFamily: 'DM Mono, monospace' }} value={form.metaAppId} onChange={e => setForm({ ...form, metaAppId: e.target.value })} placeholder="e.g. 345678901234567 (15–16 digits)" autoComplete="off" name="meta-app-id" inputMode="numeric" />
               </div>
               <div>
                 <label style={labelStyle}>
@@ -1560,6 +1152,16 @@ function WhatsappAccountsTab() {
         itemName={deleteTarget?.displayName || ''}
         itemType="WhatsApp account"
       />
+      {renaming && (
+        <RenameNumberModal
+          accountId={renaming.id}
+          phone={renaming.displayPhoneNumber}
+          currentLabel={renaming.label}
+          accountName={renaming.accountName}
+          onClose={() => setRenaming(null)}
+          onSaved={() => refresh()}
+        />
+      )}
     </div>
   );
 }
@@ -1580,14 +1182,22 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
   // non-admins must have 'admin-settings:<tab>' in their pages array.
   const isAdmin = user?.role === 'admin';
   const userPages = new Set(user?.pages || []);
-  const visibleTabs = isAdmin
-    ? TABS
-    : TABS.filter(t => userPages.has(`admin-settings:${t.key}`));
+  const hasSocial = isAdmin || userPages.has('social');
+  const mainAllowed = (t) => !t.socialOnly && (isAdmin || userPages.has(`admin-settings:${t.key}`));
+  const socialAllowed = (t) => !!SOCIAL_PARTS[t.key] && hasSocial && (SOCIAL_PARTS[t.key] === 'social' || isAdmin);
+  const visibleTabs = TABS.filter(t => mainAllowed(t) || socialAllowed(t));
   const allowedTabKeys = new Set(visibleTabs.map(t => t.key));
   const activeTab = VALID_TABS.includes(subParts[0]) && allowedTabKeys.has(subParts[0])
     ? subParts[0]
     : (visibleTabs[0]?.key || 'general');
+  const activeDef = TABS.find(t => t.key === activeTab) || TABS[0];
+  const canMain = mainAllowed(activeDef);
+  const canSocial = socialAllowed(activeDef);
+  // Which half of the tab is open: #/admin-settings/<tab>/social[/<platform>].
+  const side = !canMain ? 'social' : (canSocial && subParts[1] === 'social' ? 'social' : 'main');
+  const socialPlatform = side === 'social' ? (subParts[2] || null) : null;
   const setActiveTab = (t) => navigate ? navigate('admin-settings', t) : null;
+  const setSide = (v) => navigate ? (v === 'social' ? navigate('admin-settings', activeTab, 'social') : navigate('admin-settings', activeTab)) : null;
   const [categories, setCategories] = useState([]);
   const [tags, setTags] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1624,6 +1234,34 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
   };
 
   const renderTab = () => {
+    const switcher = canMain && canSocial ? (
+      <div style={{ padding: '20px 28px 0', flexShrink: 0 }}>
+        <PillStrip size="sm" value={side} onChange={setSide}
+          items={[{ id: 'main', label: 'Sales & Chats' }, { id: 'social', label: 'Social' }]} />
+      </div>
+    ) : null;
+    if (side === 'social') {
+      return (
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+          {switcher}
+          <div style={{ padding: '0 28px 28px' }}>
+            <SocialSettingsPart part={activeTab} platform={socialPlatform} user={user} />
+          </div>
+        </div>
+      );
+    }
+    if (switcher) {
+      return (
+        <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          {switcher}
+          <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>{renderMainTab()}</div>
+        </div>
+      );
+    }
+    return renderMainTab();
+  };
+
+  const renderMainTab = () => {
     if (loading) {
       return (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textMuted, fontSize: 15 }}>
@@ -1633,7 +1271,6 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
     }
     switch (activeTab) {
       case 'general': return <GeneralTab onLogout={onLogout} user={user} />;
-      case 'domains': return <DomainTab />;
       case 'tags': return (
         <TagsTab
           categories={categories}
@@ -1668,26 +1305,25 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
   return (
     <div style={{ display: 'flex', flex: 1, height: '100%', overflow: 'hidden', background: C.pageBg }}>
       <div style={{
-        width: 240, minWidth: 240, background: 'var(--c-cardBg)',
-        borderRight: `1px solid ${C.borderDark}`,
+        width: 248, minWidth: 248, background: 'transparent',
         display: 'flex', flexDirection: 'column', flexShrink: 0,
-        padding: '16px 12px',
+        padding: 12,
       }}>
         <button
           onClick={() => onNavigate('chats')}
           style={{
             display: 'flex', alignItems: 'center', gap: 8,
-            padding: '8px 10px', marginBottom: 16, borderRadius: 8,
+            padding: '12px 14px', marginBottom: 10, borderRadius: 999,
             border: 'none', background: 'transparent', cursor: 'pointer',
-            fontFamily: FONT, fontSize: 15, fontWeight: 600,
+            fontFamily: FONT, fontSize: 16, fontWeight: 550,
             color: C.textSecondary, textAlign: 'left',
           }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'var(--c-xf0f2f5, #f0f2f5)'; }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'var(--fc-surface)'; }}
           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
         >
           <ArrowLeft size={16} /> Back to home
         </button>
-        <div style={{ fontSize: 14, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12, paddingLeft: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 650, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10, paddingLeft: 14 }}>
           Settings
         </div>
         {visibleTabs.map(tab => {
@@ -1698,18 +1334,18 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
               key={tab.key}
               onClick={() => handleTabChange(tab.key)}
               style={{
-                width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                padding: '9px 10px', borderRadius: 8, border: 'none',
-                background: isActive ? 'var(--c-chatPanel, #f0f2f5)' : 'transparent',
-                cursor: 'pointer', fontFamily: FONT, fontSize: 15,
-                fontWeight: isActive ? 700 : 500,
-                color: isActive ? C.text : C.textSecondary,
-                textAlign: 'left', marginBottom: 2, transition: 'background .1s',
+                width: '100%', display: 'flex', alignItems: 'center', gap: 12,
+                padding: '12px 14px', borderRadius: 999, border: 'none',
+                background: isActive ? C.primary : 'transparent',
+                cursor: 'pointer', fontFamily: FONT, fontSize: 16,
+                fontWeight: isActive ? 780 : 550,
+                color: isActive ? '#fff' : C.textSecondary,
+                textAlign: 'left', marginBottom: 2, transition: 'background .15s',
               }}
-              onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--c-xf5f6f6, #f5f6f6)'; }}
+              onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--fc-surface)'; }}
               onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
             >
-              <Icon size={16} strokeWidth={isActive ? 2.5 : 2} />
+              <Icon size={17} strokeWidth={isActive ? 2.4 : 2} />
               {tab.label}
             </button>
           );
@@ -1816,7 +1452,7 @@ function WebhookDetailDrawer({ id, onClose, onChanged }) {
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 250, display: 'flex', justifyContent: 'flex-end' }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: 720, maxWidth: '94vw', height: '100%', background: 'var(--c-cardBg)', boxShadow: C.shadowLg, display: 'flex', flexDirection: 'column', fontFamily: FONT, overflow: 'hidden' }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: 720, maxWidth: 'calc(94vw / var(--fg-zoom, 1))', height: '100%', background: 'var(--c-cardBg)', boxShadow: C.shadowLg, display: 'flex', flexDirection: 'column', fontFamily: FONT, overflow: 'hidden' }}>
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--c-borderSubtle, #EEEDE8)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--c-text)' }}>Webhook Event #{id}</div>
@@ -1906,6 +1542,7 @@ const AI_PROVIDER_OPTIONS = [
   { value: 'anthropic', label: 'Anthropic Claude', accent: '#C99B7A' },
   { value: 'kimi',      label: 'Moonshot / Kimi', accent: 'var(--c-x7e58c6, #7E58C6)' },
   { value: 'gemini',    label: 'Google Gemini',   accent: '#4285F4' },
+  { value: 'openrouter', label: 'OpenRouter',     accent: '#6467F2' },
 ];
 const providerOpt = (v) => AI_PROVIDER_OPTIONS.find(o => o.value === v) || { label: v, accent: C.textMuted };
 
@@ -2098,7 +1735,6 @@ function AIModelsTab({ navigate }) {
     <div style={{ flex: 1, padding: 24, overflow: 'auto', fontFamily: FONT }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
         <div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0 }}>AI Models</h2>
           <p style={{ fontSize: 14, color: C.textMuted, margin: '4px 0 0' }}>
             Connect AI provider API keys. Available models are discovered automatically on save.
           </p>
@@ -2150,6 +1786,11 @@ function AIModelsTab({ navigate }) {
                         <div>
                           <div style={{ fontWeight: 600, color: C.text, textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 3 }}>{prov.label}</div>
                           {row.label && <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2 }}>{row.label}</div>}
+                          {row.provider === 'openrouter' && (
+                            <div data-testid="openrouter-stt-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6, padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 600, background: 'var(--c-infoBg, #EEF2FF)', color: C.text, whiteSpace: 'nowrap' }} title="Transcribes WhatsApp voice notes with Microsoft MAI-Transcribe 2">
+                              <Mic size={12}/> Voice transcription
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -2287,6 +1928,14 @@ function AIModelsTab({ navigate }) {
               />
             </div>
 
+            {form.provider === 'openrouter' && (
+              <div style={{ marginBottom: 14, padding: '10px 12px', borderRadius: 10, background: 'var(--c-infoBg, #EEF2FF)', fontSize: 13, color: C.text, lineHeight: 1.45 }}>
+                This key transcribes every WhatsApp voice note — in Chat Analyzer, AI agents, MCP and the
+                Transcribe button on voice notes in Chats — with <strong>Microsoft MAI-Transcribe 2</strong> (multilingual).
+                Each note is transcribed once and reused. OpenRouter's chat models start switched off; enable any under Manage to use them elsewhere.
+              </div>
+            )}
+
             {form.provider === 'kimi' && (
               <div style={{ marginBottom: 14 }}>
                 <label style={labelStyle}>Custom Base URL (optional)</label>
@@ -2350,7 +1999,7 @@ function AIModelsTab({ navigate }) {
                 onClick={confirmDelete}
                 disabled={deleteConfirmText.trim().toLowerCase() !== 'delete'}
                 style={{
-                  padding: '8px 14px', background: deleteConfirmText.trim().toLowerCase() === 'delete' ? '#A32D2D' : 'var(--c-borderStrong, #D5D5D0)',
+                  padding: '8px 14px', background: deleteConfirmText.trim().toLowerCase() === 'delete' ? '#A32D2D' : 'var(--c-fillMuted, #d5d5d0)',
                   color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 600,
                   cursor: deleteConfirmText.trim().toLowerCase() === 'delete' ? 'pointer' : 'not-allowed', fontFamily: FONT,
                 }}>
@@ -2364,7 +2013,7 @@ function AIModelsTab({ navigate }) {
       {/* Usage dashboard modal */}
       {usageRow && (
         <div onClick={closeUsage} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, boxShadow: C.shadowLg, width: 560, maxHeight: 'calc(100vh - 32px)', overflow: 'auto', fontFamily: FONT }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, boxShadow: C.shadowLg, width: 560, maxHeight: 'calc(calc(100vh / var(--fg-zoom, 1)) - 32px)', overflow: 'auto', fontFamily: FONT }}>
             {/* Header */}
             <div style={{ padding: '20px 24px 14px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -2941,7 +2590,6 @@ function UsersTab() {
     <div style={{ flex: 1, padding: 24, overflow: 'auto', fontFamily: FONT }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
         <div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0 }}>Users</h2>
           <p style={{ fontSize: 14, color: C.textMuted, margin: '4px 0 0' }}>
             The people who sign in. A non-admin only sees chats and contacts on their assigned WhatsApp numbers.
           </p>
@@ -3014,7 +2662,7 @@ function UsersTab() {
       {/* Create / edit modal */}
       {showForm && (
         <div onClick={() => !saving && setShowForm(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, boxShadow: C.shadowLg, width: 500, maxHeight: 'calc(100vh - 32px)', overflow: 'auto', padding: 24, fontFamily: FONT }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, boxShadow: C.shadowLg, width: 500, maxHeight: 'calc(calc(100vh / var(--fg-zoom, 1)) - 32px)', overflow: 'auto', padding: 24, fontFamily: FONT }}>
             <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: C.text }}>{editing ? 'Edit user' : 'Add user'}</h3>
 
             <div style={{ marginTop: 16, marginBottom: 14 }}>
@@ -3152,7 +2800,7 @@ function UsersTab() {
             <input value={deleteText} onChange={e => setDeleteText(e.target.value)} autoFocus style={inpStyle}/>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
               <button onClick={() => setDeleteTarget(null)} style={{ ...btnSecondary, padding: '8px 14px', fontSize: 15 }}>Cancel</button>
-              <button onClick={doDelete} disabled={deleteText.trim().toLowerCase() !== 'delete'} style={{ padding: '8px 14px', background: deleteText.trim().toLowerCase() === 'delete' ? '#A32D2D' : 'var(--c-borderStrong, #D5D5D0)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: deleteText.trim().toLowerCase() === 'delete' ? 'pointer' : 'not-allowed', fontFamily: FONT }}>Delete</button>
+              <button onClick={doDelete} disabled={deleteText.trim().toLowerCase() !== 'delete'} style={{ padding: '8px 14px', background: deleteText.trim().toLowerCase() === 'delete' ? '#A32D2D' : 'var(--c-fillMuted, #d5d5d0)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: deleteText.trim().toLowerCase() === 'delete' ? 'pointer' : 'not-allowed', fontFamily: FONT }}>Delete</button>
             </div>
           </div>
         </div>
@@ -3256,103 +2904,103 @@ function AppCard({ color, logo, label, blurb, badge, onClick }) {
 
 /* ============================ MCP Tools tab ============================ */
 
-// Human labels for the per-capability toggles. Keys match backend
-// mcp_settings.capabilities / routes/mcp.js CAPABILITY_KEYS.
-// API areas for the generic `forgechat_request` proxy ONLY.
-//
-// These used to gate named tools as well, which is what made the old screen
-// unreadable — a single key like `discovery` controlled ten unrelated tools
-// across templates, media, agents and Google Drive. Named tools are now gated
-// by CATEGORY (served by the backend from services/mcpCatalog.js), and these
-// area switches do only the job they were designed for: scoping which internal
-// API paths the Direct API access tool may reach.
-const MCP_API_AREAS = [
-  { key: 'area_contacts', label: 'Contacts & tags', desc: 'Contacts, saved contacts, tags and categories.' },
-  { key: 'area_messaging', label: 'Messages', desc: 'Chat messages, reactions and mark-read.' },
-  { key: 'area_broadcasts', label: 'Broadcasts & content', desc: 'Broadcasts, templates, media library and click-to-chat links.' },
-  { key: 'area_automations', label: 'Automations', desc: 'Automation flows, projects, executions and follow-up sequences.' },
-  { key: 'area_admin', label: 'Admin (users, accounts, payments)', desc: 'SENSITIVE — users/RBAC, WhatsApp accounts, AI models, integrations, the Razorpay gateway secret, conversion sending and live payment links.', sensitive: true },
-  { key: 'area_insights', label: 'Dashboard & logs', desc: 'Dashboard analytics, webhook history and message costs.' },
-  { key: 'area_leads', label: 'Leads & funnel', desc: 'The lead funnel, lead sources, funnel config and the field registry.' },
-  { key: 'area_leadforms', label: 'Lead forms', desc: 'Lead-capture forms and their submissions.' },
-  { key: 'area_marketing', label: 'Marketing', desc: 'Campaigns (incl. Meta Ads sync), webinars, registrations and click-to-WhatsApp analytics.' },
-  { key: 'area_resources', label: 'Resources', desc: 'Content library, live links and the trigger library.' },
-  { key: 'area_bda', label: 'BDA activity', desc: 'BDA leaderboard, activity log and webinar conversion.' },
-  { key: 'area_courses', label: 'Products', desc: 'Product catalogue, payment links and per-product revenue.' },
-  { key: 'area_payments', label: 'Payments', desc: 'Razorpay ledger, sales log and students. The gateway secret stays under Admin.' },
-];
+// Everything on this screen — areas, categories, tools, what each tool does,
+// and the API-area switches — is served by the backend from
+// services/mcpCatalog.js. This file keeps NO list of its own: a hand-kept
+// frontend copy once carried an `area_bda` switch no backend path ever read.
 
-// Tier -> pill styling. The tier is advisory signalling for the admin reading
-// the screen; the category toggle is the only real gate. Red is reserved for
-// the two things that cost money or reach a real customer, so the eye lands on
-// them first.
+// Tier -> pill styling for a CATEGORY. Advisory only; the switch is the gate.
 const MCP_TIER_STYLE = {
-  read:        { bg: 'var(--c-successBgSoft, #E8F3EF)', fg: C.green },
-  build:       { bg: 'var(--c-xedebf7, #EDEBF7)', fg: C.purple },
+  read:        { bg: 'var(--c-successBg, #E1F5EE)', fg: 'var(--c-successText, #0F6E56)' },
+  build:       { bg: 'var(--c-purpleBg, #EDEBF7)', fg: 'var(--c-purple, #534AB7)' },
+  spend:       { bg: 'var(--c-warnBg, #FBF0E4)', fg: 'var(--c-warnText, #8A5A1B)' },
   send:        { bg: 'var(--c-dangerBg, #FCEBEB)', fg: 'var(--c-dangerText, #A32D2D)' },
-  destructive: { bg: '#4A1414', fg: '#FFE8E8' },
-  advanced:    { bg: 'var(--c-xfbf0e4, #FBF0E4)', fg: 'var(--c-x8a5a1b, #8A5A1B)' },
+  destructive: { bg: 'var(--c-dangerSolid, #A32D2D)', fg: '#FFFFFF' },
+  advanced:    { bg: 'var(--c-warnBg, #FBF0E4)', fg: 'var(--c-warnText, #8A5A1B)' },
 };
 
-function TierPill({ tier, label }) {
-  const s = MCP_TIER_STYLE[tier] || MCP_TIER_STYLE.read;
+// Kind -> pill styling for ONE tool ("Reads", "Changes setup", "Reaches people"…).
+const MCP_KIND_STYLE = {
+  read:     MCP_TIER_STYLE.read,
+  change:   MCP_TIER_STYLE.build,
+  spend:    MCP_TIER_STYLE.spend,
+  send:     MCP_TIER_STYLE.send,
+  delete:   MCP_TIER_STYLE.destructive,
+  advanced: MCP_TIER_STYLE.advanced,
+};
+const MCP_KIND_ORDER = ['read', 'change', 'spend', 'send', 'delete', 'advanced'];
+
+function TierPill({ tier, label, kind }) {
+  const s = (kind ? MCP_KIND_STYLE[kind] : MCP_TIER_STYLE[tier]) || MCP_TIER_STYLE.read;
   return (
     <span style={{
       background: s.bg, color: s.fg, fontSize: 12, fontWeight: 700,
-      letterSpacing: '.04em', textTransform: 'uppercase',
       padding: '3px 8px', borderRadius: 999, whiteSpace: 'nowrap', flexShrink: 0,
     }}>{label}</span>
   );
 }
 
-// One category = one switch = one thing a person actually does ("Template
-// Builder"). Expanding it lists the exact tools that switch controls, so the
-// blast radius of turning it off is visible before you turn it off — the old
-// flat list gave no way to know that `discovery` also owned Google Drive.
-function McpCategoryCard({ cat, disabled, saving, onToggle }) {
+
+// One category = one switch. Expanding it lists every tool the switch
+// controls, each in plain words with what it does (reads / changes / reaches
+// people / costs money / deletes), so the blast radius is visible BEFORE the
+// switch is flipped.
+function McpCategoryCard({ cat, kinds, disabled, saving, onToggle }) {
   const [open, setOpen] = useState(false);
   const Chevron = open ? ChevronDown : ChevronRight;
+  const kindSummary = MCP_KIND_ORDER
+    .filter(k => cat.kindCounts?.[k])
+    .map(k => ({ k, n: cat.kindCounts[k], label: kinds?.[k]?.label || k }));
   return (
-    <div style={{
-      border: `1px solid ${C.border}`, borderRadius: 10, marginBottom: 10,
-      background: cat.enabled ? C.cardBg : 'transparent',
+    <div data-mcp-category={cat.key} style={{
+      border: `1px solid ${C.border}`, borderRadius: 12, marginBottom: 10,
+      background: cat.enabled ? 'var(--c-cardBg)' : 'var(--c-surfaceSubtle, transparent)',
       opacity: disabled ? 0.55 : 1,
     }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '13px 14px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '14px 16px' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{cat.label}</span>
+            <span style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{cat.label}</span>
             <TierPill tier={cat.tier} label={cat.tierLabel} />
           </div>
-          <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 4, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 5, lineHeight: 1.55 }}>
             {cat.description}
           </div>
           <button
             type="button"
             onClick={() => setOpen(o => !o)}
+            aria-expanded={open}
             style={{
-              display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8,
+              display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10, flexWrap: 'wrap',
               background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-              fontFamily: FONT, fontSize: 13, fontWeight: 600, color: C.textSecondary,
+              fontFamily: FONT, fontSize: 13, fontWeight: 600, color: C.text,
             }}
           >
-            <Chevron size={13} strokeWidth={2.5} />
-            <span style={{ fontFamily: MONO }}>{cat.toolCount}</span>
-            {cat.toolCount === 1 ? ' tool' : ' tools'}
+            <Chevron size={14} strokeWidth={2.5} />
+            {open ? 'Hide' : 'Show'} the {cat.toolCount} {cat.toolCount === 1 ? 'tool' : 'tools'}
+            {kindSummary.length > 0 && (
+              <span style={{ fontWeight: 500, color: C.textSecondary }}>
+                {' · '}{kindSummary.map(x => `${x.n} ${x.label.toLowerCase()}`).join(' · ')}
+              </span>
+            )}
           </button>
         </div>
-        <Toggle checked={cat.enabled} disabled={disabled || saving} onChange={onToggle} />
+        <Toggle checked={cat.enabled} disabled={disabled || saving} onChange={onToggle} label={`${cat.label}: ${cat.enabled ? 'on' : 'off'}`} />
       </div>
 
       {open && (
-        <div style={{ borderTop: `1px solid ${C.border}`, padding: '10px 14px 12px' }}>
-          {cat.tools.map(t => (
-            <div key={t.name} style={{ display: 'flex', gap: 10, padding: '5px 0', alignItems: 'baseline' }}>
-              <code style={{
-                fontFamily: MONO, fontSize: 13, color: cat.enabled ? C.text : C.textMuted,
-                whiteSpace: 'nowrap',
-              }}>{t.name}</code>
-              <span style={{ fontSize: 13, color: C.textSecondary, lineHeight: 1.45 }}>{t.summary}</span>
+        <div style={{ borderTop: `1px solid ${C.border}`, padding: '6px 16px 10px' }}>
+          {cat.tools.map((t, i) => (
+            <div key={t.name} style={{
+              display: 'flex', gap: 12, padding: '9px 0', alignItems: 'flex-start',
+              borderTop: i === 0 ? 'none' : `1px solid ${C.border}`,
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, color: C.text, lineHeight: 1.45 }}>{t.summary}</div>
+                {/* The real tool name, small — what Claude's log shows. */}
+                <div style={{ fontFamily: MONO, fontSize: 12, color: C.textMuted, marginTop: 2, wordBreak: 'break-all' }}>{t.name}</div>
+              </div>
+              <TierPill kind={t.kind} label={t.kindLabel || kinds?.[t.kind]?.label || t.kind} />
             </div>
           ))}
         </div>
@@ -3362,12 +3010,13 @@ function McpCategoryCard({ cat, disabled, saving, onToggle }) {
 }
 
 // Small inline pill toggle — consistent with the settings look, no extra deps.
-function Toggle({ checked, onChange, disabled }) {
+function Toggle({ checked, onChange, disabled, label }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      aria-label={label}
       disabled={disabled}
       onClick={() => !disabled && onChange(!checked)}
       style={{
@@ -3375,7 +3024,7 @@ function Toggle({ checked, onChange, disabled }) {
         position: 'relative', flexShrink: 0,
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.45 : 1,
-        background: checked ? C.green : 'var(--c-borderStrong, #cfcfca)',
+        background: checked ? C.green : 'var(--c-fillMuted, #d5d5d0)',
         transition: 'background .15s',
       }}
     >
@@ -3399,12 +3048,19 @@ function McpToolsTab() {
   const [freshKey, setFreshKey] = useState(null);   // { ...key, key } shown once
   const [revokeTarget, setRevokeTarget] = useState(null);
   const [copied, setCopied] = useState('');
-  const [showInstall, setShowInstall] = useState(false);
   const [oauthClients, setOauthClients] = useState([]);
   const [oauthName, setOauthName] = useState('');
   const [creatingOauth, setCreatingOauth] = useState(false);
   const [freshClient, setFreshClient] = useState(null);   // secret shown once
   const [oauthDeleteTarget, setOauthDeleteTarget] = useState(null);
+  const [mcpArea, setMcpArea] = useState('social');
+  // Tab is remembered per browser so returning to this screen lands where you were.
+  const [mcpTab, setMcpTabState] = useState(() => {
+    try { return localStorage.getItem('forgegrowth.mcpTab') || 'connect'; } catch { return 'connect'; }
+  });
+  const setMcpTab = (t) => { setMcpTabState(t); try { localStorage.setItem('forgegrowth.mcpTab', t); } catch { /* private mode */ } };
+  const [connectApp, setConnectApp] = useState('claude');
+  const [showAutoClients, setShowAutoClients] = useState(false);
 
   const load = async () => {
     try {
@@ -3526,170 +3182,406 @@ function McpToolsTab() {
   };
 
   const snippet = install ? JSON.stringify(install.configSnippet, null, 2) : '';
+  // Prefer the fields the API now returns outright. The fallbacks cover a
+  // backend older than this bundle, which sent only the legacy url — deriving
+  // the OAuth one from the page origin rather than by string-surgery on it,
+  // because that surgery is what let the legacy form reach the OAuth box.
+  const oauthUrl = install?.oauthUrl || (install ? `${window.location.origin}/api/mcp` : '');
+  const legacyUrl = install?.legacyUrl || install?.remoteUrl || '';
+
+  // Everything an admin needs on one screen, split into the order they need
+  // it: connect Claude, choose what it may do, manage who has access, and the
+  // rarely-needed advanced bits last.
+  const areas = settings.catalog?.areas || [];
+  const areaOn = (a) => a.categories.reduce((n, k) => { const c = cats.find(x => x.key === k); return n + (c && c.enabled ? c.toolCount : 0); }, 0);
+  const areaAll = (a) => a.categories.reduce((n, k) => n + (cats.find(x => x.key === k)?.toolCount || 0), 0);
+  const manualClients = oauthClients.filter(c => !c.dynamic);
+  const autoClients = oauthClients.filter(c => c.dynamic);
+  const shownClients = showAutoClients ? oauthClients : manualClients;
+  const DAY = 86400000;
+  const connected = [
+    ...oauthClients.filter(c => (c.activeTokens || 0) > 0).map(c => ({ id: 'o' + c.id, name: c.dynamic ? (c.name || 'Claude') : c.name, how: 'Signed in with OAuth', detail: `${c.activeTokens} active ${c.activeTokens === 1 ? 'session' : 'sessions'}` })),
+    ...keys.filter(k => k.isEnabled && k.lastUsedAt && Date.now() - new Date(k.lastUsedAt).getTime() < 30 * DAY).map(k => ({ id: 'k' + k.id, name: k.label, how: 'API key', detail: 'Last used ' + new Date(k.lastUsedAt).toLocaleString() })),
+  ];
+  const claudeCodeCmd = oauthUrl ? `claude mcp add --transport http forge-growth ${oauthUrl}` : '';
+  const goPermissions = (areaKey) => { if (areaKey) setMcpArea(areaKey); setMcpTab('permissions'); };
+  const btnGhost = { display: 'inline-flex', alignItems: 'center', gap: 6, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px', fontSize: 14, fontWeight: 600, cursor: 'pointer', color: C.text, fontFamily: FONT };
+  const CopyRow = ({ value, tag, muted }) => (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+      <code style={{ flex: 1, minWidth: 0, ...codeBox, whiteSpace: 'nowrap', overflowX: 'auto', padding: '11px 13px', color: muted ? '#B9B9B4' : codeBox.color }}>{value}</code>
+      <button type="button" onClick={() => copy(value, tag)} aria-label="Copy"
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: C.primary, color: '#fff', border: 'none', borderRadius: 8, padding: '0 14px', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}>
+        {copied === tag ? <Check size={14} /> : <Copy size={14} />}{copied === tag ? 'Copied' : 'Copy'}
+      </button>
+    </div>
+  );
+  const Step = ({ n, title, done, children }) => (
+    <div style={{ display: 'flex', gap: 14, padding: '18px 0', borderTop: n === 1 ? 'none' : `1px solid ${C.border}` }}>
+      <div style={{
+        width: 30, height: 30, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: done ? 'var(--c-successBg, #E1F5EE)' : 'var(--c-surfaceSubtle, #EEEDE8)',
+        color: done ? 'var(--c-successText, #0F6E56)' : C.text, fontWeight: 700, fontSize: 14,
+      }}>{done ? <Check size={15} strokeWidth={3} /> : n}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 6 }}>{title}</div>
+        {children}
+      </div>
+    </div>
+  );
+  const TABS_MCP = [
+    { id: 'connect', label: 'Connect Claude' },
+    { id: 'permissions', label: `What Claude can do · ${enabledTools}/${totalTools}` },
+    { id: 'access', label: 'Access & keys' },
+    { id: 'advanced', label: 'Advanced' },
+  ];
 
   return (
-    <div style={{ flex: 1, padding: 24, overflow: 'auto', fontFamily: FONT, maxWidth: 1320 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-        <PlugZap size={20} color={C.primary} />
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0 }}>MCP Tools</h1>
+    <div style={{ flex: 1, padding: 24, overflow: 'auto', fontFamily: FONT, maxWidth: 1180 }}>
+      {/* Status — answers "is Claude connected, and how much can it do?" before anything else. */}
+      <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+        <div style={{
+          width: 44, height: 44, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: master ? 'var(--c-successBg, #E1F5EE)' : 'var(--c-surfaceSubtle, #EEEDE8)',
+          color: master ? 'var(--c-successText, #0F6E56)' : C.textMuted,
+        }}><PlugZap size={22} /></div>
+        <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>
+            {master ? 'Claude can connect to Forge Growth' : 'Claude access is switched off'}
+          </div>
+          <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 3, lineHeight: 1.5 }}>
+            {master
+              ? <><b style={{ color: C.text }}>{enabledTools}</b> of {totalTools} tools on · <b style={{ color: C.text }}>{connected.length}</b> {connected.length === 1 ? 'app' : 'apps'} connected</>
+              : 'Every request from Claude or any other app is refused until you turn this on.'}
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: C.textSecondary }}>Allow access</span>
+          <Toggle checked={master} disabled={savingCap} label="Allow Claude access" onChange={(v) => saveSettings({ masterEnabled: v })} />
+        </div>
       </div>
-      <p style={{ fontSize: 15, color: C.textSecondary, margin: '0 0 22px', lineHeight: 1.6, maxWidth: 720 }}>
-        Connect Claude.ai to Forge Growth as a custom connector, so it can read and act on your leads, campaigns,
-        payments and BDA activity — and build or manage WhatsApp AI agents — over a secure API key.
-        Turn capabilities on or off here; changes apply instantly to every connected client.
-      </p>
 
-      {/* Two-column layout: access + capabilities on the left, keys + install on the right.
-          flex-wrap with a 420px basis collapses to one column on narrow windows. */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'flex-start' }}>
-      <div style={{ flex: '1 1 420px', minWidth: 0 }}>
+      <div style={{ overflowX: 'auto', marginBottom: 18 }}>
+        <PillStrip value={mcpTab} onChange={setMcpTab} items={TABS_MCP} />
+      </div>
 
-      {/* Claude plugin — first thing on the page: it is how you START using any of this. */}
-      <div style={{
-        ...card,
-        background: C.headerBg, border: 'none', color: C.headerText,
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
-          <div style={{ flex: '1 1 320px', minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Package size={17} strokeWidth={2} color={C.headerText} />
-              <h2 style={{ ...h2, color: C.headerText, margin: 0 }}>Claude plugin</h2>
+      {mcpTab === 'connect' && (
+        <>
+          <div style={card}>
+            <h2 style={h2}>Connect Claude in three steps</h2>
+            <p style={{ ...sub, marginBottom: 4 }}>Works with Claude on the web, the desktop app, mobile, and Claude Code. Signing in uses your Forge Growth login — no password or key is pasted anywhere.</p>
+
+            <Step n={1} title="Turn access on" done={master}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 14, color: C.textSecondary }}>{master ? 'Access is on.' : 'Use the switch at the top of this page, or here.'}</span>
+                {!master && <button type="button" style={{ ...btnGhost, background: C.primary, color: '#fff', border: 'none' }} disabled={savingCap} onClick={() => saveSettings({ masterEnabled: true })}>Turn on access</button>}
+              </div>
+            </Step>
+
+            <Step n={2} title="Choose what Claude can do" done={enabledTools > 0}>
+              <div style={{ fontSize: 14, color: C.textSecondary, marginBottom: 10 }}>Nothing is on until you switch it on. Pick an area to choose its tools.</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 10 }}>
+                {areas.map(a => {
+                  const on = areaOn(a), all = areaAll(a);
+                  return (
+                    <button key={a.key} type="button" data-area={a.key} onClick={() => goPermissions(a.key)}
+                      style={{ textAlign: 'left', padding: '12px 14px', borderRadius: 12, border: `1px solid ${C.border}`, background: 'var(--c-cardBg)', cursor: 'pointer', fontFamily: FONT }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{a.label}</span>
+                        <ChevronRight size={15} color={C.textMuted} />
+                      </div>
+                      <div style={{ fontSize: 13, color: on ? 'var(--c-successText, #0F6E56)' : C.textMuted, marginTop: 4, fontWeight: 600 }}>
+                        {on ? `${on} of ${all} tools on` : `Off · ${all} tools`}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </Step>
+
+            <Step n={3} title="Add Forge Growth to Claude" done={connected.length > 0}>
+              <div style={{ marginBottom: 12, overflowX: 'auto' }}>
+                <PillStrip size="sm" value={connectApp} onChange={setConnectApp} items={[
+                  { id: 'claude', label: 'Claude (web, desktop, mobile)' },
+                  { id: 'code', label: 'Claude Code' },
+                  { id: 'other', label: 'Other MCP apps' },
+                ]} />
+              </div>
+
+              {connectApp === 'claude' && (
+                <>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Server URL</div>
+                  {oauthUrl && <CopyRow value={oauthUrl} tag="oauthurl" />}
+                  <ol style={{ fontSize: 15, color: C.text, lineHeight: 1.8, paddingLeft: 20, margin: '12px 0 0' }}>
+                    <li>In Claude, open <b>Settings → Connectors</b> and choose <b>Add custom connector</b>.</li>
+                    <li>Name it <b>Forge Growth</b> and paste the server URL above. Leave the OAuth fields empty.</li>
+                    <li>Press <b>Add</b>, then <b>Connect</b>. A Forge Growth window opens — sign in if asked and press <b>Allow</b>.</li>
+                    <li>Start a chat and ask, for example, <i>“How did our Instagram do this week?”</i></li>
+                  </ol>
+                  <div style={{ fontSize: 13, color: C.textSecondary, marginTop: 10, lineHeight: 1.55 }}>
+                    Your Claude workspace asks for a Client ID and Secret? Create one under{' '}
+                    <button type="button" onClick={() => setMcpTab('access')} style={{ background: 'none', border: 'none', padding: 0, color: C.primary, cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 600 }}>Access &amp; keys</button>
+                    {' '}and paste both into the connector’s <b>Advanced settings</b>.
+                  </div>
+                </>
+              )}
+
+              {connectApp === 'code' && (
+                <>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Run in your terminal</div>
+                  {claudeCodeCmd && <CopyRow value={claudeCodeCmd} tag="cccmd" />}
+                  <ol style={{ fontSize: 15, color: C.text, lineHeight: 1.8, paddingLeft: 20, margin: '12px 0 0' }}>
+                    <li>Run the command above.</li>
+                    <li>In Claude Code, type <code style={{ fontFamily: MONO, fontSize: 14 }}>/mcp</code>, pick <b>forge-growth</b> and sign in.</li>
+                  </ol>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 14, padding: '12px 14px', borderRadius: 12, background: 'var(--c-surfaceSubtle, #EEEDE8)' }}>
+                    <Package size={18} color={C.text} />
+                    <div style={{ flex: '1 1 240px', fontSize: 14, color: C.textSecondary, lineHeight: 1.5 }}>
+                      <b style={{ color: C.text }}>Optional: the Forge Growth plugin</b> adds the connector plus skills that teach Claude how this app works (Social, funnel, templates, automations, agents, ads, revenue). Unzip it and add the folder as a plugin.
+                    </div>
+                    <a href={api.mcp.pluginZipUrl()} download="forge-growth-plugin.zip" style={{ ...btnGhost, textDecoration: 'none' }}>
+                      <Download size={15} /> Download plugin
+                    </a>
+                  </div>
+                </>
+              )}
+
+              {connectApp === 'other' && (
+                <>
+                  <div style={{ fontSize: 14, color: C.textSecondary, lineHeight: 1.6, marginBottom: 10 }}>
+                    Apps that support OAuth use the same server URL as Claude. Apps that only take a plain URL need an
+                    {' '}<b>API key</b> in the address — create one under{' '}
+                    <button type="button" onClick={() => setMcpTab('access')} style={{ background: 'none', border: 'none', padding: 0, color: C.primary, cursor: 'pointer', fontFamily: FONT, fontSize: 14, fontWeight: 600 }}>Access &amp; keys</button>
+                    {' '}and put it in place of <code style={{ fontFamily: MONO, fontSize: 13 }}>&lt;YOUR_KEY&gt;</code>. Treat that whole URL like a password.
+                  </div>
+                  {oauthUrl && <><div style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.04em', margin: '0 0 6px' }}>With OAuth</div><CopyRow value={oauthUrl} tag="oauthurl2" /></>}
+                  {legacyUrl && <><div style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.04em', margin: '12px 0 6px' }}>With an API key</div><CopyRow value={legacyUrl} tag="legacyurl" muted /></>}
+                </>
+              )}
+            </Step>
+          </div>
+
+          <div style={card}>
+            <h2 style={h2}>Connected apps</h2>
+            {connected.length === 0 ? (
+              <p style={{ ...sub, margin: 0 }}>Nothing connected yet. Finish step 3 above and it will show here.</p>
+            ) : (
+              <>
+                <p style={sub}>Apps currently able to use Forge Growth. Remove one under Access &amp; keys to cut it off.</p>
+                {connected.map((c, i) => (
+                  <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: i === 0 ? 'none' : `1px solid ${C.border}` }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--c-successText, #0F6E56)', flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{c.name}</div>
+                      <div style={{ fontSize: 13, color: C.textSecondary }}>{c.how} · {c.detail}</div>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 14, fontSize: 13, color: C.textSecondary, lineHeight: 1.5 }}>
+              <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+              <span>Changing what Claude can do applies <b>immediately</b>, even to apps already connected.</span>
             </div>
-            <p style={{ fontSize: 14, color: '#B9B9B4', margin: '8px 0 0', lineHeight: 1.55 }}>
-              Everything Claude needs to run Forge Growth: the connector plus a set of skills
-              covering the funnel, follow-ups, templates, messaging, automations, agents, ads
-              and revenue. The download is already pointed at <strong style={{ color: C.headerText }}>this</strong> instance,
-              so there is nothing to edit.
-            </p>
-            <p style={{ fontSize: 13, color: '#8E8E89', margin: '10px 0 0', lineHeight: 1.5 }}>
-              Unzip it, then add the folder to Claude Code as a plugin — or paste the connector
-              URL into Claude&nbsp;&rarr;&nbsp;Settings&nbsp;&rarr;&nbsp;Connectors. Signing in
-              uses OAuth, so no key is stored in the file.
-            </p>
           </div>
-          <a
-            href={api.mcp.pluginZipUrl()}
-            download="forge-growth-plugin.zip"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px',
-              background: C.primary, color: '#fff', borderRadius: 10, textDecoration: 'none',
-              fontSize: 15, fontWeight: 700, fontFamily: FONT, flexShrink: 0,
-            }}
-          >
-            <Download size={16} strokeWidth={2.5} /> Download plugin
-          </a>
-        </div>
-      </div>
+        </>
+      )}
 
-      {/* Access (master switch) */}
-      <div style={card}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
-          <div>
-            <h2 style={h2}>MCP access</h2>
-            <p style={{ ...sub, margin: 0 }}>
-              Master switch for all MCP access. When off, every MCP request is rejected regardless of key or capability.
-            </p>
-          </div>
-          <Toggle checked={master} disabled={savingCap} onChange={(v) => saveSettings({ masterEnabled: v })} />
-        </div>
-        {!master && (
-          <div style={{
-            marginTop: 14, padding: '10px 12px', borderRadius: 8,
-            background: 'var(--c-dangerBg, #FCEBEB)', color: 'var(--c-dangerText, #A32D2D)', fontSize: 14, fontWeight: 500,
-          }}>
-            MCP access is currently disabled.
-          </div>
-        )}
-      </div>
-
-      {/* Tool categories */}
+      {mcpTab === 'permissions' && (
+        <>
+      {/* What Claude can do — grouped by the part of the app it touches. */}
       <div style={{ ...card, opacity: master ? 1 : 0.6 }}>
-        <h2 style={h2}>Tool categories</h2>
+        <h2 style={h2}>What Claude can do</h2>
         <p style={sub}>
-          Every MCP tool belongs to one category. Switch a category on to give Claude
-          that whole process — expand it to see exactly which tools it controls.
+          Pick a part of the app, then switch on what Claude may do there. Each switch covers a
+          group of tools — open it to see every tool in plain words and whether it only
+          reads, changes your setup, reaches real people, costs money or deletes.
         </p>
 
-        {/* Summary strip — answers "how much is Claude allowed to do right now?"
-            at a glance, which the old flat toggle list could not. */}
+        {/* Summary strip — "how much is Claude allowed to do right now?" */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-          background: C.pageBg, border: `1px solid ${C.border}`, borderRadius: 10,
-          padding: '11px 14px', marginBottom: 16,
+          background: 'var(--c-surfaceSubtle, ' + C.pageBg + ')', borderRadius: 10,
+          padding: '11px 14px', marginBottom: 14,
         }}>
           <Wrench size={15} strokeWidth={2} color={C.textSecondary} />
           <span style={{ fontSize: 14, color: C.text, fontWeight: 600 }}>
             <span style={{ fontFamily: MONO }}>{enabledTools}</span>
             {' of '}
             <span style={{ fontFamily: MONO }}>{totalTools}</span>
-            {' tools available to Claude'}
-          </span>
-          <span style={{ fontSize: 14, color: C.textSecondary }}>
-            · <span style={{ fontFamily: MONO }}>{enabledCats.length}</span>
-            {' of '}
-            <span style={{ fontFamily: MONO }}>{cats.length}</span>
-            {' categories on'}
+            {' tools switched on'}
           </span>
         </div>
 
         {cats.length === 0 ? (
           <div style={{ fontSize: 14, color: C.textSecondary }}>
-            No tool catalog was returned by the server. Rebuild the backend to pick up the
-            category catalog.
+            No tool list was returned by the server. Rebuild the backend to pick it up.
           </div>
-        ) : cats.map(c => (
-          <McpCategoryCard
-            key={c.key}
-            cat={c}
-            disabled={!master}
-            saving={savingCap}
-            onToggle={(v) => saveSettings({ categories: { [c.key]: v } })}
-          />
-        ))}
-      </div>
-
-      {/* API areas — scope for the Direct API access tool only. */}
-      <div style={{ ...card, opacity: master && directApiOn ? 1 : 0.6 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <h2 style={{ ...h2, margin: 0 }}>API areas</h2>
-          <TierPill tier="advanced" label="Full API access" />
-        </div>
-        <p style={sub}>
-          These scope the <code style={{ fontFamily: MONO, fontSize: 13 }}>forgechat_request</code> tool
-          in <strong>Direct API access</strong> — which internal endpoints it may call.
-          {' '}
-          {directApiOn
-            ? 'Anything not covered by an area below is refused.'
-            : 'Direct API access is switched off, so none of these apply right now.'}
-        </p>
-        {MCP_API_AREAS.map((a, i) => (
-          <div key={a.key} style={{
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16,
-            padding: '12px 0', borderTop: i === 0 ? 'none' : `1px solid ${C.border}`,
-          }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                {a.sensitive && <ShieldAlert size={13} strokeWidth={2.5} color={C.primary} />}
-                <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{a.label}</span>
+        ) : (() => {
+          const areas = settings.catalog?.areas?.length
+            ? settings.catalog.areas
+            : [{ key: 'all', label: 'All tools', description: '', categories: cats.map(c => c.key) }];
+          const area = areas.find(a => a.key === mcpArea) || areas[0];
+          const areaCats = area.categories.map(k => cats.find(c => c.key === k)).filter(Boolean);
+          const onIn = (a) => a.categories.reduce((n, k) => {
+            const c = cats.find(x => x.key === k); return n + (c && c.enabled ? c.toolCount : 0);
+          }, 0);
+          const allIn = (a) => a.categories.reduce((n, k) => n + (cats.find(x => x.key === k)?.toolCount || 0), 0);
+          const kinds = settings.catalog?.kinds || {};
+          const anyOff = areaCats.some(c => !c.enabled);
+          return (
+            <>
+              <div style={{ overflowX: 'auto', marginBottom: 12 }}>
+                <PillStrip
+                  value={area.key}
+                  onChange={setMcpArea}
+                  items={areas.map(a => ({ id: a.key, label: `${a.label} · ${onIn(a)}/${allIn(a)}` }))}
+                />
               </div>
-              <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 2, lineHeight: 1.45 }}>{a.desc}</div>
-            </div>
-            <Toggle
-              checked={!!settings.capabilities[a.key]}
-              disabled={!master || savingCap}
-              onChange={(v) => saveSettings({ capabilities: { [a.key]: v } })}
-            />
-          </div>
-        ))}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+                <div style={{ fontSize: 14, color: C.textSecondary, lineHeight: 1.5, flex: '1 1 260px' }}>{area.description}</div>
+                {areaCats.length > 1 && (
+                  <button
+                    type="button"
+                    disabled={!master || savingCap}
+                    onClick={() => saveSettings({ categories: Object.fromEntries(areaCats.map(c => [c.key, anyOff])) })}
+                    style={{
+                      padding: '7px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent',
+                      color: C.text, fontSize: 13, fontWeight: 600, fontFamily: FONT,
+                      cursor: !master || savingCap ? 'not-allowed' : 'pointer', opacity: !master ? 0.5 : 1,
+                    }}
+                  >
+                    {anyOff ? `Turn on all of ${area.label}` : `Turn off all of ${area.label}`}
+                  </button>
+                )}
+              </div>
+              {areaCats.map(c => (
+                <McpCategoryCard
+                  key={c.key}
+                  cat={c}
+                  kinds={kinds}
+                  disabled={!master}
+                  saving={savingCap}
+                  onToggle={(v) => saveSettings({ categories: { [c.key]: v } })}
+                />
+              ))}
+              {/* Legend — the words used on every tool, explained once. */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 14px', marginTop: 12 }}>
+                {MCP_KIND_ORDER.filter(k => kinds[k]).map(k => (
+                  <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.textSecondary }}>
+                    <TierPill kind={k} label={kinds[k].label} /> {kinds[k].description}
+                  </span>
+                ))}
+              </div>
+            </>
+          );
+        })()}
       </div>
 
-      </div>{/* /left column */}
-      <div style={{ flex: '1 1 420px', minWidth: 0 }}>
+        </>
+      )}
+
+      {mcpTab === 'access' && (
+        <>
+      {/* OAuth clients — what Claude's connector dialog actually asks for. */}
+      <div style={card}>
+        <h2 style={h2}>OAuth clients <span style={{ fontWeight: 500, color: C.textMuted, fontSize: 14 }}>· optional</span></h2>
+        <p style={{ fontSize: 14, color: C.textSecondary, margin: '0 0 14px', lineHeight: 1.6 }}>
+          Claude connects with a <strong>Client ID + Client Secret</strong> and signs you in through a browser
+          window — nothing secret ends up in the URL. Create one per connector, paste both values into Claude&apos;s
+          <em> Advanced settings</em>, and revoke here to cut it off instantly.
+        </p>
+
+        <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+          <input
+            value={oauthName}
+            onChange={e => setOauthName(e.target.value)}
+            placeholder="Connector name (e.g. Claude — Sam)"
+            style={{ ...inputStyle, flex: 1 }}
+          />
+          <button
+            disabled={creatingOauth || !oauthName.trim()}
+            onClick={async () => {
+              try {
+                setCreatingOauth(true);
+                const c = await api.mcp.createOauthClient({ name: oauthName.trim() });
+                setFreshClient(c);          // secret is returned once and never again
+                setOauthName('');
+                await load();
+              } catch (err) { notify(err.message || 'Could not create the OAuth client'); }
+              finally { setCreatingOauth(false); }
+            }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, background: C.primary, color: '#fff',
+              border: 'none', borderRadius: 8, padding: '0 16px', fontSize: 15, fontWeight: 600,
+              cursor: creatingOauth || !oauthName.trim() ? 'not-allowed' : 'pointer',
+              opacity: creatingOauth || !oauthName.trim() ? 0.55 : 1, fontFamily: FONT,
+            }}>
+            <Plus size={14} /> Create client
+          </button>
+        </div>
+
+        {shownClients.length === 0 ? (
+          <div style={{ fontSize: 15, color: C.textMuted, padding: '10px 0' }}>
+            {autoClients.length ? 'No clients created by hand.' : 'No OAuth clients yet — you only need one if your Claude workspace asks for a Client ID.'}
+          </div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT }}>
+            <thead>
+              <tr>
+                {['Name', 'Client ID', 'Connections', 'Enabled', ''].map((h, i) => (
+                  <th key={i} style={{ textAlign: i > 1 && i < 4 ? 'center' : 'left', padding: '8px 10px',
+                    fontSize: 13, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase',
+                    color: C.textMuted, borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {shownClients.map(c => (
+                <tr key={c.id}>
+                  <td style={{ padding: '10px', fontSize: 15, borderBottom: `1px solid ${C.border}` }}>
+                    {c.name}
+                    {c.dynamic && (
+                      <span style={{ marginLeft: 7, fontSize: 12, color: C.textMuted,
+                        border: `1px solid ${C.border}`, borderRadius: 5, padding: '1px 5px' }}>AUTO</span>
+                    )}
+                  </td>
+                  <td style={{ padding: '10px', fontSize: 14, fontFamily: MONO, color: C.textSecondary,
+                    borderBottom: `1px solid ${C.border}` }}>{c.clientId}</td>
+                  <td style={{ padding: '10px', fontSize: 14, textAlign: 'center', color: C.textSecondary,
+                    borderBottom: `1px solid ${C.border}` }}>{c.activeTokens || 0}</td>
+                  <td style={{ padding: '10px', textAlign: 'center', borderBottom: `1px solid ${C.border}` }}>
+                    <Toggle
+                      checked={c.isEnabled}
+                      onChange={async (v) => {
+                        try { await api.mcp.updateOauthClient(c.id, { isEnabled: v }); await load(); }
+                        catch (err) { notify(err.message || 'Could not update the client'); }
+                      }}
+                    />
+                  </td>
+                  <td style={{ padding: '10px', textAlign: 'right', borderBottom: `1px solid ${C.border}` }}>
+                    <button onClick={() => setOauthDeleteTarget(c)} title="Remove this client"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.primary, padding: 4 }}>
+                      <Trash2 size={15} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      {autoClients.length > 0 && (
+          <button type="button" onClick={() => setShowAutoClients(v => !v)}
+            style={{ marginTop: 12, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: FONT, fontSize: 14, fontWeight: 600, color: C.textSecondary, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <ChevronRight size={14} style={{ transform: showAutoClients ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />
+            {showAutoClients ? 'Hide' : 'Show'} {autoClients.length} added automatically when Claude connected
+          </button>
+        )}
+      </div>
 
       {/* API keys */}
       <div style={card}>
-        <h2 style={h2}>API keys</h2>
-        <p style={sub}>Bearer keys MCP clients use to authenticate. The full key is shown only once at creation.</p>
+        <h2 style={h2}>API keys <span style={{ fontWeight: 500, color: C.textMuted, fontSize: 14 }}>· older apps only</span></h2>
+        <p style={sub}>For MCP apps that cannot sign in with OAuth: the key goes inside the server URL. Claude does not need one. The full key is shown once.</p>
 
         <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
           <input
@@ -3761,206 +3653,76 @@ function McpToolsTab() {
         )}
       </div>
 
-      {/* OAuth clients — what Claude's connector dialog actually asks for. */}
-      <div style={card}>
-        <h2 style={h2}>OAuth clients</h2>
-        <p style={{ fontSize: 14, color: C.textSecondary, margin: '0 0 14px', lineHeight: 1.6 }}>
-          Claude connects with a <strong>Client ID + Client Secret</strong> and signs you in through a browser
-          window — nothing secret ends up in the URL. Create one per connector, paste both values into Claude&apos;s
-          <em> Advanced settings</em>, and revoke here to cut it off instantly.
-        </p>
+        </>
+      )}
 
-        <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-          <input
-            value={oauthName}
-            onChange={e => setOauthName(e.target.value)}
-            placeholder="Connector name (e.g. Claude — Anand)"
-            style={{ ...inputStyle, flex: 1 }}
-          />
-          <button
-            disabled={creatingOauth || !oauthName.trim()}
-            onClick={async () => {
-              try {
-                setCreatingOauth(true);
-                const c = await api.mcp.createOauthClient({ name: oauthName.trim() });
-                setFreshClient(c);          // secret is returned once and never again
-                setOauthName('');
-                await load();
-              } catch (err) { notify(err.message || 'Could not create the OAuth client'); }
-              finally { setCreatingOauth(false); }
-            }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6, background: C.primary, color: '#fff',
-              border: 'none', borderRadius: 8, padding: '0 16px', fontSize: 15, fontWeight: 600,
-              cursor: creatingOauth || !oauthName.trim() ? 'not-allowed' : 'pointer',
-              opacity: creatingOauth || !oauthName.trim() ? 0.55 : 1, fontFamily: FONT,
-            }}>
-            <Plus size={14} /> Create client
-          </button>
+      {mcpTab === 'advanced' && (
+        <>
+      {/* API areas — scope for the Direct API access tool only. */}
+      <div style={{ ...card, opacity: master && directApiOn ? 1 : 0.6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <h2 style={{ ...h2, margin: 0 }}>API areas</h2>
+          <TierPill tier="advanced" label="Full API access" />
         </div>
-
-        {oauthClients.length === 0 ? (
-          <div style={{ fontSize: 15, color: C.textMuted, padding: '10px 0' }}>
-            No OAuth clients yet.
+        <p style={sub}>
+          These scope the <code style={{ fontFamily: MONO, fontSize: 13 }}>forgechat_request</code> tool
+          in <strong>Direct API access</strong> — which internal endpoints it may call.
+          {' '}
+          {directApiOn
+            ? 'Anything not covered by an area below is refused.'
+            : 'Direct API access is switched off, so none of these apply right now.'}
+        </p>
+        {(settings.catalog?.apiAreas || []).map((a, i) => (
+          <div key={a.key} style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16,
+            padding: '12px 0', borderTop: i === 0 ? 'none' : `1px solid ${C.border}`,
+          }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {a.sensitive && <ShieldAlert size={13} strokeWidth={2.5} color={C.primary} />}
+                <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{a.label}</span>
+              </div>
+              <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 2, lineHeight: 1.45 }}>{a.description}</div>
+            </div>
+            <Toggle
+              label={`${a.label}: ${settings.capabilities[a.key] ? 'on' : 'off'}`}
+              checked={!!settings.capabilities[a.key]}
+              disabled={!master || savingCap}
+              onChange={(v) => saveSettings({ capabilities: { [a.key]: v } })}
+            />
           </div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT }}>
-            <thead>
-              <tr>
-                {['Name', 'Client ID', 'Connections', 'Enabled', ''].map((h, i) => (
-                  <th key={i} style={{ textAlign: i > 1 && i < 4 ? 'center' : 'left', padding: '8px 10px',
-                    fontSize: 13, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase',
-                    color: C.textMuted, borderBottom: `1px solid ${C.border}` }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {oauthClients.map(c => (
-                <tr key={c.id}>
-                  <td style={{ padding: '10px', fontSize: 15, borderBottom: `1px solid ${C.border}` }}>
-                    {c.name}
-                    {c.dynamic && (
-                      <span style={{ marginLeft: 7, fontSize: 12, color: C.textMuted,
-                        border: `1px solid ${C.border}`, borderRadius: 5, padding: '1px 5px' }}>AUTO</span>
-                    )}
-                  </td>
-                  <td style={{ padding: '10px', fontSize: 14, fontFamily: MONO, color: C.textSecondary,
-                    borderBottom: `1px solid ${C.border}` }}>{c.clientId}</td>
-                  <td style={{ padding: '10px', fontSize: 14, textAlign: 'center', color: C.textSecondary,
-                    borderBottom: `1px solid ${C.border}` }}>{c.activeTokens || 0}</td>
-                  <td style={{ padding: '10px', textAlign: 'center', borderBottom: `1px solid ${C.border}` }}>
-                    <Toggle
-                      checked={c.isEnabled}
-                      onChange={async (v) => {
-                        try { await api.mcp.updateOauthClient(c.id, { isEnabled: v }); await load(); }
-                        catch (err) { notify(err.message || 'Could not update the client'); }
-                      }}
-                    />
-                  </td>
-                  <td style={{ padding: '10px', textAlign: 'right', borderBottom: `1px solid ${C.border}` }}>
-                    <button onClick={() => setOauthDeleteTarget(c)} title="Remove this client"
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.primary, padding: 4 }}>
-                      <Trash2 size={15} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        ))}
       </div>
 
-      {/* Install instructions */}
-      <div style={card}>
-        <button
-          onClick={() => setShowInstall(s => !s)}
-          style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: FONT }}
-        >
-          <Terminal size={16} color={C.textSecondary} />
-          <span style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Install in Claude.ai — Custom Connectors</span>
-          <ChevronRight size={16} color={C.textMuted} style={{ transform: showInstall ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />
-        </button>
 
-        {showInstall && (
-          <div style={{ marginTop: 16 }}>
-            {/* Claude.ai custom connector — the ONLY path most people need.
-                Forge Growth's MCP is hosted here and speaks Streamable HTTP, so
-                there is nothing to install on the user's machine: it is one URL
-                pasted into Claude's own Connectors settings. */}
-            <div style={{ fontSize: 15, fontWeight: 700, color: C.text, margin: '0 0 6px' }}>
-              Recommended — OAuth (works on web, desktop and mobile)
+          {/* Local stdio — for developers running the MCP server from source. */}
+          <div style={card}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <Terminal size={16} color={C.textSecondary} />
+              <h2 style={{ ...h2, margin: 0 }}>Local server (developers only)</h2>
             </div>
-            <ol style={{ fontSize: 15, color: C.text, lineHeight: 1.8, paddingLeft: 18, margin: '0 0 10px' }}>
-              <li>Turn on the master switch and the capabilities you want above.</li>
-              <li>Create an <b>OAuth client</b> in the panel above and copy the Client ID + Client Secret (the secret is shown once).</li>
-              <li>In Claude, open <b>Settings → Connectors → Add custom connector</b>.</li>
-              <li>Paste the server URL below into <b>Remote MCP server URL</b>, then open <b>Advanced settings</b> and paste the <b>OAuth Client ID</b> and <b>OAuth Client Secret</b>.</li>
-              <li>Press <b>Add</b>, then <b>Connect</b> — a Forge Growth window opens asking you to allow access. You must already be signed in to Forge Growth in that browser.</li>
-            </ol>
-            {/* install.mcpUrl, not a URL rebuilt from window.location: the server
-                resolves this once and writes the same string into the plugin
-                download and the OAuth metadata. A page that derived its own
-                could show an address the server would never have issued a token
-                for, and the mismatch surfaces as a login failure. */}
-            {install?.mcpUrl && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8 }}>
-                <code style={{ flex: 1, ...codeBox, whiteSpace: 'nowrap', overflowX: 'auto', padding: '10px 12px' }}>
-                  {install.mcpUrl}
-                </code>
-                <button
-                  onClick={() => copy(install.mcpUrl, 'oauthurl')}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1px solid ${C.border}`, borderRadius: 7, padding: '8px 10px', fontSize: 14, cursor: 'pointer', color: C.text, fontFamily: FONT }}
-                >
-                  {copied === 'oauthurl' ? <Check size={13} /> : <Copy size={13} />}
-                  {copied === 'oauthurl' ? 'Copied' : 'Copy'}
-                </button>
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '9px 12px', marginBottom: 16,
-              background: 'var(--c-xf1f6ff, #F1F6FF)', border: '1px solid #C8DAF5', borderRadius: 8, fontSize: 14, color: 'var(--c-x254c87, #254C87)' }}>
-              <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
-              <span>
-                Turning a capability off above applies <b>immediately</b>, even to a connector that is already
-                connected — access is checked on every request, not frozen at connection time.
-              </span>
-            </div>
-            {install?.remoteUrl && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, gap: 8 }}>
-                <code style={{ flex: 1, ...codeBox, whiteSpace: 'nowrap', overflowX: 'auto', padding: '10px 12px' }}>{install.remoteUrl}</code>
-                <button
-                  onClick={() => copy(install.remoteUrl, 'remoteurl')}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1px solid ${C.border}`, borderRadius: 7, padding: '8px 10px', fontSize: 14, cursor: 'pointer', color: C.text, fontFamily: FONT }}
-                >
-                  {copied === 'remoteurl' ? <Check size={13} /> : <Copy size={13} />}
-                  {copied === 'remoteurl' ? 'Copied' : 'Copy'}
-                </button>
-              </div>
-            )}
-
-            {/* Legacy key-in-URL. Kept because existing connectors use it, but
-                demoted below OAuth: it puts a long-lived credential in a URL. */}
-            <div style={{ fontSize: 15, fontWeight: 700, color: C.textSecondary, margin: '18px 0 6px' }}>
-              Legacy — key in the URL (no OAuth)
-            </div>
-            <p style={{ fontSize: 14, color: C.textSecondary, lineHeight: 1.7, margin: '0 0 12px' }}>
-              Still supported so already-installed connectors keep working. Generate an API key above and paste
-              <code style={{ fontFamily: MONO, fontSize: 14 }}> {install?.remoteUrl || '…/api/mcp/http/<key>'}</code> as
-              the server URL with no OAuth fields. Prefer OAuth for anything new — here the whole URL is the password,
-              so it ends up in browser history and logs.
+            <p style={sub}>
+              Only needed when running the MCP server from this repository on your own machine. Everyone else should use{' '}
+              <button type="button" onClick={() => setMcpTab('connect')} style={{ background: 'none', border: 'none', padding: 0, color: C.primary, cursor: 'pointer', fontFamily: FONT, fontSize: 14, fontWeight: 600 }}>Connect Claude</button>.
             </p>
-
-            {/* Local stdio — kept, but demoted. It needs this repo checked out
-                on the user's own machine, so it is for development only, not
-                the normal way anyone connects. */}
-            <div style={{ fontSize: 15, fontWeight: 700, color: C.textSecondary, margin: '18px 0 6px' }}>
-              Advanced — local stdio server (development only)
-            </div>
-            <ol style={{ fontSize: 14, color: C.textSecondary, lineHeight: 1.8, paddingLeft: 18, margin: '0 0 16px' }}>
-              <li>Only needed if you are running the MCP server from source. Requires this repo checked out locally: <code style={{ fontFamily: MONO, fontSize: 14 }}>cd {install?.serverPath?.replace('/src/index.js', '') || '/path/to/forge-growth/mcp-server'} && npm install</code></li>
-              <li>Claude Desktop → <b>Settings → Developer → Edit Config</b>, add the block below, then fully quit and reopen.</li>
+            <ol style={{ fontSize: 14, color: C.textSecondary, lineHeight: 1.8, paddingLeft: 18, margin: '0 0 14px' }}>
+              <li><code style={{ fontFamily: MONO, fontSize: 13 }}>cd {install?.serverPath?.replace('/src/index.js', '') || '/root/ForgeGrowth/mcp-server'} && npm install</code></li>
+              <li>Claude Desktop → <b>Settings → Developer → Edit Config</b>, add the block below with an API key, then restart Claude.</li>
             </ol>
-
             {install && (
               <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <span style={{ fontSize: 14, color: C.textSecondary }}>MCP API URL: <code style={{ fontFamily: MONO }}>{install.apiUrl}</code></span>
-                  <button
-                    onClick={() => copy(snippet, 'snippet')}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1px solid ${C.border}`, borderRadius: 7, padding: '5px 10px', fontSize: 14, cursor: 'pointer', color: C.text, fontFamily: FONT }}
-                  >
-                    {copied === 'snippet' ? <Check size={13} /> : <Copy size={13} />}
-                    {copied === 'snippet' ? 'Copied' : 'Copy config'}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                  <button type="button" onClick={() => copy(snippet, 'snippet')} style={btnGhost}>
+                    {copied === 'snippet' ? <Check size={13} /> : <Copy size={13} />}{copied === 'snippet' ? 'Copied' : 'Copy config'}
                   </button>
                 </div>
                 <div style={codeBox}>{snippet}</div>
               </>
             )}
           </div>
-        )}
-      </div>
+        </>
+      )}
 
-      </div>{/* /right column */}
-      </div>{/* /two-column wrapper */}
 
       {/* One-time OAuth secret. Shown once because only its hash is stored —
           there is no way to recover it later, and saying so up front avoids
@@ -3994,9 +3756,9 @@ function McpToolsTab() {
               <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.textMuted, marginBottom: 5 }}>Remote MCP server URL</div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <code style={{ flex: 1, ...codeBox, whiteSpace: 'nowrap', overflowX: 'auto', padding: '11px 13px' }}>
-                  {install?.mcpUrl || `${window.location.origin}/api/mcp`}
+                  {`${window.location.origin}/api/mcp`}
                 </code>
-                <button onClick={() => copy(install?.mcpUrl || `${window.location.origin}/api/mcp`, 'curl')}
+                <button onClick={() => copy(`${window.location.origin}/api/mcp`, 'curl')}
                   style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, padding: '0 14px', fontSize: 15, cursor: 'pointer', color: C.text, fontFamily: FONT }}>
                   {copied === 'curl' ? <Check size={14} /> : <Copy size={14} />}
                 </button>
@@ -4036,8 +3798,7 @@ function McpToolsTab() {
               <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>API key created</div>
             </div>
             <div style={{ fontSize: 15, color: C.textSecondary, marginBottom: 12, lineHeight: 1.6 }}>
-              Copy this key now — it won’t be shown again. For Claude.ai, use the ready-made connector URL below:
-              paste it into <b>Settings → Connectors → Add custom connector</b>.
+              Copy this key now — it won’t be shown again.
             </div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
               <code style={{ flex: 1, ...codeBox, whiteSpace: 'nowrap', overflowX: 'auto', padding: '12px 14px' }}>{freshKey.key}</code>
@@ -4049,16 +3810,26 @@ function McpToolsTab() {
                 {copied === 'fresh' ? 'Copied' : 'Copy'}
               </button>
             </div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: C.text, margin: '0 0 6px' }}>
-              Remote connector URL <span style={{ fontWeight: 400, color: C.textSecondary }}>— paste into Claude → Add custom connector (works on web, desktop, mobile)</span>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '9px 12px', marginBottom: 14,
+              background: 'var(--c-xf1f6ff, #F1F6FF)', border: '1px solid #C8DAF5', borderRadius: 8, fontSize: 14, color: 'var(--c-x254c87, #254C87)' }}>
+              <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+              <span>
+                Connecting <b>Claude.ai</b>? You do not need this key. Use the server URL
+                {' '}<code style={{ fontFamily: MONO, fontSize: 13 }}>{oauthUrl}</code>{' '}
+                with an <b>OAuth client</b> instead. Pasting the key URL below into Claude’s connector dialog
+                will connect and then immediately fail.
+              </span>
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: C.textSecondary, margin: '0 0 6px' }}>
+              Legacy connector URL <span style={{ fontWeight: 400 }}>— for MCP clients that take a plain URL and no OAuth</span>
             </div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
-              <code style={{ flex: 1, ...codeBox, whiteSpace: 'nowrap', overflowX: 'auto', padding: '12px 14px' }}>
+              <code style={{ flex: 1, ...codeBox, whiteSpace: 'nowrap', overflowX: 'auto', padding: '12px 14px', color: C.textSecondary }}>
                 {`${window.location.origin}/api/mcp/http/${freshKey.key}`}
               </code>
               <button
                 onClick={() => copy(`${window.location.origin}/api/mcp/http/${freshKey.key}`, 'freshurl')}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, background: C.text, color: '#fff', border: 'none', borderRadius: 8, padding: '0 14px', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, padding: '0 14px', fontSize: 15, fontWeight: 600, cursor: 'pointer', color: C.textSecondary, fontFamily: FONT }}
               >
                 {copied === 'freshurl' ? <Check size={14} /> : <Copy size={14} />}
                 {copied === 'freshurl' ? 'Copied' : 'Copy'}
@@ -4131,7 +3902,11 @@ function IntegrationsTab() {
   // independently so a failure here never blocks the Google integration UI.
   const [mkt, setMkt] = useState({ meta: null });
   const loadMkt = async () => {
-    const meta = await api.marketing.metaAds.status().catch(() => null);
+    // Each status is fetched independently and swallows its own failure, so one
+    // unreachable third party never blanks the whole Integrations screen.
+    const [meta] = await Promise.all([
+      api.marketing.metaAds.status().catch(() => null),
+    ]);
     setMkt({ meta });
   };
   useEffect(() => { loadMkt(); /* eslint-disable-next-line */ }, []);
@@ -4262,7 +4037,6 @@ function IntegrationsTab() {
   const renderAppsView = () => (
     <div>
       <div style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0 }}>Integrations</h2>
         <div style={{ fontSize: 15, color: C.textSecondary, marginTop: 4 }}>
           Connect third-party apps so your automations can read and write data outside of WhatsApp.
         </div>
@@ -4403,7 +4177,7 @@ function IntegrationsTab() {
           {googleApp.logo(34)}
         </div>
         <div>
-          <h2 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0 }}>Google</h2>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0 }}>Google</h2>
           <div style={{ fontSize: 15, color: C.textSecondary, marginTop: 2 }}>{googleApp.blurb}</div>
         </div>
       </div>
@@ -4519,7 +4293,7 @@ function IntegrationsTab() {
               {MetaLogo(28)}
             </div>
             <div>
-              <h2 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0 }}>Meta Ads Manager</h2>
+              <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0 }}>Meta Ads Manager</h2>
               <div style={{ fontSize: 15, color: C.textSecondary, marginTop: 2 }}>
                 Pull live campaign spend &amp; results from your ad accounts.
               </div>
@@ -4572,7 +4346,7 @@ function ServiceBrowser({ provider, connections, onBack, onError }) {
           })()}
         </div>
         <div>
-          <h2 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0 }}>{PROVIDERS.find(p => p.key === provider)?.label || provider}</h2>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0 }}>{PROVIDERS.find(p => p.key === provider)?.label || provider}</h2>
           <div style={{ fontSize: 15, color: C.textSecondary, marginTop: 2 }}>
             Connected as <b>{conn.accountEmail}</b>
           </div>
@@ -4972,7 +4746,6 @@ function WebhooksTab() {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 28, overflow: 'auto', fontFamily: FONT }}>
       <div style={{ marginBottom: 18 }}>
-        <h2 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em' }}>Webhooks</h2>
         <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 4 }}>
           Inbound webhook endpoints. Open a provider to edit its configuration and view recent activity.
         </div>
@@ -5092,7 +4865,6 @@ function WhatsAppWebhookPanel({ mode, onOpen, onBack }) {
   const header = (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
       <div>
-        <h2 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em' }}>Webhooks</h2>
         <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 4 }}>
           {view === 'card'
             ? 'Your WhatsApp Cloud API webhook endpoint. Open it to edit the config and view recent activity.'
@@ -5502,7 +5274,7 @@ function RazorpayWebhookPanel({ mode, onOpen, onBack }) {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h2 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em' }}>Razorpay Payments</h2>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em' }}>Razorpay Payments</h2>
           <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 4 }}>
             Verify course payments and link them to leads/contacts. Paste the callback URL + secret into Razorpay → Settings → Webhooks.
           </div>
@@ -5725,7 +5497,7 @@ function RazorpayEventDrawer({ id, onClose }) {
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 250, display: 'flex', justifyContent: 'flex-end' }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: 640, maxWidth: '94vw', height: '100%', background: 'var(--c-cardBg)', boxShadow: C.shadowLg, display: 'flex', flexDirection: 'column', fontFamily: FONT, overflow: 'hidden' }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: 640, maxWidth: 'calc(94vw / var(--fg-zoom, 1))', height: '100%', background: 'var(--c-cardBg)', boxShadow: C.shadowLg, display: 'flex', flexDirection: 'column', fontFamily: FONT, overflow: 'hidden' }}>
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--c-borderSubtle, #EEEDE8)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--c-text)' }}>Razorpay Event #{id}</div>
@@ -5813,7 +5585,7 @@ const TEST_TEMPLATES = [
 function buildTestPayload(key, opts) {
   const ts = Math.floor(Date.now() / 1000);
   const wamid = `wamid.TEST_${ts}_${Math.random().toString(36).slice(2, 8)}`;
-  const phoneNumberId = opts.phoneNumberId || '318766817983611';
+  const phoneNumberId = opts.phoneNumberId || '123456789012345';
   // Stored display numbers are digits-only across the dashboard
   const displayPhone = (opts.displayPhone || '919876543210').replace(/\D/g, '');
   const from = opts.from || '919999999999';
@@ -5915,7 +5687,7 @@ function buildTestPayload(key, opts) {
 
 function TestWebhookModal({ onClose, onSent }) {
   const [tplKey, setTplKey] = useState('msg_text');
-  const [phoneNumberId, setPhoneNumberId] = useState('318766817983611');
+  const [phoneNumberId, setPhoneNumberId] = useState('123456789012345');
   const [from, setFrom] = useState('919999999999');
   const [text, setText] = useState('Hello from test webhook');
   const [sending, setSending] = useState(false);
@@ -5951,7 +5723,7 @@ function TestWebhookModal({ onClose, onSent }) {
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 260, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, width: 620, maxWidth: '94vw', maxHeight: '90vh', overflowY: 'auto', padding: 22, boxShadow: C.shadowLg, fontFamily: FONT }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, width: 620, maxWidth: 'calc(94vw / var(--fg-zoom, 1))', maxHeight: 'calc(90vh / var(--fg-zoom, 1))', overflowY: 'auto', padding: 22, boxShadow: C.shadowLg, fontFamily: FONT }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
           <div>
             <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--c-text)' }}>Send Test Webhook</div>
@@ -5972,7 +5744,7 @@ function TestWebhookModal({ onClose, onSent }) {
             />
           </FilterField>
           <FilterField label="Phone Number ID (your WABA)">
-            <input value={phoneNumberId} onChange={e => setPhoneNumberId(e.target.value)} style={inputStyle} placeholder="318766817983611" />
+            <input value={phoneNumberId} onChange={e => setPhoneNumberId(e.target.value)} style={inputStyle} placeholder="123456789012345" />
           </FilterField>
           {selectedTpl?.kind !== 'template_status_update' && selectedTpl?.kind !== 'unknown' && (
             <FilterField label={selectedTpl?.kind === 'statuses' ? 'Recipient phone (wa_id)' : 'From phone (wa_id)'}>

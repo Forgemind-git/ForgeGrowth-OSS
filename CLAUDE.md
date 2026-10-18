@@ -70,9 +70,8 @@ so a fresh deploy self-heals. **If you change such a table in a migration, chang
 ### Never introduce a sentinel-value equality check
 
 An unconfigured env var is `''`. Comparing it directly against a record field means `'' === ''`
-evaluates true for every record that also lacks the value, silently matching everything. See
-`isBridgedNumber()` in `routes/webhook.js`: it returns false when unconfigured, deliberately. Do not
-replace it with a bare equality.
+evaluates true for every record that also lacks the value, silently matching everything. Check that
+the configured value is non-empty first, and treat "unconfigured" as "matches nothing".
 
 ### Webhook handling must never throw
 
@@ -82,7 +81,8 @@ downloads) goes on a queue rather than running inline.
 
 ### Phone numbers are digits-only
 
-Normalised on insert by `normalizePhone()` in `services/metaPayload.js`. `+91…` and `91…` must not
+Normalised on insert by `normalizePhone()` in `services/metaPayload.js`, which is also the only
+Meta payload parser — `routes/webhook.js` imports it rather than carrying a copy. `+91…` and `91…` must not
 become two chat threads.
 
 ### Capabilities are global, not per-token

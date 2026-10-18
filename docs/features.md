@@ -32,9 +32,19 @@ webhook payload into its own table, which gives you:
 - a **placement** breakdown
 - a drill-in showing the exact creative each person saw, plus a link straight into their chat thread
 
-### Conversion API
+### Conversion API and Lead Optimisation
 
-**Not shipped in this release.** The tab is present and marked Coming Soon.
+Closes the ad loop: when a lead reaches a funnel stage you map to a Meta event (Lead, Purchase, …),
+the conversion goes back to Meta with that lead's click-to-WhatsApp click id, so the optimiser learns
+which clicks turn into customers rather than which ones merely message.
+
+- **Off by default, and test mode first.** Turning it on changes how Meta spends your budget, so it is
+  the operator's decision, never a side effect.
+- Conversions older than Meta's 7-day window are **skipped, not back-dated**, and a sale marked won with
+  no payment recorded yet is skipped rather than sent as a zero-value purchase. Every skip is logged
+  with its reason.
+- **Lead Optimisation (CLO)** feeds Meta's CRM dataset for Lead Ads (Instant Forms) campaigns, on a
+  15-minute cycle. Setup: [`clo-setup.md`](./clo-setup.md).
 
 ---
 
@@ -54,8 +64,8 @@ a second copy of the person.
 
 ### Configurable columns
 
-A field registry makes the Leads table, the Sales Log and per-instalment transactions configurable the
-way Forms already were: rename "Profession", hide "Pincode", edit a dropdown's options, or add a
+A field registry makes the Leads table, the Sales Log and per-instalment transactions configurable:
+rename "Profession", hide "Pincode", edit a dropdown's options, or add a
 custom field — **with no schema change**.
 
 - Built-in columns are relabelled rather than replaced. System fields cannot be deleted or re-typed.
@@ -89,18 +99,20 @@ the customer's last message, so a link can only get through as an approved templ
 Enrolled leads and their transactions: gateway payments deduped by `payment_id`, unioned with manually
 logged sales.
 
-### Forms
-
-Shareable lead-capture forms at `/f/<slug>`, optionally prefilled from a WhatsApp send token. Field
-types include star **ratings** and **section** headings.
-
-- Responses without a phone number are kept as anonymous submissions rather than dropped.
-- A section is layout, so it is skipped when answers are collected rather than stored as an empty
-  answer.
-
 ### Products
 
 The sellable catalogue, with optional default prices.
+
+### Follow-ups
+
+Pin a lead's chat and give it a follow-up date; the calendar view lists who is due today and who is
+overdue. With Google connected, each follow-up is mirrored as a calendar event that links straight
+back to the chat.
+
+### Payments dashboard
+
+Collected, pending and refunded money over time, with refunds recorded against the original sale and
+filter presets a team can share.
 
 ---
 
@@ -115,15 +127,14 @@ A 3-pane WhatsApp-style client:
   in Safari
 - 24-hour customer-service-window enforcement
 - optimistic-UI sends and mic recording in the composer
+- voice notes transcribed to text (OpenRouter, multilingual)
 
-### Projects
+### Chat Analyzer
 
-One folder for a campaign's whole toolkit. "Run the Applied AI launch" means a broadcast template, an
-AI agent to answer the people who reply, an automation behind it, and a form — four things that
-otherwise live in four unrelated lists with no way to see them as one campaign.
-
-A project can hold all four kinds. The link is a nullable `project_id`, so nothing is forced into a
-project.
+Reads a conversation — text, transcribed voice notes, images and documents — and returns a summary,
+the customer's intent and sentiment, a suggested funnel stage, risks and ready-to-send follow-up
+messages. Results are cached per message, so re-analysing a long chat only pays for what is new.
+Tell it about your business once and every analysis takes that into account.
 
 ### Message Formats
 
@@ -195,6 +206,13 @@ A left-to-right visual flow editor with **20 block types** and drag-to-connect w
 The engine evaluates keyword / any-message / new-contact / read / delivered / sent triggers
 synchronously on each webhook.
 
+### Workflow Agents
+
+Agents that work across the whole workspace rather than one chat: run on a schedule or on a trigger
+(a new lead, a stage change), read leads, conversations and sales within a data scope you set, and
+produce drafts, worklist items or actions. Anything that would message a customer or change a record
+waits in an **approvals queue** unless you allow it outright, and every run keeps its evidence.
+
 ### AI Agents
 
 A no-code LLM agent per WhatsApp number: system prompt, model choice, triggers, multi-turn memory, a
@@ -206,8 +224,8 @@ write-back.
 - **Usage limits** cap what an agent may spend on one person — a rolling per-person allowance that
   refills on a clock rather than a lifetime cap. **Test numbers are exempt from the pause**, so a
   limit can never lock the operator out of their own rehearsal.
-- **Form filling by conversation** — a form's fields become the tool schema, so the same answers a
-  public form collects can be gathered in chat and land in the same table.
+- **Quick-start templates** for common agents (answer questions, get leads, sell & book, support), filled in from a short
+  form instead of a blank prompt.
 
 > Agent runs execute on a queue outside the webhook path, so Meta's 20-second timeout is never hit.
 
@@ -266,6 +284,15 @@ Check these first when a connector will not finish authorising:
    the backend.** The bundled nginx config already proxies them; a custom reverse proxy forwarding only
    `/api` will serve the SPA's HTML for these paths instead, and discovery fails with no useful error.
 3. **PKCE `S256`.** A missing or `plain` challenge is refused rather than downgraded.
+
+---
+
+## Social
+
+A third header section for Instagram, Facebook, Threads, YouTube and LinkedIn: analytics and insights,
+one inbox for DMs and comments, Instagram comment and DM automations, a comment analyser and a
+content library that publishes. Off until `SOCIAL_ENCRYPTION_KEY` is set; setup in
+[`social-section.md`](./social-section.md).
 
 ---
 

@@ -6,12 +6,26 @@ import {
 } from 'lucide-react';
 import { C, FONT, MONO } from '../constants.js';
 import { api } from '../api.js';
+import PillStrip from '../components/PillStrip.jsx';
+import FlowRow from '../components/FlowRow.jsx';
 import { usePolling } from '../hooks/usePolling.js';
+import { SERIES, FunnelBars, Donut } from '../components/charts.jsx';
 
 const RANGES = [
   { key: '7d', label: '7 days' },
   { key: '30d', label: '30 days' },
   { key: '90d', label: '90 days' },
+];
+
+// The left-to-right order of the scorecard. Anything the API sends that is not
+// here (open conversations, active automations) is a current state and goes in
+// the "Right now" row instead.
+const FLOW_STEPS = [
+  { key: 'leads', step: 'Came in' },
+  { key: 'sent', step: 'We reached out' },
+  { key: 'response', step: 'They got a reply' },
+  { key: 'sales', step: 'Won' },
+  { key: 'revenue', step: 'Paid' },
 ];
 
 const KPI_ICONS = {
@@ -68,7 +82,7 @@ function SectionTitle({ icon: Icon, children, right }) {
 }
 
 // ── KPI card (number is a clickable drill-down) ─────────────────────────
-function KpiCard({ tile, onSelect }) {
+function KpiCard({ tile, onSelect, compact = false }) {
   const Icon = KPI_ICONS[tile.key] || Activity;
   const value = tile.unit === '%' ? `${tile.value}%`
     : tile.unit === '₹' ? `₹${fmt(tile.value)}`
@@ -76,7 +90,7 @@ function KpiCard({ tile, onSelect }) {
   const hasDelta = tile.delta != null;
   const up = hasDelta && tile.delta >= 0;
   return (
-    <Card style={{ padding: 20 }}>
+    <Card style={{ padding: compact ? 18 : 20, flex: 1, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         {/* An eyebrow label: uppercase and letterspaced so it reads as the
             CATEGORY of the number below it rather than as a sentence competing
@@ -99,7 +113,7 @@ function KpiCard({ tile, onSelect }) {
         title={`View ${tile.label.toLowerCase()} details`}
         style={{
           border: 'none', background: 'none', padding: 0, cursor: 'pointer',
-          fontSize: 40, fontWeight: 700, color: C.text, fontFamily: MONO,
+          fontSize: compact ? 32 : 40, fontWeight: 700, color: C.text, fontFamily: MONO,
           margin: '12px 0 8px', letterSpacing: '-.02em', display: 'inline-block',
           lineHeight: 1.1,
           textDecorationColor: C.border, textUnderlineOffset: 4,
@@ -147,7 +161,7 @@ function KpiDetailModal({ tile, range, onClose }) {
     }}>
       <div onClick={e => e.stopPropagation()} style={{
         background: C.cardBg, borderRadius: 14, boxShadow: C.shadowLg, width: 'min(540px, 100%)',
-        maxHeight: '82vh', display: 'flex', flexDirection: 'column', fontFamily: FONT,
+        maxHeight: 'calc(82vh / var(--fg-zoom, 1))', display: 'flex', flexDirection: 'column', fontFamily: FONT,
       }}>
         {/* header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', borderBottom: `1px solid ${C.border}` }}>
@@ -171,7 +185,7 @@ function KpiDetailModal({ tile, range, onClose }) {
             </div>
           )}
           {!loading && error && (
-            <div style={{ margin: 18, background: C.primaryLight, color: 'var(--c-dangerText, #A32D2D)', border: '1px solid #F3C9C9', borderRadius: 10, padding: '12px 14px', fontSize: 15 }}>{error}</div>
+            <div style={{ margin: 18, background: C.primaryLight, color: 'var(--c-dangerText, #A32D2D)', border: '1px solid transparent', borderRadius: 10, padding: '12px 14px', fontSize: 15 }}>{error}</div>
           )}
           {!loading && !error && items.length === 0 && (
             <div style={{ padding: '32px 18px', textAlign: 'center', fontSize: 15, color: C.textMuted }}>No items to show.</div>
@@ -198,35 +212,6 @@ function KpiDetailModal({ tile, range, onClose }) {
 }
 
 // ── Lead funnel (horizontal bars) ──────────────────────────────────────
-function FunnelBars({ funnel }) {
-  const stages = funnel.stages || [];
-  const max = Math.max(1, ...stages.map(s => s.count));
-  // Counted from leads, so this reads "leads" — the same unit Sales -> Funnel
-  // reports. Saying "contacts" here was part of what made the two pages look
-  // like they disagreed when they were measuring different things.
-  const unit = funnel.source === 'tags' ? 'contacts' : 'leads';
-  if (stages.length === 0) {
-    return <div style={{ fontSize: 14, color: C.textMuted, fontFamily: FONT, padding: '20px 0' }}>
-      No leads yet. They appear here as soon as conversations start.
-    </div>;
-  }
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
-      {stages.map((s, i) => (
-        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 120, fontSize: 14, color: C.textSecondary, fontFamily: FONT, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={s.name}>{s.name}</div>
-          <div style={{ flex: 1, height: 22, background: C.pageBg, borderRadius: 6, overflow: 'hidden' }}>
-            <div title={`${s.name}: ${fmt(s.count)} ${unit}`} style={{
-              width: `${(s.count / max) * 100}%`, height: '100%', background: s.color || C.primary,
-              borderRadius: 6, minWidth: s.count > 0 ? 4 : 0, transition: 'width .3s ease',
-            }} />
-          </div>
-          <div style={{ width: 44, textAlign: 'right', fontSize: 15, fontWeight: 600, fontFamily: MONO, color: C.text }}>{fmt(s.count)}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 // ── Tag distribution donut ─────────────────────────────────────────────
 function polar(cx, cy, r, a) { return [cx + r * Math.sin(a), cy - r * Math.cos(a)]; }
@@ -269,50 +254,6 @@ function RecentSales({ rows }) {
   );
 }
 
-function TagDonut({ data }) {
-  const [hover, setHover] = useState(-1);
-  const total = data.reduce((s, d) => s + d.count, 0);
-  if (total === 0) {
-    return <div style={{ fontSize: 14, color: C.textMuted, fontFamily: FONT, padding: '20px 0' }}>No tags applied yet.</div>;
-  }
-  const cx = 80, cy = 80, R = 74, r = 48;
-  let acc = 0;
-  const segs = data.map((d, i) => {
-    const a0 = (acc / total) * 2 * Math.PI; acc += d.count;
-    const a1 = (acc / total) * 2 * Math.PI;
-    return { ...d, a0, a1, i };
-  });
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
-      <svg viewBox="0 0 160 160" width="150" height="150" style={{ flexShrink: 0 }}>
-        {data.length === 1 ? (
-          <circle cx={cx} cy={cy} r={(R + r) / 2} fill="none" stroke={data[0].color || C.primary} strokeWidth={R - r}>
-            <title>{`${data[0].name}: ${fmt(data[0].count)} (100%)`}</title>
-          </circle>
-        ) : segs.map((s) => (
-          <path key={s.i} d={arcPath(cx, cy, R, r, s.a0, s.a1)} fill={s.color || C.primary}
-            opacity={hover === -1 || hover === s.i ? 1 : 0.38}
-            onMouseEnter={() => setHover(s.i)} onMouseLeave={() => setHover(-1)}
-            style={{ transition: 'opacity .15s', cursor: 'default' }}>
-            <title>{`${s.name}: ${fmt(s.count)} (${Math.round((s.count / total) * 100)}%)`}</title>
-          </path>
-        ))}
-        <text x={cx} y={cy - 4} textAnchor="middle" fontSize="24" fontWeight="600" fill={C.text} fontFamily="DM Mono">{fmt(total)}</text>
-        <text x={cx} y={cy + 14} textAnchor="middle" fontSize="12" fill={C.textMuted} fontFamily="DM Sans">tagged</text>
-      </svg>
-      <div style={{ flex: 1, minWidth: 140, display: 'flex', flexDirection: 'column', gap: 7 }}>
-        {data.map((d, i) => (
-          <div key={i} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(-1)}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontFamily: FONT, opacity: hover === -1 || hover === i ? 1 : 0.5, transition: 'opacity .15s' }}>
-            <span style={{ width: 10, height: 10, borderRadius: 3, background: d.color || C.primary, flexShrink: 0 }} />
-            <span style={{ color: C.textSecondary, fontWeight: 600, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={d.name}>{d.name}</span>
-            <span style={{ color: C.text, fontFamily: MONO, fontWeight: 600 }}>{fmt(d.count)}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // ── Automation performance ─────────────────────────────────────────────
 function AutomationStat({ label, value, color }) {
@@ -362,28 +303,13 @@ export default function HomePage({ user, onPageChange }) {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 20, flexWrap: 'wrap', gap: 14 }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>
-            Welcome back, {greeting}
-          </h1>
           <p style={{ fontSize: 14, color: C.textMuted, margin: '4px 0 0', fontFamily: FONT }}>
             {isAdmin ? 'Org-wide overview' : 'Your activity overview'} · last {RANGES.find(r => r.key === range)?.label}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           {/* Range selector */}
-          <div style={{ display: 'flex', background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 9, padding: 3, gap: 2 }}>
-            {RANGES.map(r => {
-              const active = r.key === range;
-              return (
-                <button key={r.key} onClick={() => setRange(r.key)} style={{
-                  border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 14, fontWeight: 600,
-                  padding: '5px 11px', borderRadius: 7,
-                  background: active ? C.primary : 'transparent', color: active ? '#fff' : C.textSecondary,
-                  transition: 'background .15s',
-                }}>{r.label}</button>
-              );
-            })}
-          </div>
+          <PillStrip size="sm" value={range} onChange={setRange} items={RANGES.map(r => ({ id: r.key, label: r.label }))} />
           {/* Quick actions */}
           {quickActions.map(a => (
             <button key={a.label} onClick={() => go(a.page)} style={{
@@ -401,7 +327,7 @@ export default function HomePage({ user, onPageChange }) {
 
       {/* Error */}
       {error && (
-        <div style={{ background: C.primaryLight, color: 'var(--c-dangerText, #A32D2D)', border: '1px solid #F3C9C9', borderRadius: 10, padding: '12px 14px', fontSize: 15, fontFamily: FONT, marginBottom: 16 }}>
+        <div style={{ background: C.primaryLight, color: 'var(--c-dangerText, #A32D2D)', border: '1px solid transparent', borderRadius: 10, padding: '12px 14px', fontSize: 15, fontFamily: FONT, marginBottom: 16 }}>
           Couldn’t load the dashboard. Please try again in a moment.
         </div>
       )}
@@ -442,22 +368,55 @@ export default function HomePage({ user, onPageChange }) {
             </div>
           )}
 
-          {/* KPI scorecard */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 16 }}>
-            {data.kpis.map(t => <KpiCard key={t.key} tile={t} onSelect={setDetailTile} />)}
-          </div>
+          {/* KPI scorecard, in the order a lead becomes money: came in →
+              we reached out → they got a reply → won → paid. What needs
+              attention right now sits on its own row below, because it is a
+              state, not a step. */}
+          {(() => {
+            const byKey = Object.fromEntries(data.kpis.map(t => [t.key, t]));
+            const flow = FLOW_STEPS.filter(f => byKey[f.key]).map(f => ({
+              key: f.key, step: f.step, node: <KpiCard compact tile={byKey[f.key]} onSelect={setDetailTile} />,
+            }));
+            const now = data.kpis.filter(t => !FLOW_STEPS.some(f => f.key === t.key));
+            return (
+              <>
+                <FlowRow steps={flow} minWidth={150} style={{ marginBottom: 14 }} />
+                {now.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, fontFamily: FONT, margin: '4px 0 6px 2px' }}>Right now</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginBottom: 16 }}>
+                      {now.map(t => <KpiCard key={t.key} tile={t} onSelect={setDetailTile} />)}
+                    </div>
+                  </>
+                )}
+              </>
+            );
+          })()}
 
-          {/* Funnel + Tag distribution */}
+          {/* Where leads came from → which stage they reached */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, marginBottom: 16 }}>
+            <Card>
+              <SectionTitle icon={Trophy}>Where leads came from</SectionTitle>
+              {/* The same donut Marketing uses: shares as well as counts, and
+                  a tail grouped into "Other" so no two wedges can end up the
+                  same colour. */}
+              <Donut maxSlices={6} data={(data.tagDistribution || []).map(d => ({ label: d.name, value: d.count, color: d.color }))} />
+            </Card>
             <Card>
               <SectionTitle icon={Users}>
                 Lead stages{data.funnel?.categoryName ? ` · ${data.funnel.categoryName}` : ''}
               </SectionTitle>
-              <FunnelBars funnel={data.funnel || { stages: [] }} />
-            </Card>
-            <Card>
-              <SectionTitle icon={Trophy}>Where leads came from</SectionTitle>
-              <TagDonut data={data.tagDistribution || []} />
+              {/* ⚠ THE SHARED BARS, not a local copy. Home and Marketing drew
+                  the same measurement two different ways — a full-width track
+                  with the label at the left here, a 10px rail with the label
+                  above there — so the two dashboards read as different
+                  products. One component now, in both places. */}
+              <FunnelBars
+                unit={data.funnel?.source === 'tags' ? 'contacts' : 'leads'}
+                empty="No leads yet. They appear here as soon as conversations start."
+                data={(data.funnel?.stages || []).map(st => ({ label: st.name, count: st.count, color: st.color }))}
+                onClick={() => go('leads')}
+              />
             </Card>
           </div>
 

@@ -1,26 +1,36 @@
 ---
 name: forge-growth-ads
 description: >-
-  Read Forge Growth ad performance — Meta campaign spend and results, and click-to-WhatsApp
-  attribution (which ad produced which lead, CPL and ROAS). Use when the user asks what
-  their ads produced, which ad works, or what a lead costs.
+  Read Forge Growth ad performance — Meta campaign spend and results, click-to-WhatsApp
+  attribution (which ad produced which lead, CPL and ROAS), and the Meta Conversions
+  API that sends conversions back to optimise delivery. Use when the user asks what
+  their ads produced, which ad works, what a lead costs, or about conversion sending.
 ---
 
-# Ads and click-to-WhatsApp
+# Ads, click-to-WhatsApp and conversions
 
-Two layers, and they sit at **different trust tiers**:
+Three layers, and they sit at **different trust tiers**:
 
-| Layer | Reached by | Needs |
+| Layer | Read with (Marketing Analytics switch) | Changing it |
 |---|---|---|
-| Campaign performance | `get_campaign_performance` tool | Marketing Analytics category |
-| Click-to-WhatsApp (CTWA) | `forgechat_request` → `/ctwa/*` | Direct API access + **Marketing** area |
+| Overview | `get_marketing_overview` | — |
+| Campaigns → ad sets → ads | `get_campaign_performance`, `list_campaign_ads` | in Meta Ads Manager |
+| Which ad produced chats and buyers | `get_ad_conversions` | — |
+| Click-to-WhatsApp (CTWA) | `get_click_to_whatsapp` | — |
+| Conversions API (CAPI) | `get_conversion_api_status`, `list_conversion_events` | `forgechat_request` → `/capi/*`, **Admin** area only |
+
+Every Marketing tool only reads. CAPI writes are admin-tier deliberately: **sending
+conversions moves real ad spend**. Reading the CAPI set-up does not grant the ability
+to fire conversions, and you should not suggest enabling Admin casually to get it.
+
+Date ranges: `days` (e.g. "30" or "all") or `from`/`to` (IST days, inclusive). With a
+range, spend comes from per-day Meta rows — if `spendCoverage.partial` is true, say that
+spend before the oldest synced day is missing.
 
 ## Click-to-WhatsApp
 
-```
-GET /ctwa/overview          KPIs, per-ad rows, creatives, placements, clicks over time
-GET /ctwa/ads/:sourceId     one ad — its creatives, and the leads it produced
-```
+`get_click_to_whatsapp` returns KPIs, per-ad rows, placements and clicks over time.
+One ad's creatives and leads: `forgechat_request GET /ctwa/ads/:sourceId`.
 
 `sourceId` is the **Meta ad id**, which is how a click joins to ad spend.
 
@@ -48,3 +58,24 @@ conversation started** — that is Meta's attributed number and it is deliberate
 the same as the count of CRM leads in the funnel. When both appear in one answer, label
 which is which; they will not match and the difference is expected.
 
+## Conversions API
+
+CAPI sends a signal back to Meta when a lead reaches a chosen funnel stage, so Meta
+optimises toward people who actually convert rather than people who merely message.
+
+`get_conversion_api_status` (state, datasets, stage→event mappings) and
+`list_conversion_events` (history, including what was skipped and why). Whether ad sets
+have enough events for Meta to learn: `forgechat_request GET /capi/learning` (Admin area).
+
+**Sending is off by default and turning it on is the user's decision, not yours.** If
+asked to enable it, explain what will start flowing and to which ad account first.
+
+Two behaviours worth relaying accurately when a user asks why something did not send:
+
+- Conversions **older than Meta's 7-day window are skipped, not back-dated**. Back-dating
+  would report months-old sales as this week's and inflate the ROAS of a spend window
+  that did not earn them.
+- A sale marked won with **no payment recorded yet is skipped**, rather than sending a
+  ₹0 purchase, so the real amount can still be reported later.
+
+`list_conversion_events` records every skip with its reason. Read it before speculating.

@@ -10,8 +10,15 @@ description: >-
 
 # Revenue, payments and costs
 
-Tools: `list_products`, `get_product_revenue`, `list_payments`. Everything else goes
-through `forgechat_request` (see **forge-growth-api**).
+Tools (Products & Payments switch, read-only): `list_sales` (the Sales Log — who bought,
+total paid, payment status), `get_sale_transactions` (one customer's payments),
+`list_products`, `get_product_revenue`, `list_payments`, `get_payments_summary`
+(totals for a date/method slice) and `get_payments_trend` (the Payments dashboard
+series by day/week/month, optionally split by method, product or status). Everything
+else goes through `forgechat_request` (see **forge-growth-api**).
+
+Razorpay amounts are what the customer PAID, so they **include GST**. Say so when you
+quote revenue.
 
 | What | Path | Area |
 |---|---|---|

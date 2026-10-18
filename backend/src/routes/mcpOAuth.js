@@ -60,7 +60,12 @@ const baseUrl = publicOrigin;
 // The canonical resource identifier for this MCP server (RFC 8707). Must match
 // what the client sends as `resource`, and what the token is later validated
 // against.
-const resourceUrl = (req) => `${baseUrl(req)}/api/mcp`;
+//
+// RESOURCE_PATH is the single source of truth for "which path is the protected
+// resource": the metadata document, the audience check and the discovery route
+// below all derive from it, so they cannot drift apart.
+const RESOURCE_PATH = '/api/mcp';
+const resourceUrl = (req) => `${baseUrl(req)}${RESOURCE_PATH}`;
 
 async function ensureMcpOAuthTables() {
   await pool.query(`
@@ -178,9 +183,41 @@ function authServerDoc(req) {
   };
 }
 
-for (const p of ['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/*']) {
-  publicRouter.get(p, (req, res) => res.json(protectedResourceDoc(req)));
-}
+// ⚠ Answer ONLY for the resource this server actually protects.
+//
+// The wildcard exists because clients differ on whether they append the
+// resource path — but it must not answer for a path we do not serve. Returning
+// the canonical document for ANY suffix is worse than having no route: a
+// connector pointed at the deprecated /api/mcp/http/<key> URL asks about THAT
+// resource, receives a well-formed document describing /api/mcp, completes the
+// entire OAuth dance, and only then rejects the mismatch (RFC 9728 §3.3). The
+// visible result is "authorization failed" a few seconds after connecting,
+// with a freshly minted token that is never used and nothing to act on.
+// Diagnosed exactly once, the hard way, on 2026-08-20.
+//
+// A 404 naming the correct URL turns that into a one-line fix. Note this
+// applies to the PROTECTED-RESOURCE document only: it is the one that makes a
+// claim about WHICH resource it describes, so it is the one that can be wrong.
+// The authorization-server document below describes the whole origin and has
+// no such hazard, so its wildcard stays permissive.
+const PR_PREFIX = '/.well-known/oauth-protected-resource';
+
+publicRouter.get([PR_PREFIX, `${PR_PREFIX}/*`], (req, res) => {
+  const suffix = req.path.slice(PR_PREFIX.length).replace(/\/+$/, '');
+  if (suffix && suffix !== RESOURCE_PATH) {
+    return res.status(404).json({
+      error: 'not_found',
+      error_description:
+        `This server publishes no OAuth metadata for "${suffix}". The MCP endpoint is ` +
+        `${resourceUrl(req)} — use exactly that as the connector URL, with no key in it. ` +
+        `(A URL like ${baseUrl(req)}${RESOURCE_PATH}/http/<key> is the deprecated ` +
+        `key-in-URL scheme, which does not use OAuth: paste it with no OAuth client fields.)`,
+      resource: resourceUrl(req),
+    });
+  }
+  res.json(protectedResourceDoc(req));
+});
+
 for (const p of [
   '/.well-known/oauth-authorization-server',
   '/.well-known/oauth-authorization-server/*',
@@ -273,9 +310,43 @@ publicRouter.get('/api/mcp/oauth/authorize', async (req, res) => {
     // cookie is verified here directly.
     const user = readSession(req);
     if (!user) {
+      // ⚠ This fires even for an operator who IS signed in. The session cookie
+      // is SameSite=Strict, so the browser withholds it on the CROSS-SITE
+      // navigation Claude makes to get here — readSession therefore always sees
+      // nothing on that hop, and no amount of retrying from Claude changes it.
+      //
+      // So hand the app the URL to come back to. Signing in (or simply landing)
+      // on our own origin makes the return trip SAME-SITE, the cookie rides
+      // along, and consent renders. `next` is a PATH, not an absolute URL, and
+      // App.jsx re-checks that it addresses this route — an unvalidated return
+      // target is an open redirect.
       const back = encodeURIComponent(req.originalUrl);
-      return res.type('html').send(loginRequiredPage(`${baseUrl(req)}/#/?next=${back}`));
+      return res.type('html').send(loginRequiredPage(`${baseUrl(req)}/?next=${back}#/`));
     }
+
+    // ⚠ The consent form POSTs to us and we answer with a 302 to the client's
+    // redirect_uri — and Chromium enforces `form-action` across the WHOLE
+    // redirect chain, not just the immediate action. helmet's default
+    // `form-action 'self'` therefore CANCELS the navigation at the redirect:
+    // the server mints an authorization code, the browser silently discards
+    // it, and Allow looks like a dead button. Nothing throws, and it is not a
+    // `pageerror` — it surfaces only as a console CSP violation, which is why
+    // a curl round trip and a page-load check both pass.
+    //
+    // So widen form-action for THIS RESPONSE ONLY, to exactly the redirect that
+    // was validated by redirectAllowed() a few lines above — never a blanket
+    // relaxation, and never a value taken unvalidated from the query.
+    let formAction = "'self'";
+    try { formAction += ' ' + new URL(q.redirect_uri).origin; } catch { /* keep 'self' */ }
+    res.setHeader('Content-Security-Policy', [
+      "default-src 'self'",
+      "script-src 'none'",          // these pages carry no JS at all
+      "style-src 'self' 'unsafe-inline'",
+      `form-action ${formAction}`,
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+      "object-src 'none'",
+    ].join('; '));
 
     res.type('html').send(consentPage({
       clientName: client.name,
@@ -672,10 +743,13 @@ function consentPage({ clientName, user, params, resource, action }) {
 function loginRequiredPage(loginUrl) {
   return SHELL('Sign in first', `
     <h1>Sign in to Forge Growth</h1>
-    <p>You need to be signed in before you can connect a tool to your account.</p>
-    <div class="warn">Sign in in this window, then start the connection again from Claude.</div>
+    <p>Continue in Forge Growth to approve this connection. If you are already
+       signed in you will come straight back here — your browser does not pass
+       your Forge Growth session to a page opened from Claude.</p>
+    <div class="warn">Continue below rather than retrying from Claude — retrying
+      lands on this same page.</div>
     <div class="row"><a href="${esc(loginUrl)}" style="flex:1;text-decoration:none">
-      <button class="primary" style="width:100%">Open Forge Growth</button></a></div>`);
+      <button class="primary" style="width:100%">Continue</button></a></div>`);
 }
 
 function errorPage(message) {

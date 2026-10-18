@@ -1,12 +1,15 @@
+import { UNZOOM_STYLE } from '../lib/uiZoom.js';
 import React, { useState, useRef, useEffect, useCallback, useLayoutEffect, useMemo } from "react";
 import { notify as appNotify } from '../lib/feedback.js';
 import { api } from "../api.js";
-import { maskPhone, downloadJson, slugifyName } from "../constants.js";
+import { maskPhone, downloadJson, slugifyName, FONT, MONO } from "../constants.js";
 import AutomationExecutions from "./AutomationExecutions.jsx";
 import SearchableSelect from "./SearchableSelect.jsx";
+import PillStrip from "./PillStrip.jsx";
+import { PhoneFrame, Bubble, ChatDay, ChatNote, ChatEmpty } from "./sim/SimKit.jsx";
 import { useFunnelConfig } from "../hooks/useFunnelConfig.js";
 import {
-  NODE_W, HANDLE_DOT, HANDLE_HIT, INPUT_DOT, INPUT_HIT, ROW_H, SYS_H, mediaChipFor,
+  NODE_W, HEAD_H, BODY_H, SUMMARY_H, headH, HANDLE_DOT, HANDLE_HIT, INPUT_DOT, INPUT_HIT, ROW_H, SYS_H, mediaChipFor,
   nodeH, nodeLayout, nodeRows, outputHandlesOf, handlePos, inputCY, hasSummaryPanel,
   buttonLabel, isQuickReplyButton, replyButtonsOf, listRowsOf, tapTargetsOf,
   isWaitingNode, bodyPreview, handleTone,
@@ -43,6 +46,29 @@ const C = {
   teal:"var(--c-teal)", tealBg:"var(--c-tealBg)",
   pink:"var(--c-pink)", pinkBg:"var(--c-pinkBg)",
   sb:"#161513", sbItem:"#9E9A92", sbActive:"#26241F", sbBorder:"#26241F",
+};
+
+
+/* ── Builder surface tokens ──────────────────────────────────────────
+   The same vocabulary the Social section's Instagram flow builder draws
+   with: a page-tinted canvas with a dot grid, step cards on the brightest
+   surface with a hairline ring and a soft lift, and one quiet line colour
+   for connectors. The --fs-* custom properties are set per theme in the
+   <style> block at the bottom of AutomationBuilderView. */
+const FS = {
+  pageBg:"var(--fc-page)", canvas:"var(--fs-canvas)", nodeBg:"var(--fs-node-bg)",
+  ring:"var(--fs-node-ring)", shadow:"var(--fs-node-shadow)",
+  card:"0 0 0 1px var(--fs-node-ring), var(--fs-node-shadow)",
+  surface:"var(--fc-surface)", surface2:"var(--fc-surface-2)", raised:"var(--fc-raised)",
+  text:"var(--fc-text)", text2:"var(--fc-text-secondary)", muted:"var(--fc-text-muted)",
+  edge:"var(--fc-text-muted)",
+  primary:"var(--fc-primary)", primarySoft:"var(--fc-primary-soft)", primaryRing:"var(--fc-primary-ring)", onAccent:"var(--fc-on-accent)",
+  green:"var(--fc-green)", greenSoft:"var(--c-successBg)",
+  amber:"var(--fc-amber)", amberSoft:"var(--fc-amber-soft)",
+  blue:"var(--c-infoText)", blueSoft:"var(--c-infoBg)",
+  purple:"var(--c-purple)", purpleSoft:"var(--c-purpleBg)",
+  teal:"var(--c-teal)", tealSoft:"var(--c-tealBg)",
+  err:"var(--fc-err-text)", errBg:"var(--fc-err-bg)",
 };
 
 /* ── Inline SVG icon factory ──────────────────────────────────────── */
@@ -94,6 +120,8 @@ const IC = {
   zIn:(s)=>I(<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></>,s),
   zOut:(s)=>I(<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></>,s),
   fit:(s)=>I(<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/>,s),
+  // lucide "magnet" — the keep-in-order toggle: cards snap to the running order
+  magnet:(s)=>I(<><path d="m6 15-4-4 6.75-6.77a7.79 7.79 0 0 1 11 11L13 22l-4-4 6.39-6.36a2.14 2.14 0 0 0-3-3L6 15"/><path d="m5 8 4 4"/><path d="m12 15 4 4"/></>,s),
   undo:(s)=>I(<><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></>,s),
   redo:(s)=>I(<><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></>,s),
   arr:(s)=>I(<><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></>,s),
@@ -114,7 +142,7 @@ const IC = {
 
 /* ── Primitive components ─────────────────────────────────────────── */
 const Badge = ({ label, bg, color, border, dot, style }) => (
-  <span style={{ fontSize:13, fontWeight:700, padding:"3px 9px", borderRadius:99, background:bg, color, fontFamily:"'DM Sans'", whiteSpace:"nowrap", letterSpacing:".03em", border:border?`1px solid ${border}`:"none", display:"inline-flex", alignItems:"center", gap:5, ...style }}>
+  <span style={{ fontSize:13, fontWeight:700, padding:"3px 9px", borderRadius:99, background:bg, color, fontFamily:FONT, whiteSpace:"nowrap", letterSpacing:".03em", border:border?`1px solid ${border}`:"none", display:"inline-flex", alignItems:"center", gap:5, ...style }}>
     {dot && <span style={{ width:5, height:5, borderRadius:"50%", background:color }}/>}
     {label}
   </span>
@@ -135,33 +163,38 @@ const StatusPill = ({ status }) => {
 };
 
 const Btn = ({ kind="ghost", icon, children, onClick, style, size="md", title, ...rest }) => {
-  const pad = size==="sm" ? "6px 12px" : size==="lg" ? "11px 20px" : "9px 16px";
-  const fs = size==="sm" ? 11 : 12;
+  const pad = size==="sm" ? "6px 12px" : size==="lg" ? "11px 20px" : "8px 14px";
+  const fs = size==="sm" ? 12.5 : size==="lg" ? 14 : 13.5;
+  // Pills with a fill and no outline — the Social builder's button language.
   const v = {
-    primary:{ background:C.brand, color:"#fff", border:`1px solid ${C.brand}` },
-    dark:   { background:C.text1, color:"#fff", border:`1px solid ${C.text1}` },
-    ghost:  { background:"var(--c-surface, #fff)", color:C.text3, border:`1.5px solid ${C.inputBorder}` },
-    soft:   { background:C.brandBg, color:C.brandDark, border:"1px solid transparent" },
-    danger: { background:"var(--c-surface, #fff)", color:C.redDark, border:`1.5px solid ${C.redBg}` },
+    primary:{ background:FS.primary, color:FS.onAccent },
+    dark:   { background:FS.text, color:"var(--fc-card)" },
+    ghost:  { background:FS.surface2, color:FS.text },
+    soft:   { background:FS.primarySoft, color:FS.primary },
+    danger: { background:FS.errBg, color:FS.err },
   }[kind];
-  return <button onClick={onClick} title={title} style={{ fontFamily:"'DM Sans'", fontSize:fs, fontWeight:600, borderRadius:10, padding:pad, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:7, whiteSpace:"nowrap", transition:"all .14s", lineHeight:1, ...v, ...style }} {...rest}>{icon}{children}</button>;
+  return <button onClick={onClick} title={title} style={{ fontFamily:FONT, fontSize:fs, fontWeight:650, borderRadius:999, border:"none", padding:pad, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:7, whiteSpace:"nowrap", transition:"background .14s, opacity .14s", lineHeight:1.2, ...v, ...style }} {...rest}>{icon}{children}</button>;
 };
 
-const IconBtn = ({ children, onClick, title, danger, style }) => (
-  <button onClick={onClick} title={title} style={{ width:30, height:30, border:"none", background:"transparent", borderRadius:7, cursor:"pointer", color:danger?C.redDark:C.text4, display:"flex", alignItems:"center", justifyContent:"center", ...style }}>{children}</button>
+const IconBtn = ({ children, onClick, title, danger, style, ...rest }) => (
+  // ⚠ `...rest` is load-bearing: without it a data-testid / aria-* passed by a
+  // caller is silently swallowed and any test or anchor keyed on it does nothing.
+  <button {...rest} onClick={onClick} title={title} aria-label={title} style={{ width:32, height:32, border:"none", background:FS.surface, borderRadius:999, cursor:"pointer", color:danger?FS.err:FS.text2, display:"inline-flex", alignItems:"center", justifyContent:"center", padding:0, flexShrink:0, ...style }}>{children}</button>
 );
 
-const Sec = ({ children, style }) => <div style={{ fontSize:13, textTransform:"uppercase", letterSpacing:".1em", color:C.muted, fontWeight:700, ...style }}>{children}</div>;
-
+const Sec = ({ children, style }) => <div style={{ fontSize:11, textTransform:"uppercase", letterSpacing:".06em", color:FS.muted, fontWeight:650, ...style }}>{children}</div>;
 const Toggle = ({ value, onChange, size="md" }) => {
   const w = size==="sm" ? 32:38, h = size==="sm" ? 18:20, k = h-4;
-  return <div onClick={() => onChange && onChange(!value)} style={{ width:w, height:h, borderRadius:99, background:value?C.brandBright:"var(--c-borderStrong, #D5D5D0)", position:"relative", cursor:"pointer", transition:"background .2s", flexShrink:0 }}>
-    <div style={{ width:k, height:k, borderRadius:"50%", background:"var(--c-surface, #fff)", position:"absolute", top:2, left:value?w-k-2:2, transition:"left .18s", boxShadow:"0 1px 3px rgba(0,0,0,.2)" }}/>
+  return <div onClick={() => onChange && onChange(!value)} role="switch" aria-checked={!!value} style={{ width:w, height:h, borderRadius:99, background:value?FS.primary:FS.surface2, position:"relative", cursor:"pointer", transition:"background .2s", flexShrink:0 }}>
+    <div style={{ width:k, height:k, borderRadius:"50%", background:"#fff", position:"absolute", top:2, left:value?w-k-2:2, transition:"left .18s", boxShadow:"0 1px 3px rgba(0,0,0,.2)" }}/>
   </div>;
 };
 
-const Input = ({ style, ...p }) => <input {...p} style={{ width:"100%", padding:"8px 11px", border:`1.5px solid ${C.inputBorder}`, borderRadius:8, fontSize:15, fontFamily:"'DM Sans'", outline:"none", background:"var(--c-surface, #fff)", color:C.text1, ...style }}/>;
-const Textarea = ({ style, ...p }) => <textarea {...p} style={{ width:"100%", padding:"9px 11px", border:`1.5px solid ${C.inputBorder}`, borderRadius:8, fontSize:15, fontFamily:"'DM Sans'", outline:"none", background:"var(--c-surface, #fff)", color:C.text1, lineHeight:1.5, resize:"vertical", ...style }}/>;
+// Fields carry a fill and no outline (the focus ring is the one exception, in
+// the builder's own <style>), like every field in the Social builder's editor.
+const FIELD = { width:"100%", padding:"9px 12px", border:"none", borderRadius:12, fontSize:14, fontFamily:FONT, outline:"none", background:FS.surface, color:FS.text, boxSizing:"border-box" };
+const Input = ({ style, className, ...p }) => <input {...p} className={`fg-field ${className || ""}`} style={{ ...FIELD, ...style }}/>;
+const Textarea = ({ style, className, ...p }) => <textarea {...p} className={`fg-field ${className || ""}`} style={{ ...FIELD, lineHeight:1.5, resize:"vertical", ...style }}/>;
 
 // Textarea with a Word-like B/I/U toolbar. Wraps selection in WhatsApp
 // markers (`*`, `_`, `~`); with no selection, inserts the markers and parks
@@ -189,7 +222,7 @@ const FormatTextarea = ({ value, onChange, style, ...p }) => {
     <button type="button" title={title}
       onMouseDown={(ev)=>ev.preventDefault()}
       onClick={()=>apply(marker)}
-      style={{ width:26, height:24, border:`1px solid ${C.inputBorder}`, borderRadius:6, background:"var(--c-surface, #fff)", color:C.text1, fontFamily:"'DM Sans'", fontSize:15, cursor:"pointer", display:"inline-flex", alignItems:"center", justifyContent:"center", ...sx }}>
+      style={{ width:28, height:26, border:"none", borderRadius:8, background:FS.surface, color:FS.text, fontFamily:FONT, fontSize:13, cursor:"pointer", display:"inline-flex", alignItems:"center", justifyContent:"center", ...sx }}>
       {label}
     </button>
   );
@@ -216,13 +249,13 @@ const FormatTextarea = ({ value, onChange, style, ...p }) => {
           <VarPickerButton onInsert={insertVar}/>
         </span>
       </div>
-      <textarea ref={taRef} value={value || ""} onChange={onChange}
-        style={{ width:"100%", padding:"9px 11px", border:`1.5px solid ${C.inputBorder}`, borderRadius:8, fontSize:15, fontFamily:"'DM Sans'", outline:"none", background:"var(--c-surface, #fff)", color:C.text1, lineHeight:1.5, resize:"vertical", ...style }}
+      <textarea ref={taRef} value={value || ""} onChange={onChange} className="fg-field"
+        style={{ ...FIELD, lineHeight:1.5, resize:"vertical", ...style }}
         {...p}/>
     </div>
   );
 };
-const Select = ({ style, children, ...p }) => <select {...p} style={{ width:"100%", padding:"7px 9px", border:`1.5px solid ${C.inputBorder}`, borderRadius:8, fontSize:15, fontFamily:"'DM Sans'", outline:"none", background:"var(--c-surface, #fff)", color:C.text1, ...style }}>{children}</select>;
+const Select = ({ style, children, ...p }) => <select {...p} className="fg-field" style={{ ...FIELD, padding:"8px 10px", ...style }}>{children}</select>;
 
 // ─── Variable picker (Insert {{key}} into any text input) ──────────────────
 // React Context lets the settings panel pass nodes+edges+currentNodeId once
@@ -242,12 +275,31 @@ const BUILTIN_VARS = [
   { key: "last_message",   description: "The customer's latest message (same value as answer)" },
 ];
 
+// Offered only when the flow's trigger is gated on a landing page
+// (`landingSource`). ⚠ Keys must match the `answers` built by buildDetails() in
+// backend/src/services/landingLeads.js — the engine exposes each as
+// {{form_<key>}} plus {{form_summary}}. Anywhere else these would be sent to the
+// customer as literal braces, which is why they are not in BUILTIN_VARS.
+const LANDING_VARS = [
+  { key: "form_summary",     description: "Every detail they filled, one per line" },
+  { key: "form_name",        description: "The name they typed on the landing page" },
+  { key: "form_whatsapp",    description: "The number they typed" },
+  { key: "form_email",       description: "Email" },
+  { key: "form_profession",  description: "Profession" },
+  { key: "form_city",        description: "City" },
+  { key: "form_used_claude", description: "Used Claude before" },
+  { key: "form_claude_plan", description: "Claude Free or Paid" },
+  { key: "form_ai_tools",    description: "AI tools they use" },
+];
+
 
 // Small "{x}" button that opens a dropdown of available variables and
 // calls onInsert(varKey) when one is picked.
 const VarPickerButton = ({ onInsert, style }) => {
   const [open, setOpen] = React.useState(false);
   const wrapRef = React.useRef(null);
+  const { nodes: flowNodes = [] } = React.useContext(VarContext);
+  const landingGated = !!flowNodes.find(n => n.type === "trigger" && (n.triggerKind || "keyword") === "keyword" && n.landingSource);
   React.useEffect(() => {
     if (!open) return;
     const close = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
@@ -260,7 +312,7 @@ const VarPickerButton = ({ onInsert, style }) => {
       style={{ display:"block", width:"100%", textAlign:"left", padding:"7px 11px", border:"none", background:"transparent", cursor:"pointer", fontSize:14 }}
       onMouseEnter={(e)=>e.currentTarget.style.background=C.sectionBg}
       onMouseLeave={(e)=>e.currentTarget.style.background="transparent"}>
-      <span style={{ fontFamily:"'DM Mono'", color:C.brandDark, fontWeight:700 }}>{`{{${v.key}}}`}</span>
+      <span style={{ fontFamily:MONO, color:C.brandDark, fontWeight:700 }}>{`{{${v.key}}}`}</span>
       {(v.description || v.label) && <span style={{ marginLeft:8, color:C.text5 }}>{v.description || v.label}</span>}
     </button>
   );
@@ -271,13 +323,17 @@ const VarPickerButton = ({ onInsert, style }) => {
         title="Insert a variable"
         onMouseDown={(e)=>e.preventDefault()}
         onClick={()=>setOpen(o=>!o)}
-        style={{ height:24, padding:"0 8px", border:`1px solid ${C.inputBorder}`, borderRadius:6, background:"var(--c-surface, #fff)", color:C.text1, fontFamily:"'DM Mono'", fontSize:14, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:3, fontWeight:700 }}>
+        style={{ height:24, padding:"0 8px", border:`1px solid ${C.inputBorder}`, borderRadius:6, background:"var(--c-surface, #fff)", color:C.text1, fontFamily:MONO, fontSize:14, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:3, fontWeight:700 }}>
         {"{x}"}
       </button>
       {open && (
-        <div style={{ position:"absolute", top:28, right:0, zIndex:50, minWidth:240, maxHeight:320, overflowY:"auto", background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:8, boxShadow:C.shadowLg || "0 8px 24px rgba(0,0,0,.12)", fontFamily:"'DM Sans'" }}>
+        <div style={{ position:"absolute", top:28, right:0, zIndex:50, minWidth:240, maxHeight:320, overflowY:"auto", background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:8, boxShadow:C.shadowLg || "0 8px 24px rgba(0,0,0,.12)", fontFamily:FONT }}>
           <div style={{ padding:"7px 11px", fontSize:13, fontWeight:700, color:C.text5, textTransform:"uppercase", letterSpacing:".06em", borderBottom:`1px solid ${C.cardBorder}` }}>Built-in</div>
           {BUILTIN_VARS.map(Row)}
+          {landingGated && (<>
+            <div style={{ padding:"7px 11px", fontSize:13, fontWeight:700, color:C.text5, textTransform:"uppercase", letterSpacing:".06em", borderTop:`1px solid ${C.cardBorder}`, borderBottom:`1px solid ${C.cardBorder}` }}>From the landing page</div>
+            {LANDING_VARS.map(Row)}
+          </>)}
         </div>
       )}
     </span>
@@ -306,7 +362,7 @@ const VarInput = ({ value, onChange, style, pickerStyle, ...p }) => {
   return (
     <div style={{ display:"flex", alignItems:"stretch", gap:6 }}>
       <input ref={ref} value={value ?? ""} onChange={onChange}
-        style={{ flex:1, padding:"8px 11px", border:`1.5px solid ${C.inputBorder}`, borderRadius:8, fontSize:15, fontFamily:"'DM Sans'", outline:"none", background:"var(--c-surface, #fff)", color:C.text1, ...style }}
+        style={{ flex:1, padding:"8px 11px", border:`1.5px solid ${C.inputBorder}`, borderRadius:8, fontSize:15, fontFamily:FONT, outline:"none", background:"var(--c-surface, #fff)", color:C.text1, ...style }}
         {...p}/>
       <VarPickerButton onInsert={(k)=>_insertVarAtCursor(ref, value, onChange, k)} style={pickerStyle}/>
     </div>
@@ -322,44 +378,42 @@ const VarTextarea = ({ value, onChange, style, ...p }) => {
         <VarPickerButton onInsert={(k)=>_insertVarAtCursor(ref, value, onChange, k)}/>
       </div>
       <textarea ref={ref} value={value ?? ""} onChange={onChange}
-        style={{ width:"100%", padding:"9px 38px 9px 11px", border:`1.5px solid ${C.inputBorder}`, borderRadius:8, fontSize:15, fontFamily:"'DM Sans'", outline:"none", background:"var(--c-surface, #fff)", color:C.text1, lineHeight:1.5, resize:"vertical", ...style }}
+        style={{ width:"100%", padding:"9px 38px 9px 11px", border:`1.5px solid ${C.inputBorder}`, borderRadius:8, fontSize:15, fontFamily:FONT, outline:"none", background:"var(--c-surface, #fff)", color:C.text1, lineHeight:1.5, resize:"vertical", ...style }}
         {...p}/>
     </div>
   );
 };
 
 const Field = ({ label, hint, children, style }) => (
-  <div style={{ marginBottom:13, ...style }}>
-    {label && <div style={{ fontSize:14, fontWeight:600, color:C.text3, marginBottom:5, fontFamily:"'DM Sans'" }}>{label}</div>}
+  <div style={{ marginBottom:14, ...style }}>
+    {label && <div style={{ fontSize:11, fontWeight:650, letterSpacing:".06em", textTransform:"uppercase", color:FS.text2, marginBottom:6, fontFamily:FONT }}>{label}</div>}
     {children}
-    {hint && <div style={{ fontSize:13, color:C.text5, marginTop:4, fontWeight:500 }}>{hint}</div>}
+    {hint && <div style={{ fontSize:12, color:FS.muted, marginTop:6, lineHeight:1.4 }}>{hint}</div>}
   </div>
 );
 
-const Pill = ({ active, children, onClick, color=C.brand, bg=C.brandBg, textDark=C.brandDark }) => (
+const Pill = ({ active, children, onClick, color=FS.primary, bg=FS.primarySoft, textDark=FS.primary }) => (
   <button onClick={onClick} style={{
-    fontSize:14, padding:"5px 11px", borderRadius:99,
-    border:active?`1.5px solid ${color}`:`1.5px solid ${C.inputBorder}`,
-    background:active?bg:"transparent",
-    color:active?textDark:C.text4,
-    fontFamily:"'DM Sans'", fontWeight:600, cursor:"pointer", whiteSpace:"nowrap",
+    fontSize:12.5, padding:"6px 12px", borderRadius:999, border:"none",
+    background:active?bg:FS.surface2, color:active?textDark:FS.text2,
+    fontFamily:FONT, fontWeight:650, cursor:"pointer", whiteSpace:"nowrap",
   }}>{children}</button>
 );
 
 const Chip = ({ children, onClick }) => (
-  <button onClick={onClick} style={{ fontSize:13, padding:"4px 9px", borderRadius:99, border:`1.5px solid ${C.inputBorder}`, background:"var(--c-surface, #fff)", color:C.text3, fontFamily:"'DM Mono'", fontWeight:500, cursor:"pointer" }}>{children}</button>
+  <button onClick={onClick} style={{ fontSize:12, padding:"4px 10px", borderRadius:999, border:"none", background:FS.surface2, color:FS.text2, fontFamily:MONO, fontWeight:500, cursor:"pointer" }}>{children}</button>
 );
 
 const Alert = ({ kind, children, style }) => {
   const m = {
-    info:{bg:C.blueBg,color:C.blue,border:C.blueBorder,icon:IC.warn(13)},
-    warn:{bg:C.orangeBg,color:C.orangeText,border:C.orangeBorder,icon:IC.warn(13)},
-    error:{bg:C.redBg,color:C.redDark,border:"#F4C9C9",icon:IC.err(13)},
-    ok:{bg:C.brandBg,color:C.brandDark,border:C.brandBright,icon:IC.ok(13)},
+    info:{bg:FS.blueSoft,color:FS.blue,icon:IC.warn(13)},
+    warn:{bg:FS.amberSoft,color:FS.amber,icon:IC.warn(13)},
+    error:{bg:FS.errBg,color:FS.err,icon:IC.err(13)},
+    ok:{bg:FS.greenSoft,color:FS.green,icon:IC.ok(13)},
   }[kind];
-  return <div style={{ background:m.bg, border:`1px solid ${m.border}`, borderRadius:10, padding:"9px 11px", display:"flex", gap:9, alignItems:"flex-start", margin:"12px 0 4px", ...style }}>
-    <span style={{ fontSize:15, fontWeight:700, color:m.color, lineHeight:1, marginTop:1, flexShrink:0 }}>{m.icon}</span>
-    <div style={{ fontSize:14, color:m.color, lineHeight:1.55, fontWeight:500 }}>{children}</div>
+  return <div style={{ background:m.bg, borderRadius:12, padding:"9px 11px", display:"flex", gap:9, alignItems:"flex-start", margin:"12px 0 4px", ...style }}>
+    <span style={{ fontSize:14, fontWeight:700, color:m.color, lineHeight:1, marginTop:1, flexShrink:0 }}>{m.icon}</span>
+    <div style={{ fontSize:13, color:m.color, lineHeight:1.5, fontWeight:500 }}>{children}</div>
   </div>;
 };
 
@@ -369,18 +423,23 @@ const Alert = ({ kind, children, style }) => {
    Node types, sample flow, canvas, blocks, settings, preview, toolbar
    ══════════════════════════════════════════════════════════════════════ */
 
-const NT_FALLBACK = { bg:"var(--c-sectionBg, #F5F5F0)", border:"var(--c-cardBorder, #E5E5E0)", color:"var(--c-t3, #444)", accent:"var(--c-t3, #444)", label:"STEP", icon:IC.flow };
+const NT_FALLBACK = { ink:FS.text2, soft:FS.surface2, bg:FS.surface2, border:FS.surface2, color:FS.text2, accent:FS.text2, label:"STEP", icon:IC.flow };
+// One ink per step type, on a soft tint of itself — the Instagram builder's
+// scheme, so a trigger reads green, a message blue, logic in the brand colour,
+// actions amber, AI purple. `bg`/`color`/`accent`/`border` are kept as aliases
+// for the older call sites.
+const inkSet = (ink, soft, label, icon) => ({ ink, soft, bg:soft, border:soft, color:ink, accent:ink, label, icon });
 const NT = {
-  trigger: { bg:"var(--c-dangerBg, #FCEBEB)", border:"#E8A0A0", color:"var(--c-dangerText, #A32D2D)", accent:"var(--c-s791f1f, #791F1F)", label:"TRIGGER",       icon:IC.zap },
-  message: { bg:"var(--c-xfdf2f2, #FDF2F2)", border:"#E8B0B0", color:"var(--c-xb53d3d, #B53D3D)", accent:"var(--c-dangerText, #A32D2D)", label:"MESSAGE",       icon:IC.msg },
-  condition:{ bg:"var(--c-xfff5f5, #FFF5F5)", border:"#F0C0C0", color:"var(--c-xc44a4a, #C44A4A)", accent:"var(--c-dangerText, #A32D2D)", label:"CONDITION",     icon:IC.branch },
-  action:  { bg:"var(--c-xfaf0f0, #FAF0F0)", border:"#D8B0B0", color:"var(--c-s8b3a3a, #8B3A3A)", accent:"var(--c-dangerText, #A32D2D)", label:"ACTION",        icon:IC.tag },
-  delay:   { bg:"var(--c-xfdf8f5, #FDF8F5)", border:"#E0C8B8", color:"var(--c-xa05040, #A05040)", accent:"var(--c-dangerText, #A32D2D)", label:"DELAY",         icon:IC.clock },
-  api:     { bg:"var(--c-xf5ecec, #F5ECEC)", border:"#C8A0A0", color:"var(--c-x7a2a2a, #7A2A2A)", accent:"var(--c-s791f1f, #791F1F)", label:"API",           icon:IC.api },
-  handoff: { bg:"var(--c-xfdf0f0, #FDF0F0)", border:"#E0B8B8", color:"var(--c-xb04040, #B04040)", accent:"var(--c-dangerText, #A32D2D)", label:"HUMAN HANDOFF", icon:IC.agent },
-  ai:      { bg:"var(--c-xf8f0f0, #F8F0F0)", border:"#D0B0B0", color:"var(--c-s8b3a3a, #8B3A3A)", accent:"var(--c-dangerText, #A32D2D)", label:"AI",            icon:IC.ai },
-  ai_agent:{ bg:"var(--c-xf4ecec, #F4ECEC)", border:"#C8A8A8", color:"var(--c-x7a2e2e, #7A2E2E)", accent:"var(--c-s791f1f, #791F1F)", label:"AI AGENT",      icon:IC.ai },
-  subflow: { bg:"var(--c-xf0e8e8, #F0E8E8)", border:"#C0A0A0", color:"var(--c-x6a2a2a, #6A2A2A)", accent:"var(--c-s791f1f, #791F1F)", label:"SUB-FLOW",      icon:IC.flow },
+  trigger:  inkSet(FS.green,   FS.greenSoft,   "TRIGGER",       IC.zap),
+  message:  inkSet(FS.blue,    FS.blueSoft,    "MESSAGE",       IC.msg),
+  condition:inkSet(FS.primary, FS.primarySoft, "CONDITION",     IC.branch),
+  action:   inkSet(FS.amber,   FS.amberSoft,   "ACTION",        IC.tag),
+  delay:    inkSet(FS.primary, FS.primarySoft, "DELAY",         IC.clock),
+  api:      inkSet(FS.teal,    FS.tealSoft,    "API",           IC.api),
+  handoff:  inkSet(FS.amber,   FS.amberSoft,   "HUMAN HANDOFF", IC.agent),
+  ai:       inkSet(FS.purple,  FS.purpleSoft,  "AI",            IC.ai),
+  ai_agent: inkSet(FS.purple,  FS.purpleSoft,  "AI AGENT",      IC.ai),
+  subflow:  inkSet(FS.teal,    FS.tealSoft,    "SUB-FLOW",      IC.flow),
 };
 
 // Geometry and the handle vocabulary now live in builder/nodeLayout.js, where
@@ -433,6 +492,11 @@ export const getTriggerDisplay = (n) => {
 
 /* ── screenToWorld is defined inside the component so it can read viewportRef ── */
 
+/* Zoom limits. Shared by the zoom buttons, the wheel and "fit to screen" so
+   the three controls cannot disagree about how far the canvas goes. */
+export const MIN_ZOOM = 0.1;
+export const MAX_ZOOM = 2;
+
 /* ── Auto-layout: HORIZONTAL, left to right ── */
 /**
  * Columns advance in X, siblings stack in Y.
@@ -467,7 +531,13 @@ export const layoutTree = (nodes, edges) => {
     edges.forEach(e => {
       if (e.from !== id || !e.to || seen.has(e.to)) return;
       const c = byId[e.to];
-      if (c && !out.includes(c)) { out.push(c); seen.add(c); }
+      // ⚠ Claim by ID, never by object. `seen.has(e.to)` above tests a STRING,
+      // so `seen.add(c)` (the node object) could never match it — the guard
+      // silently never fired. A DAG then re-expanded every shared step once per
+      // path reaching it: 32 nodes became 1,156, and the flow was laid out
+      // 62,700px tall instead of 4,200. Nothing threw; the layout just scattered
+      // and "fit to screen" had nothing it could usefully frame.
+      if (c && !out.includes(c)) { out.push(c); seen.add(c.id); }
     });
     return out;
   };
@@ -504,6 +574,21 @@ export const layoutTree = (nodes, edges) => {
   // position map and apply it once, so a layout run produces a new array
   // rather than silently editing the array a render is already using.
   return nodes.map(n => (pos[n.id] ? { ...n, ...pos[n.id] } : n));
+};
+
+/**
+ * Can "fit to screen" actually frame this layout?
+ *
+ * Answers the precise question the canvas needs — not "is this tidy?" — so it
+ * can never disturb a layout that merely looks unusual but works.
+ */
+export const canBeFramed = (nodes, viewportEl) => {
+  if (!nodes || nodes.length < 2) return true;
+  const w = viewportEl?.clientWidth  || 1200;
+  const h = viewportEl?.clientHeight || 800;
+  const contentW = Math.max(...nodes.map(n => n.x + NODE_W)) - Math.min(...nodes.map(n => n.x));
+  const contentH = Math.max(...nodes.map(n => n.y + nodeH(n))) - Math.min(...nodes.map(n => n.y));
+  return contentW * MIN_ZOOM <= w && contentH * MIN_ZOOM <= h;
 };
 
 /* ── Default trigger node ── */
@@ -566,7 +651,10 @@ const TRIGGER_KINDS = [
     // Deliberately BLANK, not "PRICE". An empty keyword can never match, and
     // flowValidator blocks activation until one is typed — so the author is
     // asked once, instead of shipping somebody else's placeholder word live.
-    defaults:{ keyword:"", matchType:"exact", caseSensitive:false, triggerDirection:"inbound" } },
+    // landingSource: "" = an ordinary keyword flow. Listed here so switching
+    // kind clears it (see switchKind) — a stale value would gate a trigger that
+    // no longer shows the picker.
+    defaults:{ keyword:"", matchType:"exact", caseSensitive:false, triggerDirection:"inbound", landingSource:"" } },
   { kind:"link", libName:"WhatsApp Link", label:"wa.me Link", icon:IC.link, desc:"wa.me link clicked",
     defaults:{ trackingCode:"" } },
   { kind:"newContact", libName:"New Contact", label:"New Contact", icon:IC.user, desc:"New contact created",
@@ -634,17 +722,44 @@ const WA_CONDITION_PRESETS = [
 
 
 /* ── Interactive FlowNode with input/output handles ── */
-const FlowNode = ({ n, selected, isDropTarget, onSelect, onStartDrag, onStartConnect, onPickAgentResource, whatsappAccounts=[], wiredHandles, onRowClick, whatsappTemplates=[] }) => {
-  const [hoverHandle, setHoverHandle] = React.useState(null);
+/**
+ * The step card, in the Social builder's language: one bright surface with a
+ * hairline ring and a soft lift, an icon chip beside a small kicker and the
+ * title, a bubble for what the step sends, and one surface row per output
+ * ending in a connector dot on the card's right edge.
+ *
+ * ⚠ Only the LOOK changed. Every position — the card's width, where each row
+ * sits, where a dot is drawn — still comes from nodeLayout.js, so an edge
+ * attaches exactly where it did before. The bubble and the summary panel are
+ * positioned from the same budgets (headH / BODY_H / SUMMARY_H) the layout
+ * measures with, instead of flowing after the header: a header that renders
+ * shorter than its budget would otherwise leave a gap above the rows.
+ */
+const FlowNode = ({ n, selected, isDropTarget, running=false, onSelect, onStartDrag, onStartConnect, onPickAgentResource, whatsappAccounts=[], wiredHandles, onRowClick, whatsappTemplates=[] }) => {
   // A removed node type can still exist in a saved config; without the
-  // fallback `t.bg` throws during render and blanks the whole app.
+  // fallback `t.ink` throws during render and blanks the whole app.
   const t = NT[n.type] || NT_FALLBACK;
   const h = nodeH(n);
   const isCondition = n.type === "condition";
-  const isAction = n.type === "action";
   const isDisabled = !!n.disabled;
-  const SEL = "#A32D2D";
-  const DROP = "#1D9E75";
+  const kicker = n.type === "trigger" ? "Trigger" : n.type === "message" ? "WhatsApp" : "Step";
+  const actionCount = (n.actions || []).length;
+  const ruleCount = (n.rules || []).length;
+  const title = n.type === "trigger" ? getTriggerDisplay(n).title : (n.title || (n.type === "action" ? "Actions" : t.label));
+  const sub = n.type === "trigger" ? getTriggerDisplay(n).sub
+    : n.type === "message" && n.messageMode === "direct" ? (DIRECT_MSG_LABELS[n.directType] || "Direct message")
+    : n.type === "action" ? (actionCount ? `${actionCount} action${actionCount === 1 ? "" : "s"}` : "Click to configure")
+    : isCondition ? (n.matchMode === "random" ? "Random split" : `${n.matchMode === "any" ? "Any" : "All"} of ${ruleCount} rule${ruleCount === 1 ? "" : "s"}`)
+    : n.sub;
+  const ring = isDropTarget ? `0 0 0 2px ${FS.green}, ${FS.shadow}`
+    : running ? `0 0 0 3px ${FS.green}, 0 0 0 8px ${FS.greenSoft}, ${FS.shadow}`
+    : selected ? `0 0 0 2px ${FS.primary}, ${FS.shadow}`
+    : FS.card;
+  const toneColor = (tone) =>
+    tone === "good" ? FS.green : tone === "bad" ? FS.err : tone === "warn" ? FS.amber : tone === "muted" ? FS.muted : t.ink;
+  const bubble = { position:"absolute", left:14, right:14, background:FS.surface, borderRadius:12, padding:"7px 10px", boxSizing:"border-box", fontSize:12.5, lineHeight:1.4, color:FS.text, overflow:"hidden" };
+  const dot = (color, filled) => ({ width:HANDLE_DOT, height:HANDLE_DOT, borderRadius:"50%", background: filled ? color : FS.nodeBg, border:`2.5px solid ${color}`, boxSizing:"border-box", transition:"transform .12s", pointerEvents:"none" });
+
   return (
     <div
       data-testid="flow-node"
@@ -654,113 +769,39 @@ const FlowNode = ({ n, selected, isDropTarget, onSelect, onStartDrag, onStartCon
       onClick={(e) => { e.stopPropagation(); onSelect(n.id); }}
       style={{
         position:"absolute", left:n.x, top:n.y, width:NODE_W, minHeight:h,
-        // ONE surface. The card used to open with a 3px accent bar in a second
-        // colour, which read as two stacked shapes rather than one block and
-        // made a row of nodes look striped. Separation from the canvas now
-        // comes from a soft shadow and a hairline, not from a coloured lining.
-        background:"var(--c-surface, #fff)",
-        // A REAL hairline, not the near-invisible --c-border: on the tinted
-        // canvas the card edge disappeared into the background. borderStrong
-        // is the one border token with contrast against the surface in BOTH
-        // themes (#D5D5D0 light / #3A3A3A dark).
-        // A node's edge is STRUCTURE, so it gets its own token and 2px. At
-        // 1.5px in borderStrong (#D5D5D0 — a table-divider grey) the cards
-        // dissolved into the tinted canvas. Selected/drop states go to 2.5px
-        // so they still read as a state ON TOP of the new resting weight,
-        // rather than matching it.
-        border: isDropTarget ? `2.5px solid ${DROP}` : selected ? `2.5px solid ${SEL}` : `2px solid ${isDisabled ? C.cardBorder : "var(--c-nodeBorder, #B4B3AA)"}`,
-        // A chat bubble's geometry: square-ish at the top-left where the tail
-        // would be — which is also where the inbound connector now lands — and
-        // fully rounded elsewhere. This is what makes a step read as a message
-        // rather than a box.
-        borderRadius:"5px 16px 16px 16px",
-        boxShadow: isDropTarget
-          ? "0 0 0 4px rgba(29,158,117,.20), 0 12px 30px rgba(0,0,0,.13)"
-          : selected
-            ? "0 0 0 4px rgba(163,45,45,.10), 0 12px 30px rgba(0,0,0,.12)"
-            : "0 2px 5px rgba(16,24,20,.055), 0 8px 20px rgba(16,24,20,.055)",
-        cursor:"grab", userSelect:"none", fontFamily:"'DM Sans'", overflow:"visible",
-        opacity: isDisabled ? 0.55 : 1,
-        filter: isDisabled ? "grayscale(0.6)" : "none",
+        background:FS.nodeBg, borderRadius:16, boxShadow:ring, transition:"box-shadow .2s",
+        cursor:"grab", userSelect:"none", fontFamily:FONT, overflow:"visible",
+        opacity: isDisabled ? 0.55 : 1, filter: isDisabled ? "grayscale(0.6)" : "none",
       }}
     >
-      {isDisabled && (
-        <div style={{
-          position:"absolute", top:-9, right:8, zIndex:6,
-          background:"var(--c-surface, #fff)", color:"var(--c-t4, #666)", border:`1px solid ${C.cardBorder}`,
-          fontSize:13, fontWeight:700, padding:"2px 8px", borderRadius:99,
-          letterSpacing:".1em", textTransform:"uppercase",
-          boxShadow:"0 1px 3px rgba(0,0,0,.08)",
-        }}>Disabled</div>
-      )}
-      {isAction ? (
-        <div data-node-head style={{ padding:"12px 13px 9px", display:"flex", alignItems:"flex-start", gap:10 }}>
-          <div style={{ width:32, height:32, borderRadius:9, background:t.bg, color:t.accent, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{IC.tag(16)}</div>
-          <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontSize:12, fontWeight:800, letterSpacing:".12em", textTransform:"uppercase", color:t.accent, marginBottom:3 }}>{t.label}</div>
-            <div style={{ fontSize:15, fontWeight:700, color:C.text1, lineHeight:1.3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{n.title || "Actions"}</div>
-            <div style={{ fontSize:14, color:C.text4, fontWeight:500, marginTop:3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-              {(n.actions || []).length > 0 ? `${(n.actions || []).length} action${(n.actions || []).length===1?"":"s"}` : "Click to configure"}
-            </div>
-          </div>
-          {n.warn && <div title="Compliance warning" style={{ color:C.orange, flexShrink:0, paddingTop:2 }}>{IC.warn(14)}</div>}
-          {(n.error || (isCondition && (!n.rules || n.rules.length === 0))) && <div title="Set up rules to complete this condition" style={{ color:C.red, flexShrink:0, paddingTop:2 }}>{IC.err(14)}</div>}
-          {n.approved && <div title="Template approved" style={{ color:C.red, flexShrink:0, paddingTop:2 }}>{IC.ok(14)}</div>}
-          {n.type === "message" && n.waitForReply && (
-            <div title={`Pauses here, waits up to ${n.waitTimeoutHours || 24}h for customer's reply`} style={{ color:C.muted, flexShrink:0, paddingTop:2 }}>
-              {IC.clock(14)}
+      {running && <span style={{ position:"absolute", top:-11, left:14, zIndex:6, fontSize:10.5, fontWeight:750, letterSpacing:".04em", padding:"2px 8px", borderRadius:6, background:FS.green, color:"#fff" }}>TESTING HERE</span>}
+      {isDisabled && <span style={{ position:"absolute", top:-10, right:12, zIndex:6, fontSize:10.5, fontWeight:750, letterSpacing:".04em", textTransform:"uppercase", padding:"2px 8px", borderRadius:6, background:FS.surface2, color:FS.muted }}>Disabled</span>}
+
+      {/* header */}
+      <div data-node-head style={{ display:"flex", alignItems:"flex-start", gap:9, padding:"12px 14px 8px" }}>
+        <span style={{ width:28, height:28, borderRadius:9, background:t.soft, color:t.ink, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0, marginTop:2 }}>{t.icon(15)}</span>
+        <div style={{ minWidth:0, flex:1 }}>
+          <div style={{ fontSize:10.5, color:FS.muted, fontWeight:650, letterSpacing:".03em", textTransform:"uppercase" }}>{kicker}</div>
+          <div style={{ fontSize:14, fontWeight:750, color:FS.text, letterSpacing:"-0.01em", lineHeight:1.3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{title}</div>
+          {sub && <div style={{ fontSize:12, color:FS.muted, marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{sub}</div>}
+          {n.type === "message" && n.whatsappAccountId && (
+            <div style={{ fontSize:11.5, color:FS.muted, marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontFamily:MONO }}>
+              via {maskPhone(whatsappAccounts.find(a => String(a.id) === String(n.whatsappAccountId))?.displayPhoneNumber) || "custom number"}
             </div>
           )}
         </div>
-      ) : (
-        <div data-node-head style={{ padding:"12px 13px 9px", display:"flex", alignItems:"flex-start", gap:10 }}>
-          <div style={{ width:32, height:32, borderRadius:9, background:t.bg, color:t.accent, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{t.icon(16)}</div>
-          <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontSize:12, fontWeight:800, letterSpacing:".12em", textTransform:"uppercase", color:t.accent, marginBottom:3 }}>{t.label}</div>
-            <div style={{ fontSize:15, fontWeight:700, color:C.text1, lineHeight:1.3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-              {n.type === 'trigger' ? getTriggerDisplay(n).title : n.title}
-            </div>
-            <div style={{ fontSize:14, color:C.text4, fontWeight:500, marginTop:3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-              {n.type === "message" && n.messageMode === "direct" ? (DIRECT_MSG_LABELS[n.directType] || "Direct message")
-               : n.type === 'trigger' ? getTriggerDisplay(n).sub
-               : n.sub}
-            </div>
-            {n.type === "message" && n.whatsappAccountId && (
-              <div style={{ fontSize:13, color:C.muted, fontWeight:500, marginTop:3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontFamily:"'DM Mono'" }}>
-                via {maskPhone(whatsappAccounts.find(a => String(a.id) === String(n.whatsappAccountId))?.displayPhoneNumber) || 'custom number'}
-              </div>
-            )}
-          </div>
-          {n.warn && <div title="Compliance warning" style={{ color:C.orange, flexShrink:0, paddingTop:2 }}>{IC.warn(14)}</div>}
-          {(n.error || (isCondition && (!n.rules || n.rules.length === 0))) && <div title="Set up rules to complete this condition" style={{ color:C.red, flexShrink:0, paddingTop:2 }}>{IC.err(14)}</div>}
-          {n.approved && <div title="Template approved" style={{ color:C.red, flexShrink:0, paddingTop:2 }}>{IC.ok(14)}</div>}
-          {n.type === "message" && n.waitForReply && (
-            <div title={`Pauses here, waits up to ${n.waitTimeoutHours || 24}h for customer's reply`} style={{ color:C.muted, flexShrink:0, paddingTop:2 }}>
-              {IC.clock(14)}
-            </div>
-          )}
-        </div>
-      )}
+        {n.warn && <span title="Compliance warning" style={{ color:FS.amber, flexShrink:0, marginTop:4 }}>{IC.warn(14)}</span>}
+        {(n.error || (isCondition && ruleCount === 0 && n.matchMode !== "random")) && <span title="Set up rules to complete this condition" style={{ color:FS.err, flexShrink:0, marginTop:4 }}>{IC.err(14)}</span>}
+        {n.approved && <span title="Template approved" style={{ color:FS.green, flexShrink:0, marginTop:4 }}>{IC.ok(14)}</span>}
+        {n.type === "message" && n.waitForReply && (
+          <span title={`Pauses here, waits up to ${n.waitTimeoutHours || 24}h for the customer's reply`} style={{ color:FS.muted, flexShrink:0, marginTop:4 }}>{IC.clock(14)}</span>
+        )}
+      </div>
 
-      {isCondition && (
-        <div style={{ padding:"0 12px 10px", display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-          <span style={{ fontSize:13, fontWeight:700, color:C.text3, background:C.sectionBg, border:`1px solid ${C.innerBorder}`, padding:"2px 7px", borderRadius:99, letterSpacing:".06em" }}>
-            {n.matchMode === "any" ? "ANY MATCH" : "ALL MATCH"}
-          </span>
-          <span style={{ fontSize:13, fontWeight:700, color:C.muted, background:C.sectionBg, border:`1px solid ${C.innerBorder}`, padding:"2px 7px", borderRadius:99 }}>
-            {(n.rules || []).length} rule{(n.rules || []).length === 1 ? "" : "s"}
-          </span>
-        </div>
-      )}
-
-      {/* Input handle — triggers don't accept inbound connections.
-          Doubles as a drag SOURCE: pulling up from here and releasing on a node
-          above builds the same edge a forward drag would, so a connection can be
-          started from either end. */}
-      {/* ⚠ Positioned from inputCY(n) — the SAME function handlePos() draws every
-          inbound edge endpoint from. A literal here (it used to be
-          `INPUT_CY - 22`) would put the visible arrow somewhere the line does
-          not actually end. */}
+      {/* Input handle — triggers don't accept inbound connections. Doubles as
+          a drag SOURCE: pulling from here and releasing on a node builds the
+          same edge a forward drag would. Positioned from inputCY(n), the SAME
+          function handlePos() draws every inbound edge endpoint from. */}
       {n.type !== "trigger" && (
         <div
           data-handle="input"
@@ -770,150 +811,86 @@ const FlowNode = ({ n, selected, isDropTarget, onSelect, onStartDrag, onStartCon
           title="Drag from here to the step that should come before this one"
           style={{ position:"absolute", left:-(INPUT_HIT/2), top:inputCY(n) - INPUT_HIT/2, width:INPUT_HIT, height:INPUT_HIT, display:"flex", alignItems:"center", justifyContent:"center", background:"transparent", zIndex:6, cursor:"crosshair" }}
         >
-          {/* A round dot, centred on the left edge. The old shape was a 16x30
-              half-tab tucked into the top-left corner, which read as a piece of
-              the card's chrome rather than as the point a line arrives at. */}
-          <div className="fg-handle-dot" style={{ display:"flex", alignItems:"center", justifyContent:"center", width:INPUT_DOT, height:INPUT_DOT, borderRadius:"50%", background:"var(--c-surface, #fff)", border:`2px solid ${t.accent}`, color:t.accent, boxShadow:"0 1px 4px rgba(0,0,0,.14)", transition:"transform .12s", pointerEvents:"none" }}>
-            <svg width="11" height="11" viewBox="0 0 11 11" style={{ display:"block" }}>
-              <path d="M1.5 5.5 L8 5.5 M5.5 2.5 L8.5 5.5 L5.5 8.5" stroke={t.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-            </svg>
-          </div>
+          <div className="fg-handle-dot" style={dot(t.ink, false)}/>
         </div>
       )}
 
-      {/* Output handles.
-          Each dot sits inside a larger TRANSPARENT grab area centred on the very
-          same point, so the visible dot (and therefore handlePos(), which every
-          edge endpoint is drawn from) does not move — only the clickable region
-          grows. */}
-      {/* ── What the customer actually sees ──────────────────────────
-          A real WhatsApp bubble on the card, so you can read the message
-          without opening the step. The canvas previously showed only a type
-          label ("Text Message"), which told you nothing about what would be
-          sent — you had to open every node to review a flow. */}
-      {/* Every OTHER step gets the same bubble treatment, so the canvas reads
-          as one chat rather than message cards beside plain squares. Its
-          height is SUMMARY_H in nodeLayout — change one and change both, or
-          the first output row lands on top of this panel. */}
-      {hasSummaryPanel(n) && (
-        <div style={{ padding:"0 13px 8px" }}>
-          <div style={{
-            background:"var(--c-surfaceInner, #F5F5F0)",
-            border:`1px solid ${C.borderSubtle || C.cardBorder}`,
-            borderRadius:"3px 10px 10px 10px", padding:"6px 9px",
-            minHeight:34, display:"flex", alignItems:"center",
-          }}>
-            <div style={{
-              fontSize:13, lineHeight:1.35, color:C.text3,
-              display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical",
-              overflow:"hidden", wordBreak:"break-word",
-            }}>
-              {n.type === "trigger" ? getTriggerDisplay(n).sub
-                : n.type === "delay" ? `Waits ${n.waitValue || "10"} ${n.waitUnit || "minutes"} before continuing`
-                : n.type === "api" ? `${String(n.method || "GET").toUpperCase()} ${n.apiUrl || "(no URL set)"}`
-                : n.summary || n.sub || "Not configured yet"}
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* What the customer actually sees — the message bubble, sized to the
+          exact budget nodeLayout reserves (BODY_H), so the rows below it never
+          overlap it and never float away from it. */}
       {n.type === "message" && (() => {
         const chip = mediaChipFor(n);
         const tpl = n.messageMode !== "direct" && n.templateId
-          ? (whatsappTemplates || []).find(t => String(t.id) === String(n.templateId))
+          ? (whatsappTemplates || []).find(x => String(x.id) === String(n.templateId))
           : null;
         const body = bodyPreview(n) || (tpl ? String(tpl.body || "") : "");
         const empty = !body && !chip;
         return (
-          <div style={{ padding:"0 13px 8px" }}>
-            <div style={{
-              background:"var(--c-chatIncoming, #fff)",
-              border:`1px solid ${C.borderSubtle || C.cardBorder}`,
-              borderRadius:"3px 10px 10px 10px", padding:"7px 9px",
-              minHeight:44, display:"flex", flexDirection:"column", gap:4,
-              boxShadow:"0 1px 1px rgba(0,0,0,.05)",
-            }}>
-              {chip && (
-                <div style={{ fontSize:12, fontWeight:800, letterSpacing:".06em", textTransform:"uppercase",
-                  color:C.text5, fontFamily:"'DM Mono'" }}>{chip}</div>
-              )}
-              <div style={{
-                fontSize:13, lineHeight:1.42, color: empty ? C.text6 : C.text2,
-                fontStyle: empty ? "italic" : "normal",
-                display:"-webkit-box", WebkitLineClamp: chip ? 2 : 3, WebkitBoxOrient:"vertical",
-                overflow:"hidden", wordBreak:"break-word",
-              }}>
-                {body || (n.messageMode !== "direct" && !n.templateId ? "No template chosen yet" : "Nothing to send yet")}
-              </div>
+          <div style={{ ...bubble, top:headH(n), height:BODY_H - 8 }}>
+            {chip && <div style={{ fontSize:10.5, fontWeight:650, letterSpacing:".04em", textTransform:"uppercase", color:FS.muted, marginBottom:2 }}>{chip}</div>}
+            <div style={{ color: empty ? FS.muted : FS.text, fontStyle: empty ? "italic" : "normal", display:"-webkit-box", WebkitLineClamp: chip ? 2 : 3, WebkitBoxOrient:"vertical", overflow:"hidden", wordBreak:"break-word", whiteSpace:"pre-wrap" }}>
+              {body || (n.messageMode !== "direct" && !n.templateId ? "No template chosen yet" : "Nothing to send yet")}
             </div>
           </div>
         );
       })()}
 
+      {/* Every other step gets the same bubble treatment (SUMMARY_H budget). */}
+      {hasSummaryPanel(n) && (
+        <div style={{ ...bubble, top:headH(n), height:SUMMARY_H - 8, display:"flex", alignItems:"center", color:FS.text2 }}>
+          <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", minWidth:0 }}>
+            {n.type === "trigger" ? getTriggerDisplay(n).sub
+              : n.type === "delay" ? `Waits ${n.waitValue || "10"} ${n.waitUnit || "minutes"} before continuing`
+              : n.type === "api" ? `${String(n.method || "GET").toUpperCase()} ${n.apiUrl || "(no URL set)"}`
+              : n.summary || n.sub || "Not configured yet"}
+          </div>
+        </div>
+      )}
+
+      {/* An action step lists what it does, one surface row each (26px per
+          action — the extraBodyH budget). */}
+      {n.type === "action" && (n.actions || []).map((a, i) => (
+        <div key={a.id || i} style={{ position:"absolute", left:14, right:14, top:headH(n) + i * 26, height:22, borderRadius:8, background:FS.surface, fontSize:12, fontWeight:650, color:FS.text, display:"flex", alignItems:"center", gap:6, padding:"0 9px", boxSizing:"border-box", overflow:"hidden", whiteSpace:"nowrap" }}>
+          <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{a.kind}{a.field ? <span style={{ color:FS.muted }}> · {a.field}</span> : null}{a.value ? <span style={{ color:FS.muted }}> · {String(a.value)}</span> : null}</span>
+        </div>
+      ))}
+
       {/* ── Output rows ──────────────────────────────────────────────
           Every branchable thing the customer can do is its own labelled row
-          with its own connector at the RIGHT edge, so a wire is unambiguously
-          the one belonging to the label beside it.
-
-          This replaces anonymous dots spaced across the BOTTOM edge by
-          dividing a fixed width: at three buttons their labels overlapped, at
-          ten list rows they sat 22px apart, and none of them said which button
-          they belonged to. Geometry comes from nodeLayout(), the same function
-          handlePos() reads, so a row and its wire can never disagree. */}
+          with its own connector at the RIGHT edge. Geometry comes from
+          nodeLayout(), the same function handlePos() reads, so a row and its
+          wire can never disagree. A row with no connector yet shows a small
+          "+" (click it, or the row, to choose what happens next). */}
       {(() => {
         const L = nodeLayout(n);
         const wired = wiredHandles || new Set();
         const rows = L.rows.map((r, idx) => {
           const isSystem = r.kind === "system";
           const isWired = r.handle && wired.has(r.handle);
-          const tone = handleTone(r.handle);
-          const dotColor =
-            tone === "good" ? "var(--c-successText, #0F6E56)"
-            : tone === "bad" ? "var(--c-dangerText, #A32D2D)"
-            : tone === "warn" ? "var(--c-orangeText, #8A5A1B)"
-            : tone === "muted" ? C.muted
-            : t.accent;
+          const color = toneColor(handleTone(r.handle));
+          const dead = !r.handle;   // a URL / dialler / form-start button: shown, never branches
           return (
-            <div key={r.handle || `static:${r.label}`}
-              data-node-row
-              style={{ position:"absolute", left:0, right:0, top:r.top, height:r.h,
-                display:"flex", alignItems:"center", padding:"0 12px" }}
-            >
+            <div key={r.handle || `static:${idx}`} data-node-row style={{ position:"absolute", left:0, right:0, top:r.top, height:r.h }}>
               <div
                 onMouseDown={(e) => { if (r.handle && onRowClick) e.stopPropagation(); }}
                 onClick={(e) => { if (r.handle && onRowClick) { e.stopPropagation(); onRowClick(e, n.id, r.handle, r.label); } }}
                 title={r.handle
-                  ? `Click to choose what happens next, or drag the dot to an existing step`
+                  ? "Click to choose what happens next, or drag the dot to an existing step"
                   : "This button opens a link or dialler on the customer's phone — WhatsApp tells us nothing about it, so a flow cannot branch on it"}
                 style={{
-                  // Rows share the card's ONE surface — no pill fills, no second
-                  // tone. Structure comes from a hairline between rows and from
-                  // the numbering, which also keeps the card from reading as a
-                  // stack of generic chips.
-                  flex:1, minWidth:0, height:"100%", display:"flex", alignItems:"center", gap:9,
-                  padding:"0 2px",
-                  background:"transparent",
-                  border:"none",
-                  borderTop: idx === 0 ? "none" : `1px solid ${C.rowSep || C.divider}`,
-                  fontSize: isSystem ? 13 : 15,
-                  fontWeight: isSystem ? 600 : 650,
-                  fontFamily: isSystem ? "'DM Mono'" : "inherit",
-                  letterSpacing: isSystem ? ".03em" : 0,
-                  color: isSystem ? C.text5 : (r.handle ? C.text1 : C.text5),
+                  position:"absolute", left:14, right:14, top:3, bottom:3, borderRadius:10,
+                  background: isSystem ? "transparent" : FS.surface,
+                  display:"flex", alignItems:"center", gap:8, padding: isSystem ? "0 2px" : "0 10px",
+                  fontSize:12.5, fontWeight:650, color: isSystem || dead ? FS.muted : FS.text,
                   cursor: r.handle && onRowClick ? "pointer" : "default",
-                  opacity: r.handle ? 1 : 0.7,
                 }}
               >
-                {r.kind === "button" && (
-                  <span style={{ fontFamily:"'DM Mono'", fontSize:13, fontWeight:700, color:C.text5, flexShrink:0, minWidth:9 }}>
-                    {r.handle ? String(parseInt(r.handle.slice(4), 10) + 1) : "\u2014"}
-                  </span>
+                {dead && <span style={{ color:FS.muted, display:"inline-flex", flexShrink:0 }}>{IC.link(12)}</span>}
+                <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.label}</span>
+                {r.handle && !isWired && (
+                  <span title="Add the next step" style={{ width:20, height:20, borderRadius:"50%", background:t.soft, color:t.ink, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{IC.plus(11)}</span>
                 )}
-                <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                  {r.label}
-                </span>
               </div>
-
               {r.handle && (
                 <div
                   data-handle-kind="output"
@@ -921,71 +898,46 @@ const FlowNode = ({ n, selected, isDropTarget, onSelect, onStartDrag, onStartCon
                   data-node-id={n.id}
                   className="fg-handle"
                   onMouseDown={(e) => { e.stopPropagation(); onStartConnect(e, n.id, r.handle, "forward"); }}
-                  onClick={(e) => {
-                    // A click that was not a drag opens the step picker.
-                    // Dragging still works; precision is now optional.
-                    if (!isWired && onRowClick) { e.stopPropagation(); onRowClick(e, n.id, r.handle, r.label); }
-                  }}
-                  onMouseEnter={() => setHoverHandle(r.handle)}
-                  onMouseLeave={() => setHoverHandle(null)}
+                  onClick={(e) => { if (!isWired && onRowClick) { e.stopPropagation(); onRowClick(e, n.id, r.handle, r.label); } }}
                   style={{ position:"absolute", right:-(HANDLE_HIT/2), top:"50%", transform:"translateY(-50%)",
                     width:HANDLE_HIT, height:Math.min(HANDLE_HIT, r.h), display:"flex", alignItems:"center",
                     justifyContent:"center", background:"transparent", zIndex:7, cursor:"crosshair" }}
                 >
-                  {hoverHandle === r.handle && !isWired && (
-                    <span style={{ position:"absolute", left:22, top:"50%", transform:"translateY(-50%)",
-                      whiteSpace:"nowrap", fontSize:12, fontWeight:700, fontFamily:"'DM Mono'",
-                      letterSpacing:".04em", color:C.text4, background:"var(--c-surface, #fff)",
-                      border:`1px solid ${C.cardBorder}`, borderRadius:5, padding:"2px 7px",
-                      boxShadow:"0 2px 6px rgba(0,0,0,.10)", pointerEvents:"none", zIndex:9 }}>
-                      Add step
-                    </span>
-                  )}
-                  {/* A filled dot means wired, a hollow ring means declared but
-                      not yet connected — so an unfinished flow is visible at a
-                      glance instead of needing every node opened. */}
-                  <div className="fg-handle-dot" style={{ width:HANDLE_DOT, height:HANDLE_DOT, borderRadius:"50%",
-                    background: isWired ? dotColor : "var(--c-surface, #fff)",
-                    border:`2px solid ${isWired ? dotColor : C.cardBorder}`,
-                    boxShadow:"0 1px 2px rgba(0,0,0,.10)", transition:"transform .12s, border-color .12s",
-                    pointerEvents:"none" }}/>
+                  {/* A filled dot means wired, a hollow ring means not yet connected. */}
+                  <div className="fg-handle-dot" style={dot(color, isWired)}/>
                 </div>
               )}
             </div>
           );
         });
 
-        // AI Agent model/tool sockets stay SIDE handles: they are click-to-pick
-        // resource pickers, not conversational branches, and must never be
-        // draggable connection sources.
+        // AI Agent model/tool sockets stay SIDE handles: click-to-pick resource
+        // pickers, not conversational branches, never draggable connection sources.
         if (n.type === "ai_agent") {
-          ["model", "tool"].forEach((h) => {
-            const filled = h === "model" ? n.modelRef : (n.toolRefs?.length);
-            let labelText = h === "model" ? "Model" : "Tool";
-            if (h === "model" && n.modelRef?.label) labelText = n.modelRef.label;
-            if (h === "tool" && Array.isArray(n.toolRefs) && n.toolRefs.length) {
+          ["model", "tool"].forEach((hk) => {
+            const filled = hk === "model" ? n.modelRef : (n.toolRefs?.length);
+            let labelText = hk === "model" ? "Model" : "Tool";
+            if (hk === "model" && n.modelRef?.label) labelText = n.modelRef.label;
+            if (hk === "tool" && Array.isArray(n.toolRefs) && n.toolRefs.length) {
               labelText = n.toolRefs.length === 1 ? n.toolRefs[0].label : `${n.toolRefs.length} tools`;
             }
             rows.push(
-              <div key={h}
-                data-handle-kind="output" data-handle-which={h} data-node-id={n.id}
+              <div key={hk}
+                data-handle-kind="output" data-handle-which={hk} data-node-id={n.id}
                 className="fg-handle"
-                title={h === "model" ? "Choose a model" : "Choose tools"}
+                title={hk === "model" ? "Choose a model" : "Choose tools"}
                 onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); onPickAgentResource && onPickAgentResource(e, n.id, h); }}
-                style={{ position:"absolute", ...(h === "model" ? { left:-(HANDLE_HIT/2) } : { right:-(HANDLE_HIT/2) }),
+                onClick={(e) => { e.stopPropagation(); onPickAgentResource && onPickAgentResource(e, n.id, hk); }}
+                style={{ position:"absolute", ...(hk === "model" ? { left:-(HANDLE_HIT/2) } : { right:-(HANDLE_HIT/2) }),
                   top:"50%", transform:"translateY(-50%)", width:HANDLE_HIT, height:HANDLE_HIT,
                   display:"flex", alignItems:"center", justifyContent:"center",
                   background:"transparent", zIndex:7, cursor:"pointer" }}
               >
-                <div className="fg-handle-dot" style={{ position:"relative", width:HANDLE_DOT, height:HANDLE_DOT, borderRadius:"50%",
-                  background: filled ? NT.ai_agent.accent : "var(--c-surface, #fff)",
-                  border:`2px solid ${NT.ai_agent.accent}`, boxShadow:"0 1px 2px rgba(0,0,0,.10)",
-                  transition:"transform .12s, border-color .12s", pointerEvents:"none" }}>
-                  <span style={{ position:"absolute", ...(h === "model" ? { right:18 } : { left:18 }), top:"50%",
-                    transform:"translateY(-50%)", fontSize:13, fontWeight:700, color:NT.ai_agent.accent,
-                    whiteSpace:"nowrap", fontFamily:"'DM Mono'", letterSpacing:".06em", maxWidth:90,
-                    overflow:"hidden", textOverflow:"ellipsis", background:"var(--c-surface, #fff)",
+                <div className="fg-handle-dot" style={{ ...dot(NT.ai_agent.ink, !!filled), position:"relative", pointerEvents:"none" }}>
+                  <span style={{ position:"absolute", ...(hk === "model" ? { right:18 } : { left:18 }), top:"50%",
+                    transform:"translateY(-50%)", fontSize:11.5, fontWeight:700, color:NT.ai_agent.ink,
+                    whiteSpace:"nowrap", fontFamily:MONO, maxWidth:90,
+                    overflow:"hidden", textOverflow:"ellipsis", background:FS.nodeBg,
                     padding:"0 3px", borderRadius:3 }}>
                     {labelText}
                   </span>
@@ -999,8 +951,6 @@ const FlowNode = ({ n, selected, isDropTarget, onSelect, onStartDrag, onStartCon
     </div>
   );
 };
-
-
 /* ── SVG connectors between nodes ── */
 /**
  * Orthogonal left-to-right route: out of the source's RIGHT edge, along a
@@ -1053,149 +1003,78 @@ export const edgePath = (x1, y1, x2, y2, lane = 0) => {
   ].join(' ');
 };
 
+// One quiet line colour for plain and button edges, the way the Social builder
+// draws them; only a semantic branch (matched / not matched / no match) keeps a
+// tint, and a timeout is dashed rather than coloured. The edge under the
+// pointer turns the brand colour.
 const edgeColorFor = (handle) => {
   switch (handleTone(handle)) {
-    case 'good':  return 'var(--c-successText, #0F6E56)';
-    case 'bad':   return 'var(--c-dangerText, #A32D2D)';
-    case 'warn':  return 'var(--c-orangeText, #8A5A1B)';
-    case 'muted': return 'var(--c-t6, #7B7B7B)';
-    case 'brand': return 'var(--c-brand, #0F6E56)';
-    // ⚠ NOT a border token. This drew every plain edge in borderStrong
-    // (#D5D5D0), so the commonest connector on the canvas — the one from the
-    // trigger to the first step — was a near-invisible hairline while the
-    // branch edges, which get semantic colours, read fine. That asymmetry is
-    // what "the flow lines are too thin, we cannot see them" describes.
-    // (The old fallback said #9C9B92, which was not even the token's value.)
-    default:      return 'var(--c-edgeLine, #8A897F)';
+    case 'good': return FS.green;
+    case 'bad':  return FS.err;
+    case 'warn': return FS.amber;
+    default:     return FS.edge;
   }
 };
+const EDGE_TONES = { good:FS.green, bad:FS.err, warn:FS.amber, plain:FS.edge, hover:FS.primary };
+const edgeToneOf = (handle) => { const t = handleTone(handle); return t === "good" || t === "bad" || t === "warn" ? t : "plain"; };
 
-const Connectors = ({ nodes, edges, ghost, onEdgeHover }) => {
+const Connectors = ({ nodes, edges, ghost, hovered, onEdgeHover }) => {
   const map = Object.fromEntries(nodes.map(n=>[n.id,n]));
   return (
     <svg style={{ position:"absolute", top:0, left:0, width:"100%", height:"100%", overflow:"visible", pointerEvents:"none" }}>
       <defs>
-        {/* markerWidth is in STROKE-WIDTHS, not pixels, so a 6 that looked right
-            against a 2px line renders an oversized head against a 3px one.
-            Sized to 5 to keep the arrow roughly the same absolute size now that
-            the line is thicker. */}
-        {["good","bad","warn","muted","brand","plain"].map(tone => (
-          <marker key={tone} id={`arr-${tone}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
-            <path d="M0,0 L10,5 L0,10 z" fill={edgeColorFor(
-              tone === "good" ? "paid" : tone === "bad" ? "unpaid" : tone === "warn" ? "nomatch"
-              : tone === "muted" ? "timeout" : tone === "brand" ? "btn:0" : "default")}/>
+        {/* markerWidth is in STROKE-WIDTHS: 6 × a 2px line = a 12px arrowhead. */}
+        {Object.entries(EDGE_TONES).map(([tone, color]) => (
+          <marker key={tone} id={`arr-${tone}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill={color}/>
           </marker>
         ))}
-        <marker id="arrGhost" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
-          <path d="M0,0 L10,5 L0,10 z" fill={C.red}/>
+        <marker id="arrGhost" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill={FS.primary}/>
         </marker>
       </defs>
       {edges.map((e,i)=>{
         const a=map[e.from]; const b=map[e.to]; if (!a||!b) return null;
-        const p1 = handlePos(a, "output", e.fromHandle || "default");
-        const p2 = handlePos(b, "input");
         const handle = e.fromHandle || "default";
+        const p1 = handlePos(a, "output", handle);
+        const p2 = handlePos(b, "input");
         // Lane index = this branch's ROW on the source, so every edge leaving
         // one node gets its own vertical lane instead of them all sharing one.
         const lane = Math.max(0, nodeRows(a).findIndex(r => r.handle === handle));
         const d = edgePath(p1.x, p1.y, p2.x, p2.y, lane);
-        const color = edgeColorFor(handle);
-        // The label is read LIVE from the source node's own row, never stored on
-        // the edge — a stored copy goes stale the instant the button is renamed
-        // (respond.io's "Branch 1..9" problem).
-        const srcRow = nodeRows(a).find(r => r.handle === handle);
-        const label = handle === "default" ? "" : (srcRow ? srcRow.label : handle);
-        // The pill sits just BEFORE the target's input ("how do I reach this
-        // step?"), which is where the eye lands travelling left to right. When
-        // the two cards are too close for it to fit, fall back to the source's
-        // own stub so the label never overlaps a card.
-        const roomBefore = p2.x - p1.x > 120;
-        const mx = roomBefore ? p2.x - 34 : p1.x + 40;
-        const my = roomBefore ? p2.y - 14 : p1.y - 13;
+        const isHover = hovered === i;
+        const color = isHover ? FS.primary : edgeColorFor(handle);
         const dashed = handle === "timeout";
         return <g key={i}>
-          <path d={d} fill="none" stroke={color} strokeWidth={3} strokeLinecap="round"
-                strokeDasharray={dashed ? "5 4" : undefined} markerEnd={`url(#arr-${handleTone(handle)})`}/>
+          <path d={d} fill="none" stroke={color} strokeWidth={isHover ? 2.5 : 2} strokeLinecap="round"
+                strokeDasharray={dashed ? "5 4" : undefined} markerEnd={`url(#arr-${isHover ? "hover" : edgeToneOf(handle)})`}/>
           <path d={d} fill="none" stroke={color} strokeWidth={18} strokeOpacity={0}
                 style={{ pointerEvents:"stroke", cursor:"pointer" }}
                 onMouseEnter={() => onEdgeHover && onEdgeHover(i)}
                 onMouseLeave={() => onEdgeHover && onEdgeHover(null)}/>
-          {/* Room test, not a magic number. The pill sits 30px above the
-              target, so it needs the source row to be at least that far up —
-              a fixed ">70px apart" silently swallowed every label the moment
-              the cards grew taller with the message bubble. */}
-          {label && (() => {
-            // ⚠ The pill is sized from the TEXT, so both must come from the
-            // same font size. It used to hardcode `label.length * 6.1` — the
-            // per-character advance of DM Mono at 10.5px — and when the type
-            // scale moved the label to 13px the text became ~28% wider than
-            // the box drawn for it and spilled over the target card. Derived
-            // now, so the next size change cannot reintroduce it.
-            const FS = 13;
-            const CHAR_W = FS * 0.6;          // DM Mono advance is 0.6em
-            const PAD_X = 10;
-            const MAX_W = 190;
-            const maxChars = Math.floor((MAX_W - PAD_X) / CHAR_W);
-            const shown = label.length > maxChars ? label.slice(0, maxChars - 1) + "\u2026" : label;
-            const w = Math.min(MAX_W, PAD_X + shown.length * CHAR_W);
-            const h = FS + 9;
-            return (
-              <g transform={`translate(${mx}, ${my})`} style={{ pointerEvents:"none" }}>
-                <rect x={-w / 2} y={-h / 2} rx={6} width={w} height={h}
-                      fill="var(--c-surface, #fff)" stroke={color} strokeOpacity={.35}/>
-                <text x={0} y={FS * 0.36} fontSize={FS} fontWeight={700} fill={color} textAnchor="middle"
-                      fontFamily="'DM Mono', monospace">
-                  {shown}
-                </text>
-              </g>
-            );
-          })()}
         </g>;
       })}
       {ghost && (
         <g>
-          <path d={edgePath(ghost.x1, ghost.y1, ghost.x2, ghost.y2)} stroke={C.red} strokeWidth="2.5" strokeDasharray="6 5" fill="none" markerEnd="url(#arrGhost)"/>
+          <path d={edgePath(ghost.x1, ghost.y1, ghost.x2, ghost.y2)} stroke={FS.primary} strokeWidth="2" strokeDasharray="6 5" fill="none" markerEnd="url(#arrGhost)"/>
           {/* The dot marks the FIXED end you started from — which on a reverse
               drag is the arrow end, since the cursor is playing the source. */}
-          <circle cx={ghost.reverse ? ghost.x2 : ghost.x1} cy={ghost.reverse ? ghost.y2 : ghost.y1} r="5" fill={C.brandBright}/>
+          <circle cx={ghost.reverse ? ghost.x2 : ghost.x1} cy={ghost.reverse ? ghost.y2 : ghost.y1} r="5" fill={FS.primary}/>
         </g>
       )}
     </svg>
   );
 };
 
-const EdgePlus = ({ x, y, onClick, withConnector=false }) => (
-  <div data-testid={withConnector ? "append-plus" : "edge-plus"} onClick={onClick} style={{ position:"absolute", left:x, top:y, transform:"translate(-50%,-50%)", zIndex:8, cursor:"pointer" }}>
-    <div style={{ width:26, height:26, borderRadius:"50%", background:"var(--c-surface, #fff)", border:`1.5px solid ${C.red}`, color:C.red, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:700, boxShadow:"0 2px 6px rgba(0,0,0,.12)", transition:"all .15s", lineHeight:1 }}>
-      {IC.plus(14)}
-    </div>
-    {withConnector && (
-      // Purely decorative stub joining this + back to the output handle on
-      // its LEFT. It MUST NOT take pointer events: it reaches the handle's
-      // exact centre, and because this wrapper sits at zIndex 8 (above the
-      // handle's 6) it would otherwise swallow the click on the dead centre of
-      // the very dot you are trying to grab.
-      <div style={{ position:"absolute", top:12, left:-34, width:34, height:2, background:C.red, zIndex:-1, pointerEvents:"none" }}/>
-    )}
-  </div>
-);
-
+// The one control an edge carries, shown only while you point at it: remove.
+// Connecting is the handle's own job.
 const EdgeDelete = ({ x, y, onClick }) => (
   <div data-testid="edge-delete" onClick={onClick} title="Remove this connection" style={{ position:"absolute", left:x, top:y, transform:"translate(-50%,-50%)", zIndex:8, cursor:"pointer" }}>
-    <div style={{ width:24, height:24, borderRadius:"50%", background:C.redBg, border:`1.5px solid ${C.red}`, color:C.red, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, fontWeight:700, boxShadow:"0 2px 6px rgba(0,0,0,.14)", transition:"all .15s" }}>
+    <div style={{ width:24, height:24, borderRadius:"50%", background:FS.nodeBg, boxShadow:FS.card, color:FS.err, display:"flex", alignItems:"center", justifyContent:"center" }}>
       {IC.x(12)}
     </div>
   </div>
 );
-
-const NodeActions = ({ x, y, onDuplicate, onDelete }) => (
-  <div style={{ position:"absolute", left:x, top:y, transform:"translate(-50%,-100%)", zIndex:10, display:"flex", gap:4 }}>
-    <button onClick={(e)=>{e.stopPropagation(); onDuplicate();}} style={{ background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:7, width:28, height:28, display:"flex", alignItems:"center", justifyContent:"center", color:C.text3, cursor:"pointer", boxShadow:"0 2px 6px rgba(0,0,0,.08)" }}>{IC.copy(13)}</button>
-    <button onClick={(e)=>{e.stopPropagation(); onDelete();}} style={{ background:"var(--c-surface, #fff)", border:`1px solid ${C.redBg}`, borderRadius:7, width:28, height:28, display:"flex", alignItems:"center", justifyContent:"center", color:C.red, cursor:"pointer", boxShadow:"0 2px 6px rgba(0,0,0,.08)" }}>{IC.trash(13)}</button>
-  </div>
-);
-
-
 /* ── AI Agent resource catalogs (models & tools — placeholders) ── */
 const AGENT_MODELS = [
   { id: "chatgpt", label: "ChatGPT",  hint: "OpenAI GPT models" },
@@ -1242,7 +1121,7 @@ const AgentResourcePicker = ({ x, y, kind, selectedIds = [], onPick, onClose, mo
           <button key={opt.id} onClick={()=>onPick(opt)} style={{
             width:"100%", padding:"8px 9px", background: isSel ? C.sectionBg : "transparent",
             border:`1px solid ${isSel ? C.cardBorder : "transparent"}`, borderRadius:8, cursor:"pointer",
-            textAlign:"left", display:"flex", alignItems:"center", gap:10, fontFamily:"'DM Sans'", marginBottom:2,
+            textAlign:"left", display:"flex", alignItems:"center", gap:10, fontFamily:FONT, marginBottom:2,
           }}
             onMouseEnter={(e)=>{ if(!isSel) e.currentTarget.style.background="var(--c-xf8f7f2, #F8F7F2)"; }}
             onMouseLeave={(e)=>{ if(!isSel) e.currentTarget.style.background="transparent"; }}
@@ -1266,75 +1145,86 @@ const AgentResourcePicker = ({ x, y, kind, selectedIds = [], onPick, onClose, mo
   );
 };
 
-/* ── Node Picker (add node between / append) ── */
-const NodePicker = ({ x, y, onPick, onClose, mode, groups = [] }) => {
+/* ── "Choose next step" menu (append / insert, or link an existing step) ── */
+const MENU_ROW = { display:"flex", alignItems:"center", gap:10, width:"100%", padding:"8px 10px", border:"none", background:"transparent", cursor:"pointer", fontFamily:FONT, textAlign:"left", borderRadius:10 };
+const NodePicker = ({ x, y, onPick, onClose, mode, groups = [], existing = [], onLinkExisting }) => {
   const [q, setQ] = useState("");
-  const [activeG, setActiveG] = useState(null);
+  const [pickExisting, setPickExisting] = useState(false);
   const pickerRef = useRef(null);
   const [pos, setPos] = useState({ x, y });
   const visibleGroups = groups.filter(g => g.title !== "Triggers");
-  const hasSearch = q.trim().length > 0;
 
   useLayoutEffect(() => {
     const el = pickerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const MARGIN = 12;
-    let nx = x;
-    let ny = y;
-    // keep inside right edge
-    if (nx + rect.width > vw - MARGIN) nx = vw - rect.width - MARGIN;
-    // keep inside left edge
-    if (nx < MARGIN) nx = MARGIN;
-    // keep inside bottom edge — if it would overflow, shift up
-    if (ny + rect.height > vh - MARGIN) ny = vh - rect.height - MARGIN;
-    // keep inside top edge
-    if (ny < MARGIN) ny = MARGIN;
+    const vw = window.innerWidth, vh = window.innerHeight, M = 12;
+    let nx = x, ny = y;
+    if (nx + rect.width > vw - M) nx = vw - rect.width - M;
+    if (nx < M) nx = M;
+    if (ny + rect.height > vh - M) ny = vh - rect.height - M;
+    if (ny < M) ny = M;
     setPos({ x: nx, y: ny });
-  }, [x, y, activeG, q]);
+  }, [x, y, q, pickExisting]);
 
   return (
-    <div ref={pickerRef} onClick={(e) => e.stopPropagation()} style={{ position:"fixed", left:pos.x, top:pos.y, zIndex:70, background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:12, padding:6, boxShadow:"0 12px 36px rgba(0,0,0,.14)", width:220, maxHeight:"70vh", overflowY:"auto" }}>
-      <div style={{ fontSize:13, fontWeight:700, color:C.muted, letterSpacing:".1em", textTransform:"uppercase", padding:"4px 8px 6px" }}>{mode==="append"?"Add next step":"Insert block"}</div>
-      <div style={{ padding:"0 8px 6px" }}>
-        <Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search blocks…" style={{ padding:"6px 9px", fontSize:14 }}/>
+    <div ref={pickerRef} data-testid="node-picker" onClick={(e) => e.stopPropagation()} style={{ position:"fixed", left:pos.x, top:pos.y, zIndex:70, width:272, background:FS.nodeBg, borderRadius:16, boxShadow:`${FS.card}, var(--fc-shadow-lg)`, padding:8, fontFamily:FONT }}>
+      <div style={{ display:"flex", alignItems:"center", padding:"6px 8px 8px" }}>
+        <b style={{ flex:1, fontSize:14, color:FS.text }}>{pickExisting ? "Select existing step" : mode === "insert" ? "Insert a step" : "Choose next step"}</b>
+        <IconBtn title="Close" onClick={onClose} style={{ width:26, height:26 }}>{IC.x(13)}</IconBtn>
       </div>
-      {visibleGroups.map(g => {
-        const items = g.items.filter(i => !q || i.name.toLowerCase().includes(q.toLowerCase()));
-        if (!items.length) return null;
-        const isOpen = hasSearch ? true : activeG === g.title;
-        return (
-          <div key={g.title} style={{ marginBottom:4 }}>
-            <div onClick={()=>setActiveG(prev => prev === g.title ? null : g.title)} style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 8px", cursor:"pointer", borderRadius:6, transition:"background .12s" }} onMouseEnter={e=>e.currentTarget.style.background="var(--c-xf8f7f2, #F8F7F2)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-              <span style={{ width:6, height:6, borderRadius:99, background:g.color }}/>
-              <span style={{ fontSize:13, color:C.text4, fontWeight:700, letterSpacing:".08em", textTransform:"uppercase", flex:1 }}>{g.title}</span>
-              <span style={{ fontSize:13, fontWeight:600, color:C.muted, background:C.sectionBg, borderRadius:99, padding:"1px 6px", minWidth:18, textAlign:"center" }}>{items.length}</span>
-              <span style={{ color:C.ghost, transform:isOpen?"rotate(180deg)":"rotate(0)", transition:"transform .15s" }}>{IC.cD(10)}</span>
-            </div>
-            {isOpen && items.map(it => {
-              const t = NT[it.type] || NT_FALLBACK;
+      {!pickExisting && (
+        <div style={{ padding:"0 4px 6px" }}>
+          <Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search steps…" autoFocus style={{ padding:"7px 10px", fontSize:13 }}/>
+        </div>
+      )}
+      <div style={{ maxHeight:400, overflowY:"auto" }}>
+        {!pickExisting ? (
+          <>
+            {visibleGroups.map(g => {
+              const items = g.items.filter(i => !q || i.name.toLowerCase().includes(q.toLowerCase()));
+              if (!items.length) return null;
               return (
-                <button data-testid="node-picker-item" key={it.name} onClick={()=>onPick(it)} style={{
-                  width:"100%", padding:"7px 9px", background:"transparent", border:"1px solid transparent", borderRadius:7, cursor:"pointer", textAlign:"left",
-                  display:"flex", alignItems:"center", gap:8, fontSize:14, fontWeight:600, color:C.text2, fontFamily:"'DM Sans'",
-                }}>
-                  <span style={{ width:22, height:22, borderRadius:6, background:t.bg, color:t.color, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{it.icon(13)}</span>
-                  <span>{it.name}</span>
-                </button>
+                <div key={g.title}>
+                  <div style={{ fontSize:10.5, color:FS.muted, fontWeight:650, letterSpacing:".04em", textTransform:"uppercase", padding:"8px 10px 2px" }}>{g.title}</div>
+                  {items.map(it => {
+                    const t = NT[it.type] || NT_FALLBACK;
+                    return (
+                      <button data-testid="node-picker-item" key={it.name} type="button" className="fg-menu-row" onClick={()=>onPick(it)} style={MENU_ROW}>
+                        <span style={{ width:30, height:30, borderRadius:9, background:t.soft, color:t.ink, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{it.icon(15)}</span>
+                        <span style={{ minWidth:0 }}>
+                          <span style={{ display:"block", fontSize:13.5, fontWeight:650, color:FS.text }}>{it.name}</span>
+                          <span style={{ display:"block", fontSize:11.5, color:FS.muted, lineHeight:1.3 }}>{it.desc}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               );
             })}
-          </div>
-        );
-      })}
-      <div style={{ borderTop:`1px solid ${C.rowDiv}`, margin:"4px 0" }}/>
-      <button onClick={onClose} style={{ width:"100%", padding:"6px 10px", background:"transparent", border:"none", cursor:"pointer", textAlign:"center", fontSize:14, color:C.muted, fontWeight:600 }}>Cancel</button>
+            {existing.length > 0 && onLinkExisting && (
+              <button type="button" className="fg-menu-row" onClick={()=>setPickExisting(true)} style={{ ...MENU_ROW, marginTop:4, fontSize:13.5, fontWeight:650, color:FS.text }}>
+                <span style={{ width:30, height:30, borderRadius:9, background:FS.surface2, color:FS.text2, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{IC.link(14)}</span>
+                Select existing step
+              </button>
+            )}
+          </>
+        ) : existing.map(n => {
+          const t = NT[n.type] || NT_FALLBACK;
+          return (
+            <button key={n.id} type="button" className="fg-menu-row" onClick={()=>onLinkExisting(n.id)} style={MENU_ROW}>
+              <span style={{ width:30, height:30, borderRadius:9, background:t.soft, color:t.ink, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{t.icon(14)}</span>
+              <span style={{ minWidth:0 }}>
+                <span style={{ display:"block", fontSize:13, fontWeight:650, color:FS.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{n.title || t.label}</span>
+                <span style={{ display:"block", fontSize:11.5, color:FS.muted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{bodyPreview(n) || n.sub || ""}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 };
-
-
 /* ── Block Library (left sidebar of builder) ── */
 const BLOCK_GROUPS = [
   // DERIVED from TRIGGER_KINDS — never a second hand-kept list. A library item
@@ -1425,48 +1315,41 @@ const BLOCK_GROUPS = [
   // would have shipped a control that silently never fires (anti-pattern #20).
 ];
 
-const BlockLibrary = ({ onAddBlock }) => {
-  // Derived from BLOCK_GROUPS, not a hand-kept copy — a group added or removed
-  // above must not need a second edit here to open by default (anti-pattern #43).
-  const [openG, setOpenG] = useState(() =>
-    Object.fromEntries(BLOCK_GROUPS.map(g => [g.title, true])));
+/* ── Block library — a floating panel over the canvas, closed by default ──
+   The Social builder has no permanent sidebar: steps are added from the "+"
+   on a row. This panel stays for dropping an unconnected block (or a second
+   trigger) and opens from the top bar's "Blocks" button. */
+const BlockLibrary = ({ onAddBlock, onClose }) => {
   const [q, setQ] = useState("");
   return (
-    <aside style={{ width:236, borderRight:`1px solid ${C.cardBorder}`, background:"var(--c-surfaceInner, #FAFAF7)", display:"flex", flexDirection:"column", flexShrink:0 }}>
-      <div style={{ padding:"14px 14px 10px", borderBottom:`1px solid ${C.cardBorder}` }}>
-        <div style={{ fontSize:13, color:C.muted, fontWeight:700, letterSpacing:".1em", textTransform:"uppercase", marginBottom:6 }}>Block Library</div>
-        <div style={{ position:"relative" }}>
-          <span style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)", color:C.ph }}>{IC.search(13)}</span>
-          <Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search blocks…" style={{ paddingLeft:30, padding:"7px 10px 7px 30px", fontSize:14}}/>
-        </div>
-        <div style={{ fontSize:13, color:C.text5, marginTop:8, lineHeight:1.4, fontWeight:500 }}>Click any block to add it to the canvas</div>
+    <aside data-testid="block-library" style={{ position:"absolute", left:10, top:10, bottom:10, width:264, zIndex:10, background:FS.nodeBg, borderRadius:16, boxShadow:FS.card, display:"flex", flexDirection:"column", overflow:"hidden", fontFamily:FONT }}>
+      <div style={{ display:"flex", alignItems:"center", gap:8, padding:"12px 12px 8px" }}>
+        <b style={{ flex:1, fontSize:14, color:FS.text }}>Blocks</b>
+        <IconBtn title="Close" onClick={onClose} style={{ width:28, height:28 }}>{IC.x(13)}</IconBtn>
       </div>
-      <div style={{ flex:1, overflowY:"auto", padding:"10px 6px" }}>
+      <div style={{ padding:"0 12px 8px" }}>
+        <Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search blocks…" style={{ padding:"7px 10px", fontSize:13 }}/>
+      </div>
+      <div style={{ flex:1, overflowY:"auto", padding:"0 6px 8px" }}>
         {BLOCK_GROUPS.map(g => {
           const items = g.items.filter(i => !q || i.name.toLowerCase().includes(q.toLowerCase()));
           if (!items.length) return null;
-          const isOpen = openG[g.title] !== false;
           return (
-            <div key={g.title} style={{ marginBottom:8 }}>
-              <div onClick={()=>setOpenG({ ...openG, [g.title]: !isOpen })} style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 10px", cursor:"pointer" }}>
-                <span style={{ width:6, height:6, borderRadius:99, background:g.color }}/>
-                <span style={{ fontSize:13, color:C.text4, fontWeight:700, letterSpacing:".08em", textTransform:"uppercase", flex:1 }}>{g.title}</span>
-                <span style={{ color:C.ghost, transform:isOpen?"rotate(180deg)":"rotate(0)", transition:"transform .15s" }}>{IC.cD(10)}</span>
-              </div>
-              {isOpen && items.map(it => {
+            <div key={g.title}>
+              <div style={{ fontSize:10.5, color:FS.muted, fontWeight:650, letterSpacing:".04em", textTransform:"uppercase", padding:"8px 10px 2px" }}>{g.title}</div>
+              {items.map(it => {
                 const t = NT[it.type] || NT_FALLBACK;
                 return (
-                  <button data-testid="block-library-item" key={it.name} title={`Click to add "${it.name}" to the canvas · ${it.desc}`}
+                  <button data-testid="block-library-item" key={it.name} type="button" className="fg-menu-row" title={`Click to add "${it.name}" to the canvas · ${it.desc}`}
                     draggable
                     onDragStart={(e)=>{ e.dataTransfer.setData("blockType", JSON.stringify(it)); }}
                     onClick={(e)=>onAddBlock && onAddBlock(it, e)}
-                    style={{ background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:8, padding:"7px 9px", margin:"3px 4px", cursor:"pointer", display:"flex", alignItems:"center", gap:8, transition:"all .12s", width:"calc(100% - 8px)", textAlign:"left", fontFamily:"'DM Sans'" }}>
-                    <div style={{ width:22, height:22, borderRadius:6, background:t.bg, color:t.color, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{it.icon(13)}</div>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:14, fontWeight:600, color:C.text2, fontFamily:"'DM Sans'" }}>{it.name}</div>
-                      <div style={{ fontSize:13, color:C.text5, marginTop:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{it.desc}</div>
-                    </div>
-                    <span style={{ color:C.brand, opacity:0.6, flexShrink:0 }}>{IC.plus(12)}</span>
+                    style={MENU_ROW}>
+                    <span style={{ width:30, height:30, borderRadius:9, background:t.soft, color:t.ink, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{it.icon(15)}</span>
+                    <span style={{ minWidth:0, flex:1 }}>
+                      <span style={{ display:"block", fontSize:13.5, fontWeight:650, color:FS.text }}>{it.name}</span>
+                      <span style={{ display:"block", fontSize:11.5, color:FS.muted, lineHeight:1.3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{it.desc}</span>
+                    </span>
                   </button>
                 );
               })}
@@ -1474,11 +1357,10 @@ const BlockLibrary = ({ onAddBlock }) => {
           );
         })}
       </div>
+      <div style={{ padding:"8px 14px 12px", fontSize:11.5, color:FS.muted, lineHeight:1.4, boxShadow:`inset 0 1px 0 ${FS.surface2}` }}>Click a block to drop it on the canvas. It joins the running order once it is wired to a step.</div>
     </aside>
   );
 };
-
-
 /* ── Settings Panel content for each node type ── */
 /**
  * WhatsApp text formatting, as the customer will actually see it.
@@ -1495,7 +1377,7 @@ const renderWaText = (raw) => {
   while ((m = re.exec(src)) !== null) {
     if (m.index > last) out.push(src.slice(last, m.index));
     const tok = m[0];
-    if (tok.startsWith("```")) out.push(<code key={k++} style={{ fontFamily:"'DM Mono'", fontSize:"0.94em" }}>{tok.slice(3, -3)}</code>);
+    if (tok.startsWith("```")) out.push(<code key={k++} style={{ fontFamily:MONO, fontSize:"0.94em" }}>{tok.slice(3, -3)}</code>);
     else if (tok[0] === "*") out.push(<b key={k++}>{tok.slice(1, -1)}</b>);
     else if (tok[0] === "_") out.push(<i key={k++}>{tok.slice(1, -1)}</i>);
     else out.push(<s key={k++}>{tok.slice(1, -1)}</s>);
@@ -1528,6 +1410,7 @@ const StepPreview = ({ node, templates = [] }) => {
   let actions = [];
   if (direct && dt === "quick_reply") actions = (dd.buttons || []).map((b, i) => ({ label: buttonLabel(b, i) }));
   else if (direct && dt === "cta_url") actions = [{ label: dd.button_text || "Open link", link: true }];
+  else if (direct && dt === "flow") actions = [{ label: dd.button_text || "Start", link: true }];
   else if (direct && dt === "location_request") actions = [{ label: "Send location", link: true }];
   else if (!direct && Array.isArray(tpl?.buttons)) actions = tpl.buttons.map((b, i) => ({ label: buttonLabel(b, i), link: !isQuickReplyButton(b) }));
 
@@ -1541,14 +1424,14 @@ const StepPreview = ({ node, templates = [] }) => {
     <div style={{ background:"var(--c-chatWall)", borderRadius:10, padding:"12px 12px 14px",
       border:`1px solid ${C.cardBorder}` }}>
       <div style={{ fontSize:11, fontWeight:800, letterSpacing:".12em", textTransform:"uppercase",
-        color:C.muted, marginBottom:8, fontFamily:"'DM Mono'" }}>What the customer sees</div>
+        color:C.muted, marginBottom:8, fontFamily:MONO }}>What the customer sees</div>
       <div style={{ maxWidth:250 }}>
         <div style={{ background:"var(--c-chatIncoming, #fff)", borderRadius:"3px 9px 9px 9px",
           overflow:"hidden", boxShadow:"0 1px 1px rgba(0,0,0,.08)" }}>
           <div style={{ padding:"7px 9px 5px" }}>
             {chip && (
               <div style={{ fontSize:12, fontWeight:800, letterSpacing:".05em", textTransform:"uppercase",
-                color:C.text5, fontFamily:"'DM Mono'", marginBottom:5 }}>{chip}</div>
+                color:C.text5, fontFamily:MONO, marginBottom:5 }}>{chip}</div>
             )}
             {header && <div style={{ fontSize:14, fontWeight:700, color:C.text1, marginBottom:3 }}>{renderWaText(header)}</div>}
             <div style={{ fontSize:14, lineHeight:1.45, color: empty ? C.text6 : C.text1,
@@ -1601,7 +1484,7 @@ const PreviewBubble = ({ text }) => (
     <Sec style={{ marginBottom:8 }}>Preview in WhatsApp</Sec>
     <div style={{ background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:"10px 10px 10px 2px", padding:"8px 11px", fontSize:14, color:C.text1, lineHeight:1.45, maxWidth:"85%" }}>
       {text}
-      <div style={{ fontSize:11, color:C.muted, textAlign:"right", marginTop:4, fontFamily:"'DM Mono'", fontWeight:600 }}>10:24 AM</div>
+      <div style={{ fontSize:11, color:C.muted, textAlign:"right", marginTop:4, fontFamily:MONO, fontWeight:600 }}>10:24 AM</div>
     </div>
   </div>
 );
@@ -1612,7 +1495,7 @@ const PreviewQR = ({ header, body, buttons }) => (
     <div style={{ background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:"10px 10px 10px 2px", overflow:"hidden", maxWidth:"85%" }}>
       {header && <div style={{ padding:"7px 11px 3px", fontSize:14, fontWeight:700, color:C.text1 }}>{header}</div>}
       <div style={{ padding:"0 11px 5px", fontSize:14, color:C.text2, lineHeight:1.45 }}>{body}</div>
-      <div style={{ fontSize:11, color:C.muted, textAlign:"right", padding:"0 11px 5px", fontFamily:"'DM Mono'", fontWeight:600 }}>10:24 AM</div>
+      <div style={{ fontSize:11, color:C.muted, textAlign:"right", padding:"0 11px 5px", fontFamily:MONO, fontWeight:600 }}>10:24 AM</div>
       <div style={{ borderTop:`1px solid ${C.rowDiv}` }}>
         {buttons.map(b=><div key={b.text} style={{ padding:"7px 12px", textAlign:"center", fontSize:14, fontWeight:600, color:C.blue, borderBottom:`1px solid ${C.rowDiv}` }}>{b.text}</div>)}
       </div>
@@ -1648,7 +1531,7 @@ const TemplatePreview = ({ template }) => {
         <div style={{ display:"flex", justifyContent:"flex-start", marginBottom:4 }}>
           <div style={{ background:"var(--c-surface, #fff)", borderRadius:"0 8px 8px 8px", maxWidth:"88%", fontSize:14, color:"var(--c-t1, #111)", lineHeight:1.45, overflow:"hidden", boxShadow:"0 1px 1px rgba(0,0,0,.07)" }}>
             {hasHeader && (
-              <div style={{ padding:"7px 10px 3px", fontSize:14, fontWeight:700, color:C.text1, borderBottom:"1px solid #F0F0F0" }}>
+              <div style={{ padding:"7px 10px 3px", fontSize:14, fontWeight:700, color:C.text1, borderBottom:"1px solid transparent" }}>
                 {template.header_text}
               </div>
             )}
@@ -1662,9 +1545,9 @@ const TemplatePreview = ({ template }) => {
               10:24 AM
             </div>
             {hasButtons && (
-              <div style={{ borderTop:"1px solid #E0E0E0" }}>
+              <div style={{ borderTop:"1px solid transparent" }}>
                 {buttons.map((btn, idx) => (
-                  <div key={idx} style={{ display:"block", width:"100%", padding:"7px 9px", border:"none", borderTop: idx > 0 ? "1px solid #F0F0F0" : "none", textAlign:"center", color:"#00A5F4", fontSize:14, fontWeight:500, background:"transparent", fontFamily:"-apple-system, 'SF Pro Display', sans-serif" }}>
+                  <div key={idx} style={{ display:"block", width:"100%", padding:"7px 9px", border:"none", borderTop: idx > 0 ? "1px solid transparent" : "none", textAlign:"center", color:"#00A5F4", fontSize:14, fontWeight:500, background:"transparent", fontFamily:"-apple-system, 'SF Pro Display', sans-serif" }}>
                     {btn.text || btn}
                   </div>
                 ))}
@@ -1678,7 +1561,7 @@ const TemplatePreview = ({ template }) => {
 };
 
 
-const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDeleteNode=()=>{}, onDuplicateNode=()=>{}, onSaveAndClose=()=>{}, onToggleDisable=()=>{}, onDeleteButton=()=>{}, onSelectTemplate=()=>{}, onCreateTemplate=()=>{}, templates=[], tags=[], leadFields=[], otherAutomations=[], whatsappAccounts=[], assignableUsers=[], aiModels=[], automationId=null }) => {
+const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDeleteNode=()=>{}, onDuplicateNode=()=>{}, onSaveAndClose=()=>{}, onToggleDisable=()=>{}, onDeleteButton=()=>{}, onSelectTemplate=()=>{}, onCreateTemplate=()=>{}, onClose=()=>{}, templates=[], tags=[], leadFields=[], landingSources=[], otherAutomations=[], whatsappAccounts=[], assignableUsers=[], aiModels=[], automationId=null }) => {
   // Real, admin-configured stages — never a hardcoded list, which would drift
   // the moment somebody renames or adds one in Funnel Settings.
   const { stages: funnelStages } = useFunnelConfig();
@@ -1719,13 +1602,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
     api.mediaLibrary.list().then(r => setMediaItems(r.media || [])).catch(() => setMediaItems([]));
   }, [node?.type, node?.directType]);
 
-  if (!node) return (
-    <aside style={{ width:344, borderLeft:`1px solid ${C.cardBorder}`, background:"var(--c-surface, #fff)", flexShrink:0, padding:24, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", textAlign:"center", color:C.text5 }}>
-      <div style={{ width:56, height:56, borderRadius:12, background:C.sectionBg, display:"flex", alignItems:"center", justifyContent:"center", color:C.muted, marginBottom:14 }}>{IC.flow(24)}</div>
-      <div style={{ fontSize:16, fontWeight:700, color:C.text2, marginBottom:6 }}>Select a block to edit</div>
-      <div style={{ fontSize:15, color:C.text5, lineHeight:1.5 }}>Click any node on the canvas to configure its message body, buttons, conditions, or API behavior.</div>
-    </aside>
-  );
+  if (!node) return null;
   const t = NT[node.type] || NT_FALLBACK;
 
   let content = null;
@@ -1772,12 +1649,6 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
       ? (whatsappAccounts.find(a => String(a.id) === String(node.whatsappAccountId))?.displayName || 'the selected number')
       : 'the triggering number’s account';
 
-    const TabBtn = ({ label, active, onClick }) => (
-      <button onClick={onClick} style={{ flex:1, padding:"6px 0", fontSize:14, fontWeight:700, fontFamily:"'DM Sans'", borderRadius:8, border:"none", cursor:"pointer", background: active ? C.brandBg : "transparent", color: active ? C.brandDark : C.muted }}>
-        {label}
-      </button>
-    );
-
     const DirectField = ({ label, type="text", value, onChange, placeholder="", hint="" }) => (
       <Field label={label} hint={hint}>
         {type === "textarea" ? (
@@ -1804,7 +1675,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
               <select
                 value={dd.mediaLibraryId || ""}
                 onChange={e => setDirect({ mediaLibraryId: e.target.value || null, url: '' })}
-                style={{ width:'100%', padding:'6px 9px', fontSize:14, border:`1px solid ${C.inputBorder}`, borderRadius:8, fontFamily:"'DM Sans'", background:C.cardBg }}
+                className="fg-field" style={{ ...FIELD, padding:'7px 10px', fontSize:13 }}
               >
                 <option value="">— Select {dt} —</option>
                 {filtered.map(m => (
@@ -1842,12 +1713,16 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
             {dt === 'document' && <Field label="Filename (optional)"><VarInput value={dd.filename || ""} onChange={e=>setDirect({filename:e.target.value})} placeholder="e.g. brochure.pdf" style={{ padding:"6px 9px", fontSize:14 }}/></Field>}
           </>;
         }
+        case "flow":
+          // WhatsApp form steps were removed with Forms (2026-10-16). An older
+          // flow can still hold one; say so and point at the fix.
+          return <Alert kind="warn" style={{ marginTop:4 }}>WhatsApp form steps were removed. Pick another message type above, or delete this step — the flow cannot go live while it is here.</Alert>;
         case "cta_url":
           return <>
             <Field label="Header (optional)" hint="Shown bold above the body. Max 60 characters."><VarInput value={dd.header || ""} maxLength={60} onChange={e=>setDirect({header:e.target.value})} placeholder="e.g. Your seat is ready" style={{ padding:"6px 9px", fontSize:14, fontWeight:700 }}/></Field>
             <Field label="Body text" hint="Required by Meta. Max 1024 characters."><VarTextarea value={dd.body || ""} maxLength={1024} onChange={e=>setDirect({body:e.target.value})} placeholder="Tell them what the link is for…" style={{ fontSize:14 }}/></Field>
             <Field label="Button text" hint="Max 20 characters."><VarInput value={dd.button_text || ""} maxLength={20} onChange={e=>setDirect({button_text:e.target.value})} placeholder="e.g. Book my seat" style={{ padding:"6px 9px", fontSize:14 }}/></Field>
-            <Field label="Link" hint="Must start with https://"><VarInput value={dd.url || ""} onChange={e=>setDirect({url:e.target.value})} placeholder="https://forgemind.in/apply" style={{ padding:"6px 9px", fontSize:14 }}/></Field>
+            <Field label="Link" hint="Must start with https://"><VarInput value={dd.url || ""} onChange={e=>setDirect({url:e.target.value})} placeholder="https://example.com/apply" style={{ padding:"6px 9px", fontSize:14 }}/></Field>
             <Field label="Footer (optional)" hint="Max 60 characters."><VarInput value={dd.footer || ""} maxLength={60} onChange={e=>setDirect({footer:e.target.value})} placeholder="e.g. Limited seats" style={{ padding:"6px 9px", fontSize:14 }}/></Field>
             <Alert kind="warn" style={{ marginTop:4 }}>WhatsApp does not tell us when someone taps a link button, so this step cannot branch on it. Wire the next step from "Next step".</Alert>
           </>;
@@ -1893,7 +1768,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
             <Field label="List button text" hint="Max 20 characters."><Input value={dd.button_text || ""} maxLength={20} onChange={e=>setDirect({button_text:e.target.value})} placeholder="e.g. View options" style={{ padding:"6px 9px", fontSize:14 }}/></Field>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:12, marginBottom:6 }}>
               <Sec>List sections</Sec>
-              <span style={{ fontSize:13, fontFamily:"'DM Mono'", color: atRowCap ? C.red : C.muted }}>{totalRows} / {ROW_CAP} rows</span>
+              <span style={{ fontSize:13, fontFamily:MONO, color: atRowCap ? C.red : C.muted }}>{totalRows} / {ROW_CAP} rows</span>
             </div>
             {sectionsArr.map((sec, si) => (
               <div key={si} style={{ background:C.sectionBg, border:`1px solid ${C.innerBorder}`, borderRadius:10, padding:8, marginBottom:8 }}>
@@ -1940,10 +1815,8 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
         <StepPreview node={node} templates={templates} />
       </div>
 
-      <div style={{ display:"flex", gap:4, background:C.sectionBg, borderRadius:10, padding:3, marginBottom:14 }}>
-        <TabBtn label="Template" active={mode==="template"} onClick={()=>setMode("template")}/>
-        <TabBtn label="Direct" active={mode==="direct"} onClick={()=>setMode("direct")}/>
-      </div>
+      <PillStrip grow size="sm" style={{ marginBottom:14 }} value={mode} onChange={setMode}
+        items={[{ id:"template", label:"Template" }, { id:"direct", label:"Direct" }]} />
 
       <Field label="Send from" hint="Which WhatsApp number to send this message from.">
         <Select
@@ -1959,8 +1832,32 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
         </Select>
       </Field>
 
+      {/* Read by the engine's messageGapOverrideMs(). Blank = the flow's own
+          "Pause between messages" (set on the trigger). Counted from when the
+          previous message reached WhatsApp; on the first message of a run, from
+          the moment the run starts. */}
+      {(() => {
+        const flowGap = Number((nodes.find(n => n.type === "trigger") || {}).messageGapSeconds) || 0;
+        const has = node.gapSeconds !== undefined && node.gapSeconds !== null && node.gapSeconds !== "";
+        return (
+          <Field label="Pause before this message" hint={`Seconds to wait after the previous message reached WhatsApp. Leave blank to use the flow's pause (${flowGap}s).`}>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <Input type="number" min={0} max={120}
+                value={has ? node.gapSeconds : ""}
+                placeholder={String(flowGap)}
+                onChange={(e)=>{
+                  const v = e.target.value;
+                  onUpdateNode(node.id, { gapSeconds: v === "" ? null : Math.max(0, Math.min(120, parseInt(v, 10) || 0)) });
+                }}
+                style={{ width:90 }}/>
+              <span style={{ fontSize:14, color:C.muted }}>{has ? "seconds (this message only, max 120)" : `seconds — using the flow's ${flowGap}s`}</span>
+            </div>
+          </Field>
+        );
+      })()}
+
       {mode === "template" ? (<>
-        <div style={{ background:C.blueBg, border:`1px solid #90CAF9`, borderRadius:10, padding:"10px 12px", marginBottom:14, display:"flex", alignItems:"flex-start", gap:9 }}>
+        <div style={{ background:C.blueBg, border:`1px solid transparent`, borderRadius:10, padding:"10px 12px", marginBottom:14, display:"flex", alignItems:"flex-start", gap:9 }}>
           <span style={{ color:C.blue, flexShrink:0, paddingTop:1 }}>{IC.tpl(15)}</span>
           <div style={{ flex:1, fontSize:14, color:C.text2, lineHeight:1.5 }}>
             Messages are sent using <strong>Meta-approved templates only</strong>. Reply buttons, if any, are defined by the template. To create or edit a template, use WhatsApp Manager.
@@ -1981,7 +1878,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
         </Field>
 
         {tpl && _scopeAccountIds && !(tpl.whatsappAccountId != null && _scopeAccountIds.has(String(tpl.whatsappAccountId))) && (
-          <div style={{ background:"var(--c-dangerBg, #FCEBEB)", border:"1px solid #F0B4B4", borderRadius:10, padding:"10px 12px", marginBottom:14, fontSize:14, color:"var(--c-dangerText, #A32D2D)", lineHeight:1.5 }}>
+          <div style={{ background:"var(--c-dangerBg, #FCEBEB)", border:"1px solid transparent", borderRadius:10, padding:"10px 12px", marginBottom:14, fontSize:14, color:"var(--c-dangerText, #A32D2D)", lineHeight:1.5 }}>
             <strong>This template won’t send from {scopeAccountLabel}.</strong> “{tpl.name}” is approved on a different WhatsApp number, so Meta will reject it (#132001). Pick a template from the list above, or change “Send from”.
           </div>
         )}
@@ -1999,7 +1896,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
           <TemplatePreview template={tpl} />
 
           <Field label="Template body" hint="Read-only — edit in WhatsApp Manager.">
-            <div style={{ background:C.sectionBg, border:`1px solid ${C.innerBorder}`, borderRadius:10, padding:"10px 12px", fontSize:15, color:C.text2, lineHeight:1.5, fontFamily:"'DM Sans'", whiteSpace:"pre-wrap" }}>
+            <div style={{ background:C.sectionBg, border:`1px solid ${C.innerBorder}`, borderRadius:10, padding:"10px 12px", fontSize:15, color:C.text2, lineHeight:1.5, fontFamily:FONT, whiteSpace:"pre-wrap" }}>
               {tpl.body}
             </div>
           </Field>
@@ -2010,7 +1907,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
               const key = "var" + num;
               return (
                 <div key={num} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
-                  <span style={{ fontSize:14, fontWeight:700, color:C.brand, fontFamily:"'DM Mono'", minWidth:34 }}>{"{{"+num+"}}"}</span>
+                  <span style={{ fontSize:14, fontWeight:700, color:C.brand, fontFamily:MONO, minWidth:34 }}>{"{{"+num+"}}"}</span>
                   <Select value={(node.bindings || {})[key] || ""} onChange={(e)=>onUpdateNode(node.id, n => ({ ...n, bindings: { ...(n.bindings || {}), [key]: e.target.value } }))} style={{ flex:1, fontSize:14 }}>
                     <option value="">— Pick a variable —</option>
                     <option value="{{name}}">Contact Name</option>
@@ -2027,9 +1924,9 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
             <Alert kind="info" style={{ marginBottom:8 }}>Buttons are defined by the template. The node will sprout one output handle per button — wire each to the next step.</Alert>
             {templateButtons.map((b, i) => (
               <div key={i} style={{ background:C.sectionBg, border:`1px solid ${C.innerBorder}`, borderRadius:10, padding:"10px 11px", marginBottom:6, display:"flex", alignItems:"center", gap:9 }}>
-                <div style={{ width:22, height:22, borderRadius:5, background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, fontFamily:"'DM Mono'", fontWeight:700, color:C.text3, flexShrink:0 }}>{i+1}</div>
+                <div style={{ width:22, height:22, borderRadius:5, background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, fontFamily:MONO, fontWeight:700, color:C.text3, flexShrink:0 }}>{i+1}</div>
                 <div style={{ flex:1, fontSize:15, fontWeight:600, color:C.text1 }}>{b.text}</div>
-                <span style={{ fontSize:13, fontFamily:"'DM Mono'", fontWeight:700, color:C.brandDark, background:C.brandBg, border:`1px solid ${C.brandBright}`, borderRadius:5, padding:"2px 6px", letterSpacing:".04em" }}>{`btn:${i}`}</span>
+                <span style={{ fontSize:13, fontFamily:MONO, fontWeight:700, color:C.brandDark, background:C.brandBg, border:`1px solid ${C.brandBright}`, borderRadius:5, padding:"2px 6px", letterSpacing:".04em" }}>{`btn:${i}`}</span>
               </div>
             ))}
           </>)}
@@ -2052,7 +1949,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
           <Alert kind="warn">Pick a template above to configure variables and preview the message.</Alert>
         )}
       </>) : (<>
-        <div style={{ background:"var(--c-warnBgSoft, #FFF8E1)", border:`1px solid #FFE082`, borderRadius:10, padding:"10px 12px", marginBottom:14, display:"flex", alignItems:"flex-start", gap:9 }}>
+        <div style={{ background:"var(--c-warnBgSoft, #FFF8E1)", border:`1px solid transparent`, borderRadius:10, padding:"10px 12px", marginBottom:14, display:"flex", alignItems:"flex-start", gap:9 }}>
           <span style={{ color:"var(--c-s7a5c00, #7A5C00)", flexShrink:0, paddingTop:1 }}>{IC.warn(15)}</span>
           <div style={{ flex:1, fontSize:14, color:"var(--c-s7a5c00, #7A5C00)", lineHeight:1.5 }}>
             <strong>Direct messages</strong> are sent via the WhatsApp Business API without a template. They only work within the 24-hour conversation window. Outside that window, the message will fail.
@@ -2068,6 +1965,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
         {renderDirectFields()}
       </>)}
 
+      {!(node.messageMode === "direct" && node.directType === "flow") && (
       <div style={{ marginTop:14, padding:"12px", background:C.sectionBg, borderRadius:10, border:`1px solid ${C.innerBorder}` }}>
         <label style={{ display:"flex", alignItems:"flex-start", gap:8, fontSize:15, color:C.text1, cursor:"pointer", lineHeight:1.4 }}>
           <input type="checkbox"
@@ -2091,7 +1989,22 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
             <span style={{ fontSize:14, color:C.muted }}>hours (max 168 = 7d). Expired pauses are marked failed.</span>
           </div>
         )}
+        {node.waitForReply && tapTargetsOf(node).some(t => t.handle) && (
+          <label style={{ display:"flex", alignItems:"flex-start", gap:8, fontSize:15, color:C.text1, cursor:"pointer", lineHeight:1.4, marginTop:12 }}>
+            <input type="checkbox"
+              checked={node.buttonsOnly === true}
+              onChange={e => onUpdateNode(node.id, { buttonsOnly: e.target.checked })}
+              style={{ marginTop:2, flexShrink:0 }}/>
+            <span>
+              <strong>Only continue when a button is tapped</strong>
+              <div style={{ fontSize:14, color:C.muted, marginTop:2 }}>
+                A typed message is ignored and this step keeps waiting, so nobody gets a button's response without pressing it. The "Any other reply" branch is removed — delete its connection if one is drawn.
+              </div>
+            </span>
+          </label>
+        )}
       </div>
+      )}
 
       <div style={{ display:"flex", gap:6, marginTop:14 }}>
         <Btn kind="primary" style={{ flex:1, justifyContent:"center" }} onClick={onSaveAndClose}>Save</Btn>
@@ -2144,10 +2057,8 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
 
     content = (<>
       <Field label="Match mode" hint="How rules combine to produce the Matched branch.">
-        <div style={{ display:"flex", gap:6 }}>
-          <Pill active={matchMode!=="any"} onClick={()=>onUpdateNode(node.id, { matchMode: "all" })}>All conditions</Pill>
-          <Pill active={matchMode==="any"} onClick={()=>onUpdateNode(node.id, { matchMode: "any" })}>Any condition</Pill>
-        </div>
+        <PillStrip grow size="sm" value={matchMode==="any" ? "any" : "all"} onChange={v=>onUpdateNode(node.id, { matchMode: v })}
+          items={[{ id:"all", label:"All conditions" }, { id:"any", label:"Any condition" }]} />
       </Field>
 
       <Alert kind="warn">
@@ -2166,7 +2077,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
             width:"100%", padding:"7px 9px", background:"transparent",
             border:"1px solid transparent", borderTop:"1px solid transparent", cursor:"pointer", textAlign:"left",
             display:"flex", alignItems:"center", gap:8, borderRadius:7,
-            fontSize:14, fontWeight:500, color:C.brand, fontFamily:"'DM Sans'",
+            fontSize:14, fontWeight:500, color:C.brand, fontFamily:FONT,
             lineHeight:1.3, marginBottom:1,
           }}>
             <span style={{ width:18, height:18, borderRadius:5, background:"var(--c-surface, #fff)", border:`1.2px solid ${C.cardBorder}`, display:"flex", alignItems:"center", justifyContent:"center", color:C.brand, flexShrink:0 }}>{IC.plus(11)}</span>
@@ -2177,7 +2088,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
 
       <Sec style={{ marginBottom:8 }}>Conditions ({rules.length} {rules.length===1?"rule":"rules"} · {matchMode==="any"?"ANY":"ALL"} match)</Sec>
       {rules.length === 0 && (
-        <div style={{ background:C.redBg, border:`1px solid #F4C9C9`, borderRadius:10, padding:"11px 13px", marginBottom:8, display:"flex", alignItems:"center", gap:9 }}>
+        <div style={{ background:C.redBg, border:`1px solid transparent`, borderRadius:10, padding:"11px 13px", marginBottom:8, display:"flex", alignItems:"center", gap:9 }}>
           <span style={{ color:C.redDark }}>{IC.err(14)}</span>
           <div style={{ fontSize:14, color:C.redDark, lineHeight:1.45, fontWeight:500 }}>
             No rules defined. Add at least one condition or pick a preset above.
@@ -2250,7 +2161,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
 
       <Sec style={{ marginTop:18, marginBottom:8 }}>Test with sample contact</Sec>
       <div style={{ background:C.sectionBg, border:`1px solid ${C.innerBorder}`, borderRadius:10, padding:11 }}>
-        <Select style={{ marginBottom:8, fontSize:14, fontFamily:"'DM Mono'" }}>
+        <Select style={{ marginBottom:8, fontSize:14, fontFamily:MONO }}>
           <option>— Select a sample contact —</option>
         </Select>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:rules.length?10:0 }}>
@@ -2283,7 +2194,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
           <div style={{ fontSize:14, color: matchedSteps.length ? C.brandDark : C.text5, fontWeight:600, lineHeight:1.4 }}>
             {branchSummary(matchedSteps)}
           </div>
-          <div style={{ fontSize:13, color: matchedSteps.length ? C.brandDark : C.muted, opacity: matchedSteps.length ? 0.75 : 1, fontFamily:"'DM Mono'", marginTop:4 }}>
+          <div style={{ fontSize:13, color: matchedSteps.length ? C.brandDark : C.muted, opacity: matchedSteps.length ? 0.75 : 1, fontFamily:MONO, marginTop:4 }}>
             {matchedSteps.length} step{matchedSteps.length===1?"":"s"} connected
           </div>
         </div>
@@ -2297,7 +2208,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
           <div style={{ fontSize:14, color: notMatchedSteps.length ? "var(--c-sb04e0e, #B04E0E)" : C.text5, fontWeight:600, lineHeight:1.4 }}>
             {branchSummary(notMatchedSteps)}
           </div>
-          <div style={{ fontSize:13, color: notMatchedSteps.length ? "var(--c-sb04e0e, #B04E0E)" : C.muted, opacity: notMatchedSteps.length ? 0.75 : 1, fontFamily:"'DM Mono'", marginTop:4 }}>
+          <div style={{ fontSize:13, color: notMatchedSteps.length ? "var(--c-sb04e0e, #B04E0E)" : C.muted, opacity: notMatchedSteps.length ? 0.75 : 1, fontFamily:MONO, marginTop:4 }}>
             {notMatchedSteps.length} step{notMatchedSteps.length===1?"":"s"} connected
           </div>
         </div>
@@ -2323,11 +2234,8 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
     const setNumeric = (v) => onUpdateNode(node.id, { waitValue: String(v).replace(/\D/g, "") });
     content = (<>
       <Field label="Delay type">
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:5 }}>
-          <Pill active={delayMode==="duration"} onClick={()=>onUpdateNode(node.id, { delayMode:"duration" })}>For a duration</Pill>
-          <Pill active={delayMode==="date"}     onClick={()=>onUpdateNode(node.id, { delayMode:"date"     })}>Until specific date</Pill>
-          <Pill active={delayMode==="until"}    onClick={()=>onUpdateNode(node.id, { delayMode:"until"    })}>Until a specific time</Pill>
-        </div>
+        <PillStrip grow size="sm" value={delayMode} onChange={v=>onUpdateNode(node.id, { delayMode:v })}
+          items={[{ id:"duration", label:"Duration" }, { id:"date", label:"Until a date", title:"Until a specific date" }, { id:"until", label:"Until a time", title:"Until a specific time" }]} />
       </Field>
 
       {delayMode === "duration" && (
@@ -2338,7 +2246,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
               value={waitValue}
               onChange={(e)=>setNumeric(e.target.value)}
               placeholder="0"
-              style={{ width:80, fontFamily:"'DM Mono'", fontWeight:600 }}
+              style={{ width:80, fontFamily:MONO, fontWeight:600 }}
             />
             <Select style={{ flex:1 }} value={waitUnit} onChange={(e)=>onUpdateNode(node.id, { waitUnit: e.target.value })}>
               <option value="seconds">Seconds</option>
@@ -2382,15 +2290,15 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
     const addHeader = () => onUpdateNode(node.id, n => ({ ...n, headers: [ ...(Array.isArray(n.headers)?n.headers:[]), { k:"", v:"" } ] }));
     const delHeader = (i) => onUpdateNode(node.id, n => ({ ...n, headers: (Array.isArray(n.headers)?n.headers:[]).filter((_,idx)=>idx!==i) }));
     content = (<>
-      <div style={{ background:C.navyBg, border:`1px solid #9FAFD0`, borderRadius:10, padding:"10px 12px", marginBottom:14, fontSize:14, color:C.text2, lineHeight:1.5 }}>
-        Makes a real HTTP request when the flow reaches this step. URL, headers, and body all support <code style={{ background:C.sectionBg, padding:"1px 4px", borderRadius:3, fontFamily:"'DM Mono'" }}>{`{{variables}}`}</code> from upstream nodes. 15-second timeout.
+      <div style={{ background:C.navyBg, border:`1px solid transparent`, borderRadius:10, padding:"10px 12px", marginBottom:14, fontSize:14, color:C.text2, lineHeight:1.5 }}>
+        Makes a real HTTP request when the flow reaches this step. URL, headers, and body all support <code style={{ background:C.sectionBg, padding:"1px 4px", borderRadius:3, fontFamily:MONO }}>{`{{variables}}`}</code> from upstream nodes. 15-second timeout.
       </div>
       <Field label="Method & URL">
         <div style={{ display:"flex", gap:6 }}>
-          <Select value={method} onChange={e=>onUpdateNode(node.id,{ method:e.target.value })} style={{ width:90, fontFamily:"'DM Mono'", fontWeight:700, color:C.brand }}>
+          <Select value={method} onChange={e=>onUpdateNode(node.id,{ method:e.target.value })} style={{ width:90, fontFamily:MONO, fontWeight:700, color:C.brand }}>
             <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option>
           </Select>
-          <Input value={apiUrl} onChange={e=>onUpdateNode(node.id,{ apiUrl:e.target.value })} placeholder="https://api.example.com/endpoint" style={{ flex:1, fontFamily:"'DM Mono'", fontSize:14, borderColor: apiUrl && !urlOk ? C.red : C.inputBorder }}/>
+          <Input value={apiUrl} onChange={e=>onUpdateNode(node.id,{ apiUrl:e.target.value })} placeholder="https://api.example.com/endpoint" style={{ flex:1, fontFamily:MONO, fontSize:14, borderColor: apiUrl && !urlOk ? C.red : C.inputBorder }}/>
         </div>
         {apiUrl && !urlOk && <div style={{ fontSize:13, color:C.red, marginTop:5, fontWeight:600 }}>URL must start with http:// or https://</div>}
       </Field>
@@ -2399,8 +2307,8 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
           {headers.length === 0 && <div style={{ fontSize:14, color:C.muted, padding:"2px 4px 6px" }}>No headers.</div>}
           {headers.map((h,i)=>(
             <div key={i} style={{ display:"grid", gridTemplateColumns:"1fr 1.6fr 24px", gap:5, marginBottom:4, alignItems:"center" }}>
-              <Input value={h.k||""} onChange={e=>setHeader(i,{ k:e.target.value })} placeholder="Header" style={{ padding:"5px 8px", fontSize:13, fontFamily:"'DM Mono'" }}/>
-              <Input value={h.v||""} onChange={e=>setHeader(i,{ v:e.target.value })} placeholder="Value" style={{ padding:"5px 8px", fontSize:13, fontFamily:"'DM Mono'" }}/>
+              <Input value={h.k||""} onChange={e=>setHeader(i,{ k:e.target.value })} placeholder="Header" style={{ padding:"5px 8px", fontSize:13, fontFamily:MONO }}/>
+              <Input value={h.v||""} onChange={e=>setHeader(i,{ v:e.target.value })} placeholder="Value" style={{ padding:"5px 8px", fontSize:13, fontFamily:MONO }}/>
               <IconBtn title="Remove header" onClick={()=>delHeader(i)}>{IC.x(12)}</IconBtn>
             </div>
           ))}
@@ -2410,15 +2318,12 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
       {method !== "GET" && (
         <Field label="Body" hint="Plain text or JSON. JSON is validated and sent with application/json. Supports {{variables}}.">
           <Textarea rows={6} value={node.body || ""} onChange={(e)=>onUpdateNode(node.id,{ body: e.target.value })}
-            placeholder={`{\n  "name": "{{name}}",\n  "phone": "{{contact_number}}"\n}`} style={{ fontFamily:"'DM Mono'", fontSize:14 }}/>
+            placeholder={`{\n  "name": "{{name}}",\n  "phone": "{{contact_number}}"\n}`} style={{ fontFamily:MONO, fontSize:14 }}/>
         </Field>
       )}
       <Field label="On error" hint="What to do if the request fails or times out.">
-        <div style={{ display:"flex", gap:6 }}>
-          <Pill active={onError==="continue"} onClick={()=>onUpdateNode(node.id,{ onError:"continue" })}>Continue</Pill>
-          <Pill active={onError==="retry"}    onClick={()=>onUpdateNode(node.id,{ onError:"retry" })}>Retry 3×</Pill>
-          <Pill active={onError==="fail"}     onClick={()=>onUpdateNode(node.id,{ onError:"fail" })}>Fail run</Pill>
-        </div>
+        <PillStrip grow size="sm" value={onError} onChange={v=>onUpdateNode(node.id,{ onError:v })}
+          items={[{ id:"continue", label:"Continue" }, { id:"retry", label:"Retry 3×" }, { id:"fail", label:"Fail run" }]} />
       </Field>
       <div style={{ display:"flex", gap:6, marginTop:14 }}>
         <Btn kind="primary" style={{ flex:1, justifyContent:"center" }} onClick={onSaveAndClose}>Save</Btn>
@@ -2473,7 +2378,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
             const n = Math.max(1, Math.min(20, parseInt(e.target.value || '1', 10) || 1));
             onUpdateNode(node.id, { maxTurns: n });
           }}
-          style={{ width:80, fontFamily:"'DM Mono'", fontWeight:600 }}
+          style={{ width:80, fontFamily:MONO, fontWeight:600 }}
         />
       </Field>
       <Field
@@ -2482,7 +2387,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
       >
         {outputVariables.length === 0 && (
           <div style={{ background:C.sectionBg, border:`1px dashed ${C.cardBorder}`, borderRadius:8, padding:"10px 12px", fontSize:14, color:C.muted, fontStyle:"italic", marginBottom:8 }}>
-            No output variables yet. Click "+ Add variable" to choose a ForgeCRM field (like <span style={{ fontFamily:"'DM Mono'" }}>name</span>) the agent should extract.
+            No output variables yet. Click "+ Add variable" to choose a ForgeCRM field (like <span style={{ fontFamily:MONO }}>name</span>) the agent should extract.
           </div>
         )}
         {(() => {
@@ -2497,7 +2402,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
                 <Select
                   value={ov.key || ""}
                   onChange={(e)=>{ const k = e.target.value; const o = fieldOpts.find(x=>x.key===k); setOutVar(i, { key: k, fieldName: o ? (o.fieldName || o.label) : "" }); }}
-                  style={{ fontFamily:"'DM Mono'", fontSize:14 }}
+                  style={{ fontFamily:MONO, fontSize:14 }}
                 >
                   <option value="">— Select a field —</option>
                   {fieldOpts.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
@@ -2517,14 +2422,14 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
         <Btn kind="ghost" size="sm" icon={IC.plus ? IC.plus(12) : null} onClick={addOutVar}>+ Add variable</Btn>
       </Field>
       <Field label="Model">
-        <div style={{ padding:"10px 12px", border:`1.5px dashed ${C.inputBorder}`, borderRadius:8, background:C.sectionBg, fontSize:15, color:C.text3, fontFamily:"'DM Sans'" }}>
+        <div style={{ padding:"10px 12px", border:`1.5px dashed ${C.inputBorder}`, borderRadius:8, background:C.sectionBg, fontSize:15, color:C.text3, fontFamily:FONT }}>
           {modelRef
             ? <>Using <strong style={{ color:C.text1 }}>{modelRef.label}</strong> — click the left handle to change.</>
             : <>No model selected. Click the <strong>left "Model"</strong> handle to pick one.</>}
         </div>
       </Field>
       <Field label={`Tools${toolRefs.length ? ` (${toolRefs.length})` : ""}`}>
-        <div style={{ padding:"10px 12px", border:`1.5px dashed ${C.inputBorder}`, borderRadius:8, background:C.sectionBg, fontSize:15, color:C.text3, fontFamily:"'DM Sans'" }}>
+        <div style={{ padding:"10px 12px", border:`1.5px dashed ${C.inputBorder}`, borderRadius:8, background:C.sectionBg, fontSize:15, color:C.text3, fontFamily:FONT }}>
           {toolRefs.length
             ? toolRefs.map(t => t.label).join(", ")
             : <>No tools attached. Click the <strong>right "Tool"</strong> handle to add one.</>}
@@ -2557,7 +2462,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
     }));
 
     content = (<>
-      <div style={{ fontSize:16, fontWeight:600, color:C.text1, marginBottom:14, fontFamily:"'DM Sans'" }}>Perform following actions:</div>
+      <div style={{ fontSize:16, fontWeight:600, color:C.text1, marginBottom:14, fontFamily:FONT }}>Perform following actions:</div>
 
       {actions.length === 0 && (
         <div style={{ background:C.sectionBg, border:`1px dashed ${C.cardBorder}`, borderRadius:10, padding:"18px 14px", textAlign:"center", fontSize:15, color:C.muted, fontStyle:"italic", marginBottom:12 }}>
@@ -2604,7 +2509,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
                         type="button"
                         onClick={()=>updateAction(i, { assignMode: opt.v, value: '' })}
                         style={{
-                          flex:1, padding:"5px 8px", fontSize:14, fontWeight:700, fontFamily:"'DM Sans'",
+                          flex:1, padding:"5px 8px", fontSize:14, fontWeight:700, fontFamily:FONT,
                           border:`1px solid ${assignMode===opt.v ? C.brand : C.cardBorder}`,
                           background: assignMode===opt.v ? C.brandBg : "var(--c-surface, #fff)",
                           color: assignMode===opt.v ? C.brandDark : C.text3,
@@ -2620,7 +2525,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
                         value={a.value || ""}
                         onChange={(e)=>updateAction(i, { value: e.target.value })}
                         placeholder="{{assigned_bda_id}}"
-                        style={{ fontFamily:"'DM Mono'", fontSize:14 }}
+                        style={{ fontFamily:MONO, fontSize:14 }}
                       />
                       <div style={{ fontSize:13, color:C.text5, fontWeight:500, lineHeight:1.4 }}>
                         The resolved value must be a numeric user id (forgecrm_users.id). If it's missing or the user is disabled, the step fails.
@@ -2635,7 +2540,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
                             type="button"
                             onClick={()=>updateAction(i, { roleFilter: opt.v })}
                             style={{
-                              flex:1, padding:"5px 8px", fontSize:14, fontWeight:600, fontFamily:"'DM Sans'",
+                              flex:1, padding:"5px 8px", fontSize:14, fontWeight:600, fontFamily:FONT,
                               border:`1px solid ${roleFilter===opt.v ? C.brand : C.cardBorder}`,
                               background: roleFilter===opt.v ? C.brandBg : "var(--c-surface, #fff)",
                               color: roleFilter===opt.v ? C.brandDark : C.text3,
@@ -2718,7 +2623,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
           border:`2px dashed #E5A100`,
           borderRadius:10, cursor:"pointer",
           color:"var(--c-sc8881f, #C8881F)", fontSize:16, fontWeight:600,
-          fontFamily:"'DM Sans'",
+          fontFamily:FONT,
           display:"flex", alignItems:"center", justifyContent:"center", gap:7,
         }}>
           <span style={{ display:"flex" }}>{IC.plus(13)}</span>
@@ -2730,7 +2635,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
               width:"100%", padding:"8px 10px", background:"transparent",
               border:"1px solid transparent", borderRadius:7, cursor:"pointer", textAlign:"left",
               display:"flex", alignItems:"center", gap:9, marginBottom:1,
-              fontSize:15, fontWeight:500, color:C.text2, fontFamily:"'DM Sans'",
+              fontSize:15, fontWeight:500, color:C.text2, fontFamily:FONT,
             }}>
               <span style={{ color:"var(--c-sc8881f, #C8881F)", display:"flex", flexShrink:0 }}>{k.icon(15)}</span>
               <span>{k.kind}</span>
@@ -2864,6 +2769,16 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
         </div>
       </Field>
 
+      <Field label="Pause between messages" hint="Seconds between messages this flow sends one after another, counted from when the previous one went out. 0 sends them back to back.">
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <Input type="number" min={0} max={60}
+            value={node.messageGapSeconds ?? 0}
+            onChange={(e)=>onUpdateNode(node.id, { messageGapSeconds: Math.max(0, Math.min(60, parseInt(e.target.value || '0', 10) || 0)) })}
+            style={{ width:90 }}/>
+          <span style={{ fontSize:14, color:C.muted }}>seconds (max 60)</span>
+        </div>
+      </Field>
+
       {/* A flow imported from another instance can carry a kind this build no
           longer offers. Every live flow here is `keyword`, so this is defence —
           but without it the switcher would render with NOTHING selected and no
@@ -2896,6 +2811,25 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
         <Field label="Case sensitive" hint="Off means PRICE, Price and price all match.">
           <Toggle value={!!node.caseSensitive} onChange={(v)=>onUpdateNode(node.id, { caseSensitive: v })}/>
         </Field>
+        {/* One per LINE, never comma-separated: an ad's pre-filled message
+            ("Hi, I want to know more…") contains commas, and splitting it would
+            store a bare "Hi" that starts this flow on every greeting. */}
+        <Field label="Also start on" hint="One per line. A short word (under 20 characters) must be the whole message — e.g. a word for testing. A longer phrase, like an ad's pre-filled message, also starts the flow when the message contains it.">
+          <Textarea
+            rows={3}
+            value={(Array.isArray(node.extraKeywords) ? node.extraKeywords : []).join('\n')}
+            onChange={(e)=>onUpdateNode(node.id, { extraKeywords: e.target.value === '' ? [] : e.target.value.split('\n').map(s => s.trimStart()) })}
+            placeholder={"e.g. Hiii\nHi, I want to know more about the Live Lab – Sesh 02"}
+          />
+        </Field>
+        <Field label="Also start when the message contains" hint="One per line. Starts this flow when the word or phrase appears anywhere in the message, however short — e.g. Live Lab. Capitals and extra spaces don't matter.">
+          <Textarea
+            rows={2}
+            value={(Array.isArray(node.containsKeywords) ? node.containsKeywords : []).join('\n')}
+            onChange={(e)=>onUpdateNode(node.id, { containsKeywords: e.target.value === '' ? [] : e.target.value.split('\n').map(s => s.trimStart()) })}
+            placeholder="e.g. Live Lab"
+          />
+        </Field>
         <Field label="Whose message counts?" hint="Outbound fires on a message YOUR team sends — useful for internal shortcuts.">
           <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
             <Pill active={(node.triggerDirection || "inbound")==="inbound"} onClick={()=>onUpdateNode(node.id, { triggerDirection:"inbound" })}>The customer sends it</Pill>
@@ -2903,6 +2837,25 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
             <Pill active={node.triggerDirection==="both"}                   onClick={()=>onUpdateNode(node.id, { triggerDirection:"both" })}>Either side sends it</Pill>
           </div>
         </Field>
+        {/* Read by the engine's landing pass (services/landingLeads.js): the
+            options come from GET /automation-landing-sources, the same list the
+            engine resolves against, so a value here always means something. */}
+        <Field label="Only people who filled a landing page" hint="Starts this flow only when the landing page has stored this person's details (matched by their WhatsApp number). Their answers are then available as {{form_name}} and {{form_summary}}.">
+          <Select value={node.landingSource || ""} onChange={(e)=>onUpdateNode(node.id, { landingSource: e.target.value })}>
+            <option value="">— Anyone who sends the keyword —</option>
+            {landingSources.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+            {node.landingSource && !landingSources.some(s => s.key === node.landingSource) && (
+              <option value={node.landingSource}>{node.landingSource} (unknown)</option>
+            )}
+          </Select>
+        </Field>
+        {(() => {
+          if (!node.landingSource) return null;
+          const src = landingSources.find(s => s.key === node.landingSource);
+          if (!src) return <Alert kind="warn">This landing page isn't known to the server, so this flow can never start. Pick one from the list.</Alert>;
+          if (!src.configured) return <Alert kind="warn">The server can't read this landing page's stored details yet (its export address or token isn't set), so this flow won't start until it is.</Alert>;
+          return <Alert kind="info">For a matching person this flow runs <strong>alone</strong>: other automations — a New Contact flow on the same number, for example — don't also reply to that message. It runs once per visitor; the same keyword later behaves as if this flow didn't exist.</Alert>;
+        })()}
         {!(node.keyword || "").trim() && (
           <Alert kind="warn">Type a keyword. An empty one can never match, so this flow could never start.</Alert>
         )}
@@ -3005,27 +2958,20 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
     </>);
   }
 
-  const isActionHeader = node.type === "action";
+  const named = (node.title && node.title.trim()) || node.type === "trigger";
+  const displayTitle = node.type === "trigger" ? getTriggerDisplay(node).title : (named ? node.title : "Unnamed step");
 
+  // The editor floats over the canvas on the right, exactly like the Social
+  // builder's step panel: icon chip, step name (click to rename), then
+  // Duplicate / Delete / Close, and a body that scrolls on its own.
   return (
-    <aside style={{ width:344, borderLeft:`1px solid ${C.cardBorder}`, background:"var(--c-surface, #fff)", flexShrink:0, overflowY:"auto" }}>
-      <div style={{
-        padding:"15px 18px 13px",
-        borderBottom:`1px solid ${isActionHeader ? "var(--c-sf0e0a8, #F0E0A8)" : C.cardBorder}`,
-        background: isActionHeader ? "var(--c-sfff6d6, #FFF6D6)" : "var(--c-surface, #fff)",
-      }}>
-        <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom: isActionHeader ? 0 : 10 }}>
-          <div style={{
-            width:32, height:32, borderRadius:8,
-            background: isActionHeader ? "var(--c-overlaySoft)" : t.bg,
-            color: isActionHeader ? "var(--c-sc8881f, #C8881F)" : t.color,
-            display:"flex", alignItems:"center", justifyContent:"center",
-            border:`1px solid ${isActionHeader ? "var(--c-sf0e0a8, #F0E0A8)" : t.border}`,
-            flexShrink:0,
-          }}>{isActionHeader ? IC.zap(16) : t.icon(16)}</div>
+    <aside data-testid="settings-panel" style={{ width:360, maxWidth:"100%", height:"100%", background:FS.nodeBg, borderRadius:16, boxShadow:FS.card, display:"flex", flexDirection:"column", overflow:"hidden", flexShrink:0, fontFamily:FONT }}>
+      <div style={{ padding:"12px 14px 10px", boxShadow:`inset 0 -1px 0 ${FS.surface2}`, flexShrink:0 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:9 }}>
+          <span style={{ width:28, height:28, borderRadius:9, background:t.soft, color:t.ink, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{t.icon(15)}</span>
           <div style={{ flex:1, minWidth:0 }}>
-            {!isActionHeader && <div style={{ fontSize:13, fontWeight:700, letterSpacing:".1em", textTransform:"uppercase", color:t.accent, marginBottom:1 }}>{t.label} BLOCK</div>}
-            <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+            <div style={{ fontSize:10.5, color:FS.muted, fontWeight:650, letterSpacing:".03em", textTransform:"uppercase" }}>{t.label}</div>
+            <div style={{ display:"flex", alignItems:"center", gap:4 }}>
               {editingTitle ? (
                 <input
                   ref={titleInputRef}
@@ -3033,61 +2979,35 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
                   onChange={(e)=>onUpdateNode(node.id, { title: e.target.value.slice(0, 60) })}
                   onBlur={commitTitle}
                   onKeyDown={onTitleKey}
-                  placeholder="Type a node name…"
+                  placeholder="Type a step name…"
                   className="rename-input"
-                  style={{
-                    fontSize: isActionHeader ? 18 : 15,
-                    fontWeight:700,
-                    color: isActionHeader ? "var(--c-s7a5c00, #7A5C00)" : C.text1,
-                    fontFamily:"'DM Sans'", flex:1, minWidth:0,
-                    border:`1px solid ${C.brandBright}`,
-                    borderRadius:5,
-                    outline:"none", background:"var(--c-surface, #fff)",
-                    padding:"2px 6px",
-                    margin:"-2px -6px",
-                    boxShadow:`0 0 0 3px ${C.brandBg}`,
-                  }}
+                  style={{ fontSize:15, fontWeight:750, color:FS.text, fontFamily:FONT, flex:1, minWidth:0, border:"none", borderRadius:8, outline:"none", background:FS.surface, padding:"3px 8px", margin:"-3px -8px", boxShadow:`0 0 0 2px ${FS.primaryRing}` }}
                 />
               ) : (
-                <div
-                  onClick={()=>setEditingTitle(true)}
-                  title="Click the pencil to rename"
-                  style={{
-                    fontSize: isActionHeader ? 18 : 15,
-                    fontWeight:700,
-                    color: isActionHeader ? "var(--c-s7a5c00, #7A5C00)" : ((node.title && node.title.trim()) || node.type === 'trigger' ? C.text1 : C.muted),
-                    fontFamily:"'DM Sans'", flex:1, minWidth:0,
-                    padding:"2px 0",
-                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-                    cursor:"default",
-                    fontStyle: ((node.title && node.title.trim()) || node.type === 'trigger') ? "normal" : "italic",
-                  }}
-                >{node.type === 'trigger' ? getTriggerDisplay(node).title : ((node.title && node.title.trim()) ? node.title : "Unnamed node")}</div>
+                <div onClick={()=>setEditingTitle(true)} title="Click to rename"
+                  style={{ fontSize:15, fontWeight:750, color: named ? FS.text : FS.muted, fontStyle: named ? "normal" : "italic", fontFamily:FONT, flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", cursor:"text", letterSpacing:"-0.01em" }}>
+                  {displayTitle}
+                </div>
               )}
-              <IconBtn
-                title={editingTitle ? "Done editing" : "Rename this node"}
-                onClick={()=>setEditingTitle(v => !v)}
-                style={{
-                  color: editingTitle ? C.brand : (isActionHeader ? "var(--c-s7a5c00, #7A5C00)" : C.text5),
-                  background: editingTitle ? C.brandBg : "transparent",
-                }}
-              >{editingTitle ? IC.ok(13) : IC.edit(13)}</IconBtn>
+              <IconBtn title={editingTitle ? "Done editing" : "Rename this step"} onClick={()=>setEditingTitle(v => !v)}
+                style={{ width:26, height:26, background: editingTitle ? FS.primarySoft : "transparent", color: editingTitle ? FS.primary : FS.muted }}>
+                {editingTitle ? IC.ok(12) : IC.edit(12)}
+              </IconBtn>
             </div>
-            {editingTitle && (!node.title || !String(node.title).trim()) && <div style={{ fontSize:13, color:C.red, marginTop:3, fontWeight:600 }}>Node name can't be empty</div>}
+            {editingTitle && (!node.title || !String(node.title).trim()) && <div style={{ fontSize:12, color:FS.err, marginTop:3, fontWeight:600 }}>Step name can't be empty</div>}
           </div>
-          {!isActionHeader && <IconBtn title="Duplicate" onClick={()=>onDuplicateNode(node.id)}>{IC.copy(15)}</IconBtn>}
-          {!isActionHeader && <IconBtn danger title="Delete" onClick={()=>onDeleteNode(node.id)}>{IC.trash(15)}</IconBtn>}
+          {node.type !== "trigger" && <IconBtn title="Duplicate step" onClick={()=>onDuplicateNode(node.id)} style={{ width:30, height:30 }}>{IC.copy(14)}</IconBtn>}
+          {node.type !== "trigger" && <IconBtn title="Delete step" onClick={()=>onDeleteNode(node.id)} style={{ width:30, height:30, color:FS.err }}>{IC.trash(14)}</IconBtn>}
+          {onClose && <IconBtn title="Close" onClick={onClose} style={{ width:30, height:30 }}>{IC.x(15)}</IconBtn>}
         </div>
-        {!isActionHeader && (
-          <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-            <Btn kind="ghost" size="sm" onClick={()=>onToggleDisable(node.id)}>{node.disabled ? "Enable" : "Disable"}</Btn>
-            <Btn kind="ghost" size="sm" onClick={()=>onDuplicateNode(node.id)}>Duplicate</Btn>
-            <div style={{ flex:1 }}/>
-            <Badge label="Saved" bg={C.brandBg} color={C.brandDark} dot/>
+        {node.type !== "trigger" && (
+          <div style={{ display:"flex", gap:6, alignItems:"center", marginTop:8 }}>
+            <Btn kind="ghost" size="sm" onClick={()=>onToggleDisable(node.id)}>{node.disabled ? "Enable step" : "Disable step"}</Btn>
+            {node.disabled && <span style={{ fontSize:12, color:FS.muted }}>Skipped when the flow runs</span>}
           </div>
         )}
       </div>
-      <div style={{ padding:18 }}>
+      <div style={{ flex:1, minHeight:0, overflowY:"auto", padding:16 }}>
         <VarContext.Provider value={{ nodes, edges, currentNodeId: node.id }}>
           {content}
         </VarContext.Provider>
@@ -3095,140 +3015,163 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
     </aside>
   );
 };
-
-
 const DownloadIcon = (s = 13) => (
   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
   </svg>
 );
 
-const BuilderToolbar = ({ automationName, status, onBack, onSave, isDirty, saving, onToggleStatus, toggleBusy, onPreview, showPreview, activeTab, onTabChange, onUndo, onRedo, canUndo, canRedo, onZoomIn, onZoomOut, onFit, onAutoLayout, onExport }) => {
+// The status chip the Social builder puts beside the name: LIVE / DRAFT / OFF.
+const STATUS_CHIP = {
+  active:   { label:"LIVE",   bg:FS.primary,   color:FS.onAccent },
+  draft:    { label:"DRAFT",  bg:FS.surface2,  color:FS.muted },
+  inactive: { label:"OFF",    bg:FS.surface2,  color:FS.muted },
+  paused:   { label:"PAUSED", bg:FS.amberSoft, color:FS.amber },
+  error:    { label:"ERROR",  bg:FS.errBg,     color:FS.err },
+};
+const StatusChip = ({ status }) => {
+  const m = STATUS_CHIP[status] || STATUS_CHIP.draft;
+  return <span data-testid="status-chip" style={{ padding:"3px 8px", borderRadius:6, fontSize:11, fontWeight:750, letterSpacing:".04em", background:m.bg, color:m.color, flexShrink:0 }}>{m.label}</span>;
+};
+
+/**
+ * One slim row, like the Social builder's top bar: back, the name, the status
+ * chip, the Editor / Executions switch, then the actions. Zoom, fit and the
+ * arrange controls live on the canvas itself (bottom-left stack) — see Canvas.
+ */
+const BuilderToolbar = ({ automationName, status, onBack, onSave, isDirty, saving, onToggleStatus, toggleBusy, onPreview, showPreview, activeTab, onTabChange, onUndo, onRedo, canUndo, canRedo, onExport, onToggleBlocks, showBlocks }) => {
   const isActive = status === 'active';
-  const tabs = [
-    { key: 'editor', label: 'Editor' },
-    { key: 'executions', label: 'Executions' },
-  ];
+  const tabs = [{ id:'editor', label:'Editor' }, { id:'executions', label:'Executions' }];
   return (
-    <div style={{ background:"var(--c-surface, #fff)", borderBottom:`1px solid ${C.cardBorder}`, padding:"9px 16px", display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
-      <Btn kind="ghost" icon={IC.back(13)} onClick={onBack}>Back</Btn>
-      <div style={{ height:22, width:1, background:C.cardBorder }}/>
-      <div style={{ display:"flex", flexDirection:"column", minWidth:0 }}>
-        <div style={{ fontSize:16, fontWeight:700, color:C.text1, fontFamily:"'DM Sans'" }}>{automationName || "Untitled Automation"}</div>
-      </div>
-      <StatusPill status={status || "draft"}/>
+    <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap", padding:"12px 16px 10px", flexShrink:0, fontFamily:FONT }}>
+      <IconBtn title="Back to automations" onClick={onBack}>{IC.back(16)}</IconBtn>
+      <div style={{ fontSize:18, fontWeight:750, color:FS.text, letterSpacing:"-.01em", flex:"1 1 200px", minWidth:140, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{automationName || "Untitled Automation"}</div>
+      <StatusChip status={status || "draft"}/>
+      <PillStrip size="sm" items={tabs} value={activeTab} onChange={k => onTabChange && onTabChange(k)} />
       <div style={{ flex:1 }}/>
-
-      {/* Center tabs */}
-      <div style={{ display:"flex", gap:4, background:C.innerBg, borderRadius:10, padding:4 }}>
-        {tabs.map(tab => {
-          const isActive = activeTab === tab.key;
-          return (
-            <button
-              key={tab.key}
-              onClick={() => onTabChange && onTabChange(tab.key)}
-              style={{
-                padding: '6px 18px',
-                borderRadius: 8,
-                border: 'none',
-                fontSize: 14,
-                fontWeight: 700,
-                fontFamily: "'DM Sans'",
-                cursor: 'pointer',
-                background: isActive ? 'var(--c-surface, #fff)' : 'transparent',
-                color: isActive ? C.text1 : C.text5,
-                boxShadow: isActive ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
-                transition: 'all .15s',
-              }}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
+      <div style={{ display:"flex", gap:4 }}>
+        <IconBtn title="Undo" onClick={onUndo} style={{ opacity: canUndo ? 1 : 0.4 }}>{IC.undo(15)}</IconBtn>
+        <IconBtn title="Redo" onClick={onRedo} style={{ opacity: canRedo ? 1 : 0.4 }}>{IC.redo(15)}</IconBtn>
       </div>
-
-      <div style={{ flex:1 }}/>
-      <div style={{ display:"flex", gap:2 }}>
-        <IconBtn title="Undo" onClick={onUndo} style={{ opacity: canUndo ? 1 : 0.35 }}>{IC.undo(15)}</IconBtn>
-        <IconBtn title="Redo" onClick={onRedo} style={{ opacity: canRedo ? 1 : 0.35 }}>{IC.redo(15)}</IconBtn>
-        <IconBtn title="Auto-arrange" onClick={onAutoLayout}>{IC.arr(15)}</IconBtn>
-        <div style={{ height:22, width:1, background:C.cardBorder, margin:"0 6px", alignSelf:"center" }}/>
-        <IconBtn title="Zoom out" onClick={onZoomOut}>{IC.zOut(15)}</IconBtn>
-        <IconBtn title="Fit to screen" onClick={onFit}>{IC.fit(15)}</IconBtn>
-        <IconBtn title="Zoom in" onClick={onZoomIn}>{IC.zIn(15)}</IconBtn>
-      </div>
-      <div style={{ height:22, width:1, background:C.cardBorder }}/>
-      <Btn kind="ghost" icon={IC.eye(13)} onClick={onPreview} data-testid="preview-toggle">{showPreview ? "Hide preview" : "Preview"}</Btn>
+      {onToggleBlocks && (
+        <Btn kind={showBlocks ? "soft" : "ghost"} icon={IC.plus(13)} onClick={onToggleBlocks} data-testid="blocks-toggle" title="Add a block that is not connected to anything yet">Blocks</Btn>
+      )}
       {onExport && (
         <Btn kind="ghost" icon={DownloadIcon(13)} onClick={onExport} title="Download this automation as a JSON file you can import elsewhere">Export</Btn>
       )}
-      {onToggleStatus && (
-        <Btn
-          kind={isActive ? "ghost" : "primary"}
-          icon={IC.power(13)}
-          onClick={() => !toggleBusy && onToggleStatus(isActive ? 'inactive' : 'active')}
-          title={isActive ? "Disable this automation" : "Enable this automation"}
-          style={toggleBusy ? { opacity: 0.6, pointerEvents: 'none' } : (isActive ? { color: C.redDark, border: `1px solid ${C.redBg}` } : undefined)}
-        >
-          {toggleBusy ? (isActive ? "Disabling…" : "Enabling…") : (isActive ? "Disable" : "Enable")}
-        </Btn>
-      )}
+      <Btn kind={showPreview ? "soft" : "ghost"} icon={IC.phone(14)} onClick={onPreview} data-testid="preview-toggle" title="See how it works and try it as a customer">Preview & test</Btn>
       {saving ? (
-        <Btn kind="ghost" disabled style={{ opacity: .7, pointerEvents: 'none' }}>Saving…</Btn>
-      ) : isDirty ? (
-        <Btn kind="primary" icon={IC.play(12)} onClick={onSave} title="Save changes">Save</Btn>
+        <Btn kind="ghost" disabled style={{ opacity:.7, pointerEvents:'none' }}>Saving…</Btn>
       ) : (
-        <Btn kind="ghost" icon={IC.check(13)} disabled
-          title="No unsaved changes"
-          style={{ color: C.green || 'var(--c-successText, #0F6E56)', borderColor: C.green || '#0F6E56', opacity: .85, pointerEvents: 'none', cursor: 'default' }}>
-          Saved
+        <Btn kind="ghost" icon={isDirty ? IC.up(13) : IC.check(13)} onClick={isDirty ? onSave : undefined} data-testid="save-button"
+          title={isDirty ? "Save changes" : "No unsaved changes"}
+          style={isDirty ? undefined : { opacity:.6, cursor:"default" }}>
+          {isDirty ? "Save" : "Saved"}
         </Btn>
       )}
-      <IconBtn>{IC.more(16)}</IconBtn>
+      {onToggleStatus && (
+        <Btn kind={isActive ? "danger" : "primary"}
+          icon={isActive ? IC.power(13) : IC.play(12)}
+          onClick={() => !toggleBusy && onToggleStatus(isActive ? 'inactive' : 'active')}
+          title={isActive ? "Stop this automation" : "Set this automation live"}
+          style={toggleBusy ? { opacity:0.6, pointerEvents:'none' } : undefined}>
+          {toggleBusy ? (isActive ? "Stopping…" : "Starting…") : (isActive ? "Stop" : "Set live")}
+        </Btn>
+      )}
     </div>
   );
 };
+/* ══════════════════════════════════════════════════════════════════════
+   PREVIEW & TEST — the WhatsApp simulator, laid out like the Social
+   builder's Preview / Test it panel: mode tabs, a player bar, the phone,
+   "What happened", and the test contact. Nothing is sent.
+   ══════════════════════════════════════════════════════════════════════ */
 
-const PhonePreview = ({ onClose, nodes = [], edges = [], templates = [], otherAutomations = [] }) => {
+// Does a typed message start this trigger? Mirrors what the engine checks, so
+// "Test it" refuses the same messages the live flow would ignore.
+const triggerMatches = (trigger, text) => {
+  const tk = trigger.triggerKind || "keyword";
+  if (tk === "anyMessage" || tk === "newContact") return true;
+  if (tk === "link") {
+    const code = String(trigger.trackingCode || "").trim();
+    return !!code && text.toLowerCase().includes(code.toLowerCase());
+  }
+  if (tk === "keyword") {
+    const kw = String(trigger.keyword || "").trim();
+    if (!kw) return false;
+    const a = (trigger.caseSensitive ? text : text.toLowerCase()).trim();
+    const b = trigger.caseSensitive ? kw : kw.toLowerCase();
+    const mt = trigger.matchType || "exact";
+    return mt === "contains" ? a.includes(b) : mt === "starts" ? a.startsWith(b) : a === b;
+  }
+  return false;
+};
+const triggerAsk = (trigger) => {
+  const tk = trigger?.triggerKind || "keyword";
+  if (tk === "keyword") return trigger.keyword ? `Send “${trigger.keyword}” like a customer would.` : "The trigger has no keyword yet — click the trigger step to set one.";
+  if (tk === "link") return trigger.trackingCode ? `Send a message that contains the link code “${trigger.trackingCode}”.` : "The wa.me link trigger has no tracking code yet.";
+  if (tk === "newContact") return "Send anything — a first message from a new contact starts it.";
+  if (tk === "anyMessage") return "Send anything — every inbound message starts it.";
+  if (tk === "tagApplied") return `Press ▶ to apply the tag “${trigger.tag || "…"}” to the test contact.`;
+  return "Press ▶ to start.";
+};
+
+const SPEEDS = [0.5, 1, 2, 4];
+
+const SimPanel = ({ onClose, nodes = [], edges = [], templates = [], otherAutomations = [], onNode, onModeChange }) => {
+  const [mode, setMode] = useState("preview");          // preview = plays the trigger for you · test = you act as the customer
+  const [speed, setSpeed] = useState(1);
+  const [persona, setPersona] = useState({ name: "Anjali", phone: "+91 98765 43210" });
   const [conv, setConv] = useState([]);
   const [waiting, setWaiting] = useState(null);
   const [typed, setTyped] = useState("");
   const [ended, setEnded] = useState(false);
+  const [effects, setEffects] = useState({ tags: [], stage: null, fields: {} });  // what Action steps did to the test contact
   const chatRef = useRef(null);
   const timersRef = useRef([]);
   const runRef = useRef(0);
+  const speedRef = useRef(1);
+  const personaRef = useRef(persona);
+  speedRef.current = speed;
+  personaRef.current = persona;
+  const wide = mode === "test";
+
+  useEffect(() => { onModeChange && onModeChange(mode); }, [mode]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const clearTimers = () => { timersRef.current.forEach(t => clearTimeout(t)); timersRef.current = []; };
-  const sched = (cb, ms) => { const t = setTimeout(cb, ms); timersRef.current.push(t); };
-
-  const SAMPLE_VARS = {
-    "{{first_name}}": "Anjali",
-    "{{phone}}":      "+91 98765 43210",
-    "{{city}}":       "Chennai",
-    "{{bhk_type}}":   "2BHK",
-    "{{order_id}}":   "ORD-12345",
-    "{{budget}}":     "₹1.2 Cr",
-    "{{name}}":       "Anjali",
-    "{{contact_number}}": "+91 98765 43210",
-  };
-  const resolveBody = (body, bindings = {}) =>
-    (body || "").replace(/\{\{(\d+)\}\}/g, (_, num) => {
-      const bound = bindings["var" + num];
-      if (!bound) return `[var${num}]`;
-      return SAMPLE_VARS[bound] || bound;
-    });
+  // Every delay is divided by the speed, so 2× really is twice as fast.
+  const sched = (cb, ms) => { const t = setTimeout(cb, ms / (speedRef.current || 1)); timersRef.current.push(t); };
 
   const now = () => {
     const d = new Date();
     return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
   };
 
+  // Variables resolve to the TEST CONTACT, so {{name}} in a message reads as a
+  // name rather than as braces, the way it will for a real person.
+  const sampleVars = () => {
+    const p = personaRef.current;
+    const first = String(p.name || "").trim().split(/\s+/)[0] || "there";
+    return {
+      "{{first_name}}": first, "{{name}}": p.name || "Customer", "{{phone}}": p.phone || "", "{{contact_number}}": p.phone || "",
+      "{{city}}": "Chennai", "{{bhk_type}}": "2BHK", "{{order_id}}": "ORD-12345", "{{budget}}": "₹1.2 Cr",
+    };
+  };
+  const fill = (text) => {
+    const vars = sampleVars();
+    return String(text || "").replace(/\{\{\s*([a-zA-Z_][\w.-]*)\s*\}\}/g, (m, k) => vars[`{{${k}}}`] ?? m);
+  };
+  const resolveBody = (body, bindings = {}) =>
+    fill((body || "").replace(/\{\{(\d+)\}\}/g, (_, num) => {
+      const bound = bindings["var" + num];
+      if (!bound) return `[var${num}]`;
+      return sampleVars()[bound] || fill(bound);
+    }));
+
   const resolveNext = (nodeId, fromHandle = null) => {
     // Mirror the engine exactly (automationEngine.js walkFrom / resumeAutomation):
     //   - an OMITTED fromHandle means "default", so asking for "default"
-    //     explicitly must still match those edges. The old strict equality
-    //     missed every one of them, and the builder deliberately omits the
-    //     string when it is default — so live flow 14's trigger edge is one.
+    //     explicitly must still match those edges.
     //   - a placeholder row with a null target is not a route.
     const want = fromHandle || "default";
     const candidates = edges.filter(e =>
@@ -3248,15 +3191,19 @@ const PhonePreview = ({ onClose, nodes = [], edges = [], templates = [], otherAu
     return target;
   };
 
+  const say = (nodeId) => { onNode && onNode(nodeId); };
+  const finish = () => { setEnded(true); };
+
   const playNode = (nodeId, runId) => {
     if (runId !== runRef.current) return;
     const node = nodes.find(n => n.id === nodeId);
-    if (!node) { setEnded(true); return; }
+    if (!node) { finish(); return; }
     if (node.disabled) {
       const next = resolveNext(node.id);
-      next ? sched(() => playNode(next, runId), 80) : setEnded(true);
+      next ? sched(() => playNode(next, runId), 80) : finish();
       return;
     }
+    say(node.id);
 
     if (node.type === "message") {
       if (node.messageMode === "direct") {
@@ -3264,9 +3211,9 @@ const PhonePreview = ({ onClose, nodes = [], edges = [], templates = [], otherAu
         const dt = node.directType || "text";
         let text = "";
         let media = null;
+        // An image above the buttons counts as media in the bubble too.
+        if (dd.headerType === "image" && dd.headerMediaLibraryId) media = "Photo";
         switch (dt) {
-          // No emojis anywhere in this codebase — a typed media chip renders
-          // in the bubble instead, via the `media` field.
           case "text": text = dd.body || "(empty text)"; break;
           case "image": text = dd.caption || ""; media = "Photo"; break;
           case "video": text = dd.caption || ""; media = "Video"; break;
@@ -3275,6 +3222,7 @@ const PhonePreview = ({ onClose, nodes = [], edges = [], templates = [], otherAu
           case "document": text = dd.caption || ""; media = dd.filename ? `Document · ${dd.filename}` : "Document"; break;
           case "location": text = `${dd.name || "Location"}${dd.address ? `\n${dd.address}` : ""}`.trim(); media = "Location"; break;
           case "contact": text = `${dd.name || "Contact"}${dd.phone ? `\n${dd.phone}` : ""}`; media = "Contact card"; break;
+          case "flow": text = dd.body || ""; media = "WhatsApp form"; break;
           case "cta_url":
           case "location_request":
           case "quick_reply":
@@ -3287,393 +3235,367 @@ const PhonePreview = ({ onClose, nodes = [], edges = [], templates = [], otherAu
         // ⚠ The simulator keeps NO handle list of its own. `tapTargetsOf` is the
         // same derivation the canvas draws its connector rows from, so a tap
         // here can only ever resolve a handle an edge could have been drawn to.
-        // The copy that used to live in this switch emitted `row:<section>`
-        // while the canvas drew `row:<section>:<row>`, so every list tap matched
-        // no edge and the run reported END OF FLOW on a correctly wired menu —
-        // and both options collapsed onto one handle besides. Nothing threw: a
-        // handle matching no edge is indistinguishable from "the flow finished".
         const taps = tapTargetsOf(node);
         const buttons = taps.length ? taps.map(t => ({ text: t.label })) : null;
         const handles = taps.length ? taps.map(t => t.handle) : null;
-        setConv(c => [...c, { from:"bot", text, time: now(), buttons, media, ownerNodeId: node.id }]);
+        setConv(c => [...c, { from:"bot", text: fill(text), time: now(), buttons, media, ownerNodeId: node.id }]);
         // A button that cannot advance the flow (a link button) must not park
         // the simulator waiting for a tap that will never mean anything.
         if (buttons && buttons.length && (handles.some(Boolean) || node.waitForReply)) {
           setWaiting({ nodeId: node.id, buttons, handles });
         } else if (node.waitForReply) {
-          // No buttons, but the step waits: a free-text question. Park with no
-          // buttons so the composer takes the answer.
+          // No buttons, but the step waits: a free-text question.
           setWaiting({ nodeId: node.id, buttons: null, handles: null });
         } else {
           const next = resolveNext(node.id);
-          next ? sched(() => playNode(next, runId), 900) : setEnded(true);
+          next ? sched(() => playNode(next, runId), 900) : finish();
         }
         return;
       }
       const tpl = templates.find(t => String(t.id) === String(node.templateId));
       if (!tpl) {
-        setConv(c => [...c, { from:"system", text:"[Warning] Message node has no template selected", time: now() }]);
+        setConv(c => [...c, { from:"system", text:"This message step has no template selected", time: now() }]);
         const next = resolveNext(node.id);
-        next ? sched(() => playNode(next, runId), 600) : setEnded(true);
+        next ? sched(() => playNode(next, runId), 600) : finish();
         return;
       }
       const text = resolveBody(tpl.body, node.bindings || {});
-      // Every button is SHOWN (the customer really does see the link and call
-      // buttons), but only a QUICK_REPLY can move the flow on — Meta sends no
-      // inbound message at all for the others. A null handle marks those, and
-      // the tap handler says so instead of silently doing nothing.
-      //
       // The buttons come from the TEMPLATE (the node stores only a snapshot,
-      // which can lag an edit), so this is the one place `tapTargetsOf` is fed
-      // a synthetic node rather than the real one — same derivation, live data.
+      // which can lag an edit) — same derivation, live data.
       const taps = tapTargetsOf({ ...node, messageMode: "template", buttons: tpl.buttons });
       const buttons = taps.length ? taps.map(t => ({ text: t.label })) : null;
       const handles = taps.length ? taps.map(t => t.handle) : null;
       setConv(c => [...c, { from:"bot", text, time: now(), buttons, ownerNodeId: node.id }]);
-      // Park only when a tap can mean something, or the step waits for a typed
-      // answer. A template whose buttons are all URL / phone taps and which is
-      // NOT waiting used to strand the run here on a tap that can never advance
-      // the flow — the direct-message path already guarded against exactly that.
       if (buttons && buttons.length && (handles.some(Boolean) || node.waitForReply)) {
         setWaiting({ nodeId: node.id, buttons, handles });
       } else if (node.waitForReply) {
         setWaiting({ nodeId: node.id, buttons: null, handles: null });
       } else {
         const next = resolveNext(node.id);
-        next ? sched(() => playNode(next, runId), 900) : setEnded(true);
+        next ? sched(() => playNode(next, runId), 900) : finish();
       }
     } else if (node.type === "condition") {
       const branch = (node.matchMode === "random") ? (Math.random() < 0.5 ? "yes" : "no") : "yes";
-      setConv(c => [...c, { from:"system", text:`[Condition] ${node.title || "Condition"} — ${branch === "yes" ? "Matched" : "Not-matched"} branch`, time: now() }]);
+      setConv(c => [...c, { from:"system", text:`${node.title || "Condition"} → ${branch === "yes" ? "Matched" : "Not matched"}`, time: now() }]);
       const next = resolveNext(node.id, branch);
-      next ? sched(() => playNode(next, runId), 650) : setEnded(true);
+      next ? sched(() => playNode(next, runId), 650) : finish();
     } else if (node.type === "action") {
-      const actList = (node.actions || []).map(a => `${a.kind}${a.value ? " → " + a.value : ""}`);
-      setConv(c => [...c, { from:"system", text:`[Action] ${actList.join(" · ") || (node.title || "Action")}`, time: now() }]);
+      const acts = node.actions || [];
+      setEffects(ef => {
+        const next = { tags: [...ef.tags], stage: ef.stage, fields: { ...ef.fields } };
+        for (const a of acts) {
+          if (a.kind === "Add Tag" && a.value) next.tags = [...new Set([...next.tags, a.value])];
+          else if (a.kind === "Remove Tag" && a.value) next.tags = next.tags.filter(x => x !== a.value);
+          else if (a.kind === "Set Funnel Stage" && a.value) next.stage = a.value;
+          else if (a.kind === "Set Lead Field" && a.field) next.fields[a.field] = fill(a.value || "");
+        }
+        return next;
+      });
+      const actList = acts.map(a => `${a.kind}${a.field ? " · " + a.field : ""}${a.value ? " → " + fill(a.value) : ""}`);
+      setConv(c => [...c, { from:"system", text: actList.join(" · ") || (node.title || "Action"), time: now() }]);
       const next = resolveNext(node.id);
-      next ? sched(() => playNode(next, runId), 600) : setEnded(true);
+      next ? sched(() => playNode(next, runId), 600) : finish();
     } else if (node.type === "delay") {
-      setConv(c => [...c, { from:"system", text:`[Delay] Wait ${node.waitValue || "10"} ${node.waitUnit || "minutes"}`, time: now() }]);
+      setConv(c => [...c, { from:"system", text:`Waits ${node.waitValue || "10"} ${node.waitUnit || "minutes"}`, time: now(), kind:"wait" }]);
       const next = resolveNext(node.id);
-      next ? sched(() => playNode(next, runId), 900) : setEnded(true);
+      next ? sched(() => playNode(next, runId), 900) : finish();
     } else if (node.type === "ai") {
       const snippet = (node.aiGoal || "AI generates an answer").slice(0, 80);
       setConv(c => [...c, { from:"bot", text:`[AI] ${snippet}${(node.aiGoal || "").length > 80 ? "…" : ""}`, time: now() }]);
       const next = resolveNext(node.id);
-      next ? sched(() => playNode(next, runId), 900) : setEnded(true);
+      next ? sched(() => playNode(next, runId), 900) : finish();
     } else if (node.type === "ai_agent") {
       setConv(c => [...c, { from:"bot", text:`[AI Agent] (no model connected — preview unavailable)`, time: now() }]);
       const next = resolveNext(node.id);
-      next ? sched(() => playNode(next, runId), 900) : setEnded(true);
+      next ? sched(() => playNode(next, runId), 900) : finish();
     } else if (node.type === "handoff") {
       const count = (node.assigned || []).length;
-      setConv(c => [...c, { from:"system", text:`[Handoff] Conversation assigned to ${count ? "the selected user" : "the inbox"} · ${node.priority || "high"} priority`, time: now() }]);
-      setConv(c => [...c, { from:"system", text:"Flow ended — a live agent will continue.", time: now() }]);
-      setEnded(true);
+      setConv(c => [...c, { from:"system", text:`Handed to ${count ? "the selected user" : "the inbox"} · ${node.priority || "high"} priority — a person continues from here`, time: now() }]);
+      finish();
     } else if (node.type === "subflow") {
       const flow = otherAutomations.find(f => f.id === node.flowId);
-      setConv(c => [...c, { from:"system", text:`[Sub-flow] ${flow?.name || "(none selected)"} · ${node.waitMode || "await"}`, time: now() }]);
-      if (node.waitMode === "handoff") { setEnded(true); return; }
+      setConv(c => [...c, { from:"system", text:`Starts “${flow?.name || "(none selected)"}” · ${node.waitMode || "await"}`, time: now() }]);
+      if (node.waitMode === "handoff") { finish(); return; }
       const next = resolveNext(node.id);
-      next ? sched(() => playNode(next, runId), 700) : setEnded(true);
+      next ? sched(() => playNode(next, runId), 700) : finish();
     } else if (node.type === "api") {
-      setConv(c => [...c, { from:"system", text:`[API] ${node.method || "POST"} ${(node.apiUrl || "API request").slice(0, 40)}`, time: now() }]);
+      setConv(c => [...c, { from:"system", text:`API ${node.method || "POST"} ${(node.apiUrl || "request").slice(0, 40)}`, time: now() }]);
       const next = resolveNext(node.id);
-      next ? sched(() => playNode(next, runId), 700) : setEnded(true);
+      next ? sched(() => playNode(next, runId), 700) : finish();
     } else if (node.type === "trigger") {
       const next = resolveNext(node.id);
-      next ? sched(() => playNode(next, runId), 400) : setEnded(true);
+      next ? sched(() => playNode(next, runId), 400) : finish();
     } else {
-      setConv(c => [...c, { from:"system", text:`(${node.type} node — no preview)`, time: now() }]);
+      setConv(c => [...c, { from:"system", text:`(${node.type} step — no preview)`, time: now() }]);
       const next = resolveNext(node.id);
-      next ? sched(() => playNode(next, runId), 500) : setEnded(true);
+      next ? sched(() => playNode(next, runId), 500) : finish();
     }
   };
 
   const onTapButton = (text, idx) => {
-    if (!waiting) return;
+    if (!waiting || waiting.trigger) return;
     const { nodeId, handles } = waiting;
     // A link / call / copy-code button opens something on the phone and sends
-    // us nothing, so the flow genuinely cannot continue from it. Say that
-    // rather than appearing to accept the tap and then stopping.
+    // us nothing, so the flow genuinely cannot continue from it.
     if (handles && handles[idx] === null) {
-      setConv(c => [...c, {
-        from: "system",
-        text: "That button opens a link or dialler on the customer's phone. WhatsApp tells us nothing about it, so a flow cannot branch on it.",
-        time: now(),
-      }]);
+      setConv(c => [...c, { from:"system", text:"That button opens a link or dialler on the customer's phone. WhatsApp tells us nothing about it, so a flow cannot branch on it.", time: now() }]);
       return;
     }
     setConv(c => [...c, { from:"user", text, time: now() }]);
     setWaiting(null);
-    // A list's outputs are `row:*`, hence the explicit handle list rather than
-    // an assumed `btn:<index>`.
     const next = resolveNext(nodeId, handles ? handles[idx] : `btn:${idx}`);
     if (next) sched(() => playNode(next, runRef.current), 600);
-    else setEnded(true);
+    else finish();
   };
 
-  // Typing is allowed whenever the flow is parked on a reply — a free-text
-  // question, or a menu where the customer types instead of tapping.
-  const canType = !!waiting && !ended;
+  const trigger = nodes.find(n => n.type === "trigger" && !n.disabled) || null;
+  const tk = trigger ? (trigger.triggerKind || "keyword") : null;
+  // Triggers a customer cannot type their way into: you press ▶ instead.
+  const pressOnly = !!trigger && (tk === "tagApplied" || (tk === "keyword" && (trigger.triggerDirection || "inbound") === "outbound"));
+
+  // Act out the trigger (Preview does this on its own; in Test it, ▶ does it for you).
+  const startTrigger = (runId) => {
+    if (!trigger) {
+      setConv([{ from:"system", text:"No active trigger step in this flow.", time: now() }]);
+      finish();
+      return;
+    }
+    say(trigger.id);
+    setWaiting(null);
+    const go = () => { const next = resolveNext(trigger.id); if (next) sched(() => playNode(next, runId), 700); else finish(); };
+    if (tk === "keyword") {
+      const kw = (trigger.keyword || "PRICE").trim();
+      if ((trigger.triggerDirection || "inbound") === "outbound") {
+        setConv([
+          { from:"system", text:"You sent this keyword from your business number — the flow then runs.", time: now() },
+          { from:"bot", text: kw, time: now(), ownerNodeId: trigger.id },
+        ]);
+      } else {
+        setConv([{ from:"user", text: kw, time: now() }]);
+      }
+      go(); return;
+    }
+    if (tk === "link") {
+      const code = trigger.trackingCode || "WEB_HOMEPAGE_HERO";
+      const msg  = trigger.prefilledMsg || "Hi, I'd like to know more";
+      setConv([{ from:"system", text:`Opened your wa.me link · ${trigger.linkSource || "Website"}`, time: now() }, { from:"user", text:`${msg} · ${code}`, time: now() }]);
+      go(); return;
+    }
+    if (tk === "newContact") {
+      setConv([{ from:"system", text:"First time messaging this number", time: now() }, { from:"user", text:"Hello", time: now() }]);
+      go(); return;
+    }
+    if (tk === "anyMessage") { setConv([{ from:"user", text:"Hi there", time: now() }]); go(); return; }
+    if (tk === "tagApplied") {
+      setConv([{ from:"system", text:`Tag “${trigger.tag || "Hot Lead"}” was ${trigger.tagDirection === "removed" ? "removed from" : "added to"} the contact`, time: now() }]);
+      go(); return;
+    }
+    setConv([{ from:"user", text:"(triggered)", time: now() }]);
+    go();
+  };
+
+  // Restart in the current mode. Preview plays the trigger for you; Test it
+  // hands you the composer and waits for you to send something.
+  const restart = (m = mode) => {
+    clearTimers();
+    setTyped("");
+    setEnded(false);
+    setEffects({ tags: [], stage: null, fields: {} });
+    runRef.current += 1;
+    const runId = runRef.current;
+    setConv([]);
+    say(null);
+    if (m === "test") {
+      setWaiting({ trigger: true });
+      return;
+    }
+    setWaiting(null);
+    startTrigger(runId);
+  };
+
+  const canType = !!waiting && !ended && !(waiting.trigger && pressOnly);
 
   const onSendTyped = () => {
     const text = typed.trim();
     if (!text || !canType) return;
     setTyped("");
+    if (waiting.trigger) {
+      // Test it: the first message has to start the trigger, the same way it
+      // would have to in a real chat.
+      setConv(c => [...c, { from:"user", text, time: now() }]);
+      if (!trigger) { setConv(c => [...c, { from:"system", text:"No active trigger step in this flow.", time: now() }]); finish(); return; }
+      if (!triggerMatches(trigger, text)) {
+        const kw = trigger.keyword ? `“${trigger.keyword}” (${trigger.matchType || "exact"} match)` : "a different message";
+        setConv(c => [...c, { from:"system", text:`Nothing started — this flow waits for ${tk === "link" ? `a message containing “${trigger.trackingCode || ""}”` : kw}.`, time: now() }]);
+        return;
+      }
+      setWaiting(null);
+      say(trigger.id);
+      const next = resolveNext(trigger.id);
+      if (next) sched(() => playNode(next, runRef.current), 700); else finish();
+      return;
+    }
     const { nodeId, handles } = waiting;
+    // Mirror resumeAutomation: a buttons-only step ignores typed text and keeps waiting.
+    const waitingNode = nodes.find(n => n.id === nodeId);
+    if (waitingNode?.buttonsOnly === true && (handles || []).some(Boolean)) {
+      setConv(c => [...c, { from:"user", text, time: now() }, { from:"system", text:"Ignored — this step only accepts a button tap", time: now() }]);
+      return;
+    }
     setConv(c => [...c, { from:"user", text, time: now() }]);
     setWaiting(null);
     // Mirror resumeAutomation's order: a free-text answer follows `replied` on
     // a question that offered no choices, and `nomatch` on one that did.
-    const target = resolveNext(nodeId, "replied")
-      || resolveNext(nodeId, "nomatch")
-      || resolveNext(nodeId, "default");
+    const target = resolveNext(nodeId, "replied") || resolveNext(nodeId, "nomatch") || resolveNext(nodeId, "default");
     if (target) sched(() => playNode(target, runRef.current), 600);
-    else setEnded(true);
+    else finish();
   };
 
-  const restart = () => {
-    clearTimers();
-    setWaiting(null);
-    setTyped("");
-    setEnded(false);
-    runRef.current += 1;
-    const runId = runRef.current;
-    setConv([]);
-    const trigger = nodes.find(n => n.type === "trigger" && !n.disabled);
-    if (!trigger) {
-      setConv([{ from:"system", text:"[Warning] No active trigger node in this flow.", time: now() }]);
-      setEnded(true);
-      return;
-    }
-    const tk = trigger.triggerKind || "keyword";
-    let firstItem;
-    if (tk === "keyword") {
-      const kw = (trigger.keyword || "PRICE").trim();
-      const dir = trigger.triggerDirection || "inbound";
-      if (dir === "outbound") {
-        // Outbound trigger: YOU (a BD number) send the keyword — the flow runs
-        // right after your message goes out. Show it as a business-sent message,
-        // not a contact-sent one.
-        setConv([
-          { from:"system", text:"[Outbound] You sent this keyword from your BD number — this flow then runs.", time: now() },
-          { from:"bot", text: kw, time: now(), ownerNodeId: trigger.id },
-        ]);
-        const next = resolveNext(trigger.id);
-        if (next) sched(() => playNode(next, runId), 700);
-        else setEnded(true);
-        return;
-      }
-      firstItem = { from:"user", text: kw, time: now() };
-    } else if (tk === "link") {
-      const code = trigger.trackingCode || "WEB_HOMEPAGE_HERO";
-      const msg  = trigger.prefilledMsg || "Hi, I'd like to know more";
-      firstItem = { from:"user",   text: `${msg} · ${code}`, time: now() };
-      setConv([{ from:"system", text:`[Link] Contact opened wa.me link · ${trigger.linkSource || "Website"}`, time: now() }, firstItem]);
-      const next = resolveNext(trigger.id);
-      if (next) sched(() => playNode(next, runId), 700);
-      else setEnded(true);
-      return;
-    } else if (tk === "newContact") {
-      firstItem = { from:"user", text:"Hello", time: now() };
-      setConv([{ from:"system", text:"[New Contact] First time messaging this number", time: now() }, firstItem]);
-      const next = resolveNext(trigger.id);
-      if (next) sched(() => playNode(next, runId), 700);
-      else setEnded(true);
-      return;
-    } else if (tk === "anyMessage") {
-      firstItem = { from:"user", text:"Hi there", time: now() };
-    } else if (tk === "tagApplied") {
-      setConv([{ from:"system", text:`[Tag] "${trigger.tag || "Hot Lead"}" was ${trigger.tagDirection === "removed" ? "removed from" : "added to"} the contact`, time: now() }]);
-      const next = resolveNext(trigger.id);
-      if (next) sched(() => playNode(next, runId), 700);
-      else setEnded(true);
-      return;
-    } else {
-      firstItem = { from:"user", text:"(triggered)", time: now() };
-    }
-    setConv([firstItem]);
-    const next = resolveNext(trigger.id);
-    if (next) sched(() => playNode(next, runId), 700);
-    else setEnded(true);
-  };
+  useEffect(() => { restart(mode); return () => clearTimers(); }, [mode]);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { clearTimers(); onNode && onNode(null); }, []);     // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, [conv, waiting, ended]);
 
-  useEffect(() => {
-    restart();
-    return () => clearTimers();
-    // eslint-disable-next-line
-  }, []);
+  // "What happened": every step and customer action, in order.
+  const timeline = conv.map(m => ({
+    kind: m.from === "user" ? "you" : m.from === "system" ? (m.kind === "wait" ? "wait" : "step") : "bot",
+    label: m.from === "bot" ? `Sent: ${[m.media, m.text].filter(Boolean).join(" · ")}`.slice(0, 90) : m.text,
+  }));
+  if (ended) timeline.push({ kind: "end", label: "End of flow" });
+  const stepCount = conv.filter(m => m.from !== "user").length;
+  const status = ended ? "Ended"
+    : waiting?.trigger ? (pressOnly ? "Press ▶ to start" : "Waiting for you to start it")
+    : waiting ? (waiting.buttons ? "Waiting for them to tap or reply" : "Waiting for their answer")
+    : conv.length ? "Playing" : "Ready";
+  const hint = !trigger ? "Add a trigger first: click the “Trigger” step."
+    : mode === "preview" ? "Plays the start for you. Tap the buttons in the chat to follow a path. Nothing is sent."
+    : `${triggerAsk(trigger)} Then tap the buttons or type like a customer would. Nothing is sent.`;
 
-  useEffect(() => {
-    if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
-  }, [conv, waiting, ended]);
+  const tileBtn = { border:"none", background:"transparent", cursor:"pointer", fontFamily:FONT };
+  const contactBox = (
+    <div style={{ background:FS.raised, borderRadius:12, padding:"10px 12px", flexShrink:0 }}>
+      <div style={{ fontSize:12, fontWeight:650, color:FS.muted, marginBottom:8 }}>Test contact</div>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+        <Input value={persona.name} onChange={e => setPersona(p => ({ ...p, name: e.target.value.slice(0, 40) }))} placeholder="Name" aria-label="Test contact name" style={{ padding:"6px 10px", fontSize:13 }}/>
+        <Input value={persona.phone} onChange={e => setPersona(p => ({ ...p, phone: e.target.value.slice(0, 20) }))} placeholder="Phone" aria-label="Test contact phone" style={{ padding:"6px 10px", fontSize:13 }}/>
+      </div>
+      <div style={{ fontSize:12, color:FS.muted, marginTop:8 }}><b style={{ color:FS.text }}>Tags:</b> {effects.tags.length ? effects.tags.join(", ") : "none"}</div>
+      <div style={{ fontSize:12, color:FS.muted, marginTop:4 }}><b style={{ color:FS.text }}>Stage:</b> {effects.stage || "unchanged"}</div>
+      <div style={{ fontSize:12, color:FS.muted, marginTop:4, overflowWrap:"anywhere" }}><b style={{ color:FS.text }}>Fields:</b> {Object.keys(effects.fields).length ? Object.entries(effects.fields).map(([k, v]) => `${k} = ${v}`).join(" · ") : "none yet"}</div>
+      <div style={{ fontSize:11.5, color:FS.muted, marginTop:6, lineHeight:1.4 }}>Only in this test — no real contact is changed and nothing is sent.</div>
+    </div>
+  );
+  const timelineBox = (side) => (
+    <div style={side ? { display:"flex", flexDirection:"column", minHeight:0, flex:1 } : { marginTop:12 }}>
+      <div style={{ fontSize:12, fontWeight:650, color:FS.muted, marginBottom:6, flexShrink:0 }}>What happened</div>
+      {!timeline.length
+        ? <div style={{ background:FS.raised, borderRadius:12, padding:"14px 12px", fontSize:12.5, color:FS.muted, lineHeight:1.45 }}>Each step shows up here as the run goes.</div>
+        : <div data-testid="sim-timeline" style={{ ...(side ? { flex:1, minHeight:0 } : { maxHeight:200 }), overflowY:"auto", display:"flex", flexDirection:"column", gap:2, background:FS.raised, borderRadius:12, padding:6 }}>
+            {timeline.map((t, i) => (
+              <div key={i} style={{ display:"flex", alignItems:"flex-start", gap:7, padding:"5px 8px", borderRadius:8, fontSize:12, lineHeight:1.35, color: t.kind === "end" ? FS.muted : FS.text }}>
+                <span style={{ fontFamily:MONO, fontSize:10.5, color:FS.muted, minWidth:16, marginTop:1 }}>{i + 1}</span>
+                <span style={{ flexShrink:0, marginTop:2, color: t.kind === "you" ? FS.blue : t.kind === "end" ? FS.muted : t.kind === "wait" ? FS.amber : FS.green, display:"inline-flex" }}>
+                  {t.kind === "you" ? IC.user(12) : t.kind === "end" ? IC.check(12) : t.kind === "wait" ? IC.clock(12) : t.kind === "bot" ? IC.msg(12) : IC.zap(12)}
+                </span>
+                <span style={{ minWidth:0, overflowWrap:"anywhere" }}>{t.label}</span>
+              </div>
+            ))}
+          </div>}
+    </div>
+  );
 
   return (
-    <div style={{ width:308, borderLeft:`1px solid ${C.cardBorder}`, background:"var(--c-surfaceInner, #FAFAF7)", flexShrink:0, display:"flex", flexDirection:"column", minHeight:0 }}>
-      <div style={{ padding:"11px 14px", borderBottom:`1px solid ${C.cardBorder}`, display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
-        <div>
-          <div style={{ fontSize:12, color:C.muted, fontWeight:700, letterSpacing:".1em", textTransform:"uppercase" }}>Live Preview</div>
-          <div style={{ fontSize:15, fontWeight:700, color:C.text1, marginTop:2 }}>WhatsApp simulator</div>
-        </div>
-        <IconBtn onClick={onClose}>{IC.x(15)}</IconBtn>
+    <div data-testid="sim-panel" style={{ width: wide ? 600 : 340, transition:"width .2s", height:"100%", background:FS.nodeBg, borderRadius:16, boxShadow:FS.card, display:"flex", flexDirection:"column", fontFamily:FONT, overflow:"hidden", flexShrink:0 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:8, padding:"12px 12px 8px", flexShrink:0 }}>
+        <PillStrip size="sm" value={mode} onChange={setMode} items={[{ id:"preview", label:"Preview" }, { id:"test", label:"Test it" }]} />
+        <span style={{ flex:1 }}/>
+        <IconBtn title="Start over" onClick={() => restart()} style={{ width:30, height:30 }} data-testid="sim-restart">{IC.refresh(14)}</IconBtn>
+        <IconBtn title="Close preview" onClick={onClose} style={{ width:30, height:30 }}>{IC.x(14)}</IconBtn>
       </div>
-      <div style={{ flex:1, minHeight:0, overflow:"hidden", padding:"14px 14px 10px", display:"flex", flexDirection:"column", alignItems:"center" }}>
-        <div style={{
-          width: 278, flex: 1, minHeight: 0, maxHeight: 600,
-          background: "linear-gradient(155deg, var(--c-sd8d8de, #D8D8DE) 0%, #A6A6AD 30%, #82828A 58%, var(--c-sbfbfc5, #BFBFC5) 82%, #6E6E76 100%)",
-          borderRadius: 52, padding: 3.5,
-          boxShadow: "0 22px 50px rgba(0,0,0,.28), 0 4px 10px rgba(0,0,0,.10), inset 0 0 0 0.5px rgba(255,255,255,.55), inset 0 -2px 4px rgba(0,0,0,.18)",
-          position: "relative", display: "flex", flexDirection: "column",
-        }}>
-          <div style={{ position:"absolute", left:0, top:84,  width:3, height:30, background:"linear-gradient(90deg,#4A4A50,#6B6B72)", borderRadius:"3px 0 0 3px" }}/>
-          <div style={{ position:"absolute", left:0, top:130, width:3, height:48, background:"linear-gradient(90deg,#4A4A50,#6B6B72)", borderRadius:"3px 0 0 3px" }}/>
-          <div style={{ position:"absolute", left:0, top:188, width:3, height:48, background:"linear-gradient(90deg,#4A4A50,#6B6B72)", borderRadius:"3px 0 0 3px" }}/>
-          <div style={{ position:"absolute", right:0, top:130, width:3, height:64, background:"linear-gradient(270deg,#4A4A50,#6B6B72)", borderRadius:"0 3px 3px 0" }}/>
-          <div style={{ position:"absolute", right:0, top:208, width:3, height:38, background:"linear-gradient(270deg,#4A4A50,#6B6B72)", borderRadius:"0 3px 3px 0" }}/>
 
-          <div style={{ background: "#000", borderRadius: 48.5, padding: 2, flex: 1, minHeight: 0, display: "flex", flexDirection: "column", boxShadow: "inset 0 0 0 0.5px rgba(255,255,255,.12)" }}>
-            <div style={{ flex: 1, minHeight: 0, position: "relative", borderRadius: 46.5, overflow: "hidden", display: "flex", flexDirection: "column", background: "#075E54" }}>
-              <div style={{ position:"absolute", top:0, left:0, right:0, height:46, padding:"14px 28px 0", display:"flex", justifyContent:"space-between", alignItems:"flex-start", color:"#fff", zIndex:5, fontFamily:"-apple-system, 'SF Pro Display', system-ui, sans-serif", fontWeight:600, fontSize:15, letterSpacing:"-.01em", pointerEvents:"none" }}>
-                <span style={{ minWidth:48, textAlign:"left" }}>{now()}</span>
-                <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-                  <svg width="17" height="11" viewBox="0 0 17 11" style={{ display:"block" }}>
-                    <rect x="0"  y="6.5" width="3" height="4.5" rx="0.7" fill="#fff"/>
-                    <rect x="4"  y="4.5" width="3" height="6.5" rx="0.7" fill="#fff"/>
-                    <rect x="8"  y="2.5" width="3" height="8.5" rx="0.7" fill="#fff"/>
-                    <rect x="12" y="0.5" width="3" height="10.5" rx="0.7" fill="#fff"/>
-                  </svg>
-                  <svg width="15" height="11" viewBox="0 0 15 11" style={{ display:"block" }}>
-                    <path d="M7.5 2.5 C 4 2.5, 1.5 4.5, 0.5 5.5 L 1.7 7 C 2.6 6.1, 4.6 4.5, 7.5 4.5 C 10.4 4.5, 12.4 6.1, 13.3 7 L 14.5 5.5 C 13.5 4.5, 11 2.5, 7.5 2.5 Z" fill="#fff"/>
-                    <path d="M7.5 5.5 C 5.5 5.5, 4 6.6, 3.3 7.4 L 4.5 8.7 C 5 8.1, 6 7.5, 7.5 7.5 C 9 7.5, 10 8.1, 10.5 8.7 L 11.7 7.4 C 11 6.6, 9.5 5.5, 7.5 5.5 Z" fill="#fff"/>
-                    <circle cx="7.5" cy="9.7" r="1.1" fill="#fff"/>
-                  </svg>
-                  <svg width="27" height="13" viewBox="0 0 27 13" style={{ display:"block" }}>
-                    <rect x="0.5" y="0.5" width="23" height="12" rx="3" fill="none" stroke="#fff" strokeOpacity="0.45" strokeWidth="1"/>
-                    <rect x="24.5" y="4" width="1.5" height="5" rx="0.6" fill="#fff" fillOpacity="0.45"/>
-                    <rect x="2" y="2" width="20" height="9" rx="1.7" fill="#fff"/>
-                  </svg>
-                </div>
-              </div>
+      {/* player: play the trigger · speed · status */}
+      <div style={{ margin:"0 12px 10px", background:FS.raised, borderRadius:12, padding:"8px 10px", display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", flexShrink:0 }}>
+        <button type="button" onClick={() => { if (waiting?.trigger) { setWaiting(null); startTrigger(runRef.current); } }} disabled={!waiting?.trigger}
+          title={waiting?.trigger ? "Play the trigger for me" : "The run has started"} aria-label="Play the trigger"
+          style={{ ...tileBtn, width:34, height:34, borderRadius:999, background: waiting?.trigger ? FS.primary : FS.surface2, color: waiting?.trigger ? FS.onAccent : FS.muted, display:"inline-flex", alignItems:"center", justifyContent:"center" }}>
+          {IC.play(14)}
+        </button>
+        <div style={{ display:"flex", gap:2, marginLeft:2, background:FS.surface, borderRadius:8, padding:2 }}>
+          {SPEEDS.map(x => (
+            <button key={x} type="button" onClick={() => setSpeed(x)} aria-label={`${x}x speed`} title={`${x}× speed`}
+              style={{ ...tileBtn, padding:"4px 7px", borderRadius:6, fontSize:11.5, fontWeight:700, fontFamily:MONO, background: speed === x ? FS.nodeBg : "transparent", color: speed === x ? FS.text : FS.muted }}>{x}×</button>
+          ))}
+        </div>
+        <div style={{ width:"100%", fontSize:11.5, color:FS.muted, display:"flex", justifyContent:"space-between", marginTop:2 }}>
+          <span data-testid="sim-status">{status}</span>
+          <span style={{ fontFamily:MONO }}>{stepCount ? `${stepCount} step${stepCount === 1 ? "" : "s"}` : ""}</span>
+        </div>
+      </div>
 
-              <div style={{ position:"absolute", top:11, left:"50%", transform:"translateX(-50%)", width:108, height:32, background:"#000", borderRadius:99, zIndex:6, boxShadow:"inset 0 0 0 0.5px rgba(255,255,255,.08), 0 0 0 0.5px #000" }}>
-                <div style={{ position:"absolute", top:11, right:14, width:9, height:9, borderRadius:"50%", background:"#1a1a1d", boxShadow:"inset 0 0 0 1px #050505, inset 0 0 4px rgba(80,120,200,.3)" }}/>
-              </div>
+      <div style={{ flex:1, minHeight:0, display:"flex", gap:12, padding:"0 12px 14px" }}>
+        <div style={{ width: wide ? 316 : "100%", flexShrink:0, overflowY:"auto", minHeight:0 }}>
+          <div style={{ fontSize:12, color:FS.muted, textAlign:"center", lineHeight:1.4, marginBottom:10 }}>{hint}</div>
 
-              <div style={{ background:"#075E54", paddingTop:50, paddingBottom:8, paddingLeft:12, paddingRight:12, color:"#fff", fontFamily:"-apple-system, 'SF Pro Display', system-ui, sans-serif", flexShrink:0, position:"relative", zIndex:1 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                  <span style={{ color:"#fff", fontSize:22, lineHeight:1, opacity:.9, marginRight:-2 }}>‹</span>
-                  <div style={{ width:30, height:30, borderRadius:"50%", background:`linear-gradient(135deg,${C.brandBright},${C.brand})`, display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", fontSize:14, fontWeight:700, flexShrink:0 }}>F</div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:15, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>Forge Automation</div>
-                    <div style={{ fontSize:12, opacity:.82, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{ended ? "Conversation ended" : waiting ? "Waiting for your reply" : "typing…"}</div>
-                  </div>
-                  <svg width="20" height="14" viewBox="0 0 20 14" style={{ display:"block", flexShrink:0 }}>
-                    <rect x="0.5" y="1.5" width="13" height="11" rx="2.5" fill="none" stroke="#fff" strokeWidth="1.4"/>
-                    <path d="M14 5.5 L19 3 L19 11 L14 8.5 Z" fill="none" stroke="#fff" strokeWidth="1.4" strokeLinejoin="round"/>
-                  </svg>
-                  <svg width="15" height="15" viewBox="0 0 15 15" style={{ display:"block", flexShrink:0 }}>
-                    <path d="M3 1 L5 1 L6.5 4.5 L5 6 C 6 8, 7 9, 9 10 L 10.5 8.5 L 14 10 L 14 12 C 14 13, 13 14, 12 14 C 6 14, 1 9, 1 3 C 1 2, 2 1, 3 1 Z" fill="none" stroke="#fff" strokeWidth="1.4" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-              </div>
-
-              {/* Anchored so a test can read the CONVERSATION alone. The canvas
-                  behind it renders every node's body text too, so an unscoped
-                  assertion that "the flow reached the ONE branch" passes even
-                  when it reached neither. */}
-              <div ref={chatRef} data-testid="preview-chat" style={{ flex:1, minHeight:0, overflowY:"auto", background:"var(--c-chatWall)", padding:"10px 7px", backgroundImage:"var(--c-chatPattern)" }}>
-                <div style={{ display:"flex", justifyContent:"center", marginBottom:8 }}>
-                  <span style={{ background:"var(--c-infoBg, #E1F2FA)", color:"var(--c-s3c6678, #3C6678)", fontSize:11, padding:"2px 9px", borderRadius:99, fontWeight:600 }}>TODAY</span>
-                </div>
-                {conv.map((m, i) => {
-                  if (m.from === "system") {
-                    return (
-                      <div key={i} style={{ display:"flex", justifyContent:"center", margin:"6px 0" }}>
-                        <div style={{ background:"var(--c-warnBgSoft, #FFF8E1)", border:"1px solid #FFE082", color:"var(--c-s7a5c00, #7A5C00)", fontSize:11, padding:"3px 9px", borderRadius:99, fontWeight:600, maxWidth:"90%", textAlign:"center", lineHeight:1.4 }}>{m.text}</div>
-                      </div>
-                    );
-                  }
-                  const isUser = m.from === "user";
-                  const hasButtons = m.buttons && m.buttons.length > 0;
-                  const isWaitingOnThese = waiting && waiting.nodeId === m.ownerNodeId;
-                  return (
-                    <div key={i} style={{ display:"flex", justifyContent: isUser ? "flex-end" : "flex-start", marginBottom:4 }}>
-                      <div style={{ background: isUser ? "var(--c-sdcf8c6, #DCF8C6)" : "var(--c-surface, #fff)", borderRadius: isUser ? "8px 0 8px 8px" : "0 8px 8px 8px", maxWidth: "82%", fontSize:13, color:"var(--c-t1, #111)", lineHeight:1.4, overflow:"hidden", boxShadow:"0 1px 1px rgba(0,0,0,.07)" }}>
-                        <div style={{ padding:"5px 9px" }}>
-                          {/* Attachments read as a typed chip, the way WhatsApp
-                              shows a placeholder before media loads. */}
-                          {m.media && (
-                            <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom: m.text ? 4 : 2,
-                              background:"var(--c-surfaceInner, #F5F5F0)", borderRadius:5, padding:"5px 7px",
-                              fontSize:12, fontWeight:700, color:"var(--c-t4, #666)", letterSpacing:".02em" }}>
-                              {m.media}
-                            </div>
-                          )}
-                          {m.text}
-                          <div style={{ fontSize:11, color:"var(--c-s667781, #667781)", textAlign:"right", marginTop:2, fontFamily:"-apple-system, 'SF Pro Display', sans-serif", display:"flex", justifyContent:"flex-end", alignItems:"center", gap:3 }}>
-                            {m.time}
-                          </div>
-                        </div>
-                        {hasButtons && (
-                          <div style={{ borderTop:"1px solid #E0E0E0" }}>
-                            {m.buttons.map((btn, idx) => (
-                              // ⚠ Pass the LABEL, never the button object. The
-                              // handler stores what it is given as the
-                              // customer's message and the bubble renders it as
-                              // a React child — handing it an object throws and
-                              // PageErrorBoundary replaces the whole route with
-                              // "This page ran into a problem". Payment buttons
-                              // never crashed only because they pass strings.
-                              <button key={idx} onClick={()=>isWaitingOnThese && onTapButton(buttonLabel(btn, idx), idx)} disabled={!isWaitingOnThese}
-                                style={{ display:"block", width:"100%", padding:"7px 9px", border:"none", borderTop:"1px solid #F0F0F0", textAlign:"center", color:"#00A5F4", fontSize:13, fontWeight:500, background:"transparent", cursor: isWaitingOnThese ? "pointer" : "default", opacity: isWaitingOnThese ? 1 : 0.4, fontFamily:"-apple-system, 'SF Pro Display', sans-serif", transition:"background .12s" }}
-                                onMouseEnter={(e)=>{ if (isWaitingOnThese) e.currentTarget.style.background = "var(--c-xf5fbff, #F5FBFF)"; }}
-                                onMouseLeave={(e)=>{ e.currentTarget.style.background = "transparent"; }}
-                              >{buttonLabel(btn, idx)}</button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-                {ended && (
-                  <div style={{ display:"flex", justifyContent:"center", marginTop:10 }}>
-                    <span style={{ background:"var(--c-successBg, #E1F5EE)", color:C.brandDark, fontSize:11, padding:"3px 10px", borderRadius:99, fontWeight:700, letterSpacing:".06em", textTransform:"uppercase" }}>End of flow</span>
-                  </div>
-                )}
-              </div>
-
-              {/* A REAL composer. It used to be a static div reading "Tap a
-                  reply button above", so a free-text question — which by
-                  definition has no buttons — could not be answered at all and
-                  the preview stopped dead at END OF FLOW. */}
-              <div style={{ background:"var(--c-xf0f0f0, #F0F0F0)", padding:"7px 9px 22px", display:"flex", alignItems:"center", gap:6, flexShrink:0, position:"relative" }}>
+          {/* the phone — the shared simulator kit (sim/SimKit), the same one
+              the agent test chat and the template/broadcast previews draw */}
+          <PhoneFrame
+            headerTitle="Forge Automation"
+            headerSubtitle={ended ? "Conversation ended" : waiting ? (waiting.trigger ? "online" : "Waiting for your reply") : conv.length ? "typing…" : "online"}
+            height={620}
+            bodyRef={chatRef}
+            bodyTestId="preview-chat"
+            inputBar={
+              <div style={{ padding:"7px 9px 20px", display:"flex", alignItems:"center", gap:6 }}>
                 <input
                   value={typed}
                   onChange={(e) => setTyped(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") onSendTyped(); }}
                   disabled={!canType}
-                  placeholder={
-                    canType ? "Type a reply…"
-                    : ended ? "Conversation ended — tap Restart"
-                    : "Waiting for the next message…"
-                  }
-                  style={{ flex:1, background:"var(--c-surface, #fff)", borderRadius:99, padding:"6px 12px",
-                    fontSize:12, color:"var(--c-t1, #111)", border:"1px solid var(--c-border, #E5E5E0)",
-                    outline:"none", fontFamily:"'DM Sans'", minWidth:0 }}
+                  aria-label="Message"
+                  placeholder={canType ? (waiting?.trigger ? "Type what the customer would send…" : "Type a reply…") : ended ? "Conversation ended" : waiting?.trigger ? "Press ▶ to start" : "Waiting for the next message…"}
+                  style={{ flex:1, background:"var(--c-surface, #fff)", borderRadius:99, padding:"7px 12px", fontSize:12.5, color:"var(--c-t1, #111)", border:"none", outline:"none", fontFamily:FONT, minWidth:0 }}
                 />
-                <div onClick={() => canType && onSendTyped()}
-                  style={{ width:28, height:28, background: canType ? "var(--c-waGreen, #25D366)" : "var(--c-t7, #999)", borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", flexShrink:0, boxShadow:"0 1px 2px rgba(0,0,0,.15)", cursor: canType ? "pointer" : "default" }}>{IC.send(13)}</div>
-                <div style={{ position:"absolute", bottom:6, left:"50%", transform:"translateX(-50%)", width:110, height:4, background:"#111", borderRadius:99, opacity:.85 }}/>
+                <button type="button" onClick={() => canType && onSendTyped()} aria-label="Send" disabled={!canType}
+                  style={{ ...tileBtn, width:30, height:30, background: canType ? "var(--c-waGreen, #25D366)" : "var(--c-t7, #999)", borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", flexShrink:0, cursor: canType ? "pointer" : "default" }}>{IC.send(13)}</button>
               </div>
-            </div>
-          </div>
+            }
+          >
+            <ChatDay />
+            {conv.length === 0 && waiting?.trigger && (
+              <ChatEmpty>{pressOnly ? "Press ▶ above to start." : "Send a message to start."}</ChatEmpty>
+            )}
+            {conv.map((m, i) => {
+              if (m.from === "system") return <ChatNote key={i}>{m.text}</ChatNote>;
+              const isWaitingOnThese = waiting && !waiting.trigger && waiting.nodeId === m.ownerNodeId;
+              return (
+                <Bubble key={i} from={m.from === "user" ? "user" : "bot"} time={m.time}
+                  media={m.media ? <div style={{ display:"flex", alignItems:"center", gap:5, background:"var(--c-surfaceInner, #F5F5F0)", borderRadius:6, padding:"5px 7px", fontSize:12, fontWeight:700, color:"var(--c-t4, #666)" }}>{m.media}</div> : null}
+                  // ⚠ Pass the LABEL, never the button object — an object
+                  // rendered as a React child throws and blanks the route.
+                  buttons={(m.buttons || []).map((btn, idx) => ({
+                    label: buttonLabel(btn, idx),
+                    disabled: !isWaitingOnThese,
+                    onClick: () => isWaitingOnThese && onTapButton(buttonLabel(btn, idx), idx),
+                  }))}>
+                  {m.text ? renderWaText(m.text) : null}
+                </Bubble>
+              );
+            })}
+            {ended && (
+              <div style={{ display:"flex", justifyContent:"center", marginTop:10, flexShrink:0 }}>
+                <span style={{ background:"var(--c-successBg, #E1F5EE)", color:FS.green, fontSize:11, padding:"3px 10px", borderRadius:99, fontWeight:700, letterSpacing:".06em", textTransform:"uppercase" }}>End of flow</span>
+              </div>
+            )}
+          </PhoneFrame>
+
+          {!wide && timelineBox(false)}
+          {!wide && <div style={{ marginTop:12 }}>{contactBox}</div>}
         </div>
-      </div>
-      <div style={{ padding:"10px 12px 12px", borderTop:`1px solid ${C.cardBorder}`, display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, flexShrink:0 }}>
-        <Btn kind="ghost" size="sm" onClick={restart}>↻ Restart</Btn>
-        <Btn kind="primary" size="sm" icon={IC.send(12)} onClick={restart}>Run again</Btn>
+        {wide && (
+          <div data-testid="sim-side" style={{ flex:1, minWidth:0, minHeight:0, display:"flex", flexDirection:"column", gap:10 }}>
+            {timelineBox(true)}
+            {contactBox}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3683,7 +3605,6 @@ const PhonePreview = ({ onClose, nodes = [], edges = [], templates = [], otherAu
 /* ══════════════════════════════════════════════════════════════════════
    CANVAS + BUILDER — Full pan / zoom / drag / connect
    ══════════════════════════════════════════════════════════════════════ */
-
 const findDataAttr = (el, attr) => {
   while (el && el !== document.body) {
     if (el.dataset && el.dataset[attr] !== undefined) return el;
@@ -3695,14 +3616,11 @@ const findDataAttr = (el, attr) => {
 const Canvas = ({
   nodes, edges, selectedId, setSelectedId, transform, setTransform,
   onStartDrag, onStartConnect, onPickAgentResource, ghost, panning, connectTargetId,
-  onClickEdgePlus, onClickAppendPlus, onClickEdgeDelete, onDeleteNode, onDuplicateNode,
-  viewportRef, onViewportMouseDown, onAutoLayout, whatsappAccounts, onRowClick, canvasTemplates=[],
+  onClickEdgeDelete, viewportRef, onViewportMouseDown, onAutoLayout, onFit,
+  onZoomIn, onZoomOut, autoArrange, onToggleAutoArrange,
+  whatsappAccounts, onRowClick, canvasTemplates=[], activeNode=null, hideMiniMap=false,
 }) => {
   const map = Object.fromEntries(nodes.map(n=>[n.id,n]));
-  // Which handles already carry a real edge, so a node can render a filled dot
-  // versus a hollow ring. `e.to` matters: a placeholder row with a null target
-  // is not a connection, and treating it as one is what used to suppress the
-  // append control on every button of a freshly-picked template.
   const [hoveredEdge, setHoveredEdge] = React.useState(null);
   const hoverTimer = React.useRef(null);
   const setEdgeHover = (i) => {
@@ -3711,48 +3629,37 @@ const Canvas = ({
     else setHoveredEdge(i);
   };
 
+  // Which handles already carry a real edge, so a row renders a dot rather than
+  // a "+". `e.to` matters: a placeholder row with a null target is not a
+  // connection.
   const wiredByNode = {};
   edges.forEach(e => {
     if (!e.to) return;
     (wiredByNode[e.from] || (wiredByNode[e.from] = new Set())).add(e.fromHandle || "default");
   });
-  const edgePluses = edges.map((e, i) => {
+  const edgeMid = (i) => {
+    const e = edges[i]; if (!e) return null;
     const a = map[e.from]; const b = map[e.to]; if (!a||!b) return null;
     const p1 = handlePos(a, "output", e.fromHandle || "default");
     const p2 = handlePos(b, "input");
-    return { x:(p1.x + p2.x) / 2, y:(p1.y + p2.y) / 2, edgeIndex: i, isLabeled: !!e.label };
-  }).filter(Boolean);
+    return { x:(p1.x + p2.x) / 2, y:(p1.y + p2.y) / 2 };
+  };
+  const hoverMid = hoveredEdge != null ? edgeMid(hoveredEdge) : null;
 
-  const appendPluses = [];
-  nodes.forEach(n => {
-    const handles = outputHandlesOf(n);
-    handles.forEach(handle => {
-      // AI Agent side handles open a resource picker — no "+" append button.
-      if (n.type === "ai_agent" && (handle === "model" || handle === "tool")) return;
-      // ⚠ `e.to` is load-bearing. onSelectTemplate used to write placeholder
-      // rows {from, to:null, fromHandle:'btn:N'}, which Connectors refused to
-      // draw and edgePluses filtered out — but this test accepted them, so
-      // picking a template with reply buttons left the node with N handles, no
-      // edges, and NO append controls at all. Live flow 4 still carries one.
-      const hasEdge = edges.some(e => e.from === n.id && (e.fromHandle || "default") === handle && e.to);
-      if (!hasEdge) {
-        // To the RIGHT of the row now, not 50px below it: outputs leave from
-        // the right edge, so a "+" underneath would point at nothing.
-        const p = handlePos(n, "output", handle);
-        appendPluses.push({ x:p.x+46, y:p.y, fromId:n.id, fromHandle:handle });
-      }
-    });
-  });
+  const trigger = nodes.find(n => n.type === "trigger");
+  const caption = trigger ? getTriggerDisplay(trigger) : null;
+  const empty = nodes.length <= 1 && !edges.length;
 
-  const selectedNode = nodes.find(n => n.id === selectedId);
+  const zoomBtn = { width:32, height:32, borderRadius:8, border:"none", background:"transparent", color:FS.text2, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:FONT };
 
   return (
     <div
       ref={viewportRef}
       onMouseDown={onViewportMouseDown}
       onClick={(e) => { if (!e.target.closest("[data-node-id]")) setSelectedId(null); }}
+      data-testid="flow-canvas"
       style={{
-        flex:1, position:"relative", overflow:"hidden", background:C.pageBg,
+        position:"absolute", inset:0, overflow:"hidden", background:FS.canvas,
         cursor: panning ? "grabbing" : "grab",
         touchAction: "none",
         userSelect: "none",
@@ -3761,8 +3668,8 @@ const Canvas = ({
     >
       <div className="canvas-bg" style={{
         position:"absolute", inset:0,
-        backgroundImage:`radial-gradient(${C.cardBorder} 1px, transparent 1px)`,
-        backgroundSize: `${18*transform.scale}px ${18*transform.scale}px`,
+        backgroundImage:`radial-gradient(var(--fs-dot) 1.6px, transparent 1.6px)`,
+        backgroundSize: `${22*transform.scale}px ${22*transform.scale}px`,
         backgroundPosition: `${transform.x}px ${transform.y}px`,
         pointerEvents:"none",
       }}/>
@@ -3772,12 +3679,13 @@ const Canvas = ({
         transform:`translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
         transformOrigin:"0 0",
       }}>
-        <Connectors nodes={nodes} edges={edges} ghost={ghost} onEdgeHover={setEdgeHover}/>
+        <Connectors nodes={nodes} edges={edges} ghost={ghost} hovered={hoveredEdge} onEdgeHover={setEdgeHover}/>
 
         {nodes.map(n => (
           <FlowNode
             key={n.id} n={n} selected={selectedId===n.id}
             isDropTarget={connectTargetId===n.id}
+            running={activeNode===n.id}
             onSelect={setSelectedId}
             onStartDrag={onStartDrag}
             onStartConnect={onStartConnect}
@@ -3789,63 +3697,50 @@ const Canvas = ({
           />
         ))}
 
-        {/* Only ONE control on an edge, and only while you are pointing at it.
-            Every edge used to carry a permanent "+" and "x" chip, and every
-            unconnected handle carried a third — so a five-branch node put
-            thirteen red circles on the canvas, none of them attached to
-            anything you were looking at. Connecting is now the handle's own
-            job (click the circle), which leaves the edge with exactly one
-            reason to exist: removing it. */}
-        {hoveredEdge != null && edgePluses.find(p => p.edgeIndex === hoveredEdge) && (
+        {/* The one control an edge carries, shown only while you point at it. */}
+        {hoverMid && (
           <div onMouseEnter={() => setEdgeHover(hoveredEdge)} onMouseLeave={() => setEdgeHover(null)}>
-            <EdgeDelete
-              x={edgePluses.find(p => p.edgeIndex === hoveredEdge).x}
-              y={edgePluses.find(p => p.edgeIndex === hoveredEdge).y}
-              onClick={(e) => onClickEdgeDelete(e, hoveredEdge)}
-            />
+            <EdgeDelete x={hoverMid.x} y={hoverMid.y} onClick={(e) => onClickEdgeDelete(e, hoveredEdge)} />
           </div>
         )}
-
-        {selectedNode && (
-          <NodeActions
-            x={selectedNode.x + NODE_W/2}
-            y={selectedNode.y - 8}
-            onDuplicate={()=>onDuplicateNode(selectedNode.id)}
-            onDelete={()=>onDeleteNode(selectedNode.id)}
-          />
-        )}
       </div>
 
-      <div style={{ position:"absolute", top:14, left:"50%", transform:"translateX(-50%)", background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:99, padding:"6px 14px", display:"flex", alignItems:"center", gap:10, boxShadow:"0 2px 8px rgba(0,0,0,.05)", fontSize:14, color:C.text3, fontWeight:500, fontFamily:"'DM Sans'", whiteSpace:"nowrap" }}>
-        <span>Tap a step to edit</span>
-        <span style={{ width:1, height:12, background:C.cardBorder }}/>
-        <span style={{ display:"inline-flex", alignItems:"center", gap:5 }}>
-          <span style={{ width:16, height:16, borderRadius:"50%", background:"var(--c-surface, #fff)", border:`1.5px dashed ${C.text4}`, color:C.text4, fontSize:14, fontWeight:600, display:"inline-flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}>+</span>
-          Click to add a block
-        </span>
-        <span style={{ width:1, height:12, background:C.cardBorder }}/>
-        <span>Drag handle to connect · Drag canvas to pan</span>
+      {empty && (
+        <div data-testid="canvas-hint" style={{ position:"absolute", top:14, left:"50%", transform:"translateX(-50%)", background:FS.nodeBg, borderRadius:999, padding:"7px 14px", boxShadow:FS.card, fontSize:12.5, color:FS.text2, fontFamily:FONT, whiteSpace:"nowrap", pointerEvents:"none" }}>
+          Click <b style={{ color:FS.text }}>+</b> on a step to choose what happens next · drag the canvas to pan
+        </div>
+      )}
+
+      {/* zoom / fit / arrange, bottom-left — the same stack the Social builder shows */}
+      <div data-testid="canvas-controls" style={{ position:"absolute", bottom:12, left:12, display:"flex", alignItems:"center", gap:2, background:FS.nodeBg, borderRadius:12, padding:3, boxShadow:FS.card }} onMouseDown={e => e.stopPropagation()}>
+        <button type="button" onClick={onZoomOut} title="Zoom out" aria-label="Zoom out" style={zoomBtn}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M5 12h14"/></svg></button>
+        <span style={{ fontFamily:MONO, fontSize:11.5, color:FS.muted, minWidth:36, textAlign:"center" }}>{Math.round(transform.scale * 100)}%</span>
+        <button type="button" onClick={onZoomIn} title="Zoom in" aria-label="Zoom in" style={zoomBtn}>{IC.plus(14)}</button>
+        <span style={{ width:1, height:18, background:FS.surface2, margin:"0 3px" }}/>
+        <button type="button" onClick={onFit} title="Fit the whole flow on screen" aria-label="Fit to screen" style={zoomBtn}>{IC.fit(14)}</button>
+        <button type="button" onClick={onAutoLayout} title="Arrange the steps in running order" aria-label="Auto layout" style={zoomBtn}>{IC.arr(14)}</button>
+        <button type="button" onClick={onToggleAutoArrange} data-testid="auto-arrange-toggle" title={autoArrange ? "Steps snap into running order after every edit — click to stop" : "Keep steps in running order after every edit"}
+          style={{ ...zoomBtn, width:"auto", padding:"0 9px", gap:5, fontSize:11.5, fontWeight:650, background: autoArrange ? FS.primarySoft : "transparent", color: autoArrange ? FS.primary : FS.text2 }}>
+          {IC.magnet(13)} {autoArrange ? "Keeping order" : "Keep in order"}
+        </button>
       </div>
 
-      <div style={{ position:"absolute", bottom:14, left:14, display:"flex", gap:6 }}>
-        <button onClick={()=>setTransform({ x:30, y:30, scale:0.7 })} style={{ background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:10, padding:"6px 10px", display:"flex", alignItems:"center", gap:6, fontSize:14, fontFamily:"'DM Mono'", fontWeight:700, color:C.text2, cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,.04)" }}>{IC.fit(13)} Fit</button>
-        <button onClick={onAutoLayout} style={{ background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:10, padding:"6px 10px", display:"flex", alignItems:"center", gap:6, fontSize:14, fontFamily:"'DM Mono'", fontWeight:700, color:C.text2, cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,.04)" }}>{IC.flow(13)} Auto layout</button>
-      </div>
+      {caption && (
+        <div data-testid="trigger-caption" style={{ position:"absolute", bottom:54, left:12, fontSize:12, color:FS.muted, fontFamily:FONT, pointerEvents:"none" }}>
+          Starts {caption.sub ? caption.sub.replace(/^When /, "when ") : caption.title.replace(/^Trigger: /, "on ")}
+        </div>
+      )}
 
-      <MiniMap nodes={nodes} transform={transform}/>
+      {!hideMiniMap && <MiniMap nodes={nodes} transform={transform}/>}
     </div>
   );
 };
 
 const MiniMap = ({ nodes, transform }) => {
-  const mw = 164, mh = 100;
+  const mw = 150, mh = 90;
+  const shell = { position:"absolute", bottom:12, right:12, width:mw+12, background:FS.nodeBg, borderRadius:12, padding:6, boxShadow:FS.card, opacity:.92 };
   if (!nodes || !nodes.length) {
-    return (
-      <div style={{ position:"absolute", bottom:14, right:14, width:mw+16, background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:10, padding:8, boxShadow:"0 4px 14px rgba(0,0,0,.05)" }}>
-        <div style={{ fontSize:13, fontWeight:700, color:C.muted, letterSpacing:".1em", textTransform:"uppercase", marginBottom:5 }}>Mini-map</div>
-        <div style={{ width:mw, height:mh, background:C.sectionBg, borderRadius:6 }}/>
-      </div>
-    );
+    return <div style={shell}><div style={{ width:mw, height:mh, background:FS.surface, borderRadius:8 }}/></div>;
   }
   const minX = Math.min(...nodes.map(n=>n.x)) - 40;
   const minY = Math.min(...nodes.map(n=>n.y)) - 40;
@@ -3857,9 +3752,8 @@ const MiniMap = ({ nodes, transform }) => {
   const offX = (mw - w * s) / 2;
   const offY = (mh - h * s) / 2;
   return (
-    <div style={{ position:"absolute", bottom:14, right:14, width:mw+16, background:"var(--c-surface, #fff)", border:`1px solid ${C.cardBorder}`, borderRadius:10, padding:8, boxShadow:"0 4px 14px rgba(0,0,0,.05)" }}>
-      <div style={{ fontSize:13, fontWeight:700, color:C.muted, letterSpacing:".1em", textTransform:"uppercase", marginBottom:5 }}>Mini-map</div>
-      <div style={{ position:"relative", width:mw, height:mh, background:C.sectionBg, borderRadius:6, overflow:"hidden" }}>
+    <div style={shell} data-testid="mini-map">
+      <div style={{ position:"relative", width:mw, height:mh, background:FS.surface, borderRadius:8, overflow:"hidden" }}>
         {nodes.map(n=>{
           const t = NT[n.type] || NT_FALLBACK;
           return <div key={n.id} style={{
@@ -3868,15 +3762,13 @@ const MiniMap = ({ nodes, transform }) => {
             top:  offY + (n.y - minY) * s,
             width: NODE_W * s,
             height: nodeH(n) * s,
-            background:t.accent, borderRadius:1, opacity:.9,
+            background:t.ink, borderRadius:2, opacity:.75,
           }}/>;
         })}
       </div>
     </div>
   );
 };
-
-
 /* ══════════════════════════════════════════════════════════════════════
    AUTOMATION BUILDER VIEW — exported component
    ══════════════════════════════════════════════════════════════════════ */
@@ -3907,13 +3799,14 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
   const [aiModels,        setAiModels]        = useState([]);
   const [assignableUsers, setAssignableUsers] = useState([]);
   const [leadFields,      setLeadFields]      = useState([]);
+  const [landingSources,  setLandingSources]  = useState([]);
   const [loading,         setLoading]         = useState(true);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const [tpls, tgs, flows, accs, ais, usrs, lf] = await Promise.all([
+        const [tpls, tgs, flows, accs, ais, usrs, lf, ls] = await Promise.all([
           api.templates.list(),
           api.tags.list(),
           api.chatbots.list(),
@@ -3921,6 +3814,7 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
           api.aiModels.list().catch(() => []),
           api.users.list().catch(() => []),
           api.chatbots.leadFields().catch(() => ({ fields: [] })),
+          api.chatbots.landingSources().catch(() => ({ sources: [] })),
         ]);
         if (!alive) return;
         // Include APPROVED (sendable) and SUBMITTED (pending Meta review) so a
@@ -3942,6 +3836,7 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
         // Array.isArray guard here would render the empty picker forever
         // with a perfectly healthy backend behind it.
         setLeadFields(Array.isArray(lf) ? lf : (lf?.fields || []));
+        setLandingSources(Array.isArray(ls) ? ls : (ls?.sources || []));
       } catch (e) {
         console.error("AutomationBuilderView load error:", e);
       } finally {
@@ -3955,6 +3850,7 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
   const [edges, setEdges] = useState([]);
   const [saving, setSaving] = useState(false);
   const savedSnapshotRef = useRef("");
+  const needsFitRef = useRef(false);
   const [savedSnapshot, setSavedSnapshot] = useState("");
 
   const idRef = useRef(1);
@@ -3972,12 +3868,50 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
     return "n" + v;
   }, []);
 
+  const [autoArrange, setAutoArrange] = useState(() => {
+    try { return localStorage.getItem("forgecrm.builder.autoArrange") !== "off"; }
+    catch { return true; }
+  });
+  const toggleAutoArrange = useCallback(() => {
+    setAutoArrange(v => {
+      const next = !v;
+      try { localStorage.setItem("forgecrm.builder.autoArrange", next ? "on" : "off"); } catch { /* private mode */ }
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     const cfg = automation?.config || {};
     let initialNodes, initialEdges;
     if (cfg.nodes && cfg.nodes.length > 0) {
       initialNodes = cfg.nodes.map(n => ({ ...n, disabled: n.disabled === true }));
       initialEdges = cfg.edges || [];
+      // ⚠ Repair a stored layout that CANNOT BE SHOWN. Flows laid out before
+      // layoutTree's claim-set bug was fixed carry coordinates spread over tens
+      // of thousands of pixels — live flow 29 spans 62,700px for 32 cards. Even
+      // at MIN_ZOOM that is ~6,300px in a ~900px viewport, so "fit" is
+      // arithmetically unable to frame it and the canvas opens on empty space
+      // with only mini-map dots to show anything is there. Nobody should have
+      // to know to press "Auto layout" to see their own flow.
+      //
+      // The test is exactly the failure: can fit do its job at all? It is not a
+      // guess about tidiness, so a deliberately spread-out hand-made layout is
+      // left alone. Off means off — with keep-in-order disabled, stored
+      // positions are honoured however unusable they are.
+      //
+      // The snapshot below stays the ORIGINAL, so this reads as an unsaved
+      // change: one click on Save makes the repair permanent. Positions are
+      // purely visual — the engine never reads x/y — so saving them cannot
+      // affect a live automation.
+      if (autoArrange && !canBeFramed(initialNodes, viewportRef.current)) {
+        initialNodes = layoutTree(initialNodes, initialEdges);
+      }
+      // Frame it once the cards are on screen. The canvas otherwise opens on a
+      // hardcoded {x:30, y:30, scale:0.7} — the top-left corner of the world,
+      // which shows the flow only by luck. layoutTree centres a trigger in its
+      // subtree's band, so on a tall funnel the first card sits ~1,500px down
+      // and the canvas opens empty even AFTER the layout has been repaired.
+      needsFitRef.current = true;
       setNodes(initialNodes);
       setEdges(initialEdges);
       const next = computeNextId(cfg.nodes);
@@ -4008,6 +3942,9 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
   const [confirmOpen,setConfirmOpen]= useState(false);
   const [ghost,      setGhost]      = useState(null);
   const [connectTargetId, setConnectTargetId] = useState(null); // node highlighted as a drop target while dragging a connection
+  const [showBlocks, setShowBlocks] = useState(false);   // the floating block library (hidden by default — the + on each step is the main way to add)
+  const [activeNode, setActiveNode] = useState(null);     // the step the simulator is on → green ring + "TESTING HERE"
+  const [simMode, setSimMode] = useState("preview");
 
   // ── Undo / Redo history ──
   const [history, setHistory] = useState([]);
@@ -4079,6 +4016,57 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
     return { x: (sx - rect.left - t.x) / t.scale, y: (sy - rect.top - t.y) / t.scale };
   };
 
+  /**
+   * Frame the whole flow.
+   *
+   * ⚠ ONE implementation, shared by the toolbar's ⛶ icon and the canvas's
+   * bottom-left "Fit" button. Those were two different things: the bottom-left
+   * one ignored the nodes entirely and jumped to a hardcoded
+   * `{x:30, y:30, scale:0.7}`. On a flow whose first card sits at y=62,000
+   * that is a corner of empty canvas — mini-map dots, and not one visible
+   * step. A second copy of "fit" is exactly the drift that produced it.
+   */
+  const fitToContent = useCallback(() => {
+    if (!nodes.length || !viewportRef.current) return;
+    const rect = viewportRef.current.getBoundingClientRect();
+    const PAD = 40;
+    const minX = Math.min(...nodes.map(n => n.x)) - PAD;
+    const minY = Math.min(...nodes.map(n => n.y)) - PAD;
+    const maxX = Math.max(...nodes.map(n => n.x + NODE_W)) + PAD;
+    const maxY = Math.max(...nodes.map(n => n.y + nodeH(n))) + PAD;
+    const contentW = maxX - minX, contentH = maxY - minY;
+    // ⚠ Derive the pan offsets from the SCALE THAT IS ACTUALLY APPLIED. This
+    // used to compute x/y from the raw ratio and then apply a clamped,
+    // 0.9-shrunk scale, so the moment the clamp fired the view panned to empty
+    // space. And the floor has to clear the biggest flow anyone really builds:
+    // at 0.3 a 32-node funnel (~4,300px tall) still overflowed a 900px
+    // viewport, so "fit to screen" returned a view that did not fit.
+    const scale = Math.max(MIN_ZOOM, Math.min(rect.width / contentW, rect.height / contentH, 1) * 0.9);
+    setTransform({
+      x: (rect.width  - contentW * scale) / 2 - minX * scale,
+      y: (rect.height - contentH * scale) / 2 - minY * scale,
+      scale,
+    });
+  }, [nodes]);
+
+  // ⚠ Must wait for BOTH: nodes in state and a viewport with a real width.
+  // Fitting against a 0x0 element divides by zero and parks the canvas at NaN,
+  // which renders as a blank page with nothing in the console.
+  // ⚠ `loading` is load-bearing in the deps. The nodes are set while the view
+  // is still showing its spinner, so the Canvas — and therefore viewportRef —
+  // is not mounted yet. Without `loading` the effect runs once against a
+  // missing element, bails, and never runs again, because `nodes` does not
+  // change afterwards. The flow then opens unframed and the fix looks like it
+  // simply does not work.
+  useEffect(() => {
+    if (!needsFitRef.current || loading || !nodes.length) return;
+    // Fitting against a 0x0 element divides by zero and parks the canvas at
+    // NaN — a blank page with nothing in the console.
+    if (!viewportRef.current?.clientWidth) return;
+    needsFitRef.current = false;
+    fitToContent();
+  }, [nodes, loading, fitToContent]);
+
   const autoLayout = useCallback(() => {
     setNodes(prev => {
       const next = layoutTree(prev, edges);
@@ -4086,6 +4074,36 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
       return next;
     });
   }, [edges]);
+
+  /**
+   * Keep the canvas in reading order as the flow is built.
+   *
+   * The canvas is still free-form — you can drag a card anywhere — but a
+   * STRUCTURAL edit (adding a step from "+", wiring a branch, deleting a node)
+   * re-runs the same left-to-right layout the toolbar button runs, so a new
+   * step lands in the lane it belongs to instead of wherever the pointer
+   * happened to be. That "wherever the pointer was" placement is what made a
+   * flow built over many sittings read as scattered.
+   *
+   * ⚠ Off is a real choice, not a hidden default: someone who has hand-placed
+   * a large flow must not have that silently rewritten on the next click. The
+   * preference is per-browser and survives a reload.
+   */
+  /**
+   * Apply one structural change and, when auto-arrange is on, re-lay the flow.
+   *
+   * ⚠ Nodes and edges are committed TOGETHER and history is pushed ONCE. The
+   * layout reads the edges, so arranging against the pre-change edge list would
+   * place a brand-new step as an unconnected root — parked in its own band
+   * below the flow rather than after the step it was just wired to.
+   */
+  const commitStructure = useCallback((nextNodes, nextEdges, { arrange = true } = {}) => {
+    const laid = (arrange && autoArrange) ? layoutTree(nextNodes, nextEdges) : nextNodes;
+    setNodes(laid);
+    setEdges(nextEdges);
+    pushHistory(laid, nextEdges);
+    return laid;
+  }, [autoArrange, pushHistory]);
 
   const updateNode = (id, patch) => {
     if (typeof patch === "function") {
@@ -4118,15 +4136,10 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
   };
 
   const removeNode = (id) => {
-    setNodes(prev => {
-      const nextNodes = prev.filter(n => n.id !== id);
-      setEdges(prevEdges => {
-        const nextEdges = prevEdges.filter(e => e.from !== id && e.to !== id);
-        pushHistory(nextNodes, nextEdges);
-        return nextEdges;
-      });
-      return nextNodes;
-    });
+    commitStructure(
+      nodes.filter(n => n.id !== id),
+      edges.filter(e => e.from !== id && e.to !== id),
+    );
     if (selectedId === id) setSelectedId(null);
     setSelSet(s => { const ns = new Set(s); ns.delete(id); return ns; });
   };
@@ -4347,15 +4360,11 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
       fromId = c.fromId; fromHandle = c.fromHandle || "default";
     }
 
-    setEdges(prev => {
-      const filtered = prev.filter(ed => !(ed.from === fromId && (ed.fromHandle || "default") === fromHandle));
-      const newEdge = { from: fromId, to: toId };
-      if (fromHandle && fromHandle !== "default") newEdge.fromHandle = fromHandle;
-      const next = [...filtered, newEdge];
-      pushHistory(nodes, next);
-      return next;
-    });
-  }, [nodes, pushHistory]);
+    const filtered = edges.filter(ed => !(ed.from === fromId && (ed.fromHandle || "default") === fromHandle));
+    const newEdge = { from: fromId, to: toId };
+    if (fromHandle && fromHandle !== "default") newEdge.fromHandle = fromHandle;
+    commitStructure(nodes, [...filtered, newEdge]);
+  }, [nodes, edges, commitStructure]);
 
   const onClickEdgePlus = (e, edgeIndex) => {
     e.stopPropagation();
@@ -4421,11 +4430,7 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
 
   const onClickEdgeDelete = (e, edgeIndex) => {
     e.stopPropagation();
-    setEdges(prev => {
-      const next = prev.filter((_, i) => i !== edgeIndex);
-      pushHistory(nodes, next);
-      return next;
-    });
+    commitStructure(nodes, edges.filter((_, i) => i !== edgeIndex));
   };
 
   const addNodeFromPicker = (tpl) => {
@@ -4468,14 +4473,41 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
     }
     const nextNodes = [...nodes, newNode];
     const nextEdges = connectTo ? [...edges, { from: connectTo, to: nid, fromHandle }] : edges;
-    setNodes(nextNodes);
-    if (connectTo) setEdges(nextEdges);
-    pushHistory(nextNodes, nextEdges);
+    commitStructure(nextNodes, nextEdges);
     setPicker(null);
     setSelectedId(nid);
   };
 
   const closePicker = () => setPicker(null);
+
+  // "Select existing step" in the + menu: wire the dangling handle to a step
+  // that is already on the canvas instead of adding a new one.
+  const linkExistingFromPicker = (targetId) => {
+    if (!picker?.connectTo || !targetId || targetId === picker.connectTo) { setPicker(null); return; }
+    const fromHandle = picker.fromHandle || "default";
+    const already = edges.some(e => e.from === picker.connectTo && (e.fromHandle || "default") === fromHandle && e.to);
+    if (!already) commitStructure(nodes, [...edges, { from: picker.connectTo, to: targetId, fromHandle }]);
+    setPicker(null);
+    setSelectedId(targetId);
+  };
+
+  // While the simulator plays, keep the current step on screen (the Social
+  // builder does the same) — but only if it is actually outside the visible
+  // area, so a run through nearby steps does not jiggle the canvas.
+  useEffect(() => {
+    if (!activeNode || !viewportRef.current) return;
+    const n = nodes.find(x => x.id === activeNode);
+    if (!n) return;
+    const rect = viewportRef.current.getBoundingClientRect();
+    const t = transformRef.current;
+    const panelW = (selectedId ? 370 : 0) + (simMode === "test" ? 600 : 340) + 20;
+    const visibleW = Math.max(200, rect.width - panelW);
+    const cx = n.x * t.scale + t.x + (NODE_W * t.scale) / 2;
+    const cy = n.y * t.scale + t.y + (nodeH(n) * t.scale) / 2;
+    const inside = cx > 40 && cx < visibleW - 40 && cy > 40 && cy < rect.height - 40;
+    if (inside) return;
+    setTransform(tt => ({ ...tt, x: visibleW / 2 - (n.x + NODE_W / 2) * tt.scale, y: rect.height / 2 - (n.y + nodeH(n) / 2) * tt.scale }));
+  }, [activeNode]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const onWheel = useCallback((e) => {
     if (!viewportRef.current || !viewportRef.current.contains(e.target)) return;
@@ -4483,7 +4515,7 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
     if (e.ctrlKey || e.metaKey) {
       // Ctrl/Cmd+scroll or trackpad pinch → zoom
       const ds = e.deltaY > 0 ? 0.92 : 1.08;
-      setTransform(t => ({ ...t, scale: Math.min(2, Math.max(0.3, t.scale * ds)) }));
+      setTransform(t => ({ ...t, scale: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, t.scale * ds)) }));
     } else {
       // Regular scroll → pan
       setTransform(t => ({ ...t, x: t.x - e.deltaX, y: t.y - e.deltaY }));
@@ -4600,7 +4632,7 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
 
   if (loading) {
     return (
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100%", color:C.text5, fontFamily:"'DM Sans'" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100%", color:C.text5, fontFamily:FONT }}>
         <div style={{ textAlign:"center" }}>
           <div style={{ width:40, height:40, borderRadius:"50%", border:`3px solid ${C.cardBorder}`, borderTopColor:C.brand, animation:"spin .8s linear infinite", margin:"0 auto 16px" }}/>
           <div style={{ fontSize:16, fontWeight:600 }}>Loading automation builder…</div>
@@ -4610,7 +4642,9 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
   }
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100%", background:C.pageBg, fontFamily:"'DM Sans', system-ui, sans-serif" }}>
+    // ...UNZOOM_STYLE: the builder renders 1:1 inside the 110%-zoomed app so every
+    // drag / connect / pan calculation stays in one coordinate space (lib/uiZoom.js).
+    <div className="fg-flow" style={{ ...UNZOOM_STYLE, display:"flex", flexDirection:"column", height:"100%", background:"transparent", fontFamily:FONT }}>
       <BuilderToolbar
         automationName={automation?.name || "Untitled Automation"}
         status={automation?.status || "draft"}
@@ -4628,111 +4662,119 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
         onRedo={redo}
         canUndo={canUndo}
         canRedo={canRedo}
-        onZoomIn={() => setTransform(t => ({ ...t, scale: Math.min(2, t.scale * 1.2) }))}
-        onZoomOut={() => setTransform(t => ({ ...t, scale: Math.max(0.3, t.scale / 1.2) }))}
-        onFit={() => {
-          if (!nodes.length || !viewportRef.current) return;
-          const rect = viewportRef.current.getBoundingClientRect();
-          const xs = nodes.map(n => n.x);
-          const ys = nodes.map(n => n.y);
-          const hs = nodes.map(n => nodeH(n));
-          const minX = Math.min(...xs) - 40;
-          const minY = Math.min(...ys) - 40;
-          const maxX = Math.max(...xs.map((x, i) => x + NODE_W)) + 40;
-          const maxY = Math.max(...ys.map((y, i) => y + hs[i])) + 40;
-          const contentW = maxX - minX;
-          const contentH = maxY - minY;
-          const scale = Math.min(rect.width / contentW, rect.height / contentH, 1.0);
-          setTransform({ x: 40 - minX * scale + (rect.width - contentW * scale) / 2, y: 30 - minY * scale + (rect.height - contentH * scale) / 2, scale: Math.max(0.3, scale * 0.9) });
-        }}
-        onAutoLayout={autoLayout}
         onExport={automation?.id ? handleExportAutomation : null}
+        onToggleBlocks={()=>setShowBlocks(v=>!v)}
+        showBlocks={showBlocks}
       />
 
       {activeTab === 'executions' ? (
         <AutomationExecutions automation={automation} onBack={onBack} hideTopBar initialExecutionId={initialExecutionId} />
       ) : (
-        <div style={{ display:"flex", flex:1, minHeight:0 }}>
-          <BlockLibrary onAddBlock={(tpl, e) => {
-            const nid = newId();
-            // Place node at the center of the visible viewport
-            const rect = viewportRef.current?.getBoundingClientRect();
-            const t = transformRef.current;
-            let pos;
-            if (rect && t) {
-              pos = { x: (rect.width / 2 - t.x) / t.scale, y: (rect.height / 2 - t.y) / t.scale };
-            } else {
-              pos = screenToWorld(e.clientX, e.clientY);
-            }
-            const n = makeNode(tpl.type, pos.x, pos.y, nid, templates);
-            if (tpl.defaults) Object.assign(n, tpl.defaults);
-            if (!n.title) n.title = tpl.name;
-            if (!n.sub) n.sub = tpl.desc;
-            if (n.actions && n.actions.length > 0) {
-              n.actions = n.actions.map((a, idx) => ({ ...a, id: a.id || ("a" + Date.now() + idx) }));
-            }
-            setNodes(prev => {
-              const next = [...prev, n];
-              pushHistory(next, edges);
-              return next;
-            });
-            setSelectedId(nid);
-          }}/>
-
-          <Canvas
-            nodes={nodes} edges={edges} selectedId={selectedId}
-            setSelectedId={setSelectedId} transform={transform} setTransform={setTransform}
-            onStartDrag={onStartDrag} onStartConnect={onStartConnect}
-            onPickAgentResource={onPickAgentResource}
-            ghost={ghost} panning={panning} connectTargetId={connectTargetId}
-            onClickEdgePlus={onClickEdgePlus} onClickAppendPlus={onClickAppendPlus}
-            onClickEdgeDelete={onClickEdgeDelete}
-            onDeleteNode={openConfirm} onDuplicateNode={duplicateNode}
-            viewportRef={viewportRef} onViewportMouseDown={onViewportMouseDown}
-            onAutoLayout={autoLayout}
-            whatsappAccounts={whatsappAccounts}
-            onRowClick={onRowClick}
-            canvasTemplates={templates}
-          />
-
-          {selectedNode && (
-            <SettingsPanel
-              node={selectedNode} nodes={nodes} edges={edges}
-              onUpdateNode={updateNode}
-              onDeleteNode={openConfirm}
-              onDuplicateNode={duplicateNode}
-              onSaveAndClose={() => { handleSave(); setSelectedId(null); }}
-              onToggleDisable={toggleNodeDisable}
-              onDeleteButton={(nid, bid)=>updateNode(nid, n => ({
-                ...n, actions: (n.actions || []).filter(a => a.id !== bid)
-              }))}
-              onSelectTemplate={onSelectTemplate}
-              onCreateTemplate={handleCreateTemplate}
-              templates={templates}
-              tags={tags}
-              leadFields={leadFields}
-              otherAutomations={otherAutomations}
+        <div style={{ flex:1, minHeight:0, padding:"0 16px 16px" }}>
+          <div style={{ position:"relative", height:"100%", borderRadius:16, overflow:"hidden", boxShadow:FS.card, background:FS.canvas }}>
+            <Canvas
+              nodes={nodes} edges={edges} selectedId={selectedId}
+              setSelectedId={setSelectedId} transform={transform} setTransform={setTransform}
+              onStartDrag={onStartDrag} onStartConnect={onStartConnect}
+              onPickAgentResource={onPickAgentResource}
+              ghost={ghost} panning={panning} connectTargetId={connectTargetId}
+              onClickEdgeDelete={onClickEdgeDelete}
+              viewportRef={viewportRef} onViewportMouseDown={onViewportMouseDown}
+              onAutoLayout={autoLayout}
+              onFit={fitToContent}
+              onZoomIn={() => setTransform(t => ({ ...t, scale: Math.min(MAX_ZOOM, t.scale * 1.2) }))}
+              onZoomOut={() => setTransform(t => ({ ...t, scale: Math.max(MIN_ZOOM, t.scale / 1.2) }))}
+              autoArrange={autoArrange}
+              onToggleAutoArrange={toggleAutoArrange}
               whatsappAccounts={whatsappAccounts}
-              assignableUsers={assignableUsers}
-              aiModels={aiModels}
-              automationId={automation?.id}
+              onRowClick={onRowClick}
+              canvasTemplates={templates}
+              activeNode={activeNode}
+              hideMiniMap={!!selectedNode || showPreview}
             />
-          )}
 
-          {showPreview && (
-            <PhonePreview
-              onClose={()=>setShowPreview(false)}
-              nodes={nodes} edges={edges}
-              templates={templates}
-              otherAutomations={otherAutomations}
-            />
-          )}
+            {showBlocks && (
+              <BlockLibrary onClose={()=>setShowBlocks(false)} onAddBlock={(tpl, e) => {
+                const nid = newId();
+                // Place node at the center of the visible viewport
+                const rect = viewportRef.current?.getBoundingClientRect();
+                const t = transformRef.current;
+                let pos;
+                if (rect && t) {
+                  pos = { x: (rect.width / 2 - t.x) / t.scale, y: (rect.height / 2 - t.y) / t.scale };
+                } else {
+                  pos = screenToWorld(e.clientX, e.clientY);
+                }
+                const n = makeNode(tpl.type, pos.x, pos.y, nid, templates);
+                if (tpl.defaults) Object.assign(n, tpl.defaults);
+                if (!n.title) n.title = tpl.name;
+                if (!n.sub) n.sub = tpl.desc;
+                if (n.actions && n.actions.length > 0) {
+                  n.actions = n.actions.map((a, idx) => ({ ...a, id: a.id || ("a" + Date.now() + idx) }));
+                }
+                // ⚠ Deliberately NOT auto-arranged. A block dragged in from the
+                // library has no edges yet, so the layout would treat it as a
+                // second root and park it in a band below the flow — the card
+                // would vanish off-screen the instant it was added. It stays where
+                // it was dropped and snaps into the running order as soon as it is
+                // wired to something.
+                commitStructure([...nodes, n], edges, { arrange: false });
+                setSelectedId(nid);
+              }}/>
+            )}
+
+            {(selectedNode || showPreview) && (
+              <div data-testid="floating-panels" style={{ position:"absolute", top:10, right:10, bottom:10, display:"flex", gap:10, zIndex:10, pointerEvents:"none" }}>
+                {selectedNode && (
+                  <div style={{ pointerEvents:"auto", height:"100%" }}>
+                    <SettingsPanel
+                      node={selectedNode} nodes={nodes} edges={edges}
+                      onUpdateNode={updateNode}
+                      onDeleteNode={openConfirm}
+                      onDuplicateNode={duplicateNode}
+                      onSaveAndClose={() => { handleSave(); setSelectedId(null); }}
+                      onClose={() => setSelectedId(null)}
+                      onToggleDisable={toggleNodeDisable}
+                      onDeleteButton={(nid, bid)=>updateNode(nid, n => ({
+                        ...n, actions: (n.actions || []).filter(a => a.id !== bid)
+                      }))}
+                      onSelectTemplate={onSelectTemplate}
+                      onCreateTemplate={handleCreateTemplate}
+                      templates={templates}
+                      tags={tags}
+                      leadFields={leadFields}
+                      landingSources={landingSources}
+                      otherAutomations={otherAutomations}
+                      whatsappAccounts={whatsappAccounts}
+                      assignableUsers={assignableUsers}
+                      aiModels={aiModels}
+                      automationId={automation?.id}
+                    />
+                  </div>
+                )}
+                {showPreview && (
+                  <div style={{ pointerEvents:"auto", height:"100%" }}>
+                    <SimPanel
+                      onClose={()=>setShowPreview(false)}
+                      nodes={nodes} edges={edges}
+                      templates={templates}
+                      otherAutomations={otherAutomations}
+                      onNode={setActiveNode}
+                      onModeChange={setSimMode}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       {picker && (
         <div style={{ position:"fixed", inset:0, zIndex:60 }} onClick={closePicker}>
-          <NodePicker x={picker.x} y={picker.y} onPick={addNodeFromPicker} onClose={closePicker} mode={picker.mode} groups={BLOCK_GROUPS}/>
+          <NodePicker x={picker.x} y={picker.y} onPick={addNodeFromPicker} onClose={closePicker} mode={picker.mode} groups={BLOCK_GROUPS}
+            existing={picker.connectTo ? nodes.filter(n => n.id !== picker.connectTo && n.type !== "trigger") : []}
+            onLinkExisting={linkExistingFromPicker}/>
         </div>
       )}
 
@@ -4793,36 +4835,18 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
       )}
 
       <style>{`
+        /* Canvas tokens (--fs-*) live in styles/forge.css under
+           .fg-flow + .fg-sim, shared with every simulator card. */
         @keyframes spin { to { transform: rotate(360deg); } }
-        /* The grab area is deliberately much larger than the dot, so give it a
-           visible reaction — otherwise the extra room is undiscoverable and it
-           still feels like you must hit the dot exactly. */
-        .fg-handle:hover .fg-handle-dot {
-          transform: scale(1.35);
-          border-color: var(--c-dangerText, #A32D2D) !important;
-        }
-        .fg-handle:active .fg-handle-dot {
-          transform: scale(1.15);
-        }
-        .picker-item:hover {
-          background: var(--c-surfaceSection, #F8F7F2) !important;
-          border-color: var(--c-border) !important;
-        }
-        .picker-item:active {
-          background: var(--c-sf0efea, #F0EFEA) !important;
-        }
-        .rename-input::placeholder {
-          color: var(--c-t7);
-          font-style: italic;
-        }
-        .rename-input:focus {
-          border-color: var(--c-successBright, #1D9E75) !important;
-          box-shadow: 0 0 0 3px #E1F5EE !important;
-        }
-        ::-webkit-scrollbar { width: 5px; height: 5px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--c-borderStrong, #D5D5D0); border-radius: 99px; }
-        ::-webkit-scrollbar-thumb:hover { background: #AAA; }
+        /* The grab area is much larger than the dot — give it a visible reaction. */
+        .fg-handle:hover .fg-handle-dot { transform: scale(1.25); }
+        .fg-handle:active .fg-handle-dot { transform: scale(1.1); }
+        .fg-menu-row:hover { background: var(--fc-surface) !important; }
+        .fg-field:focus { box-shadow: 0 0 0 2px var(--fc-primary-ring); }
+        .rename-input::placeholder { color: var(--fc-text-muted); font-style: italic; }
+        .fg-flow ::-webkit-scrollbar { width: 5px; height: 5px; }
+        .fg-flow ::-webkit-scrollbar-track { background: transparent; }
+        .fg-flow ::-webkit-scrollbar-thumb { background: var(--fc-border); border-radius: 99px; }
       `}</style>
     </div>
   );

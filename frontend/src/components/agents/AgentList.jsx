@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Bot, MessageSquare, Edit3, Plus, FolderKanban } from 'lucide-react';
+import { Bot, MessageSquare, Edit3, Plus } from 'lucide-react';
 import { C, FONT, MONO } from '../../constants.js';
 import { PROVIDER_LABELS } from './modelCatalog.js';
 import SortControl from '../SortControl.jsx';
@@ -86,12 +86,6 @@ function Row({ agent, waAccounts, onEdit }) {
           <span>· {agent.toolCount || 0} tool{(agent.toolCount || 0) === 1 ? '' : 's'}</span>
           {wa && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <MessageSquare size={11} /> {wa.displayName}
-          </span>}
-          {/* Which campaign this agent belongs to. Filing happens on the
-              Projects page — shown here so the grouping is visible where
-              people browse agents. */}
-          {agent.projectName && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <FolderKanban size={11} /> {agent.projectName}
           </span>}
           {agent.lastRunAt && <span>· last run {formatRelative(agent.lastRunAt)}</span>}
           {/* Shown because the list sorts by it — a sort key the reader cannot

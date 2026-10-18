@@ -50,7 +50,11 @@ const TIERS = {
   },
   build: {
     label: 'Builds & configures',
-    description: 'Creates or edits setup — templates, agents, flows, forms, funnel stages.',
+    description: 'Creates or edits setup — templates, agents, flows, funnel stages.',
+  },
+  spend: {
+    label: 'Costs money per use',
+    description: 'Messages nobody, but every call bills your AI provider — reading voice notes, images and PDFs is charged per item.',
   },
   send: {
     label: 'Reaches customers',
@@ -66,6 +70,57 @@ const TIERS = {
   },
 };
 
+/* ------------------------------ areas ----------------------------------- */
+
+// The five parts of the app, in the order the Settings screen shows them. Every
+// category belongs to exactly one area, so a non-technical admin can find "what
+// can Claude do in Social?" without knowing any tool names.
+const AREAS = [
+  { key: 'social', label: 'Social', description: 'Instagram, Facebook, Threads, YouTube and LinkedIn — numbers, inbox, posting, Instagram automations and Social AI agents.' },
+  { key: 'marketing', label: 'Marketing', description: 'Meta ad campaigns, Click-to-WhatsApp results, campaign ROI and the Conversions API (read-only).' },
+  { key: 'sales', label: 'Sales', description: 'Leads and the funnel, the follow-up calendar, the Sales Log, products, payments and the Chat Analyzer.' },
+  { key: 'chats', label: 'Chats & Automations', description: 'WhatsApp conversations, sending, broadcasts, templates, media, automation flows and WhatsApp AI agents.' },
+  { key: 'admin', label: 'Admin', description: 'Connected numbers and models, Google, deleting things, and the unrestricted API escape hatch.' },
+];
+
+/* ------------------------------ kinds ----------------------------------- */
+
+// What ONE tool does, in plain words. Shown next to every tool in Settings so
+// the admin sees the risk of each tool, not just of the category switch.
+const KINDS = {
+  read: { label: 'Reads', description: 'Looks only. Changes nothing, reaches nobody.' },
+  change: { label: 'Changes setup', description: 'Creates or edits something in the app.' },
+  send: { label: 'Reaches people', description: 'Sends a real message, reply or post.' },
+  spend: { label: 'Costs money', description: 'Each use bills your AI provider.' },
+  delete: { label: 'Deletes', description: 'Removes something for good. No undo.' },
+  advanced: { label: 'Full API', description: 'Calls any internal endpoint in an enabled API area.' },
+};
+
+// Default kind of a tool from its category's tier, used when a tool does not
+// say otherwise. list_/get_/read_/search_/validate_ tools only ever read.
+const TIER_KIND = { read: 'read', build: 'change', spend: 'spend', send: 'send', destructive: 'delete', advanced: 'advanced' };
+const READ_PREFIX = /^(list_|get_|read_|search_|validate_)/;
+
+// The API areas that scope the generic forgechat_request proxy (Direct API
+// access). Served to the Settings screen so it never keeps its own copy — a
+// hand-kept frontend list once carried an `area_bda` switch that no backend
+// path ever checked. mcpService derives AREA_CAPABILITY_KEYS from this list.
+const API_AREAS = [
+  { key: 'area_contacts', label: 'Contacts & tags', description: 'Contacts, saved contacts, tags and categories.' },
+  { key: 'area_messaging', label: 'Messages', description: 'Chat messages, reactions, WhatsApp group archive and pausing a bot on one chat.' },
+  { key: 'area_broadcasts', label: 'Broadcasts & content', description: 'Broadcasts (incl. repeating), templates, media library and click-to-chat links.' },
+  { key: 'area_automations', label: 'Automations', description: 'Automation flows and their runs.' },
+  { key: 'area_admin', label: 'Admin (users, accounts, payments)', description: 'SENSITIVE — users, WhatsApp accounts, AI models, integrations, the Razorpay gateway, conversion sending, live payment links and Social credentials.', sensitive: true },
+  { key: 'area_insights', label: 'Dashboard & logs', description: 'Dashboard analytics, webhook history and message costs.' },
+  { key: 'area_leads', label: 'Leads & funnel', description: 'Leads, funnel config, the field registry and follow-ups.' },
+  { key: 'area_marketing', label: 'Marketing', description: 'Campaigns, Click-to-WhatsApp, campaign ROI and webinars.' },
+  { key: 'area_resources', label: 'Resources', description: 'Live links and the trigger library.' },
+  { key: 'area_courses', label: 'Products', description: 'Product catalogue and payment-link price registry.' },
+  { key: 'area_payments', label: 'Payments', description: 'Razorpay ledger, sales log and students. The gateway secret stays under Admin.' },
+  { key: 'area_chat_analysis', label: 'Chat Analyzer', description: 'Conversation analyses and what they cost.' },
+  { key: 'area_social', label: 'Social', description: 'The Social workspace: analytics, inbox, posting, Instagram automations, flows and Social AI agents. Its credentials and settings stay under Admin.' },
+];
+
 /* ---------------------------- categories -------------------------------- */
 
 // Order here is the order shown in Settings: setup first (what you connect),
@@ -74,14 +129,18 @@ const TIERS = {
 const CATEGORIES = [
   {
     key: 'setup',
+    area: 'admin',
     label: 'Setup & Connections',
     description:
-      'See which WhatsApp numbers, AI models and API areas are connected. This is how Claude discovers what your workspace actually has before it configures anything.',
-    tier: 'read',
+      'See which WhatsApp numbers, AI models and API areas are connected — how Claude discovers what your workspace has before it configures anything — and give a number a short display label.',
+    // 'build' since rename_wa_number: a category's tier describes the most
+    // powerful thing inside it. The label is display-only; nothing else here writes.
+    tier: 'build',
     legacyCaps: ['discovery'],
   },
   {
     key: 'templates',
+    area: 'chats',
     label: 'Template Builder',
     description:
       'Read, draft, submit for Meta approval and re-sync WhatsApp message templates. Everything needed to take a template from an idea to APPROVED without opening the app.',
@@ -90,6 +149,7 @@ const CATEGORIES = [
   },
   {
     key: 'media',
+    area: 'chats',
     label: 'Media Library',
     description:
       'List and upload posters, images, video and documents, and sync them to each WhatsApp account so templates and sends can use them.',
@@ -98,6 +158,7 @@ const CATEGORIES = [
   },
   {
     key: 'agents',
+    area: 'chats',
     label: 'AI Agents',
     description:
       'Create and configure the AI agents that talk to customers on WhatsApp — persona, model, trigger, and their Google Sheets / HTTP tools.',
@@ -106,52 +167,56 @@ const CATEGORIES = [
   },
   {
     key: 'delete',
+    area: 'admin',
     label: 'Delete & remove',
     description:
-      'Let Claude delete an agent outright, or strip a tool off one. Kept out of AI Agents deliberately — building and deleting are different decisions, and this is the only category whose actions cannot be undone.',
+      'Let Claude permanently delete things: WhatsApp AI agents and their tools, WhatsApp automation flows, Instagram automations and flows, and Social AI agents and their tools. Kept apart from building deliberately — building and deleting are different decisions, and this is the only category whose actions cannot be undone.',
     tier: 'destructive',
     legacyCaps: ['delete'],
   },
   {
     key: 'automations',
+    area: 'chats',
     label: 'Automations',
     description:
-      'Build automation flows — the trigger/message/condition/action graphs that run when a customer messages in.',
+      'Build, check and edit automation flows — the trigger/message/condition/action graphs that run when a customer messages in — and read what a flow actually did on each run. ' +
+      'It can also SWITCH A FLOW LIVE, after which that flow replies to real customers on its own; activating runs the same check the app does and refuses a flow that would be broken.',
+    // Stays in the "builds" tier rather than "reaches customers": arming a flow
+    // is not the same as sending. A live flow only ever answers someone who
+    // messaged in first, so it cannot originate contact or blast a list the way
+    // Send Messages and Broadcasts can — but the description says plainly that
+    // it starts replying, because an admin reading this screen must not have to
+    // infer it from the tier badge.
     tier: 'build',
     legacyCaps: ['area_automations'],
   },
   {
-    key: 'forms',
-    label: 'Lead Forms',
+    key: 'chat_analysis',
+    area: 'sales',
+    label: 'Chat Analyzer',
     description:
-      'Create shareable lead-capture forms and read who filled them in.',
-    tier: 'build',
-    legacyCaps: ['area_leadforms'],
-  },
-  {
-    key: 'projects',
-    label: 'Projects',
-    description:
-      'File a template, automation, AI agent or form into a campaign project — or take it out again. It only changes which folder something is listed under: nothing is created, edited, activated or sent.',
-    // Its own category rather than folded into Templates or Lead Forms: the one
-    // tool moves FIVE different kinds, so hiding it under any one of them would
-    // make "is this on?" unanswerable from the Settings screen.
-    tier: 'build',
-    // Matches where /projects resolves in PROXY_AREAS, so the named tools and
-    // the generic proxy grant the same reach rather than one being a way past
-    // the other.
-    legacyCaps: ['area_broadcasts'],
+      'Read what a WhatsApp conversation is about — its summary, intent, objections and suggested funnel stage — and analyse one conversation on demand, optionally including its voice notes, images and PDFs.',
+    // 'spend', not 'read': three of these tools only read, but analyse_chat
+    // bills the AI provider per call, and a category's tier has to describe the
+    // most powerful thing inside it or the Settings badge misleads.
+    tier: 'spend',
+    // ⚠ There is deliberately NO bulk tool here. A bulk run costs money per
+    // conversation with nobody watching; it stays a click in the tab, behind a
+    // cost estimate.
+    legacyCaps: ['area_chat_analysis'],
   },
   {
     key: 'leads',
+    area: 'sales',
     label: 'Leads & Funnel',
     description:
-      'Read the lead list and move a lead between funnel stages. This is the funnel Claude reshapes when you hand it a game plan.',
+      'Read leads and the funnel, edit a lead\'s details, move a lead between funnel stages, and manage the follow-up calendar.',
     tier: 'build',
     legacyCaps: ['area_leads'],
   },
   {
     key: 'inbox',
+    area: 'chats',
     label: 'Conversations',
     description:
       'Read WhatsApp conversations and message history, including whether the 24-hour reply window is still open. Read-only — it cannot send.',
@@ -160,6 +225,7 @@ const CATEGORIES = [
   },
   {
     key: 'messaging',
+    area: 'chats',
     label: 'Send Messages',
     description:
       'Send a real WhatsApp message to one person — free text inside the 24-hour window, approved templates any time, plus media and interactive messages.',
@@ -168,6 +234,7 @@ const CATEGORIES = [
   },
   {
     key: 'broadcasts',
+    area: 'chats',
     label: 'Broadcasts',
     description:
       'Message a whole uploaded list in one go. A broadcast reaches everyone on the list at once and Meta charges per message, so this is the highest-volume way to spend money from a chat.',
@@ -176,6 +243,7 @@ const CATEGORIES = [
   },
   {
     key: 'message_formats',
+    area: 'chats',
     label: 'Message Formats',
     description:
       'Generate trackable click-to-chat links with a pre-filled opening message, so you can tell which campaign a lead arrived from.',
@@ -188,22 +256,70 @@ const CATEGORIES = [
   },
   {
     key: 'marketing',
+    area: 'marketing',
     label: 'Marketing Analytics',
     description:
-      'Read campaign performance (including Meta Ads spend) and webinars. Read-only reporting.',
+      'Read Meta campaign performance down to ad sets and ads, Click-to-WhatsApp results, campaign ROI (spend vs leads vs revenue), the Conversions API set-up and its history, and webinars. Read-only — it cannot change ads or send conversions.',
     tier: 'read',
     legacyCaps: ['area_marketing'],
   },
   {
     key: 'sales',
+    area: 'sales',
     label: 'Products & Payments',
     description:
-      'Read the product catalogue, per-product revenue and the payment ledger. Read-only — it cannot mint a payment link or charge anyone.',
+      'Read the Sales Log (who bought, what they paid, what they still owe), the product catalogue, per-product revenue, the payment ledger and the Payments dashboard trend. Read-only — it cannot mint a payment link or charge anyone.',
     tier: 'read',
     legacyCaps: ['area_courses', 'area_payments'],
   },
   {
+    key: 'social_insights',
+    area: 'social',
+    label: 'Social analytics',
+    description: 'Read follower trends, reach and engagement per platform, the content library (every post with its numbers), audience demographics, connected accounts and login health. Read-only — from synced data, never live calls.',
+    tier: 'read',
+    // area_social is new, so no existing instance holds it: these seed OFF.
+    legacyCaps: ['area_social'],
+  },
+  {
+    key: 'social_inbox',
+    area: 'social',
+    label: 'Social inbox & contacts',
+    description: 'Read Instagram DMs, comments on your posts, the Social contacts list and the posting queue. Read-only — it cannot reply.',
+    tier: 'read',
+    // area_social is new, so no existing instance holds it: these seed OFF.
+    legacyCaps: ['area_social'],
+  },
+  {
+    key: 'social_publish',
+    area: 'social',
+    label: 'Social replies & posting',
+    description: 'Reply publicly to comments, send Instagram DMs, and publish or schedule posts. Every one of these is seen by real people on the real platform.',
+    tier: 'send',
+    // area_social is new, so no existing instance holds it: these seed OFF.
+    legacyCaps: ['area_social'],
+  },
+  {
+    key: 'social_automations',
+    area: 'social',
+    label: 'Instagram automations & flows',
+    description: 'Build, edit and read Instagram automations (comment-to-DM and keyword rules) and multi-step flows, and see how each one performed. Switching one ON makes it answer real people on its own. Deleting is a separate switch.',
+    tier: 'build',
+    // area_social is new, so no existing instance holds it: these seed OFF.
+    legacyCaps: ['area_social'],
+  },
+  {
+    key: 'social_agents',
+    area: 'social',
+    label: 'Social AI agents',
+    description: 'Create and edit the AI agents that answer Instagram/Facebook DMs and comments, attach tools, and read what they replied. Switching one live makes it answer real people. Deleting is a separate switch.',
+    tier: 'build',
+    // area_social is new, so no existing instance holds it: these seed OFF.
+    legacyCaps: ['area_social'],
+  },
+  {
     key: 'google',
+    area: 'admin',
     label: 'Google Workspace',
     description:
       'Search connected Google Drive spreadsheets and read their tabs and values — used when wiring a Google Sheets tool onto an agent.',
@@ -212,6 +328,7 @@ const CATEGORIES = [
   },
   {
     key: 'direct_api',
+    area: 'admin',
     label: 'Direct API access',
     description:
       'The generic escape hatch: call any internal ForgeGrowth API endpoint as an admin. What it can actually reach is scoped separately by the API area switches below.',
@@ -222,7 +339,6 @@ const CATEGORIES = [
       'area_contacts', 'area_messaging', 'area_broadcasts', 'area_automations',
       'area_admin', 'area_insights', 'area_leads', 'area_marketing',
       'area_resources', 'area_courses', 'area_payments',
-      'area_leadforms',
     ],
     legacyAny: true,
   },
@@ -233,7 +349,7 @@ const CATEGORIES = [
 // name -> { category, summary }
 // `summary` is what an admin reads in Settings when they expand a category, so
 // it says what the tool DOES for them, not what function it calls.
-const TOOLS = {
+const HAND_TOOLS = {
   /* --- Setup & Connections --- */
   list_wa_accounts:        { category: 'setup', summary: 'List the connected WhatsApp business numbers.' },
   list_models:             { category: 'setup', summary: 'List the connected AI models an agent can use.' },
@@ -266,19 +382,26 @@ const TOOLS = {
 
   /* --- Automations --- */
   create_automation:       { category: 'automations', summary: 'Build an automation flow from a plain-language plan.' },
+  list_automations:        { category: 'automations', summary: 'List the automation flows, or read one’s full graph.' },
+  validate_automation:     { category: 'automations', summary: 'Check a flow for problems without saving it.' },
+  update_automation:       { category: 'automations', summary: 'Edit a flow, or switch it live / pause it.' },
+  get_automation_runs:     { category: 'automations', summary: 'Read what a flow actually did, step by step.' },
 
-  /* --- Lead Forms --- */
-  create_lead_form:        { category: 'forms', summary: 'Create a shareable lead-capture form.' },
-  list_lead_forms:         { category: 'forms', summary: 'List the lead forms and their public links.' },
-  list_form_submissions:   { category: 'forms', summary: 'Read the responses a form has collected.' },
-
-  /* --- Projects --- */
-  list_projects:           { category: 'projects', summary: 'List campaign projects and what each one holds.' },
-  move_to_project:         { category: 'projects', summary: 'File a template, automation, agent or form into a project.' },
+  list_analysed_chats:     { category: 'chat_analysis', summary: 'List conversations and what the analyser found in them.' },
+  get_chat_analysis:       { category: 'chat_analysis', summary: 'Read one conversation\'s analysis, and what has been read of it so far.' },
+  analyze_chat:            { category: 'chat_analysis', summary: 'Analyse one conversation now. Costs money; media costs more.' },
+  get_chat_analysis_costs: { category: 'chat_analysis', summary: 'Estimated spend on analysis, split by media type.' },
+  get_chat_transcript:     { category: 'chat_analysis', summary: 'Read a conversation word for word, with voice notes transcribed.' },
+  transcribe_chat:         { category: 'chat_analysis', summary: 'Transcribe a conversation\'s voice notes (once each, then free).' },
+  suggest_follow_up_date:  { category: 'chat_analysis', summary: 'Ask the AI for the best next follow-up date for a chat.' },
+  get_chat_image:          { category: 'chat_analysis', summary: 'Look at images a customer sent. Free — no vision model involved.' },
 
   /* --- Leads & Funnel --- */
   list_leads:              { category: 'leads', summary: 'List leads, filtered by stage, source or saved view.' },
   move_lead_stage:         { category: 'leads', summary: 'Move a lead to a different funnel stage.' },
+  list_follow_ups:         { category: 'leads', summary: 'Read the follow-up calendar: who to contact on which day.' },
+  set_follow_up:           { category: 'leads', summary: 'Put a lead on the follow-up calendar (or reschedule them).' },
+  update_follow_up:        { category: 'leads', summary: 'Reschedule, add a note, mark done or delete a follow-up.' },
 
   /* --- Conversations --- */
   list_conversations:      { category: 'inbox', summary: 'List recent conversations with 24-hour window status.' },
@@ -298,6 +421,7 @@ const TOOLS = {
 
   /* --- Marketing Analytics --- */
   get_campaign_performance: { category: 'marketing', summary: 'Read campaign spend, leads and results.' },
+  get_ad_conversions:      { category: 'marketing', summary: 'Read which Meta ads produced chats, paying students and revenue.' },
   list_webinars:           { category: 'marketing', summary: 'List webinars and their registrations.' },
 
   /* --- Products & Payments --- */
@@ -314,6 +438,16 @@ const TOOLS = {
   forgechat_request:       { category: 'direct_api', summary: 'Call any internal API endpoint in an enabled area.' },
 };
 
+// Tools declared as data in mcpRouteTools.js are merged in here, so the
+// catalog — and therefore the Settings screen and the gate — knows them without
+// a second hand-typed entry. A name declared in both places is a bug.
+const { ROUTE_TOOLS } = require('./mcpRouteTools');
+const TOOLS = { ...HAND_TOOLS };
+for (const t of ROUTE_TOOLS) {
+  if (TOOLS[t.name]) throw new Error(`MCP tool '${t.name}' is declared twice (mcpCatalog + mcpRouteTools).`);
+  TOOLS[t.name] = { category: t.category, summary: t.summary, kind: t.kind };
+}
+
 /* ------------------------------ helpers --------------------------------- */
 
 const CATEGORY_KEYS = CATEGORIES.map(c => c.key);
@@ -329,6 +463,16 @@ function toolCategory(name) {
 
 function toolsInCategory(key) {
   return TOOL_NAMES.filter(n => TOOLS[n].category === key).sort();
+}
+
+// What one tool does: its own `kind` when declared, a read-only verb prefix,
+// else its category's tier.
+function toolKind(name) {
+  const t = TOOLS[name];
+  if (!t) return null;
+  if (t.kind) return t.kind;
+  if (READ_PREFIX.test(name)) return 'read';
+  return TIER_KIND[CATEGORY_BY_KEY[t.category]?.tier] || 'change';
 }
 
 // Is this tool allowed to run? The ONLY runtime gate for named tools.
@@ -383,27 +527,44 @@ function normalizeCategories(stored = {}) {
 // so the UI never hand-maintains its own copy of the category list — the exact
 // drift that let a Settings tab render a button that silently did nothing.
 function catalogForUi(categories = {}) {
+  const cats = CATEGORIES.map(c => {
+    // Reading tools first, then by risk, so the dangerous ones sit together at
+    // the bottom of an expanded category instead of being scattered.
+    const order = ['read', 'change', 'spend', 'send', 'delete', 'advanced'];
+    const tools = toolsInCategory(c.key)
+      .map(n => ({ name: n, summary: TOOLS[n].summary, kind: toolKind(n), kindLabel: KINDS[toolKind(n)]?.label }))
+      .sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind) || a.name.localeCompare(b.name));
+    const kindCounts = {};
+    for (const t of tools) kindCounts[t.kind] = (kindCounts[t.kind] || 0) + 1;
+    return {
+      key: c.key,
+      area: c.area,
+      label: c.label,
+      description: c.description,
+      tier: c.tier,
+      tierLabel: TIERS[c.tier]?.label || c.tier,
+      toolCount: tools.length,
+      kindCounts,
+      enabled: categories[c.key] === true,
+      tools,
+    };
+  });
   return {
     tiers: TIERS,
+    kinds: KINDS,
+    apiAreas: API_AREAS,
     totalTools: TOOL_NAMES.length,
-    categories: CATEGORIES.map(c => {
-      const tools = toolsInCategory(c.key);
-      return {
-        key: c.key,
-        label: c.label,
-        description: c.description,
-        tier: c.tier,
-        tierLabel: TIERS[c.tier]?.label || c.tier,
-        toolCount: tools.length,
-        enabled: categories[c.key] === true,
-        tools: tools.map(n => ({ name: n, summary: TOOLS[n].summary })),
-      };
-    }),
+    areas: AREAS.map(a => ({ ...a, categories: cats.filter(c => c.area === a.key).map(c => c.key) })),
+    categories: cats,
   };
 }
 
 module.exports = {
   TIERS,
+  AREAS,
+  KINDS,
+  API_AREAS,
+  toolKind,
   CATEGORIES,
   CATEGORY_KEYS,
   TOOLS,

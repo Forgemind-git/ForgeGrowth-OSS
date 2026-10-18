@@ -71,8 +71,6 @@ async function ensurePaymentRequestTables() {
       paid_at            TIMESTAMPTZ,
       cancelled_at       TIMESTAMPTZ,
       sync_error         TEXT,
-      form_id            BIGINT,
-      form_submission_id BIGINT,
       created_by         TEXT,
       created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -122,8 +120,6 @@ function requestRow(r) {
     expireBy: r.expire_by,
     paidAt: r.paid_at,
     cancelledAt: r.cancelled_at,
-    formId: r.form_id == null ? null : Number(r.form_id),
-    formSubmissionId: r.form_submission_id == null ? null : Number(r.form_submission_id),
     createdBy: r.created_by,
     createdAt: r.created_at,
     leadStage: r.lead_stage || null,
@@ -473,7 +469,7 @@ router.post('/payment-requests', requirePermission('payments'), async (req, res)
     courseId, purpose, kind = 'fixed',
     amount, minAmount, description,
     notifySms = false, notifyEmail = false, reminderEnable = false,
-    expireBy, formId, formSubmissionId,
+    expireBy,
   } = req.body || {};
 
   try {
@@ -533,12 +529,12 @@ router.post('/payment-requests', requirePermission('payments'), async (req, res)
       `INSERT INTO coexistence.payment_requests
          (lead_id, customer_name, customer_phone, customer_email, course_id, product_label,
           purpose, kind, amount_paise, min_amount_paise, description, expire_by,
-          form_id, form_submission_id, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+          created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        RETURNING id`,
       [lead?.id || null, finalName, finalPhone || null, finalEmail, product?.id || null, product?.name || null,
        purpose?.trim() || null, kind, amountPaise, minPaise, description?.trim() || null,
-       expireBy || null, formId || null, formSubmissionId || null, req.user?.username || null]
+       expireBy || null, req.user?.username || null]
     );
 
     // 2. Mint the link.

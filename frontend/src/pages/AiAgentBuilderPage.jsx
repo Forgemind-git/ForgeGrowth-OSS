@@ -5,7 +5,10 @@ import { C, FONT, MONO } from '../constants.js';
 import { showError, showSuccess } from '../lib/feedback.js';
 import AgentEditor from '../components/agents/AgentEditor.jsx';
 import AgentList from '../components/agents/AgentList.jsx';
+import QuickAgentTemplates from '../components/agents/QuickAgentTemplates.jsx';
+import QuickAgentEditor from '../components/agents/QuickAgentEditor.jsx';
 import LiveLinksPanel from '../components/LiveLinksPanel.jsx';
+import { useHubEditing } from '../components/AutomationHub.jsx';
 
 /**
  * AI Agents top-level page.
@@ -23,6 +26,13 @@ export default function AiAgentBuilderPage({ user, navigate }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editingId, setEditingId] = useState(null); // null = list view, 'new' = create, <number> = edit
+  // "New agent" opens the template picker (like Social's Quick Automations);
+  // picking one opens the one-page Quick AI Agent editor, "Start from scratch"
+  // the full five-tab editor.
+  const [picker, setPicker] = useState(false);
+  const [quick, setQuick] = useState(null); // a QUICK_AGENTS template while the quick editor is open
+  const editing = editingId !== null || quick !== null;
+  useHubEditing(editing); // an editor owns the whole pane
   const [importing, setImporting] = useState(false);
   const fileRef = useRef(null);
 
@@ -73,9 +83,9 @@ export default function AiAgentBuilderPage({ user, navigate }) {
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', background: C.pageBg, fontFamily: FONT, overflow: 'hidden' }}>
       <input ref={fileRef} type="file" accept="application/json,.json" onChange={handleImportFile} style={{ display: 'none' }} />
       <Header
-        editing={editingId !== null}
-        onBack={() => { setEditingId(null); refresh(); }}
-        onNew={() => setEditingId('new')}
+        editing={editing}
+        onBack={() => { setEditingId(null); setQuick(null); refresh(); }}
+        onNew={() => setPicker(true)}
         onImport={() => fileRef.current?.click()}
         importing={importing}
         agentCount={agents.length}
@@ -95,10 +105,10 @@ export default function AiAgentBuilderPage({ user, navigate }) {
           its own child scroll. */}
       <div style={{
         flex: 1, minHeight: 0,
-        overflow: editingId !== null ? 'hidden' : 'auto',
-        display: editingId !== null ? 'flex' : 'block',
+        overflow: editing ? 'hidden' : 'auto',
+        display: editing ? 'flex' : 'block',
       }}>
-        {editingId === null && (
+        {!editing && (
           loading
             ? <Loading />
             : <>
@@ -107,9 +117,20 @@ export default function AiAgentBuilderPage({ user, navigate }) {
                   agents={agents}
                   waAccounts={waAccounts}
                   onEdit={(id) => setEditingId(id)}
-                  onCreate={() => setEditingId('new')}
+                  onCreate={() => setPicker(true)}
                 />
               </>
+        )}
+        {quick && (
+          <QuickAgentEditor
+            key={quick.id}
+            template={quick}
+            waAccounts={waAccounts}
+            user={user}
+            navigate={navigate}
+            onDone={() => { setQuick(null); refresh(); }}
+            onOpenFull={(id) => { setQuick(null); setEditingId(id); }}
+          />
         )}
         {editingId !== null && (
           <AgentEditor
@@ -118,10 +139,20 @@ export default function AiAgentBuilderPage({ user, navigate }) {
             user={user}
             navigate={navigate}
             onDone={() => { setEditingId(null); refresh(); }}
-            onCancel={() => setEditingId(null)}
+            // Refresh on the way out too: "Create agent" now keeps the editor
+            // open, so a cancel after creating must still show the new row.
+            onCancel={() => { setEditingId(null); refresh(); }}
           />
         )}
       </div>
+
+      {picker && (
+        <QuickAgentTemplates
+          onClose={() => setPicker(false)}
+          onQuick={(t) => { setPicker(false); setEditingId(null); setQuick(t); }}
+          onScratch={() => { setPicker(false); setQuick(null); setEditingId('new'); }}
+        />
+      )}
     </div>
   );
 }
@@ -139,11 +170,11 @@ function Header({ editing, onBack, onNew, onImport, importing, agentCount }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <Bot size={editing ? 16 : 18} color={C.primary} />
         <div>
-          <div style={{ fontSize: editing ? 15 : 18, fontWeight: 700, color: C.text, letterSpacing: '-.01em' }}>
-            AI Agents
-          </div>
+          {editing && (
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.text, letterSpacing: '-.01em' }}>AI Agents</div>
+          )}
           {!editing && (
-            <div style={{ fontSize: 14, color: C.textMuted, marginTop: 2 }}>
+            <div style={{ fontSize: 14, color: C.textMuted }}>
               LLM-driven WhatsApp assistants · {agentCount} configured
             </div>
           )}

@@ -13,7 +13,8 @@
 /**
  * Parse a Meta WhatsApp Cloud API webhook payload and extract message records.
  * Handles: text, image, video, audio, document, location, sticker, contacts,
- *          interactive (button_reply / list_reply), reaction, and status updates.
+ *          interactive (button_reply / list_reply / nfm_reply), template buttons,
+ *          reaction, and status updates.
  */
 // Normalize WhatsApp phone numbers to digits-only — strips '+', spaces, dashes.
 // Meta sometimes includes leading '+' in display_phone_number, sometimes not;
@@ -122,9 +123,34 @@ function parseMetaPayload(body) {
           const names = msg.contacts.map(c => c.name?.formatted_name || c.name?.first_name || 'Contact').join(', ');
           record.message_body = `Shared contact(s): ${names}`;
         } else if (type === 'interactive' && msg.interactive) {
-          const reply = msg.interactive.button_reply || msg.interactive.list_reply || {};
-          record.message_body = reply.title || 'Interactive response';
-          record.message_type = 'interactive';
+          // The two interactive shapes were previously MERGED into one label,
+          // after which a button tap was indistinguishable from a list choice.
+          // `message_body` stays the display label (right for the chat bubble);
+          // `reply_kind`/`reply_id` are the ROUTING key. Two different needs
+          // that were being served by one column.
+          //
+          // Extracted HERE and not from `raw_payload` at resume time: that
+          // column holds the WHOLE webhook batch, so any later extraction has
+          // to re-find this message by `m.id === record.message_id` — the join
+          // already documented as load-bearing for the CTWA backfill.
+          const nfm = msg.interactive.type === 'nfm_reply' ? msg.interactive.nfm_reply : null;
+          if (nfm) {
+            // A WhatsApp form (Meta Flow) submission. Forms were removed
+            // (2026-10-16), so nothing continues from one any more; it is still
+            // stored so the chat shows that something arrived.
+            record.message_type = 'flow_reply';
+            record.message_body = 'Form submitted';
+            record.reply_kind = 'flow';
+          } else {
+            const br = msg.interactive.button_reply;
+            const lr = msg.interactive.list_reply;
+            const reply = br || lr || {};
+            record.message_body = reply.title || 'Interactive response';
+            record.message_type = 'interactive';
+            record.reply_kind = br ? 'button' : lr ? 'list' : null;
+            record.reply_id = reply.id || null;
+            record.reply_label = reply.title || null;
+          }
         } else if (type === 'button' && msg.button) {
           // A TEMPLATE quick-reply tap (distinct from `interactive`, which is a
           // button on a non-template interactive message). Meta sends
@@ -132,8 +158,17 @@ function parseMetaPayload(body) {
           // with a NULL body — the bubble rendered empty AND no keyword trigger
           // could ever match the tap, so "tap the button to get the link" style
           // automations silently never fired.
+          //
+          // ⚠ This is the shape that matters here: EVERY button-bearing node in
+          // production is a template, so a router that only understands
+          // `interactive.button_reply.id` fixes nothing that is live. Unless we
+          // injected a payload at send time, `payload` is Meta's echo of the
+          // visible LABEL — hence the label fallback in resolveReplyHandle.
           record.message_body = msg.button.text || msg.button.payload || 'Button tap';
           record.message_type = 'button';
+          record.reply_kind = 'template_button';
+          record.reply_id = msg.button.payload || null;
+          record.reply_label = msg.button.text || null;
         } else if (type === 'reaction' && msg.reaction) {
           record.message_body = `Reaction: ${msg.reaction.emoji || ''}`;
           record.message_type = 'reaction';
@@ -146,6 +181,10 @@ function parseMetaPayload(body) {
             from: msg.from || null,
           };
         } else if (type === 'order' && msg.order) {
+          // Meta still delivers this shape if a catalog is enabled on the number
+          // at Meta's end, so the branch stays — the message must land in the
+          // chat rather than vanishing. The cart itself is not modelled here;
+          // the full payload remains available in raw_payload.
           record.message_body = 'Order received';
         } else if (type === 'system' && msg.system) {
           record.message_body = msg.system.body || 'System message';

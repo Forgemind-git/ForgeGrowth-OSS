@@ -17,21 +17,19 @@ import {
   PageShell, Table, Td, Badge, EmptyState, Segmented, StageBadge, fmtINR, fmtDate,
 } from '../academy/shared.jsx';
 import { Card, KpiCard, Donut, LineTrend, Shimmer, EmptyChart } from '../../components/charts.jsx';
+import DateRangeControl, { useMarketingRange, rangeParams, SpendCoverageNote } from '../../components/DateRangeControl.jsx';
 
+// Variable-driven like the rest of the palette, so a themed section draws these
+// from its own tokens instead of three brand hues that belong to nobody's design
+// system. Fallbacks are the historical values, so an unscoped render is
+// unchanged.
 const PLATFORM_COLOR = {
-  Instagram: '#db2777',
-  Facebook: '#2563eb',
-  WhatsApp: '#0F6E56',
-  Other: '#6B7280',
-  Unknown: '#6B7280',
+  Instagram: 'var(--fg-series-1, #db2777)',
+  Facebook: 'var(--fg-series-3, #2563eb)',
+  WhatsApp: 'var(--fg-series-5, #0F6E56)',
+  Other: 'var(--fg-series-4, #6B7280)',
+  Unknown: 'var(--fg-series-4, #6B7280)',
 };
-
-const RANGES = [
-  { value: '7', label: '7d' },
-  { value: '30', label: '30d' },
-  { value: '90', label: '90d' },
-  { value: '', label: 'All' },
-];
 
 function num(n) {
   return Number(n || 0).toLocaleString('en-IN');
@@ -78,7 +76,9 @@ function PlatformBadge({ platform, all }) {
 }
 
 export default function CtwaPage({ navigate }) {
-  const [days, setDays] = useState('30');
+  // Shared with Overview and Campaigns, and survives a refresh.
+  const [range, setRange] = useMarketingRange();
+  const paramsKey = JSON.stringify(rangeParams(range));
   const [platform, setPlatform] = useState('');
   const [data, setData] = useState(null);
   const [popup, setPopup] = useState(null);
@@ -92,7 +92,7 @@ export default function CtwaPage({ navigate }) {
   const load = useCallback(async () => {
     setData(null);
     try {
-      const d = await api.ctwa.overview({ days, platform });
+      const d = await api.ctwa.overview({ ...JSON.parse(paramsKey), platform });
       setData(d);
       // allPlatforms is placement-blind (date range still applies). Fall back to
       // the filtered list only on an older backend that doesn't send it.
@@ -102,7 +102,7 @@ export default function CtwaPage({ navigate }) {
       showError(e.message);
       setData({ kpis: {}, ads: [], platforms: [], allPlatforms: [], timeseries: [], stages: [], creatives: [] });
     }
-  }, [days, platform]);
+  }, [paramsKey, platform]);
   useEffect(() => { load(); }, [load]);
 
   const k = data?.kpis || {};
@@ -110,7 +110,6 @@ export default function CtwaPage({ navigate }) {
 
   return (
     <PageShell
-      title="Click-to-WhatsApp"
       subtitle="Every conversation that started from a click-to-WhatsApp ad — the ad, the creative they saw, and what happened after."
       actions={
         <>
@@ -120,16 +119,9 @@ export default function CtwaPage({ navigate }) {
               value={platform} onChange={setPlatform}
             />
           )}
-          {/* Date range gets its own labelled control so it reads as a filter
-              rather than a second, unrelated set of tabs next to placements. */}
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 4px 4px 11px',
-            border: `1.5px solid ${C.border}`, borderRadius: 11, background: C.cardBg }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13,
-              fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.textMuted, fontFamily: FONT }}>
-              <CalendarDays size={14} /> Period
-            </span>
-            <Segmented options={RANGES} value={days} onChange={setDays} />
-          </div>
+          {/* The shared labelled period control, so it reads as a filter rather
+              than a second, unrelated set of tabs next to placements. */}
+          <DateRangeControl value={range} onChange={setRange} />
         </>
       }
     >
@@ -144,9 +136,11 @@ export default function CtwaPage({ navigate }) {
             sub={k.leadToEnrolPct != null ? `${k.leadToEnrolPct.toFixed(1)}% of leads` : '—'} />
           <KpiCard label="Revenue" value={fmtINR(k.revenue)} accent="var(--c-successText, #0F6E56)" icon={TrendingUp}
             info="Gateway payments (deduped) plus manually logged sales, for leads that came from these ads." />
-          <KpiCard label="Spend" value={fmtINR(k.spend)} icon={Wallet}
-            sub={data.spendIsLifetime ? 'lifetime, from Meta' : undefined}
-            info="Comes from the Meta Ads sync and is LIFETIME spend per ad — it does not shrink when you narrow the date range above." />
+          <KpiCard label="Spend" value={k.spend != null ? fmtINR(k.spend) : '—'} icon={Wallet}
+            sub={data.spendIsLifetime ? 'lifetime, from Meta' : data.spendCoverage?.partial ? 'incomplete — see note' : 'for this range'}
+            info={data.spendIsLifetime
+              ? 'All time is selected, so this is LIFETIME spend per ad from the Meta Ads sync, for the ads that brought clicks.'
+              : 'Meta’s per-day spend for exactly these days, for the ads that brought clicks in the range.'} />
           <KpiCard label="Cost / lead" value={k.costPerLead != null ? fmtINR(k.costPerLead) : '—'} />
           <KpiCard label="ROAS" value={k.roas != null ? `${k.roas.toFixed(2)}x` : '—'}
             accent={k.roas >= 1 ? 'var(--c-successText, #0F6E56)' : C.text}
@@ -164,7 +158,7 @@ export default function CtwaPage({ navigate }) {
             <>
               {/* Donut carries its own legend (placement + clicks) — the strip
                   below adds what the legend can't: what those clicks became. */}
-              <Donut data={data.platforms.map(p => ({ label: p.platform, value: p.clicks, color: PLATFORM_COLOR[p.platform] || PLATFORM_COLOR.Other }))} />
+              <Donut maxSlices={6} data={data.platforms.map(p => ({ label: p.platform, value: p.clicks, color: PLATFORM_COLOR[p.platform] || PLATFORM_COLOR.Other }))} />
               <div style={{ marginTop: 14, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
                 {data.platforms.map(p => (
                   <div key={p.platform} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', fontFamily: FONT, fontSize: 14 }}>
@@ -202,13 +196,20 @@ export default function CtwaPage({ navigate }) {
         </Card>
       </div>
 
-      {data?.spendIsLifetime && ads.some(a => a.spend != null) && (
+      {data && <SpendCoverageNote coverage={data.spendCoverage} />}
+      {data && ads.some(a => a.spend != null) && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 13px', marginBottom: 12,
           background: 'var(--c-warnBgSoft, #FFF8E6)', border: '1px solid var(--c-warnBorder, #F0DCA8)', borderRadius: 9, fontFamily: FONT, fontSize: 14, color: 'var(--c-warnDeep, #6B5312)' }}>
           <Info size={15} style={{ flexShrink: 0, marginTop: 1 }} />
           <span>
-            Clicks, leads and revenue respect the date range. <strong>Spend, impressions and Meta&apos;s own lead count are lifetime
-            totals</strong> for each ad, taken from the Meta Ads sync — so cost-per-lead is conservative on short ranges.
+            {data.spendIsLifetime ? (
+              <>All time is selected, so <strong>spend, impressions and Meta&apos;s own lead count are lifetime totals</strong> for
+              each ad, taken from the Meta Ads sync.</>
+            ) : (
+              <>Clicks, leads, revenue <strong>and spend</strong> follow the date range — spend, impressions and Meta&apos;s lead
+              count are Meta&apos;s per-day figures for the same days. An ad can show clicks with ₹0 spend when it was paid for
+              before the range started.</>
+            )}{' '}
             Per-ad revenue is <strong>multi-touch</strong>: someone who clicked two ads counts their full amount against both, so
             the revenue column can sum to more than the Revenue KPI above (which counts each person once).
           </span>
@@ -265,6 +266,7 @@ export default function CtwaPage({ navigate }) {
       {popup && (
         <AdPopup
           ad={popup}
+          spendIsLifetime={data?.spendIsLifetime !== false}
           onClose={() => setPopup(null)}
           // ChatsPage deep-links on subParts[0]/[1]. Closing first means the
           // modal isn't left mounted over the page we just navigated to.
@@ -286,7 +288,7 @@ export default function CtwaPage({ navigate }) {
 // Laid out as creative-beside-numbers rather than numbers-then-creative: the
 // question this view answers is "what did they see, and did it work?", and
 // those two halves have to be readable together.
-function AdPopup({ ad, onClose, onOpenChat }) {
+function AdPopup({ ad, onClose, onOpenChat, spendIsLifetime = true }) {
   const [detail, setDetail] = useState(null);
   const [tab, setTab] = useState('people');
 
@@ -341,7 +343,7 @@ function AdPopup({ ad, onClose, onOpenChat }) {
       `}</style>
       <div onClick={e => e.stopPropagation()}
         style={{
-          position: 'relative', width: 'min(1120px, 100%)', maxHeight: '90vh', overflowY: 'auto',
+          position: 'relative', width: 'min(1120px, 100%)', maxHeight: 'calc(90vh / var(--fg-zoom, 1))', overflowY: 'auto',
           background: C.pageBg, borderRadius: 16, boxShadow: C.shadowLg, fontFamily: FONT,
           animation: 'ctwaPopIn .2s ease-out',
         }}>
@@ -396,8 +398,10 @@ function AdPopup({ ad, onClose, onOpenChat }) {
                   sub={leadToEnrol != null ? `${leadToEnrol.toFixed(1)}% of leads` : undefined} />
                 <KpiCard label="Revenue" value={fmtINR(ad.revenue)} accent="var(--c-successText, #0F6E56)" icon={TrendingUp} />
                 <KpiCard label="Spend" value={ad.spend != null ? fmtINR(ad.spend) : '—'} icon={Wallet}
-                  sub="lifetime"
-                  info="Lifetime spend for this ad, from the Meta Ads sync. It does not shrink when the date range on the page is narrowed, so cost-per-lead is conservative on short ranges." />
+                  sub={spendIsLifetime ? 'lifetime' : 'in the selected range'}
+                  info={spendIsLifetime
+                    ? 'Lifetime spend for this ad, from the Meta Ads sync (All time is selected).'
+                    : 'Meta’s per-day spend for this ad over the date range selected on the page — the same days as the clicks and leads here.'} />
                 <KpiCard label="Cost / lead" value={cpl != null ? fmtINR(cpl) : '—'}
                   sub={cpEnrol != null ? `${fmtINR(cpEnrol)} / enrolment` : undefined} />
                 <KpiCard label="ROAS" value={roas != null ? `${roas.toFixed(2)}x` : '—'}

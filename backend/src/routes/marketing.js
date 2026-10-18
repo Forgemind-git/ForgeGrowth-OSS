@@ -14,6 +14,7 @@ const pool = require('../db');
 const { adminOnly } = require('../middleware/access');
 const { encrypt, decrypt } = require('../util/crypto');
 const metaAds = require('../integrations/metaAdsClient');
+const { parseDateRange, isWindowed, timestampClause, dateClause, spendCoverage } = require('../util/dateRange');
 
 const router = Router();
 
@@ -77,38 +78,76 @@ async function ensureAdSetTables() {
 }
 
 // ── overview ──────────────────────────────────────────────────────────────────
+// Accepts ?days=N (legacy, default 30) or ?from=YYYY-MM-DD&to=YYYY-MM-DD (IST,
+// inclusive), plus ?source=. Every lead figure — KPIs, donut, funnel, trend —
+// covers leads that ARRIVED in the range. Spend comes from per-day Meta rows for
+// a windowed range and from lifetime totals only for all-time (days=all), with
+// spendBasis/spendCoverage saying which and whether the range is fully covered.
 router.get('/marketing/overview', async (req, res) => {
   try {
-    const days = parseInt(req.query.days, 10) || 30;
+    const range = parseDateRange(req.query, { defaultDays: 30 });
+    if (range.error) return res.status(400).json({ error: range.error });
+    const windowed = isWindowed(range);
     const src = req.query.source || null;
-    const srcClause = src ? `AND source = $2` : '';
-    const p = src ? [days, src] : [days];
 
+    // Each query gets its own params array so placeholders never drift.
+    const bind = () => { const params = []; return { params, add: (v) => { params.push(v); return `$${params.length}`; } }; };
+
+    const k = bind();
+    const createdK = timestampClause(range, 'created_at', k.add) || 'TRUE';
+    const enrolledK = timestampClause(range, 'stage_changed_at', k.add) || 'TRUE';
+    const srcClause = src ? `AND source = ${k.add(src)}` : '';
     const { rows: kpi } = await pool.query(
       `SELECT
-         COUNT(*) FILTER (WHERE created_at >= NOW() - ($1 || ' days')::interval)::int AS new_leads,
-         COUNT(*) FILTER (WHERE stage = 'enrolled' AND stage_changed_at >= NOW() - ($1 || ' days')::interval)::int AS enrollments
+         COUNT(*) FILTER (WHERE ${createdK})::int AS new_leads,
+         COUNT(*) FILTER (WHERE stage = 'enrolled' AND ${enrolledK})::int AS enrollments
        FROM coexistence.leads WHERE 1=1 ${srcClause}`,
-      p
+      k.params
     );
+
+    // Legacy KPI, unchanged for existing API/MCP readers: LIFETIME spend of the
+    // campaigns currently marked active. The page no longer shows it under a
+    // date filter — `spend` below is the range-aware figure.
     const { rows: campKpi } = await pool.query(
-      `SELECT COALESCE(SUM(spend),0)::numeric AS active_spend,
-              COALESCE(SUM(leads_generated),0)::int AS gen
+      `SELECT COALESCE(SUM(spend),0)::numeric AS active_spend
          FROM coexistence.campaigns WHERE status = 'active'`
     );
-    const newLeads = num(kpi[0]?.new_leads);
-    const activeSpend = num(campKpi[0]?.active_spend);
-    const totalGen = num(campKpi[0]?.gen);
 
-    // Leads by source (donut).
+    const cov = await spendCoverage(pool, range);
+    let spendRow;
+    if (windowed) {
+      const s = bind();
+      const dayClause = dateClause(range, 'stat_date', s.add);
+      ({ rows: [spendRow] } = await pool.query(
+        `SELECT COALESCE(SUM(spend),0)::numeric AS spend, COALESCE(SUM(leads),0)::int AS leads
+           FROM coexistence.ad_daily_stats WHERE ${dayClause}`,
+        s.params
+      ));
+    } else {
+      ({ rows: [spendRow] } = await pool.query(
+        `SELECT COALESCE(SUM(spend),0)::numeric AS spend, COALESCE(SUM(leads_generated),0)::int AS leads
+           FROM coexistence.campaigns`
+      ));
+    }
+    const spend = cov.noDailyData && windowed ? null : num(spendRow?.spend);
+    const metaLeads = cov.noDailyData && windowed ? null : num(spendRow?.leads);
+
+    // Leads by source (donut) — leads that arrived in the range.
+    const b = bind();
+    const createdB = timestampClause(range, 'created_at', b.add) || 'TRUE';
     const { rows: bySource } = await pool.query(
       `SELECT COALESCE(source,'Unknown') AS source, COUNT(*)::int AS count
-         FROM coexistence.leads GROUP BY COALESCE(source,'Unknown') ORDER BY count DESC`
+         FROM coexistence.leads WHERE ${createdB}
+        GROUP BY COALESCE(source,'Unknown') ORDER BY count DESC`,
+      b.params
     );
 
-    // Funnel snapshot.
+    // Funnel snapshot — where the leads that arrived in the range are NOW.
+    const f = bind();
+    const createdF = timestampClause(range, 'created_at', f.add) || 'TRUE';
     const { rows: byStage } = await pool.query(
-      `SELECT stage, COUNT(*)::int AS count FROM coexistence.leads GROUP BY stage`
+      `SELECT stage, COUNT(*)::int AS count FROM coexistence.leads WHERE ${createdF} GROUP BY stage`,
+      f.params
     );
     const stageCounts = {};
     for (const r of byStage) stageCounts[r.stage] = r.count;
@@ -116,22 +155,31 @@ router.get('/marketing/overview', async (req, res) => {
       stage: s, count: stageCounts[s] || 0,
     }));
 
-    // Leads trend (daily buckets).
+    // Leads trend (daily IST buckets).
+    const t = bind();
+    const createdT = timestampClause(range, 'created_at', t.add) || 'TRUE';
     const { rows: trend } = await pool.query(
       `SELECT (created_at AT TIME ZONE 'Asia/Kolkata')::date AS day, COUNT(*)::int AS count
          FROM coexistence.leads
-        WHERE created_at >= NOW() - ($1 || ' days')::interval
+        WHERE ${createdT}
         GROUP BY day ORDER BY day ASC`,
-      [days]
+      t.params
     );
 
     res.json({
       kpis: {
-        newLeads,
-        costPerLead: totalGen ? activeSpend / totalGen : 0,
-        activeSpend,
+        newLeads: num(kpi[0]?.new_leads),
+        // Range-aware: Meta spend ÷ Meta-attributed leads over the same days.
+        costPerLead: spend != null && metaLeads ? spend / metaLeads : null,
+        spend,
+        metaLeads,
+        activeSpend: num(campKpi[0]?.active_spend),
+        activeSpendIsLifetime: true,
         enrollments: num(kpi[0]?.enrollments),
       },
+      range: { mode: range.mode, from: cov.rangeFrom, to: cov.rangeTo, days: range.days },
+      spendBasis: cov.basis,
+      spendCoverage: cov,
       bySource: bySource.map(r => ({ source: r.source, count: r.count })),
       funnel,
       trend: trend.map(r => ({ day: r.day, count: r.count })),
@@ -162,10 +210,89 @@ function campaignRow(r) {
   };
 }
 
+// No range (the default, and what MCP clients send) → every campaign with its
+// stored LIFETIME figures, exactly as before.
+//
+// With ?days=N or ?from=&to= (IST, inclusive) the list becomes "what ran in this
+// range":
+//   • Meta campaigns — spend/leads/impressions/clicks summed from ad_daily_stats
+//     for those days; campaigns with no delivery in the range are left out
+//     (counted in hiddenNoDelivery). Cost/enrolment is null: enrolments are not
+//     stored per day, so dividing windowed spend by them would mix bases.
+//   • Manual campaigns — they have no per-day data, so they are listed only if
+//     their start/end dates overlap the range, carry metricsBasis:'stored', and
+//     are EXCLUDED from `totals`. Showing their typed totals as if they were
+//     this range's numbers is the one thing this must not do.
 router.get('/campaigns', async (req, res) => {
   try {
-    const { rows } = await pool.query(`SELECT * FROM coexistence.campaigns ORDER BY start_date DESC NULLS LAST, id DESC`);
-    res.json({ campaigns: rows.map(campaignRow) });
+    const range = parseDateRange(req.query);
+    if (range.error) return res.status(400).json({ error: range.error });
+    const cov = await spendCoverage(pool, range);
+    const rangeOut = { mode: range.mode, from: cov.rangeFrom, to: cov.rangeTo, days: range.days };
+
+    if (!isWindowed(range)) {
+      const { rows } = await pool.query(`SELECT * FROM coexistence.campaigns ORDER BY start_date DESC NULLS LAST, id DESC`);
+      return res.json({
+        campaigns: rows.map(r => ({ ...campaignRow(r), metricsBasis: r.source === 'meta' ? 'lifetime' : 'stored' })),
+        range: rangeOut, spendBasis: cov.basis, spendCoverage: cov,
+      });
+    }
+
+    const params = [];
+    const add = (v) => { params.push(v); return `$${params.length}`; };
+    const dayClause = dateClause(range, 'stat_date', add);
+    const ovFrom = add(cov.rangeFrom);
+    const ovTo = add(cov.rangeTo);
+    const { rows } = await pool.query(
+      `WITH d AS (
+         SELECT campaign_external_id,
+                SUM(spend)::numeric AS spend, SUM(leads)::bigint AS leads,
+                SUM(impressions)::bigint AS impressions, SUM(clicks)::bigint AS clicks
+           FROM coexistence.ad_daily_stats
+          WHERE campaign_external_id IS NOT NULL AND ${dayClause}
+          GROUP BY campaign_external_id
+       )
+       SELECT c.*, d.spend AS w_spend, d.leads AS w_leads, d.impressions AS w_impressions, d.clicks AS w_clicks
+         FROM coexistence.campaigns c
+         LEFT JOIN d ON d.campaign_external_id = c.external_id
+        WHERE (c.source = 'meta' AND d.campaign_external_id IS NOT NULL AND (d.spend > 0 OR d.impressions > 0))
+           OR (COALESCE(c.source, 'manual') <> 'meta'
+               AND (c.start_date IS NULL OR ${ovTo}::date IS NULL OR c.start_date <= ${ovTo}::date)
+               AND (c.end_date   IS NULL OR ${ovFrom}::date IS NULL OR c.end_date >= ${ovFrom}::date))
+        ORDER BY d.spend DESC NULLS LAST, c.start_date DESC NULLS LAST, c.id DESC`,
+      params
+    );
+    const { rows: [metaCount] } = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM coexistence.campaigns WHERE source = 'meta'`
+    );
+
+    const totals = { spend: 0, leads: 0, impressions: 0, clicks: 0, campaigns: 0 };
+    let manualListed = 0;
+    const campaigns = rows.map(r => {
+      const base = campaignRow(r);
+      if (r.source !== 'meta') { manualListed++; return { ...base, metricsBasis: 'stored' }; }
+      const spend = num(r.w_spend);
+      const leads = num(r.w_leads);
+      const impressions = num(r.w_impressions);
+      const clicks = num(r.w_clicks);
+      totals.spend += spend; totals.leads += leads; totals.impressions += impressions; totals.clicks += clicks; totals.campaigns++;
+      return {
+        ...base,
+        spend, leadsGenerated: leads, impressions, clicks,
+        costPerLead: leads ? spend / leads : null,
+        costPerEnrollment: null,
+        lifetimeSpend: base.spend, lifetimeLeads: base.leadsGenerated,
+        metricsBasis: 'daily',
+      };
+    });
+
+    res.json({
+      campaigns,
+      totals,
+      manualExcludedFromTotals: manualListed,
+      hiddenNoDelivery: Math.max(0, num(metaCount?.n) - totals.campaigns),
+      range: rangeOut, spendBasis: cov.basis, spendCoverage: cov,
+    });
   } catch (err) {
     console.error('[marketing] campaigns list error:', err.message);
     res.status(500).json({ error: 'Failed to fetch campaigns' });

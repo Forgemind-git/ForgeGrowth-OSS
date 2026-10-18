@@ -43,6 +43,7 @@ const SEED = [
       'sales-pipeline', 'leads', 'onboarding',
       'sales-funnel', 'sales-log',
       'payments',
+      'follow-ups',
       'admin-settings:general',
     ],
   },

@@ -1,0 +1,167 @@
+/* ============================================================================
+   SOCIAL SECTION — the ported ForgeSocial pages, inside ForgeGrowth.
+   ============================================================================
+
+   Both apps are built on the same Forge borderless design system, so the core
+   --fc-* tokens (page, card, text, primary, radii, gutter) are ForgeGrowth's
+   own, from styles/forge.css, and the Social pages simply read them.
+
+   This file adds ONLY what ForgeSocial had beyond that kit, and every rule is
+   scoped under .social-root: ForgeSocial's stylesheet was GLOBAL (it restyled
+   every input, button, table and radius on the page), and loading it unscoped
+   would quietly restyle the rest of ForgeGrowth. Theme follows ForgeGrowth's
+   own data-theme attribute on <html>; nothing here switches it.
+   ========================================================================== */
+
+/* ── 1. Extra tokens (values verbatim from ForgeSocial's tokens.css) ─────── */
+.social-root {
+  --fc-font-mono:      'DM Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --fc-veil:           rgba(247, 247, 243, 0.82);
+  --fc-speak-tint:     #FFF5F5;
+  --fc-mock:           #FFFFFF;
+  --fc-mock-line:      #ECECEC;
+  --fc-mock-body:      #F4F3EE;
+  --fc-mock-rail:      #FAFAF7;
+  --fc-mock-rail-item: #E9E9E4;
+  --fc-mock-text:      #141414;
+  --fc-mock-dim:       #8A8A8A;
+  --fc-chip:           #FFFFFF;
+  --fc-green-soft:     #E1F5EE;
+  --fc-blue:           #1d4ed8;
+  --fc-blue-soft:      #E7F0FE;
+  --fc-purple:         #534AB7;
+  --fc-purple-soft:    #EEEDFE;
+  --fc-pink:           #C13584;
+  --fc-pink-soft:      #FBE8F2;
+  --fc-plate:          rgba(17, 17, 19, 0.92);
+  --fc-plate-text:     #ffffff;
+  --fc-brand-threads:  #111111;
+  --fc-header:         #000000;
+  --fc-header-surface: rgba(255, 255, 255, 0.08);
+  --fc-header-text:    #ffffff;
+  --fc-header-muted:   rgba(255, 255, 255, 0.72);
+  --bg-deep:           var(--fc-page);
+}
+:root[data-theme="dark"] .social-root {
+  --fc-veil:           rgba(10, 10, 10, 0.86);
+  --fc-speak-tint:     #241a1a;
+  --fc-mock:           #141414;
+  --fc-mock-line:      #242424;
+  --fc-mock-body:      #0a0a0a;
+  --fc-mock-rail:      #101010;
+  --fc-mock-rail-item: #262626;
+  --fc-mock-text:      #f0f0f0;
+  --fc-mock-dim:       #939393;
+  --fc-chip:           #F4F4F1;
+  --fc-green-soft:     rgba(74, 222, 128, 0.16);
+  --fc-blue:           #60a5fa;
+  --fc-blue-soft:      rgba(96, 165, 250, 0.16);
+  --fc-purple:         #a78bfa;
+  --fc-purple-soft:    rgba(167, 139, 250, 0.16);
+  --fc-pink:           #f472b6;
+  --fc-pink-soft:      rgba(244, 114, 182, 0.16);
+  --fc-brand-threads:  #E8E8E5;
+}
+
+/* ── 2. The page area: what ForgeSocial's .fc-main did ─────────────────────
+   ForgeGrowth's .fc-content scrolls but has no padding; Social pages expect the
+   padded column, and a chat layout opts into filling it with .fc-fill. */
+.social-root {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 20px 24px 40px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  font-family: var(--fc-font);
+  font-weight: 450;
+  color: var(--fc-text);
+}
+.social-root > * { flex-shrink: 0; }
+.social-root > .fc-fill { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+.social-root.social-root--settings { padding-top: 16px; }
+
+/* ── 3. ForgeSocial's element rules, scoped ───────────────────────────────── */
+.social-root [style*="DM Sans"]:not(.fs-report-page *) { font-family: var(--fc-font) !important; }
+.social-root [style*="DM Mono"][style*="font-size: 18px"]:not(.fs-report-page *), .social-root [style*="DM Mono"][style*="font-size: 20px"]:not(.fs-report-page *), .social-root [style*="DM Mono"][style*="font-size: 22px"]:not(.fs-report-page *),
+.social-root [style*="DM Mono"][style*="font-size: 24px"]:not(.fs-report-page *), .social-root [style*="DM Mono"][style*="font-size: 26px"]:not(.fs-report-page *), .social-root [style*="DM Mono"][style*="font-size: 28px"]:not(.fs-report-page *),
+.social-root [style*="DM Mono"][style*="font-size: 30px"]:not(.fs-report-page *), .social-root [style*="DM Mono"][style*="font-size: 32px"]:not(.fs-report-page *), .social-root [style*="DM Mono"][style*="font-size: 36px"]:not(.fs-report-page *),
+.social-root [style*="DM Mono"][style*="font-size: 38px"]:not(.fs-report-page *), .social-root [style*="DM Mono"][style*="font-size: 40px"]:not(.fs-report-page *) {
+  font-family: var(--fc-font) !important; font-weight: 780 !important; letter-spacing: -0.03em !important; font-variant-numeric: tabular-nums;
+}
+.social-root h1, .social-root h2, .social-root h3, .social-root h4 { font-family: var(--fc-font); }
+
+.social-root :focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--fc-primary); }
+.social-root input:focus, .social-root input:focus-visible, .social-root textarea:focus, .social-root textarea:focus-visible, .social-root select:focus { box-shadow: none !important; outline: none !important; }
+.social-root .fc-searchfield:focus-within { box-shadow: inset 0 0 0 1.5px var(--fc-primary); }
+
+.social-root input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]):not([style*="background: transparent"]):not([style*="background: none"]):not([style*="background-color: transparent"]),
+.social-root textarea:not([style*="background: transparent"]):not([style*="background: none"]),
+.social-root select:not([style*="background: transparent"]) {
+  background-color: var(--fc-surface) !important;
+  border-color: transparent !important;
+  color: var(--fc-text);
+}
+.social-root input::placeholder, .social-root textarea::placeholder { color: var(--fc-text-muted); opacity: 1; }
+.social-root input[type=checkbox], .social-root input[type=radio] { accent-color: var(--fc-primary); }
+.social-root input[type=date], .social-root input[type=datetime-local], .social-root input[type=time] { color-scheme: inherit; }
+
+.social-root button[style*="background: var(--fc-raised)"], .social-root button[style*="background: var(--fc-card)"],
+.social-root button[style*="background: rgb(255, 255, 255)"], .social-root button[style*="background-color: rgb(255, 255, 255)"] {
+  background: var(--fc-surface-2) !important;
+}
+.social-root button:disabled { cursor: not-allowed; }
+
+.social-root [style*="border-radius: 1px"], .social-root [style*="border-radius: 2px"], .social-root [style*="border-radius: 3px"], .social-root [style*="border-radius: 4px"],
+.social-root [style*="border-radius: 5px"], .social-root [style*="border-radius: 6px"], .social-root [style*="border-radius: 7px"], .social-root [style*="border-radius: 8px"],
+.social-root [style*="border-radius: 9px"], .social-root [style*="border-radius: 10px"], .social-root [style*="border-radius: 11px"], .social-root [style*="border-radius: 12px"] { border-radius: var(--fc-r-sm) !important; }
+.social-root [style*="border-radius: 13px"], .social-root [style*="border-radius: 14px"], .social-root [style*="border-radius: 15px"], .social-root [style*="border-radius: 16px"],
+.social-root [style*="border-radius: 17px"], .social-root [style*="border-radius: 18px"], .social-root [style*="border-radius: 19px"], .social-root [style*="border-radius: 20px"] { border-radius: var(--fc-r-md) !important; }
+.social-root [style*="border-radius: 22px"], .social-root [style*="border-radius: 24px"], .social-root [style*="border-radius: 26px"], .social-root [style*="border-radius: 28px"] { border-radius: var(--fc-r-lg) !important; }
+.social-root [style*="border-radius: 99px"]:not([role="switch"]),
+.social-root [style*="border-radius: 999px"]:not([role="switch"]) { border-radius: var(--fc-r-ctl) !important; }
+.social-root button:not(.fc-tab):not(.fc-row):not(.fc-square):not([role="switch"]):not([style*="border-bottom"]):not([style*="border-radius: 50%"]):not(:has(div)):not(:has(img)):not(:has(video)) {
+  border-radius: var(--fc-r-ctl) !important;
+}
+.social-root button.fc-square { border-radius: var(--fc-r-sm) !important; }
+.social-root .fs-ig-phone [style*="border-radius: 999px"], .social-root .fs-ig-phone button[style*="border-radius: 999px"] { border-radius: 999px !important; }
+
+.social-root table { border-collapse: separate; border-spacing: 0; }
+.social-root th, .social-root td { border: none !important; }
+.social-root thead th { background: var(--fc-surface); font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; color: var(--fc-text-secondary); }
+.social-root thead th:first-child { border-top-left-radius: var(--fc-r-sm); border-bottom-left-radius: var(--fc-r-sm); }
+.social-root thead th:last-child { border-top-right-radius: var(--fc-r-sm); border-bottom-right-radius: var(--fc-r-sm); }
+.social-root tbody tr { transition: background-color .14s ease; }
+.social-root tbody tr:hover, .social-root .table-row:hover { background: var(--fc-surface); }
+.social-root tbody tr:hover td:first-child { border-top-left-radius: var(--fc-r-sm); border-bottom-left-radius: var(--fc-r-sm); }
+.social-root tbody tr:hover td:last-child { border-top-right-radius: var(--fc-r-sm); border-bottom-right-radius: var(--fc-r-sm); }
+.social-root hr { border: none; height: 0; margin: 0; }
+
+.social-root .rc { transition: background-color .16s ease, transform .16s ease; cursor: pointer; }
+.social-root .rc:hover { background: var(--fc-surface) !important; }
+.social-root .sb { font-size: 13px; padding: 6px 14px; border-radius: var(--fc-r-ctl); cursor: pointer; font-weight: 650; transition: background .12s, color .12s; }
+.social-root .sb:hover { background: var(--fc-primary-soft) !important; color: var(--fc-primary) !important; }
+.social-root .si { border: none; border-radius: var(--fc-r-sm); padding: 10px 14px 10px 38px; font-size: 14px; width: 100%; background: var(--fc-surface); color: var(--fc-text); outline: none; }
+.social-root .clear-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: var(--fc-surface-2); border: none; border-radius: 999px; width: 22px; height: 22px; cursor: pointer; font-size: 13px; color: var(--fc-text-secondary); display: flex; align-items: center; justify-content: center; }
+.social-root .stat-card { background: var(--fc-raised); border: none; border-radius: var(--fc-r-md); padding: 18px; }
+.social-root .stat-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--fc-text-secondary); margin-bottom: 8px; font-weight: 650; }
+.social-root .stat-val { font-size: 38px; font-weight: 780; font-family: var(--fc-font); letter-spacing: -.03em; line-height: 1.1; color: var(--fc-text); font-variant-numeric: tabular-nums; }
+.social-root .sort-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--fc-text-muted); margin-right: 4px; font-weight: 650; }
+.social-root .sec-head { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--fc-text-secondary); font-weight: 650; font-family: var(--fc-font-mono); }
+.social-root .mini-stat { text-align: center; min-width: 40px; }
+.social-root .mini-val { font-size: 15px; font-weight: 700; font-family: var(--fc-font); color: var(--fc-text); font-variant-numeric: tabular-nums; }
+.social-root .mini-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--fc-text-muted); font-weight: 650; }
+.social-root .settings-btn { padding: 9px 16px; background: var(--fc-surface-2); border: none; border-radius: var(--fc-r-ctl); cursor: pointer; display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 650; color: var(--fc-text); flex-shrink: 0; transition: background .15s; }
+.social-root .settings-btn:hover { background: var(--fc-primary-soft); }
+.social-root .ig-msg-row:hover .ig-msg-action { opacity: 1 !important; }
+
+/* Keyframes the Social pages reference by name. Prefixed copies are not needed:
+   these names already exist with the same meaning in ForgeGrowth or are new. */
+@keyframes fadeIn  { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+@keyframes slideIn { from { transform: translateX(-100%) } to { transform: translateX(0) } }
+@keyframes pulse   { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
+@keyframes fc-wire-dash { to { stroke-dashoffset: -22; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }

@@ -1,6 +1,6 @@
 # Forge Growth plugin
 
-Configure **Forge Growth** (your Marketing → Sales → Chats funnel on WhatsApp) end-to-end by
+Configure **Forge Growth** (Social, Marketing, Sales and WhatsApp Chats) end-to-end by
 talking to Claude. Give Claude a plain-language **game plan** — "get a template approved by
 Meta, then message my hot leads" — and it drives the Forge Growth MCP connector to do it,
 showing you a preview and asking for a yes before anything goes live.
@@ -9,8 +9,10 @@ showing you a preview and asking for a yes before anything goes live.
 
 - `.mcp.json` — the connector. A pointer at *your* Forge Growth server, not the tools
   themselves: those live in the Forge Growth backend and arrive automatically.
-- `skills/forge-growth-marketer/SKILL.md` — the orchestration brain (the game-plan loop,
-  preview patterns, playbooks). Auto-activates when you talk about your funnel.
+- `skills/` — ten skills (incl. `forge-growth-social` for Instagram automations, flows, Social AI agents and social analytics). `forge-growth-marketer` is the orchestration brain (the
+  game-plan loop, preview patterns, playbooks) and auto-activates when you talk about
+  your funnel; the rest cover one area each and are loaded on demand, so a question
+  about automations does not drag in payment detail.
 - `commands/game-plan.md` — a `/game-plan <your plan>` command to kick things off.
 
 ## One-time setup
@@ -38,7 +40,7 @@ error.
 ### 2. Turn MCP on and choose what Claude may do
 
 In Forge Growth → **Admin Settings → MCP Tools**: switch the master toggle **on**, then
-enable the categories you want. Each is one switch over one process; expand a card to see
+pick an area (Social / Marketing / Sales / Chats & Automations / Admin) and enable the switches you want. Each is one switch over one process; open a card to see
 exactly which tools it controls.
 
 | Category | Lets Claude… | Tier |
@@ -46,12 +48,11 @@ exactly which tools it controls.
 | Setup & Connections | see your WhatsApp numbers, AI models and reachable areas | reads only |
 | Template Builder | draft, submit to Meta and re-sync WhatsApp templates | builds |
 | Media Library | list and upload posters, images, video, documents | builds |
-| AI Agents | create and configure the agents that talk to customers | builds |
-| Automations | build automation flows | builds |
-| Lead Forms | create lead-capture forms and read submissions | builds |
+| AI Agents | create and configure the agents that talk to customers — model, trigger, usage limits, test numbers, tools | builds |
+| Automations | build, check, edit and **switch live** automation flows, and read what a flow did on each run | builds |
 | Leads & Funnel | read leads and move them between stages | builds |
 | Message Formats | generate trackable click-to-chat links | builds |
-| Conversations | read chats and 24-hour window status | reads only |
+| Conversations | read chats, group chat and 24-hour window status | reads only |
 | Marketing Analytics | read campaigns, spend, webinars, BDA activity | reads only |
 | Products & Payments | read products, revenue and the payment ledger | reads only |
 | Google Workspace | search connected Drive spreadsheets and read tabs | reads only |
@@ -89,6 +90,24 @@ that arrived in the last 24 hours.
 
 Claude will find the poster, draft and preview the template, submit it to Meta, poll for
 approval, pull your recent leads, show you the audience, and — once you say yes — send.
+
+## Building a chat flow
+
+Describe the conversation and Claude builds it:
+
+```
+/game-plan When someone messages COURSE, send the brochure, then ask with buttons
+whether they want Fees or a Demo, and reply differently to each.
+```
+
+It sketches the flow, **checks it before saving** and refuses one that would be broken
+at runtime — a branch wired to an output the step does not have, or a question that
+offers choices without waiting for the answer. Both of those save cleanly and then do
+nothing, which is the single most common way a hand-built flow arrives wrong.
+
+A flow is always created as a **draft**. Going live is a separate, explicitly checked
+step, because a live flow replies to real customers on its own. If one misbehaves, ask
+Claude to read its runs — every step is recorded with its input, output and any error.
 
 ## Notes
 

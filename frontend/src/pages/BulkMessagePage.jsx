@@ -5,17 +5,22 @@ import { notify } from '../lib/feedback.js';
 // it throws at RENDER. With a page-level error boundary in place that shows as
 // "This page ran into a problem" and fires NO `pageerror` — only a
 // console.error — so a harness that watches pageerror alone reports it clean.
-import { Send, ArrowLeft, Trash2, Loader2, Clock, Users, Phone, FileText, Repeat, X, CheckCircle, Eye, Search, ChevronDown, ChevronLeft, ChevronRight, Filter, Plus, Play, Library, Image, Video, Music, CalendarDays, MousePointerClick, Pencil, Copy } from 'lucide-react';
+import { Send, ArrowLeft, Trash2, Loader2, Clock, Users, Phone, FileText, Repeat, X, CheckCircle, Eye, Search, ChevronDown, ChevronLeft, ChevronRight, Filter, Plus, Play, Library, Image, Video, Music, CalendarDays, MousePointerClick, Pencil, Copy, LayoutTemplate, MessageSquare, Link } from 'lucide-react';
 import { api } from '../api.js';
 import { C, FONT, MONO, formatDate, formatTime, maskPhone } from '../constants.js';
 import MaskedNumber from '../components/MaskedNumber.jsx';
 import SearchableSelect from '../components/SearchableSelect.jsx';
-import WhatsAppPreview from '../components/WhatsAppPreview.jsx';
+import WhatsAppPreview, { BroadcastMessagePreview } from '../components/WhatsAppPreview.jsx';
+import { SimShell } from '../components/sim/SimKit.jsx';
+import ViewToggle, { useViewMode } from '../components/ViewToggle.jsx';
+import MessageCardPreview from '../components/MessageCardPreview.jsx';
 import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx';
 import TagMultiSelect from '../components/TagMultiSelect.jsx';
+import PillStrip from '../components/PillStrip.jsx';
 import { useConfirm } from '../components/ConfirmDialog.jsx';
 import AccountHealthBanner from '../components/AccountHealthBanner.jsx';
 import { useTableSelection, SelectAllCheckbox, RowCheckbox, BulkDeleteButton, runBulkDelete } from '../components/TableSelection.jsx';
+import { useHubEditing } from '../components/AutomationHub.jsx';
 
 const FILTER_TABS = [
   { key: 'all', label: 'All' },
@@ -34,12 +39,12 @@ const FILTER_TABS = [
 
 function StatusBadge({ status }) {
   const config = {
-    DRAFT:     { bg: 'var(--c-surfaceMuted, #f3f4f6)', color: 'var(--c-textSecondary)', border: '#e5e7eb', dot: '#9ca3af' },
-    SCHEDULED: { bg: 'var(--c-purpleBg, #ede9fe)', color: 'var(--c-s5b21b6, #5b21b6)', border: '#ddd6fe', dot: 'var(--c-s7c3aed, #7c3aed)' },
-    SENDING:   { bg: 'var(--c-sdbeafe, #dbeafe)', color: 'var(--c-s1e40af, #1e40af)', border: '#bfdbfe', dot: 'var(--c-s3b82f6, #3b82f6)' },
-    SENT:      { bg: 'var(--c-sd1fae5, #d1fae5)', color: 'var(--c-s065f46, #065f46)', border: '#a7f3d0', dot: '#10b981' },
-    PARTIAL:   { bg: 'var(--c-sfef3c7, #fef3c7)', color: 'var(--c-s92400e, #92400e)', border: '#fde68a', dot: '#f59e0b' },
-    FAILED:    { bg: 'var(--c-dangerBg, #fee2e2)', color: 'var(--c-dangerStrong, #991b1b)', border: '#fecaca', dot: 'var(--c-sef4444, #ef4444)' },
+    DRAFT:     { bg: 'var(--c-surfaceMuted, #f3f4f6)', color: 'var(--c-textSecondary)', border: 'transparent', dot: '#9ca3af' },
+    SCHEDULED: { bg: 'var(--c-purpleBg, #ede9fe)', color: 'var(--c-s5b21b6, #5b21b6)', border: 'transparent', dot: 'var(--c-s7c3aed, #7c3aed)' },
+    SENDING:   { bg: 'var(--c-sdbeafe, #dbeafe)', color: 'var(--c-s1e40af, #1e40af)', border: 'transparent', dot: 'var(--c-s3b82f6, #3b82f6)' },
+    SENT:      { bg: 'var(--c-sd1fae5, #d1fae5)', color: 'var(--c-s065f46, #065f46)', border: 'transparent', dot: '#10b981' },
+    PARTIAL:   { bg: 'var(--c-sfef3c7, #fef3c7)', color: 'var(--c-s92400e, #92400e)', border: 'transparent', dot: '#f59e0b' },
+    FAILED:    { bg: 'var(--c-dangerBg, #fee2e2)', color: 'var(--c-dangerStrong, #991b1b)', border: 'transparent', dot: 'var(--c-sef4444, #ef4444)' },
   };
   const c = config[status] || config.SENT;
   return (
@@ -79,9 +84,9 @@ function ActionBadge({ action }) {
 
 function LogStatusBadge({ status }) {
   const colors = {
-    PENDING: { bg: 'var(--c-surfaceMuted, #f3f4f6)', color: 'var(--c-textSecondary)', border: '#e5e7eb' },
-    SENT: { bg: 'var(--c-sd1fae5, #d1fae5)', color: 'var(--c-s065f46, #065f46)', border: '#a7f3d0' },
-    FAILED: { bg: 'var(--c-dangerBg, #fee2e2)', color: 'var(--c-dangerStrong, #991b1b)', border: '#fecaca' },
+    PENDING: { bg: 'var(--c-surfaceMuted, #f3f4f6)', color: 'var(--c-textSecondary)', border: 'transparent' },
+    SENT: { bg: 'var(--c-sd1fae5, #d1fae5)', color: 'var(--c-s065f46, #065f46)', border: 'transparent' },
+    FAILED: { bg: 'var(--c-dangerBg, #fee2e2)', color: 'var(--c-dangerStrong, #991b1b)', border: 'transparent' },
   };
   const c = colors[status] || colors.PENDING;
   return (
@@ -113,85 +118,6 @@ function TagBadge({ tag }) {
   );
 }
 
-function BroadcastMessagePreview({ messageType, body, url, mediaLibraryId, caption, mediaItems }) {
-  const selectedMedia = mediaItems.find(m => String(m.id) === String(mediaLibraryId));
-  const resolvedBody = (body || url || caption || '').replace(/\{\{name\}\}/g, 'John Doe').replace(/\{\{contact_number\}\}/g, '+91 98765 43210');
-
-  return (
-    <div style={{ width: 278, background: 'linear-gradient(155deg, var(--c-sd8d8de, #D8D8DE) 0%, #A6A6AD 30%, #82828A 58%, var(--c-sbfbfc5, #BFBFC5) 82%, #6E6E76 100%)', borderRadius: 52, padding: 3.5, boxShadow: '0 22px 50px rgba(0,0,0,.28), 0 4px 10px rgba(0,0,0,.10), inset 0 0 0 0.5px rgba(255,255,255,.55), inset 0 -2px 4px rgba(0,0,0,.18)', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: '#000', borderRadius: 48.5, padding: 2, flex: 1, minHeight: 280, display: 'flex', flexDirection: 'column', boxShadow: 'inset 0 0 0 0.5px rgba(255,255,255,.12)' }}>
-        <div style={{ flex: 1, minHeight: 0, position: 'relative', borderRadius: 46.5, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#075E54' }}>
-          {/* Chat header */}
-          <div style={{ background: '#075E54', paddingTop: 50, paddingBottom: 8, paddingLeft: 12, paddingRight: 12, color: '#fff', fontFamily: "-apple-system, 'SF Pro Display', system-ui, sans-serif", flexShrink: 0, position: 'relative', zIndex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ color: '#fff', fontSize: 22, lineHeight: 1, opacity: .9, marginRight: -2 }}>‹</span>
-              <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg,#1D9E75,#0F6E56)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 14, fontWeight: 700, flexShrink: 0 }}>F</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 15, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Your Business</div>
-                <div style={{ fontSize: 12, opacity: .82, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>online</div>
-              </div>
-            </div>
-          </div>
-          {/* Chat body */}
-          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--c-chatWall)', padding: '10px 7px', backgroundImage: 'var(--c-chatPattern)' }}>
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
-              <span style={{ background: 'var(--c-infoBg, #E1F2FA)', color: 'var(--c-s3c6678, #3C6678)', fontSize: 11, padding: '2px 9px', borderRadius: 99, fontWeight: 600 }}>TODAY</span>
-            </div>
-            <div style={{ marginLeft: 'auto', maxWidth: '88%', minWidth: '55%' }}>
-              <div style={{ background: 'var(--c-sdcf8c6, #DCF8C6)', borderRadius: '7.5px 7.5px 0 7.5px', padding: '6px 7px 5px 9px', boxShadow: '0 1px 0.5px rgba(11,20,26,.13)', position: 'relative', marginRight: 8 }}>
-                <div style={{ position: 'absolute', bottom: 0, right: -8, width: 0, height: 0, borderStyle: 'solid', borderWidth: '0 0 9px 9px', borderColor: 'transparent transparent #DCF8C6 transparent' }} />
-
-                {messageType === 'image' && selectedMedia && (
-                  <img src={api.mediaLibrary.downloadUrl(selectedMedia.id)} alt="" style={{ margin: '-6px -7px 6px -9px', borderRadius: '7.5px 7.5px 0 0', height: 120, width: 'calc(100% + 16px)', objectFit: 'cover', display: 'block' }} />
-                )}
-                {messageType === 'video' && selectedMedia && (
-                  <div style={{ margin: '-6px -7px 6px -9px', borderRadius: '7.5px 7.5px 0 0', height: 120, position: 'relative', overflow: 'hidden' }}>
-                    <video src={api.mediaLibrary.downloadUrl(selectedMedia.id)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} preload="metadata" muted />
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)' }}>
-                      <div style={{ width: 38, height: 38, borderRadius: 99, background: 'rgba(255,255,255,.15)', border: '1.5px solid rgba(255,255,255,.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Play size={16} color="white" fill="white" />
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {messageType === 'audio' && selectedMedia && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#0F6E56', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Music size={14} color="#fff" />
-                    </div>
-                    <div style={{ flex: 1, height: 4, background: 'rgba(0,0,0,0.1)', borderRadius: 2 }} />
-                    <span style={{ fontSize: 12, color: 'var(--c-textSecondary)' }}>0:15</span>
-                  </div>
-                )}
-                {messageType === 'document' && selectedMedia && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, padding: '6px 8px', background: 'rgba(0,0,0,.06)', borderRadius: 6 }}>
-                    <div style={{ width: 34, height: 38, background: 'var(--c-cardBg)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 1px 3px rgba(0,0,0,.15)' }}>
-                      <FileText size={16} color="#9e9e9e" />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--c-text)', fontFamily: FONT }}>{selectedMedia.name || 'Document'}</div>
-                      <div style={{ fontSize: 11, color: 'var(--c-textMuted)', fontFamily: FONT }}>PDF</div>
-                    </div>
-                  </div>
-                )}
-
-                {resolvedBody && (
-                  <div style={{ fontSize: 15, color: 'var(--c-text)', lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: FONT }}>{resolvedBody}</div>
-                )}
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 3, marginTop: 2, marginBottom: -1 }}>
-                  <span style={{ fontSize: 12, color: 'var(--c-textSecondary)', fontFamily: FONT }}>9:41</span>
-                  <svg width="16" height="11" viewBox="0 0 16 11" fill="none"><path d="M1 5.5L5 9.5L11.5 1" stroke="#53BDEB" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /><path d="M5 5.5L9 9.5L15.5 1" stroke="#53BDEB" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /**
  * A from/to date filter that sits inline in the recipient toolbar.
  *
@@ -204,25 +130,8 @@ function BroadcastMessagePreview({ messageType, body, url, mediaLibraryId, capti
 // two or three short options, a dropdown hides the answer you are looking at.
 function Segmented({ value, onChange, options, title }) {
   return (
-    <div title={title} style={{ display: 'inline-flex', border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }}>
-      {options.map(opt => {
-        const active = value === opt.k;
-        return (
-          <button
-            key={opt.k}
-            onClick={() => onChange(opt.k)}
-            style={{
-              padding: '8px 12px', border: 'none', cursor: 'pointer', fontFamily: FONT,
-              fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap',
-              background: active ? C.primary : 'var(--c-cardBg)',
-              color: active ? '#fff' : C.textSecondary,
-            }}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
-    </div>
+    <PillStrip title={title} size="sm" value={value} onChange={onChange}
+      items={options.map(o => ({ id: o.k, label: o.label }))} />
   );
 }
 
@@ -356,13 +265,6 @@ function ScheduleSection({ mode, onMode, value, onValue, recurrence, onRecurrenc
   const WEEK = [['Mon', 1], ['Tue', 2], ['Wed', 3], ['Thu', 4], ['Fri', 5], ['Sat', 6], ['Sun', 0]];
   const isPast = value && new Date(value).getTime() <= Date.now();
 
-  const pill = (on) => ({
-    padding: '8px 14px', borderRadius: 8, cursor: 'pointer',
-    border: `1.5px solid ${on ? C.primary : C.border}`,
-    background: on ? C.primaryLight : 'var(--c-cardBg)',
-    color: on ? C.primary : C.text,
-    fontSize: 15, fontFamily: FONT, fontWeight: on ? 700 : 500,
-  });
   const chip = (on) => ({
     padding: '6px 11px', borderRadius: 20, cursor: 'pointer',
     border: `1px solid ${on ? C.primary : C.border}`,
@@ -376,16 +278,12 @@ function ScheduleSection({ mode, onMode, value, onValue, recurrence, onRecurrenc
       <div style={{ fontSize: 14, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>
         When should this send?
       </div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: mode === 'manual' ? 0 : 12, flexWrap: 'wrap' }}>
-        <button type="button" onClick={() => onMode('manual')} style={pill(mode === 'manual')}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><MousePointerClick size={14} /> Manually</span>
-        </button>
-        <button type="button" onClick={() => onMode('scheduled')} style={pill(mode === 'scheduled')}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Clock size={14} /> At a scheduled time</span>
-        </button>
-        <button type="button" onClick={() => onMode('repeating')} style={pill(mode === 'repeating')}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Repeat size={14} /> Repeating</span>
-        </button>
+      <div style={{ marginBottom: mode === 'manual' ? 0 : 12 }}>
+        <PillStrip value={mode} onChange={onMode} items={[
+          { id: 'manual', label: 'Manually', Icon: MousePointerClick },
+          { id: 'scheduled', label: 'At a scheduled time', Icon: Clock },
+          { id: 'repeating', label: 'Repeating', Icon: Repeat },
+        ]} />
       </div>
 
       {mode === 'manual' ? (
@@ -489,10 +387,9 @@ function RepeatConfig({ recurrence, onRecurrence, endsOn, onEndsOn, maxRuns, onM
   return (
     <div style={{ background: 'var(--c-surfaceAlt)', border: `1px solid ${C.border}`, borderRadius: 10, padding: 12 }}>
       <div style={lbl}>How often</div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-        {[['daily', 'Every day'], ['weekly', 'Every week'], ['monthly', 'Every month']].map(([k, label]) => (
-          <button key={k} type="button" onClick={() => set({ kind: k })} style={chip(r.kind === k)}>{label}</button>
-        ))}
+      <div style={{ marginBottom: 12 }}>
+        <PillStrip size="sm" value={r.kind} onChange={k => set({ kind: k })}
+          items={[{ id: 'daily', label: 'Every day' }, { id: 'weekly', label: 'Every week' }, { id: 'monthly', label: 'Every month' }]} />
       </div>
 
       {r.kind === 'weekly' && (
@@ -862,7 +759,20 @@ function SeriesList({ series, onChanged, isAdmin, onEdit }) {
   );
 }
 
-function KpiCards({ metrics }) {
+// "What do you want to send?" as tiles instead of a dropdown of seven words:
+// the icon and the one-line reason are what a first-time sender needs to pick.
+// `value`s are the exact message_type strings the backend branches on.
+const MESSAGE_TYPE_TILES = [
+  { value: 'template', label: 'Template', Icon: LayoutTemplate, hint: 'An approved message — reaches anyone' },
+  { value: 'text',     label: 'Text',     Icon: MessageSquare,  hint: 'Plain text' },
+  { value: 'link',     label: 'Link',     Icon: Link,           hint: 'A web link with a preview' },
+  { value: 'image',    label: 'Image',    Icon: Image,          hint: 'A picture from your Media Library' },
+  { value: 'video',    label: 'Video',    Icon: Video,          hint: 'A video from your Media Library' },
+  { value: 'audio',    label: 'Audio',    Icon: Music,          hint: 'An audio file / voice note' },
+  { value: 'document', label: 'Document', Icon: FileText,       hint: 'A PDF or other file' },
+];
+
+function KpiCards({ metrics, compact = false }) {
   const { totalRecipients, totalSent, totalDelivered, totalRead } = metrics;
 
   const cards = [
@@ -876,8 +786,9 @@ function KpiCards({ metrics }) {
     <div style={{
       display: 'grid',
       gridTemplateColumns: 'repeat(4, 1fr)',
-      gap: 16,
-      marginBottom: 24,
+      gap: compact ? 12 : 16,
+      marginBottom: compact ? 14 : 24,
+      flexShrink: 0,
     }}>
       {cards.map((card) => {
         const Icon = card.icon;
@@ -888,10 +799,10 @@ function KpiCards({ metrics }) {
               background: C.cardBg,
               borderRadius: 12,
               border: `1px solid ${C.border}`,
-              padding: '20px 24px',
+              padding: compact ? '12px 16px' : '20px 24px',
               display: 'flex',
               alignItems: 'center',
-              gap: 16,
+              gap: compact ? 12 : 16,
             }}
           >
             <div style={{
@@ -910,7 +821,7 @@ function KpiCards({ metrics }) {
               <div style={{ fontSize: 13, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4, fontFamily: FONT }}>
                 {card.label}
               </div>
-              <div style={{ fontSize: 26, fontWeight: 700, color: card.color, fontFamily: FONT, lineHeight: 1 }}>
+              <div style={{ fontSize: compact ? 22 : 26, fontWeight: 700, color: card.color, fontFamily: FONT, lineHeight: 1 }}>
                 {card.value}
               </div>
             </div>
@@ -937,11 +848,21 @@ function formatSentTo(log) {
 
 export default function BulkMessagePage({ onNavigate, user }) {
   const [view, setView] = useState('list'); // 'list' | 'detail'
+  useHubEditing(view !== 'list'); // a broadcast's detail owns the whole pane
   const [broadcasts, setBroadcasts] = useState([]);
   const [series, setSeries] = useState([]);
   const [filterStatus, setFilterStatus] = useState('all');
   const [loading, setLoading] = useState(false);
   const [selectedBroadcast, setSelectedBroadcast] = useState(null);
+  const [listView, setListView] = useViewMode('forgegrowth.broadcasts.view', 'list');
+  // Template content for the grid previews. Separate from `templates` (which
+  // the composer loads, approved-only, when it opens) because a sent broadcast
+  // may use a template that is no longer approved and should still preview.
+  const [previewTemplates, setPreviewTemplates] = useState(null);
+  useEffect(() => {
+    if (listView !== 'grid' || previewTemplates) return;
+    api.templates.list().then(t => setPreviewTemplates(Array.isArray(t) ? t : (t?.templates || []))).catch(() => setPreviewTemplates([]));
+  }, [listView, previewTemplates]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [repeatModal, setRepeatModal] = useState(false);
   const [repeatSending, setRepeatSending] = useState(false);
@@ -1903,7 +1824,7 @@ export default function BulkMessagePage({ onNavigate, user }) {
             disabled={payConfirmText !== 'CREATE LINKS'}
             onClick={() => { const st = payConfirm.status; setPayConfirm(null); handleNewBroadcastSave(st); }}
             style={{ padding: '9px 16px', borderRadius: 8, border: 'none',
-              background: payConfirmText === 'CREATE LINKS' ? '#0F6E56' : C.border,
+              background: payConfirmText === 'CREATE LINKS' ? '#0F6E56' : C.fillMuted,
               color: '#fff', fontSize: 15, fontWeight: 600, fontFamily: FONT,
               cursor: payConfirmText === 'CREATE LINKS' ? 'pointer' : 'not-allowed' }}>
             Create and send
@@ -1922,7 +1843,6 @@ export default function BulkMessagePage({ onNavigate, user }) {
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
           <div>
-            <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>Bulk Messages</h1>
             <p style={{ fontSize: 14, color: C.textMuted, margin: '4px 0 0', fontFamily: FONT }}>Manage your broadcast campaigns and drafts</p>
           </div>
           <button
@@ -1943,35 +1863,13 @@ export default function BulkMessagePage({ onNavigate, user }) {
 
         {/* Filter Tabs + bulk-delete */}
         <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: 6 }}>
-          {FILTER_TABS.map(tab => {
-            const active = filterStatus === tab.key;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setFilterStatus(tab.key)}
-                style={{
-                  padding: '7px 16px', borderRadius: 8, border: `1.5px solid ${active ? C.primary : C.border}`,
-                  background: active ? C.primary : 'var(--c-cardBg)', color: active ? '#fff' : C.textSecondary,
-                  cursor: 'pointer', fontSize: 15, fontWeight: 700, fontFamily: FONT,
-                }}
-              >
-                {tab.label}
-                {tab.key !== 'all' && (
-                  <span style={{
-                    marginLeft: 6, fontSize: 13, fontWeight: 700,
-                    background: active ? 'rgba(255,255,255,.2)' : C.primaryLight,
-                    color: active ? '#fff' : C.primary,
-                    padding: '1px 7px', borderRadius: 99,
-                  }}>
-                    {tab.key === 'SERIES' ? series.length : broadcasts.filter(b => b.status === tab.key).length}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-          </div>
+          <PillStrip value={filterStatus} onChange={setFilterStatus}
+            items={FILTER_TABS.map(tab => ({
+              id: tab.key, label: tab.label,
+              badge: tab.key === 'all' ? null : tab.key === 'SERIES' ? series.length : broadcasts.filter(b => b.status === tab.key).length,
+            }))} />
           <BulkDeleteButton sel={sel} label="broadcast" onConfirm={(ids) => handleBulkDelete(ids)} />
+          {filterStatus !== 'SERIES' && <span style={{ marginLeft: 'auto' }}><ViewToggle value={listView} onChange={setListView} /></span>}
         </div>
 
         {/* Table */}
@@ -1982,6 +1880,60 @@ export default function BulkMessagePage({ onNavigate, user }) {
             isAdmin={user?.role === 'admin'}
             onEdit={openSeriesEditor}
           />
+        ) : listView === 'grid' ? (
+          loading ? (
+            <div style={{ padding: 40, textAlign: 'center', color: C.textMuted }}><Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} /></div>
+          ) : broadcasts.length === 0 ? (
+            <div style={{ padding: 48, textAlign: 'center', background: C.cardBg, borderRadius: 12, border: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 4 }}>No broadcasts yet</div>
+              <div style={{ fontSize: 14, color: C.textMuted }}>Click "New Broadcast" to create your first campaign</div>
+            </div>
+          ) : (
+          <div data-testid="broadcast-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+            {broadcasts.map(b => {
+              // The list endpoint carries the template's id and name, not its
+              // content — the content comes from the approved templates already
+              // loaded for the composer. A broadcast on a template that is no
+              // longer approved shows its name instead of a preview.
+              const tplRow = b.message_type === 'template' || !b.message_type ? (previewTemplates || []).find(t => String(t.id) === String(b.template_id)) : null;
+              const iconBtn = { width: 30, height: 30, borderRadius: 8, border: 'none', background: 'var(--c-surfaceMuted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textSecondary };
+              const m = getMetrics(b);
+              return (
+                <div key={b.id} data-broadcast-card={b.id} onClick={() => openDetail(b)}
+                  style={{ background: C.cardBg, border: `1.5px solid ${sel.isSelected(b.id) ? C.primary : C.border}`, borderRadius: 14, overflow: 'hidden', cursor: 'pointer', display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
+                  <div style={{ position: 'relative' }}>
+                    <MessageCardPreview
+                      topInset={30} height={230}
+                      template={tplRow ? { ...tplRow, header_media_library_id: b.media_library_id || tplRow.header_media_library_id } : null}
+                      direct={b.message_type && b.message_type !== 'template' ? { messageType: b.message_type, body: b.body, url: b.url, caption: b.caption, mediaLibraryId: b.media_library_id } : null}
+                      emptyText={b.template_name ? `Template: ${b.template_name}` : 'No preview'}
+                    />
+                    <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: 8, left: 8, background: 'var(--c-cardBg)', borderRadius: 6, padding: '2px 3px', lineHeight: 0 }}>
+                      <RowCheckbox sel={sel} id={b.id} label={b.name || `Broadcast #${b.id}`} />
+                    </div>
+                    <div style={{ position: 'absolute', top: 8, right: 8 }}><StatusBadge status={b.status} /></div>
+                  </div>
+                  <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+                    <div title={b.name || ''} style={{ fontSize: 15, fontWeight: 700, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.name || b.template_name || 'Untitled'} #{b.id}</div>
+                    <div style={{ fontSize: 12.5, color: C.textMuted, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <span><MaskedNumber number={b.from_number} prefix="+" /></span>
+                      <span>· {formatRecipients(b)}</span>
+                      {m && m.totalRead > 0 && <span>· {m.totalRead} read</span>}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 'auto', paddingTop: 4 }}>
+                      <span style={{ flex: 1, fontSize: 12.5, color: C.textMuted }}>{b.last_activity ? `${formatDate(b.last_activity)} ${formatTime(b.last_activity)}` : formatDate(b.created_at)}</span>
+                      <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: 5 }}>
+                        {EDITABLE_BROADCAST_STATUSES.includes(b.status) && <button onClick={() => openComposerFor(b, { mode: 'edit' })} title="Edit" style={iconBtn}><Pencil size={13} /></button>}
+                        <button onClick={() => openComposerFor(b, { mode: 'duplicate' })} title="Duplicate" style={iconBtn}><Copy size={13} /></button>
+                        <button onClick={() => setDeleteModal({ open: true, broadcast: b })} title="Delete" style={{ ...iconBtn, color: C.primary }}><Trash2 size={13} /></button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          )
         ) : (
         <div style={{ background: C.cardBg, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
@@ -2113,7 +2065,7 @@ export default function BulkMessagePage({ onNavigate, user }) {
                 not shrink, so its child can never scroll). */}
             <div style={{
               background: C.cardBg, borderRadius: 14,
-              width: 1100, height: '92vh',
+              width: 1100, height: 'calc(92vh / var(--fg-zoom, 1))',
               boxShadow: C.shadowLg, overflow: 'hidden',
               display: 'flex', flexDirection: 'column',
             }}>
@@ -2133,51 +2085,28 @@ export default function BulkMessagePage({ onNavigate, user }) {
               {/* Step toggle — the two questions, in the order you answer them.
                   Step 2 is reachable at any time: someone editing an existing
                   broadcast usually wants the audience, not the message. */}
-              <div style={{ display: 'flex', gap: 8, padding: '14px 24px 0', flexShrink: 0 }}>
-                {[
-                  { k: 'message', n: 1, label: 'Message', hint: 'When, and what you send' },
-                  { k: 'recipients', n: 2, label: sendMode === 'repeating' ? 'Audience' : 'Recipients', hint: sendMode === 'repeating' ? 'The rule, re-checked each run' : 'Who receives it' },
-                ].map(st => {
-                  const active = composerStep === st.k;
-                  const count = st.k === 'recipients' && sendMode !== 'repeating' ? selectedRecipients.length : null;
-                  return (
-                    <button
-                      key={st.k}
-                      onClick={() => setComposerStep(st.k)}
-                      style={{
-                        flex: 1, textAlign: 'left', cursor: 'pointer', fontFamily: FONT,
-                        padding: '10px 14px', borderRadius: 10,
-                        border: `1.5px solid ${active ? C.primary : C.border}`,
-                        background: active ? 'var(--c-primaryLight)' : 'var(--c-cardBg)',
-                        display: 'flex', alignItems: 'center', gap: 10,
-                      }}
-                    >
-                      <span style={{
-                        width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-                        background: active ? C.primary : 'var(--c-surfaceMuted, #eee)',
-                        color: active ? '#fff' : C.textSecondary,
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 12, fontWeight: 700,
-                      }}>{st.n}</span>
-                      <span style={{ minWidth: 0 }}>
-                        <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: active ? C.primary : C.text }}>
-                          {st.label}{count != null && count > 0 ? ` · ${count}` : ''}
-                        </span>
-                        <span style={{ display: 'block', fontSize: 12, color: C.textMuted }}>{st.hint}</span>
-                      </span>
-                    </button>
-                  );
-                })}
+              <div style={{ padding: '14px 24px 0', flexShrink: 0 }}>
+                <PillStrip grow value={composerStep} onChange={setComposerStep} items={[
+                  { id: 'message', label: '1 · Message', title: 'When, and what you send' },
+                  { id: 'recipients',
+                    label: sendMode === 'repeating' ? '2 · Audience' : '2 · Recipients',
+                    title: sendMode === 'repeating' ? 'The rule, re-checked each run' : 'Who receives it',
+                    badge: sendMode !== 'repeating' && selectedRecipients.length > 0 ? selectedRecipients.length : null },
+                ]} />
               </div>
 
-              {/* The one scrolling region. */}
-              <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+              {/* The step body. It does NOT scroll as a whole any more: on the
+                  message step only the form column scrolls (the phone is pinned
+                  beside it), on the recipients step only the contact table does.
+                  A preview inside the scroller is what made the simulator
+                  scroll away with the form. */}
+              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
 
               {/* ── STEP 1 — Message ─────────────────────────────────────── */}
               {composerStep === 'message' && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 420px', gap: 24, padding: '20px 24px' }}>
-                {/* LEFT — Form */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+                {/* LEFT — Form, the only scrolling column on this step */}
+                <div data-testid="broadcast-form" style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16, padding: '18px 24px 24px' }}>
 
                   {/* WHEN — first, because it decides what the rest of the
                       composer even is: a one-off takes a ticked recipient list,
@@ -2194,9 +2123,10 @@ export default function BulkMessagePage({ onNavigate, user }) {
                     skipAlreadySent={seriesSkipSent} onSkipAlreadySent={setSeriesSkipSent}
                   />
 
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, alignItems: 'start' }}>
                   {/* Broadcast Name */}
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Broadcast Name</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Name <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.textMuted }}>(only you see this)</span></div>
                     <input
                       type="text"
                       value={newBroadcastName}
@@ -2213,19 +2143,21 @@ export default function BulkMessagePage({ onNavigate, user }) {
 
                   {/* From */}
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>From (WhatsApp Number)</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Send from</div>
                     <SearchableSelect
                       value={newBroadcastFrom}
                       onChange={(val) => { setNewBroadcastFrom(val); setSelectedNumber(val); setNewBroadcastTemplateId(''); }}
-                      options={numbers.map(n => ({ value: String(n.wa_number), label: n.display_name || maskPhone(n.wa_number) }))}
+                      options={numbers.map(n => ({ value: String(n.wa_number), label: n.display_name || maskPhone(n.wa_number), sublabel: n.display_name ? maskPhone(n.wa_number) : undefined }))}
                       placeholder="Select a WhatsApp number..."
                       searchPlaceholder="Search numbers..."
                     />
                     {/* Linked account status — shown once the lookup resolves */}
                     {newBroadcastFrom && accountLookupDone && (
                       linkedAccount ? (
-                        <div style={{ marginTop: 6, fontSize: 13, color: 'var(--c-successText, #0F6E56)', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 4 }}>
-                          ✓ Linked to <strong>{linkedAccount.displayName}</strong> · WABA {linkedAccount.wabaId}
+                        // Plain inline text: as a flex row each word became its own
+                        // column once the field sat in half the width.
+                        <div style={{ marginTop: 6, fontSize: 13, color: 'var(--c-successText, #0F6E56)', fontFamily: FONT, lineHeight: 1.45 }}>
+                          ✓ Connected · <strong>{linkedAccount.displayName}</strong>
                           {!linkedAccount.isActive && <span style={{ color: 'var(--c-orangeText, #E65100)', marginLeft: 6 }}>(inactive)</span>}
                         </div>
                       ) : (
@@ -2238,21 +2170,24 @@ export default function BulkMessagePage({ onNavigate, user }) {
                       <AccountHealthBanner phone={newBroadcastFrom} style={{ marginTop: 8, marginBottom: 0 }} />
                     )}
                   </div>
-
-                  {/* To */}
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>To ({selectedRecipients.length} selected)</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 100, overflowY: 'auto', padding: '10px 12px', background: 'var(--c-hover)', borderRadius: 8, border: `1.5px solid ${C.border}` }}>
-                      {selectedRecipients.length === 0 && (
-                        <span style={{ fontSize: 14, color: C.textMuted, fontFamily: FONT }}>Select contacts from the table below</span>
-                      )}
-                      {selectedRecipients.map(c => (
-                        <span key={c.contact_number} style={{ fontSize: 13, color: C.textSecondary, background: 'var(--c-cardBg)', padding: '3px 10px', borderRadius: 99, border: `1px solid ${C.border}`, fontFamily: FONT, fontWeight: 500 }}>
-                          {c.name} (<MaskedNumber number={c.contact_number} prefix="+" />)
-                        </span>
-                      ))}
-                    </div>
                   </div>
+
+                  {/* Who — one line pointing at step 2. The chip box that used to
+                      sit here repeated step 2's selection in 100px at the top of
+                      the form; the footer already counts it too. */}
+                  {sendMode !== 'repeating' && (
+                    <div data-testid="to-summary" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, background: 'var(--c-hover)', fontSize: 14, color: C.textSecondary, fontFamily: FONT }}>
+                      <Users size={15} color={selectedRecipients.length ? C.primary : C.textMuted} />
+                      <span style={{ flex: 1 }}>
+                        {selectedRecipients.length
+                          ? <><strong style={{ color: C.text }}>{selectedRecipients.length}</strong> recipient{selectedRecipients.length === 1 ? '' : 's'} chosen</>
+                          : 'Nobody chosen yet — you pick recipients on the next step.'}
+                      </span>
+                      <button type="button" onClick={() => setComposerStep('recipients')} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: C.primary, fontWeight: 700, fontSize: 14, fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                        {selectedRecipients.length ? 'Change' : 'Choose'} <ChevronRight size={14} />
+                      </button>
+                    </div>
+                  )}
 
                   {isPaymentBroadcast && (
                     <div style={{ background: 'var(--c-successBgSoft, #EDF6F1)', border: '1px solid #9CC9B4', borderRadius: 10, padding: '14px 16px' }}>
@@ -2305,21 +2240,30 @@ export default function BulkMessagePage({ onNavigate, user }) {
 
                   {/* Message Type */}
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Message Type</div>
-                    <SearchableSelect
-                      value={newBroadcastMessageType}
-                      onChange={(val) => setNewBroadcastMessageType(val)}
-                      options={[
-                        { value: 'template', label: 'Template Message' },
-                        { value: 'text', label: 'Text Message' },
-                        { value: 'link', label: 'Link Message' },
-                        { value: 'image', label: 'Image Message' },
-                        { value: 'video', label: 'Video Message' },
-                        { value: 'audio', label: 'Audio Message' },
-                        { value: 'document', label: 'Document Message' },
-                      ]}
-                      placeholder="Select message type..."
-                    />
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>What do you want to send?</div>
+                    <div role="radiogroup" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 6 }}>
+                      {MESSAGE_TYPE_TILES.map(t => {
+                        const on = newBroadcastMessageType === t.value;
+                        return (
+                          <button key={t.value} type="button" role="radio" aria-checked={on} data-msgtype={t.value} title={t.hint}
+                            onClick={() => setNewBroadcastMessageType(t.value)}
+                            style={{
+                              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                              padding: '9px 2px', borderRadius: 10, minWidth: 0, cursor: 'pointer', fontFamily: FONT,
+                              border: `1.5px solid ${on ? C.primary : C.border}`,
+                              background: on ? 'var(--c-primaryLight)' : 'var(--c-cardBg)',
+                              color: on ? C.primary : C.text, fontSize: 14, fontWeight: on ? 700 : 600,
+                            }}>
+                            <t.Icon size={17} /> {t.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div style={{ fontSize: 13, color: C.textMuted, marginTop: 6, fontFamily: FONT, lineHeight: 1.5 }}>
+                      {newBroadcastMessageType === 'template'
+                        ? 'Templates are pre-approved by WhatsApp and reach anyone on your list.'
+                        : 'Heads up: WhatsApp only delivers this to people who messaged you in the last 24 hours. For everyone else, use a Template.'}
+                    </div>
                   </div>
 
                   {/* Template Fields */}
@@ -2381,7 +2325,7 @@ export default function BulkMessagePage({ onNavigate, user }) {
 
                       {templateVars.length > 0 && (
                         <div>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Variable Mapping</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Fill in the blanks</div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                             {templateVars.map(v => {
                               const fieldVals = new Set(contactFieldOptions.map(o => o.value));
@@ -2431,7 +2375,7 @@ export default function BulkMessagePage({ onNavigate, user }) {
                             })}
                           </div>
                           <div style={{ fontSize: 13, color: C.textMuted, marginTop: 6, fontFamily: FONT }}>
-                            Map each variable to a contact field, or choose <strong>Custom text…</strong> to type a fixed value (same for every recipient).
+                            Each blank in the template is filled per person — pick where it comes from (e.g. their name), or choose <strong>Custom text…</strong> to type one value for everyone.
                           </div>
                         </div>
                       )}
@@ -2565,7 +2509,7 @@ export default function BulkMessagePage({ onNavigate, user }) {
 
                   {/* Test Number */}
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Test Number</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Send yourself a test <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500, color: C.textMuted }}>(optional — recommended before a big send)</span></div>
                     <div style={{ display: 'flex', gap: 8 }}>
                       {/* Searchable Dropdown */}
                       <div ref={newTestNumRef} style={{ flex: 1, position: 'relative' }}>
@@ -2678,13 +2622,24 @@ export default function BulkMessagePage({ onNavigate, user }) {
                   </div>
                 </div>
 
-                {/* RIGHT — WhatsApp Preview */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, paddingTop: 8 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--c-t6, #888)', fontFamily: FONT }}>Live Preview</div>
+                {/* RIGHT — WhatsApp Preview, pinned at full step height. It is
+                    a sibling of the scrolling form, so it never scrolls away and
+                    the phone is never clipped at the bottom of the modal. */}
+                <aside style={{ flex: '0 0 400px', minHeight: 0, display: 'flex', justifyContent: 'center', padding: '16px 20px 16px 4px', boxSizing: 'border-box' }}>
+                  <SimShell
+                    fill
+                    width="100%"
+                    title="Preview"
+                    testId="broadcast-preview"
+                    status="Updates as you type"
+                    meta={newBroadcastMessageType === 'template' ? 'Template' : newBroadcastMessageType.charAt(0).toUpperCase() + newBroadcastMessageType.slice(1)}
+                    hint="What each recipient sees. Nothing is sent until you broadcast."
+                  >
                   {newBroadcastMessageType === 'template' ? (
-                    <WhatsAppPreview template={previewTemplate} minHeight={280} emptyText="Select a template&#10;to preview" />
+                    <WhatsAppPreview template={previewTemplate} height="100%" emptyText={'Select a template\nto preview'} />
                   ) : (
                     <BroadcastMessagePreview
+                      height="100%"
                       messageType={newBroadcastMessageType}
                       body={newBroadcastBody}
                       url={newBroadcastUrl}
@@ -2693,38 +2648,23 @@ export default function BulkMessagePage({ onNavigate, user }) {
                       mediaItems={newBroadcastMediaItems}
                     />
                   )}
-                </div>
+                  </SimShell>
+                </aside>
               </div>
 
               )}
 
               {/* ── STEP 2 — Recipients ──────────────────────────────────── */}
               {composerStep === 'recipients' && (
-              <div style={{ padding: '20px 24px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minHeight: 0, padding: '18px 24px 16px', display: 'flex', flexDirection: 'column', overflowY: sendMode === 'repeating' ? 'auto' : 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap', flexShrink: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>
-                    {sendMode === 'repeating' ? 'Who it reaches, every run' : 'Select Recipients'}
+                    {sendMode === 'repeating' ? 'Who it reaches, every run' : 'Who should get it? Tick people below, or filter first'}
                   </div>
                   {/* Recipient scope: this number's contacts vs every contact across all numbers */}
-                  <div style={{ display: 'inline-flex', border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }}>
-                    {[{ k: 'number', label: 'This number' }, { k: 'all', label: 'All numbers' }].map(opt => {
-                      const active = recipientScope === opt.k;
-                      return (
-                        <button
-                          key={opt.k}
-                          onClick={() => { if (recipientScope !== opt.k) { setRecipientScope(opt.k); setSelectedContactNumbers(new Set()); } }}
-                          style={{
-                            padding: '7px 14px', border: 'none', cursor: 'pointer', fontFamily: FONT,
-                            fontSize: 14, fontWeight: 700,
-                            background: active ? C.primary : 'var(--c-cardBg)',
-                            color: active ? '#fff' : C.textSecondary,
-                          }}
-                        >
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <PillStrip size="sm" value={recipientScope}
+                    onChange={k => { if (recipientScope !== k) { setRecipientScope(k); setSelectedContactNumbers(new Set()); } }}
+                    items={[{ id: 'number', label: 'This number' }, { id: 'all', label: 'All numbers' }]} />
                 </div>
 
                 {sendMode === 'repeating' ? (
@@ -2739,12 +2679,8 @@ export default function BulkMessagePage({ onNavigate, user }) {
                   />
                 ) : (<>
                 {/* Toolbar */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    background: 'var(--c-chatPanel)', borderRadius: 8,
-                    padding: '8px 12px', flex: 1, minWidth: 200, maxWidth: 360,
-                  }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap', flexShrink: 0 }}>
+                  <div className="fc-searchfield" style={{ flex: 1, minWidth: 200, maxWidth: 360 }}>
                     <Search size={16} color={C.textMuted} />
                     <input
                       value={contactSearch}
@@ -2900,8 +2836,11 @@ export default function BulkMessagePage({ onNavigate, user }) {
                 </div>
 
                 {/* Contacts Table */}
-                <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
-                  <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+                {/* The table takes whatever height the step has left and is the
+                    only thing that scrolls here — it was a 320px box inside a
+                    step that also scrolled, so two scrollbars fought. */}
+                <div style={{ flex: 1, minHeight: 160, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                  <div data-testid="recipient-table" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT, fontSize: 15 }}>
                       <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
                         <tr style={{ background: 'var(--c-hover)' }}>
@@ -3079,7 +3018,7 @@ export default function BulkMessagePage({ onNavigate, user }) {
                     title={!newBroadcastScheduleAt ? 'Pick a time above first' : undefined}
                     style={{
                       padding: '10px 18px', borderRadius: 8, border: 'none',
-                      background: (isBroadcastFormInvalid() || !scheduleReady) ? 'var(--c-borderStrong, #ccc)' : C.purple,
+                      background: (isBroadcastFormInvalid() || !scheduleReady) ? 'var(--c-fillMuted, #d5d5d0)' : C.purple,
                       color: '#fff', cursor: (isBroadcastFormInvalid() || !scheduleReady) ? 'not-allowed' : 'pointer',
                       fontSize: 15, fontWeight: 700, fontFamily: FONT,
                       display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
@@ -3094,7 +3033,7 @@ export default function BulkMessagePage({ onNavigate, user }) {
                     disabled={isBroadcastFormInvalid()}
                     style={{
                       padding: '10px 18px', borderRadius: 8, border: 'none',
-                      background: isBroadcastFormInvalid() ? 'var(--c-borderStrong, #ccc)' : C.primary,
+                      background: isBroadcastFormInvalid() ? 'var(--c-fillMuted, #d5d5d0)' : C.primary,
                       color: '#fff', cursor: isBroadcastFormInvalid() ? 'not-allowed' : 'pointer',
                       fontSize: 15, fontWeight: 700, fontFamily: FONT,
                       display: 'flex', alignItems: 'center', gap: 6,
@@ -3149,10 +3088,14 @@ export default function BulkMessagePage({ onNavigate, user }) {
 
 
 
+  // The detail page fills the pane and never scrolls as a whole: header and
+  // numbers on top, then the details + activity log on the left (only the log
+  // scrolls) beside the message preview, which is pinned at full height. It
+  // used to be one long scroll with a tall phone that ran off the bottom.
   return (
-    <div style={{ padding: '24px 28px', fontFamily: FONT }}>
+    <div data-testid="broadcast-detail" style={{ padding: '18px 28px 18px', fontFamily: FONT, height: '100%', minHeight: 0, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, gap: 12, flexWrap: 'wrap', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
             onClick={() => { setView('list'); setSelectedBroadcast(null); }}
@@ -3165,7 +3108,7 @@ export default function BulkMessagePage({ onNavigate, user }) {
             <ArrowLeft size={14} /> Back
           </button>
           <div>
-            <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>
+            <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em', fontFamily: FONT }}>
               {b?.name || b?.template_name || 'Broadcast'} #{b?.id}
             </h1>
             <p style={{ fontSize: 14, color: C.textMuted, margin: '4px 0 0', fontFamily: FONT }}>
@@ -3229,15 +3172,14 @@ export default function BulkMessagePage({ onNavigate, user }) {
       ) : (
         <>
           {/* KPI Cards */}
-          <KpiCards metrics={metrics} />
+          <KpiCards metrics={metrics} compact />
 
-          {/* Info + Preview Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 24, marginBottom: 28 }}>
+          {/* Details + log (left) beside the pinned preview (right) */}
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 20 }}>
+            <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
             {/* Info Card */}
-            <div style={{ background: C.cardBg, borderRadius: 12, border: `1px solid ${C.border}`, padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 4 }}>Broadcast Details</div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 20px' }}>
+            <div style={{ background: C.cardBg, borderRadius: 12, border: `1px solid ${C.border}`, padding: '14px 18px', flexShrink: 0 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px 20px' }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.textSecondary, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>From</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 15, color: C.text }}>
@@ -3269,16 +3211,9 @@ export default function BulkMessagePage({ onNavigate, user }) {
               </div>
             </div>
 
-            {/* Preview */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--c-t6, #888)', fontFamily: FONT }}>Template Preview</div>
-              <WhatsAppPreview template={tpl} />
-            </div>
-          </div>
-
-          {/* Activity Log */}
-          <div style={{ background: C.cardBg, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
-            <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          {/* Activity Log — the only scrolling region on this page */}
+          <div style={{ flex: 1, minHeight: 0, background: C.cardBg, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ padding: '12px 18px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>Activity Log</div>
               <div style={{ fontSize: 14, color: C.textMuted }}>{(b.logs || []).length} entries</div>
             </div>
@@ -3289,8 +3224,9 @@ export default function BulkMessagePage({ onNavigate, user }) {
                 <div style={{ fontSize: 15, color: C.textMuted }}>No activity yet. Send a test or broadcast to see entries here.</div>
               </div>
             ) : (
+              <div data-testid="activity-log" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
-                <thead>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
                   <tr style={{ background: 'var(--c-surfaceInner, #fafaf9)', borderBottom: `1px solid ${C.border}` }}>
                     <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 13, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Action</th>
                     <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 13, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Sent To</th>
@@ -3321,7 +3257,26 @@ export default function BulkMessagePage({ onNavigate, user }) {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
+          </div>
+            </div>
+
+            {/* Preview — pinned, full height of the area, never scrolls. A
+                non-template broadcast now shows its real message instead of
+                "No template on this broadcast". */}
+            <aside style={{ flex: '0 0 360px', minHeight: 0, display: 'flex', justifyContent: 'center' }}>
+              <SimShell fill width="100%" testId="detail-preview"
+                title={b.message_type && b.message_type !== 'template' ? 'Message preview' : 'Template preview'}
+                status={b.message_type && b.message_type !== 'template' ? 'What each recipient saw' : (tpl ? 'What each recipient saw' : 'No template on this broadcast')}>
+                {b.message_type && b.message_type !== 'template' ? (
+                  <BroadcastMessagePreview height="100%" messageType={b.message_type} body={b.body} url={b.url}
+                    mediaLibraryId={b.media_library_id} caption={b.caption} mediaItems={[]} />
+                ) : (
+                  <WhatsAppPreview template={tpl} height="100%" />
+                )}
+              </SimShell>
+            </aside>
           </div>
         </>
       )}
@@ -3335,7 +3290,7 @@ export default function BulkMessagePage({ onNavigate, user }) {
         }}>
           <div style={{
             background: C.cardBg, borderRadius: 14,
-            width: 480, maxHeight: '80vh',
+            width: 480, maxHeight: 'calc(80vh / var(--fg-zoom, 1))',
             boxShadow: C.shadowLg, overflowY: 'auto',
             display: 'flex', flexDirection: 'column',
             padding: '24px 24px 20px',
@@ -3415,7 +3370,7 @@ export default function BulkMessagePage({ onNavigate, user }) {
         }}>
           <div style={{
             background: C.cardBg, borderRadius: 14,
-            width: 820, maxHeight: '90vh',
+            width: 820, maxHeight: 'calc(90vh / var(--fg-zoom, 1))',
             boxShadow: C.shadowLg, overflowY: 'auto',
             display: 'flex', flexDirection: 'column',
           }}>
@@ -3498,7 +3453,7 @@ export default function BulkMessagePage({ onNavigate, user }) {
                     disabled={repeatSending}
                     style={{
                       padding: '10px 18px', borderRadius: 8, border: 'none',
-                      background: repeatSending ? 'var(--c-borderStrong, #ccc)' : C.primary,
+                      background: repeatSending ? 'var(--c-fillMuted, #d5d5d0)' : C.primary,
                       color: '#fff', cursor: repeatSending ? 'not-allowed' : 'pointer',
                       fontSize: 15, fontWeight: 700, fontFamily: FONT,
                       display: 'flex', alignItems: 'center', gap: 6,
@@ -3512,8 +3467,9 @@ export default function BulkMessagePage({ onNavigate, user }) {
 
               {/* RIGHT — Preview */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, paddingTop: 8 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--c-t6, #888)', fontFamily: FONT }}>Template Preview</div>
-                <WhatsAppPreview template={tpl} />
+                <SimShell title="Template preview" status={tpl ? 'What each recipient gets, every run' : 'No template on this series'}>
+                  <WhatsAppPreview template={tpl} />
+                </SimShell>
               </div>
             </div>
           </div>

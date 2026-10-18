@@ -84,6 +84,14 @@ async function ensureCourseTables() {
   await pool.query(`ALTER TABLE coexistence.leads ADD COLUMN IF NOT EXISTS age        INT;`);
   await pool.query(`ALTER TABLE coexistence.leads ADD COLUMN IF NOT EXISTS profession TEXT;`);
   await pool.query(`ALTER TABLE coexistence.leads ADD COLUMN IF NOT EXISTS pincode    TEXT;`);
+  // Migration 116: manual payment-status override on a sale (NULL = derived).
+  await pool.query(`ALTER TABLE coexistence.leads ADD COLUMN IF NOT EXISTS payment_status TEXT;`);
+  await pool.query(`DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'leads_payment_status_check') THEN
+      ALTER TABLE coexistence.leads ADD CONSTRAINT leads_payment_status_check
+        CHECK (payment_status IS NULL OR payment_status IN ('paid', 'partial', 'unpaid'));
+    END IF;
+  END $$;`);
 }
 
 // Resolve an amount (+ description/notes text) to a registered course link.

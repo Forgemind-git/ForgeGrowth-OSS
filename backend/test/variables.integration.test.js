@@ -148,15 +148,13 @@ describe('variable resolution against real rows', () => {
 
   test('neededContext only asks for what the tokens actually reference', async (t) => {
     if (h.skipNoDb(t)) return;
-    // Sale and form context are expensive joins; loading them for a step that
+    // Sale context is an expensive join; loading it for a step that
     // never mentions them would make every send slower for nothing.
     // neededContext takes the TEXTS, not the token names.
     const leadOnly = v.neededContext(['Hi {{name}} at {{lead.email}}']);
     assert.ok(!leadOnly.sale, 'a lead-only body does not load sale data');
     const withSale = v.neededContext(['You have paid {{sale.total_paid}}']);
     assert.ok(withSale.sale, 'a sale token does load it');
-    const withForm = v.neededContext(['You answered {{form.myform.q1}}']);
-    assert.deepEqual(withForm.formSlugs, ['myform'], 'only the referenced form is loaded');
   });
 
   test('fmtDate, rupees and stringifyVal render for a human, not a machine', async (t) => {

@@ -35,6 +35,13 @@ function walk(dir, cutoffMs, acc) {
     } else if (entry.isFile()) {
       let stat;
       try { stat = fs.statSync(full); } catch { continue; }
+      // ⚠ A shared outbound file (see mediaDownloader _store/) is ONE inode
+      // with many hard links, and links share a single mtime — the time the
+      // file was FIRST sent. Age-based deletion would therefore remove the
+      // video from a chat sent yesterday. Shared files are skipped: removing a
+      // link frees nothing while another chat still holds the inode anyway.
+      // A _store/ copy is removed only once no chat links to it (nlink 1).
+      if (stat.nlink > 1) continue;
       if (stat.mtimeMs < cutoffMs) {
         acc.files.push({ path: full, size: stat.size });
       }

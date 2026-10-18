@@ -77,7 +77,7 @@ export default function LeadImportModal({ open, onClose, onImported }) {
     }}>
       <div onClick={e => e.stopPropagation()} style={{
         background: C.cardBg, borderRadius: 14, boxShadow: C.shadowLg, width: '100%', maxWidth: 520,
-        maxHeight: '90vh', overflowY: 'auto', fontFamily: FONT, boxSizing: 'border-box',
+        maxHeight: 'calc(90vh / var(--fg-zoom, 1))', overflowY: 'auto', fontFamily: FONT, boxSizing: 'border-box',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: `1px solid ${C.border}` }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Import leads</div>

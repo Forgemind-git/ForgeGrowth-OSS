@@ -2,7 +2,8 @@
 // (well under Meta Tier 1's 80/sec ceiling). All four send-origin paths
 // (chat reply, broadcast, automation, template test) enqueue here.
 
-const { Queue, Worker, QueueEvents } = require('bullmq');
+const { Queue, Worker, QueueEvents, DelayedError } = require('bullmq');
+const { chainDecision, parseChainState, formatChainState, gapWaitUntil, CHAIN_KEY_PREFIX, CHAIN_RECHECK_MS, CHAIN_TTL_SECONDS } = require('./sendChain');
 const IORedis = require('ioredis');
 const pool = require('../db');
 const { getAccountWithToken } = require('../routes/whatsappAccounts');
@@ -50,8 +51,46 @@ let queueEvents = null;
  *   }
  * }
  */
-async function processJob(job) {
-  const { kind, accountId, to, localMessageId, payload, originRef } = job.data || {};
+// Record that message `chainSeq` of its chain reached Meta (or finally failed),
+// releasing the next one. Only ever moves forward.
+async function advanceChain(data) {
+  if (!data || !data.chainKey || !data.chainSeq) return;
+  const key = CHAIN_KEY_PREFIX + data.chainKey;
+  try {
+    const current = parseChainState(await connection.get(key));
+    if (Number(data.chainSeq) > current.seq) {
+      await connection.set(key, formatChainState(data.chainSeq, Date.now()), 'EX', CHAIN_TTL_SECONDS);
+    }
+  } catch (err) {
+    console.error('[sendQueue] chain advance failed:', err.message);
+  }
+}
+
+async function processJob(job, token) {
+  const { kind, accountId, to, localMessageId, payload, originRef, chainKey, chainSeq, chainGiveUpAt, chainGapMs } = job.data || {};
+
+  // Hold this message until the previous one in its automation run has reached
+  // Meta, so video / voice note / poster arrive in the order the flow sends them,
+  // then for the flow's pause between messages.
+  // A DelayedError re-queues WITHOUT spending one of the job's retry attempts.
+  if (chainKey && Number(chainSeq) > 1) {
+    const state = parseChainState(await connection.get(CHAIN_KEY_PREFIX + chainKey));
+    const now = Date.now();
+    const decision = chainDecision({ seq: chainSeq, lastAccepted: state.seq, now, giveUpAt: chainGiveUpAt });
+    if (decision === 'wait') {
+      await job.moveToDelayed(now + CHAIN_RECHECK_MS, token);
+      throw new DelayedError();
+    }
+    if (decision === 'send_late') {
+      console.warn(`[sendQueue] ${kind} to ${to}: message ${chainSeq - 1} of its run never reached Meta — sending ${chainSeq} anyway`);
+    } else {
+      const until = gapWaitUntil({ gapMs: chainGapMs, lastAcceptedAt: state.at, now });
+      if (until) {
+        await job.moveToDelayed(until, token);
+        throw new DelayedError();
+      }
+    }
+  }
   const account = await getAccountWithToken(accountId);
   if (!account) throw new Error(`Account id=${accountId} not found`);
   if (!account.accessToken) throw new Error('Access token missing');
@@ -70,7 +109,7 @@ async function processJob(job) {
     } else if (kind === 'template') {
       result = await sendTemplate({ ...args, templateName: payload.name, languageCode: payload.languageCode, components: payload.components });
     } else if (kind === 'media') {
-      result = await sendMedia({ ...args, type: payload.type, mediaId: payload.mediaId, link: payload.link, caption: payload.caption, filename: payload.filename, contextMessageId: payload.contextMessageId });
+      result = await sendMedia({ ...args, type: payload.type, mediaId: payload.mediaId, link: payload.link, caption: payload.caption, filename: payload.filename, voice: payload.voice === true, contextMessageId: payload.contextMessageId });
     } else if (kind === 'interactive') {
       result = await sendInteractive({ ...args, interactive: payload.interactive });
     } else if (kind === 'location') {
@@ -98,6 +137,7 @@ async function processJob(job) {
 
   // Swap the optimistic row's local id for the real wamid
   if (localMessageId) await markSent(localMessageId, wamid);
+  await advanceChain(job.data);
 
   // Update origin-side linkage (broadcast_log etc) if provided
   if (originRef?.kind === 'broadcast_log' && originRef.id) {
@@ -164,6 +204,8 @@ function startSendWorker() {
     const skipRetry = err?.skipRetry || /invalid.*token|access token has expired|Error validating access token/i.test(err?.message || '');
     const finalAttempt = (job?.attemptsMade || 0) >= ATTEMPTS || skipRetry;
     console.error(`[sendQueue] ${job?.data?.kind} to ${job?.data?.to} failed attempt=${job?.attemptsMade}/${ATTEMPTS}${skipRetry ? ' (no-retry: auth)' : ''}: ${err.message}`);
+    // A message that will never send must not hold the rest of its run hostage.
+    if (finalAttempt) await advanceChain(job?.data);
     if (finalAttempt && localId) {
       await markFailed(localId, err.message).catch(() => {});
       if (job?.data?.originRef?.kind === 'broadcast_log') {

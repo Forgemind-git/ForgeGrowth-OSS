@@ -64,20 +64,16 @@ async function transcodeAudioForMeta(srcBuffer, srcMime) {
  * the thumbnail/playback via the existing /api/media/:messageId proxy.
  * Path layout matches inbound: <wa>/<yyyymm>/<msgid>.<ext>
  */
-function persistOutboundMedia({ accountPhoneDigits, messageId, buffer, ext }) {
-  const ym = `${new Date().getUTCFullYear()}${String(new Date().getUTCMonth() + 1).padStart(2, '0')}`;
-  const dir = path.join(MEDIA_DIR, accountPhoneDigits || 'unknown', ym);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  const filename = `${String(messageId).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 200)}.${ext || 'bin'}`;
-  const absPath = path.join(dir, filename);
-  fs.writeFileSync(absPath, buffer);
-  return { absPath, size: buffer.length };
+function persistOutboundMedia(args) {
+  // One implementation: stores identical files once (see mediaDownloader).
+  return require('../services/mediaDownloader').persistOutboundBuffer(args);
 }
 
 // Categories whose tags the BACKEND owns. They are hidden from every manual
 // picker and preserved through a manual save; see POST /contacts/save.
 const MANAGED_TAG_CATEGORIES = ['cat-funnel-stage', 'cat-product'];
 
+const { accountNameSql } = require('./whatsappAccounts');
 const router = Router();
 
 /**
@@ -259,15 +255,21 @@ router.get('/numbers', async (req, res) => {
           [row.wa_number]
         ),
         // The account's own name — now the PRIMARY label for a business number.
+        // Label (migration 133) wins over the account name — see accountNameSql.
         pool.query(
-          `SELECT display_name FROM coexistence.whatsapp_accounts
+          `SELECT id, label, display_name, ${accountNameSql()} AS shown_name
+             FROM coexistence.whatsapp_accounts
             WHERE display_phone_number = $1 AND is_active = TRUE LIMIT 1`,
           [row.wa_number]
         ),
       ]);
+      const acct = acctRes.rows[0] || null;
       return {
         ...row,
-        display_name: acctRes.rows[0]?.display_name || nameRes.rows[0]?.name || null,
+        display_name: acct?.shown_name || nameRes.rows[0]?.name || null,
+        account_id: acct?.id || null,
+        label: acct?.label && acct.label.trim() ? acct.label.trim() : null,
+        account_name: acct?.display_name || null,
         profile_picture_url: null,
         unread_chats: unreadMap[row.wa_number] || 0,
       };
@@ -281,6 +283,72 @@ router.get('/numbers', async (req, res) => {
 });
 
 // GET /api/contacts?waNumber=xxx&timeRange=24h
+// ── notifications ─────────────────────────────────────────────────────────────
+// Unread inbound conversations across EVERY WhatsApp number the caller can see,
+// newest first — what the bell in the header shows, and what it navigates to.
+//
+// ⚠ "Unread" is defined ONCE, by `conversation_reads.last_read_at`, exactly as
+// the per-number badge and the contact-row badge define it. A second definition
+// here (a flag, a timestamp of our own) would let the bell disagree with the
+// list it links to, which is worse than no bell.
+//
+// ⚠ BDA scoping is the same INNER JOIN the contacts list uses: a non-admin sees
+// only conversations assigned to them. Skipping it here would leak every other
+// BDA's customers through a header popover.
+router.get('/notifications', async (req, res) => {
+  try {
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const params = [];
+    let assignJoin = 'LEFT JOIN coexistence.contacts c ON c.wa_number = ch.wa_number AND c.contact_number = ch.contact_number';
+    let assignWhere = '';
+    if (!isAdmin(req.user)) {
+      params.push(req.user.id);
+      assignJoin = 'JOIN coexistence.contacts c ON c.wa_number = ch.wa_number AND c.contact_number = ch.contact_number';
+      assignWhere = `AND c.assigned_user_id = $${params.length}`;
+    }
+    params.push(limit);
+    const { rows } = await pool.query(`
+      SELECT ch.wa_number, ch.contact_number,
+             COALESCE(NULLIF(c.name,''), NULLIF(c.profile_name,''), ch.contact_number) AS name,
+             COUNT(*)                       AS unread_count,
+             MAX(ch.timestamp)              AS last_at,
+             (ARRAY_AGG(ch.message_body ORDER BY ch.timestamp DESC))[1] AS snippet,
+             (ARRAY_AGG(ch.message_type ORDER BY ch.timestamp DESC))[1] AS message_type,
+             MAX(COALESCE(NULLIF(btrim(a.label), ''), a.display_name)) AS account_name
+        FROM coexistence.chat_history ch
+        ${assignJoin}
+        LEFT JOIN coexistence.conversation_reads cr
+          ON cr.wa_number = ch.wa_number AND cr.contact_number = ch.contact_number
+        LEFT JOIN coexistence.whatsapp_accounts a ON a.display_phone_number = ch.wa_number
+       WHERE ch.direction = 'incoming'
+         AND ch.timestamp > COALESCE(cr.last_read_at, 'epoch'::timestamptz)
+         ${assignWhere}
+       GROUP BY ch.wa_number, ch.contact_number, c.name, c.profile_name
+       ORDER BY MAX(ch.timestamp) DESC
+       LIMIT $${params.length}
+    `, params);
+
+    res.json({
+      // The badge counts CONVERSATIONS, not messages: "3" meaning three people
+      // are waiting is actionable; "47" meaning someone sent 47 lines is not.
+      unreadChats: rows.length,
+      notifications: rows.map(r => ({
+        waNumber: r.wa_number,
+        contactNumber: r.contact_number,
+        name: r.name,
+        accountName: r.account_name || null,
+        unreadCount: Number(r.unread_count) || 0,
+        at: r.last_at,
+        // A media message has no body; say what arrived instead of showing a blank line.
+        snippet: r.snippet || (r.message_type && r.message_type !== 'text' ? `[${r.message_type}]` : ''),
+      })),
+    });
+  } catch (err) {
+    console.error('[messages] notifications error:', err.message);
+    res.status(500).json({ error: 'Failed to load notifications' });
+  }
+});
+
 router.get('/contacts', async (req, res) => {
   try {
     const { waNumber, timeRange = '24h' } = req.query;
@@ -320,6 +388,7 @@ router.get('/contacts', async (req, res) => {
                   WHEN ch2.message_type = 'contacts' THEN '👤 Contact'
                   WHEN ch2.message_type = 'sticker'  THEN 'Sticker'
                   WHEN ch2.message_type = 'template' THEN 'Template message'
+                  WHEN ch2.message_type = 'flow_reply' THEN 'Form submitted'
                   WHEN ch2.message_type = 'interactive' THEN 'Interactive message'
                   WHEN ch2.message_type IN ('unsupported','unknown') THEN 'Unsupported message'
                   ELSE NULL
@@ -753,6 +822,52 @@ router.post('/messages/mark-read', async (req, res) => {
   }
 });
 
+// POST /api/messages/mark-all-read — the bell's "Mark all read". Stamps
+// last_read_at = NOW() on every conversation that currently has an unread
+// inbound message AND is visible to this user — the SAME scoping the
+// /notifications query uses, so the set cleared is exactly the set the popover
+// listed. A BDA cannot clear conversations they cannot see.
+//
+// Only conversations with something unread are touched: rewriting every
+// conversation's timestamp would be harmless today but is not what "mark all
+// read" claims to do.
+router.post('/messages/mark-all-read', async (req, res) => {
+  try {
+    const params = [];
+    let assignJoin = '';
+    let assignWhere = '';
+    if (!isAdmin(req.user)) {
+      params.push(req.user.id);
+      assignJoin = 'JOIN coexistence.contacts c ON c.wa_number = ch.wa_number AND c.contact_number = ch.contact_number';
+      assignWhere = `AND c.assigned_user_id = $${params.length}`;
+    }
+    const { rows } = await pool.query(`
+      WITH unread AS (
+        SELECT DISTINCT ch.wa_number, ch.contact_number
+          FROM coexistence.chat_history ch
+          ${assignJoin}
+          LEFT JOIN coexistence.conversation_reads cr
+            ON cr.wa_number = ch.wa_number AND cr.contact_number = ch.contact_number
+         WHERE ch.direction = 'incoming'
+           AND ch.timestamp > COALESCE(cr.last_read_at, 'epoch'::timestamptz)
+           ${assignWhere}
+      )
+      INSERT INTO coexistence.conversation_reads (wa_number, contact_number, last_read_at)
+      SELECT wa_number, contact_number, NOW() FROM unread
+      ON CONFLICT (wa_number, contact_number) DO UPDATE SET last_read_at = NOW()
+      RETURNING wa_number, contact_number
+    `, params);
+
+    // One event with no waNumber: every open chat list refetches (their
+    // listeners treat a missing waNumber as "could be mine").
+    if (rows.length) bus.emit('conversation-read', { all: true, count: rows.length });
+    res.json({ ok: true, marked: rows.length });
+  } catch (err) {
+    console.error('[messages] /messages/mark-all-read error:', err.message);
+    res.status(500).json({ error: 'Failed to mark all as read' });
+  }
+});
+
 // GET /api/messages?waNumber=xxx&contactNumber=xxx&page=1&limit=50
 router.get('/messages', async (req, res) => {
   try {
@@ -830,9 +945,26 @@ router.get('/messages', async (req, res) => {
       }
     }
 
+    // Voice notes carry their stored transcript (Chat Analyzer / agents / the
+    // per-bubble Transcribe button all write the same cache), so the bubble can
+    // show it without a request per note.
+    const audioIds = rows.filter(r => r.message_type === 'audio' || r.message_type === 'voice').map(r => r.message_id);
+    const transcripts = audioIds.length
+      ? await require('../services/voiceNotes').transcriptsFor(audioIds).catch(() => ({}))
+      : {};
+
+    // Files sent from our Media Library carry its name + description (matched by
+    // file bytes, cached per message — see services/libraryMedia.js).
+    const library = await require('../services/libraryMedia')
+      .libraryMatches('chat', rows.filter(r => r.direction === 'outgoing'))
+      .catch(() => new Map());
+
     res.json({
       messages: rows
-        .map(m => ({ ...m, reactions: reactionsByMsg[m.message_id] || [] }))
+        .map(m => ({
+          ...m, reactions: reactionsByMsg[m.message_id] || [], transcript: transcripts[m.message_id] || null,
+          library: library.get(m.message_id) || null,
+        }))
         .reverse(), // oldest first for chat display
       total,
       page: pageNum,

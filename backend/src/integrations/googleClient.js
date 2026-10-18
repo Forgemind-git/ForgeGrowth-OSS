@@ -291,6 +291,46 @@ async function calendarInsertEvent({ calendarId, summary, description, location,
   return json;
 }
 
+/**
+ * Create or update one event from a raw Calendar `event` body (all-day or timed).
+ * With `eventId`, PATCHes that event; a 404/410 (deleted in Google by hand) falls
+ * back to creating a fresh one, so a sync can always converge.
+ * Returns the event JSON ({ id, htmlLink, … }).
+ */
+async function calendarUpsertEvent({ calendarId = 'primary', eventId = null, event }) {
+  const token = await getValidAccessToken('google_calendar');
+  const base = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
+  const send = async (method, url) => {
+    const res = await fetch(url, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(event),
+    });
+    return { res, json: await res.json().catch(() => ({})) };
+  };
+  let r = eventId ? await send('PATCH', `${base}/${encodeURIComponent(eventId)}`) : null;
+  if (!r || r.res.status === 404 || r.res.status === 410) r = await send('POST', base);
+  if (!r.res.ok) {
+    const msg = r.json?.error?.message || `Calendar write failed (${r.res.status})`;
+    await markIntegrationError('google_calendar', msg);
+    throw new Error(msg);
+  }
+  return r.json;
+}
+
+/** Delete an event. Already gone (404/410) counts as success. */
+async function calendarDeleteEvent({ calendarId = 'primary', eventId }) {
+  if (!eventId) return;
+  const token = await getValidAccessToken('google_calendar');
+  const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, {
+    method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok && res.status !== 404 && res.status !== 410) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error(json?.error?.message || `Calendar delete failed (${res.status})`);
+  }
+}
+
 // Encode a UTF-8 string into RFC 2047 "encoded-word" form so non-ASCII
 // subjects/bodies survive Gmail's MIME parsing.
 function encodeMimeHeader(s) {
@@ -481,6 +521,8 @@ module.exports = {
   sheetsReadRange,
   sheetsUpdateRange,
   calendarInsertEvent,
+  calendarUpsertEvent,
+  calendarDeleteEvent,
   gmailSend,
   driveListSpreadsheets,
   sheetsGetSpreadsheet,

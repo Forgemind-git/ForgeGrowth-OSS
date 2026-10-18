@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, FileSpreadsheet, AlertCircle, Globe, ClipboardList, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
+import { Plus, Trash2, FileSpreadsheet, AlertCircle, Globe, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { api } from '../../api.js';
 import { C, FONT } from '../../constants.js';
 import Toggle from '../Toggle.jsx';
 import DeleteConfirmModal from '../DeleteConfirmModal.jsx';
 import GoogleSheetsToolConfig from './GoogleSheetsToolConfig.jsx';
 import HttpToolConfig from './HttpToolConfig.jsx';
-import LeadFormToolConfig from './LeadFormToolConfig.jsx';
 
 /**
  * ONE list of everything this agent can do.
@@ -30,18 +29,15 @@ import LeadFormToolConfig from './LeadFormToolConfig.jsx';
  */
 
 const TOOL_TYPES = [
-  { type: 'lead_form', label: "Form's table", desc: 'Collect a form\'s columns in chat and write a row into its table.',
-    icon: ClipboardList, iconColor: '#8E24AA', iconBg: 'var(--c-purpleBg, #F3E5F5)' },
   { type: 'google_sheets', label: 'Google Sheets', desc: 'Read, append, or update rows in a sheet.',
     icon: FileSpreadsheet, iconColor: '#0F7A38', iconBg: 'var(--c-xe6f4ea, #E6F4EA)' },
   { type: 'http_request', label: 'HTTP request', desc: 'Call an external API / device / webhook.',
     icon: Globe, iconColor: '#2563EB', iconBg: 'var(--c-infoBg, #E6EEFC)' },
 ];
 
-const toolMeta = (type) => TOOL_TYPES.find(t => t.type === type) || TOOL_TYPES[1];
+const toolMeta = (type) => TOOL_TYPES.find(t => t.type === type) || TOOL_TYPES[0];
 
 const CONFIG_COMPONENTS = {
-  lead_form: LeadFormToolConfig,
   google_sheets: GoogleSheetsToolConfig,
   http_request: HttpToolConfig,
 };
@@ -54,12 +50,6 @@ function describeTool(tool) {
     return {
       title: cfg.label || 'HTTP request',
       summary: `${cfg.method || 'GET'} ${cfg.url || ''}`.trim() || 'No endpoint set',
-    };
-  }
-  if (tool.toolType === 'lead_form') {
-    return {
-      title: cfg.form_name || 'Form',
-      summary: 'Collects this form\'s columns in chat and writes a row into its table',
     };
   }
   const sheet = [cfg.spreadsheet_name || cfg.spreadsheet_id, cfg.sheet_name].filter(Boolean).join(' · ');
@@ -296,7 +286,7 @@ export default function AgentToolsList({ agentId, tools, onChange, ensureAgentId
         open={!!pendingRemove}
         title="Remove this tool?"
         message={pendingRemove
-          ? `"${describeTool(pendingRemove).title}" will be removed from this agent. Rows it already saved stay exactly where they are, and the ${pendingRemove.toolType === 'lead_form' ? 'form and its table are' : 'spreadsheet or endpoint is'} not touched.`
+          ? `"${describeTool(pendingRemove).title}" will be removed from this agent. Rows it already saved stay exactly where they are, and the spreadsheet or endpoint is not touched.`
           : ''}
         confirmText="Remove tool"
         onCancel={() => setPendingRemove(null)}

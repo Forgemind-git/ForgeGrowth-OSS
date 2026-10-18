@@ -4,6 +4,7 @@
 // finish_reason === 'tool_calls' until the model stops requesting tools.
 
 const OpenAI = require('openai');
+const { applyCompletionParams, isMaxTokensParamError } = require('./openaiCompat');
 
 function toOpenAITools(tools) {
   return tools.map(t => ({
@@ -42,12 +43,23 @@ async function runWithTools({
   while (iterations < maxIterations) {
     iterations += 1;
     const t0 = Date.now();
-    const resp = await client.chat.completions.create({
+    const params = applyCompletionParams({
       model,
       messages: history,
       tools: oaiTools.length > 0 ? oaiTools : undefined,
-      max_tokens: 1024,
-    });
+    }, model, { maxTokens: 1024 });
+    let resp;
+    try {
+      resp = await client.chat.completions.create(params);
+    } catch (err) {
+      // A model we do not yet recognise as a reasoning model. Retry once in the
+      // other shape rather than failing every run until the regex is updated.
+      if (!isMaxTokensParamError(err)) throw err;
+      delete params.max_tokens;
+      params.max_completion_tokens = 4096;
+      delete params.temperature;
+      resp = await client.chat.completions.create(params);
+    }
     const latency = Date.now() - t0;
 
     totalInputTokens += resp.usage?.prompt_tokens || 0;

@@ -137,12 +137,31 @@ async function listGemini(apiKey) {
     .filter(m => m.id);
 }
 
+// OpenRouter: an OpenAI-compatible gateway. Its /models list holds CHAT models
+// only — the speech-to-text model (microsoft/mai-transcribe-2) is not listed
+// there and is not a chat model, so it is never offered in a model picker; the
+// transcription service reads this credential's key directly.
+async function listOpenRouter(apiKey, baseUrl) {
+  const models = await listOpenAICompatible(apiKey, baseUrl || 'https://openrouter.ai/api/v1');
+  // /models answers without auth, so it cannot tell a bad key from a good one.
+  // /key does: it 401s on an invalid key.
+  await fetchJson('https://openrouter.ai/api/v1/key', {
+    method: 'GET', headers: { 'Authorization': `Bearer ${apiKey}` },
+  });
+  return models;
+}
+
 const PROVIDERS = {
   openai:    { label: 'OpenAI',          listModels: listOpenAI },
   anthropic: { label: 'Anthropic Claude', listModels: listAnthropic },
   kimi:      { label: 'Moonshot / Kimi', listModels: listKimi },
   gemini:    { label: 'Google Gemini',   listModels: listGemini },
+  openrouter: { label: 'OpenRouter',     listModels: listOpenRouter, defaultBaseUrl: 'https://openrouter.ai/api/v1' },
 };
+
+function defaultBaseUrl(provider) {
+  return PROVIDERS[provider]?.defaultBaseUrl || null;
+}
 
 function isSupported(provider) {
   return Object.prototype.hasOwnProperty.call(PROVIDERS, provider);
@@ -163,5 +182,6 @@ module.exports = {
   listModels,
   isSupported,
   providerLabel,
+  defaultBaseUrl,
   SUPPORTED: Object.keys(PROVIDERS),
 };

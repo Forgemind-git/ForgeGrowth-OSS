@@ -6,7 +6,7 @@
 const { Router } = require('express');
 const pool = require('../db');
 const { encrypt, decrypt, maskSecret } = require('../util/crypto');
-const { listModels, isSupported, providerLabel, SUPPORTED } = require('../integrations/aiProviders');
+const { listModels, isSupported, providerLabel, defaultBaseUrl, SUPPORTED } = require('../integrations/aiProviders');
 
 const router = Router();
 
@@ -16,6 +16,9 @@ const router = Router();
 // Order matters: first match is treated as the recommended default.
 const DEFAULT_ENABLED = {
   openai: ['gpt-4o-mini', 'gpt-3.5-turbo', 'gpt-5'],
+  // OpenRouter is added for voice-note TRANSCRIPTION; its 450+ chat models
+  // start disabled so they do not flood every model picker. Enable any in Manage.
+  openrouter: [],
 };
 
 // Build the dynamic WHERE clause + params array for activity queries.
@@ -117,6 +120,7 @@ async function loadActivity(credId, provider, limit, offset, filters = {}) {
 function pickDefaultEnabled(provider, models) {
   const wishlist = DEFAULT_ENABLED[provider];
   if (!wishlist) return null; // null = all enabled (preserves existing behaviour for kimi/anthropic/gemini)
+  if (!wishlist.length) return []; // explicit "none enabled" (openrouter)
   const available = new Set(models.map(m => m.id));
   const enabled = wishlist.filter(id => available.has(id));
   // Fall back to all-enabled if none of the curated ids exist on this account
@@ -183,7 +187,9 @@ router.post('/ai-models', async (req, res) => {
     if (!apiKey || !String(apiKey).trim()) {
       return res.status(400).json({ error: 'API key is required' });
     }
-    const cleanBaseUrl = baseUrl?.trim() || null;
+    // OpenRouter gets its API root stored so its chat models (if enabled) run
+    // through the OpenAI-compatible transport like any gateway.
+    const cleanBaseUrl = baseUrl?.trim() || defaultBaseUrl(provider);
     if (cleanBaseUrl && !/^https?:\/\//i.test(cleanBaseUrl)) {
       return res.status(400).json({ error: 'Custom base URL must start with http:// or https://' });
     }

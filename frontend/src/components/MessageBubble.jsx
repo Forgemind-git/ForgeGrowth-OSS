@@ -1,3 +1,4 @@
+import { toLayout } from '../lib/uiZoom.js';
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { Check, CheckCheck, FileText, Image as ImageIcon, Video, Music, MapPin, Phone, Download, AlertCircle, Loader2, Mic, ExternalLink, Reply, Copy, ChevronDown, Forward, Star, Info, Ban } from 'lucide-react';
 import { C, CHAT, FONT, MONO, formatTime } from '../constants.js';
@@ -194,9 +195,193 @@ function PauseIcon({ size = 18, color = 'var(--c-x1f3c2e, #1f3c2e)' }) {
   );
 }
 
+/* ── Voice-note transcript (view, or estimate + transcribe) ────────────
+ * Every voice note gets this strip under its player.
+ *  - Already transcribed (Chat Analyzer, an agent, MCP or an earlier click):
+ *    "Transcript" toggles the stored text. Nothing is sent to the model again.
+ *  - Not yet: "Transcribe" first fetches the ESTIMATED cost and asks, then
+ *    transcribes on confirm. The server never overwrites an existing transcript.
+ */
+function inr(n) {
+  const v = Number(n || 0);
+  return v < 0.01 ? `₹${v.toFixed(4)}` : `₹${v.toFixed(2)}`;
+}
+
+function VoiceTranscript({ message, isOutgoing }) {
+  const initial = message.transcript || null;
+  const [data, setData] = useState(initial);              // {status, transcript, error, ...}
+  const [open, setOpen] = useState(false);
+  const [estimate, setEstimate] = useState(null);         // voiceNote() response when not transcribed
+  const [busy, setBusy] = useState(null);                 // 'estimate' | 'transcribe' | 'redo' | null
+  const [redo, setRedo] = useState(null);                 // {seconds, inr} while confirming a re-transcribe
+  const [err, setErr] = useState('');
+
+  // The chat refetches every few seconds; adopt a transcript that appeared
+  // elsewhere (e.g. the analyser ran) without clobbering one we just made.
+  useEffect(() => {
+    if (message.transcript && (!data || data.status !== 'ok')) setData(message.transcript);
+  }, [message.transcript]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const done = data && data.status === 'ok' && data.transcript;
+
+  const muted = C.textMuted;
+  // Translucent grey reads on both bubble colours in both themes.
+  const panelBg = 'rgba(127,127,127,0.12)';
+  const spin = { animation: 'spin 0.9s linear infinite' };
+  const linkStyle = {
+    background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+    fontSize: 12.5, fontWeight: 600, color: C.primary,
+    display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: FONT,
+  };
+
+  // Older model (Whisper) transcript → offer a deliberate redo, cost first.
+  const askRedo = async () => {
+    setErr(''); setBusy('estimate');
+    try {
+      const r = await api.chatAnalyzer.voiceNote(message.message_id);
+      if (!r.canRetranscribe) { setData(r); return; }
+      setRedo(r.retranscribeEstimate || { seconds: null, inr: 0 });
+    } catch (e) { setErr(e.message || 'Could not load the estimate'); }
+    finally { setBusy(null); }
+  };
+  const doRedo = async () => {
+    setErr(''); setBusy('redo');
+    try {
+      const r = await api.chatAnalyzer.retranscribeVoiceNote(message.message_id);
+      setData(r); setRedo(null);
+      if (r.replaced) setOpen(true);
+      else setErr(`Kept the old transcript — ${r.retranscribeError}`);
+    } catch (e) { setErr(e.message || 'Re-transcription failed'); }
+    finally { setBusy(null); }
+  };
+  const redoLink = data && data.canRetranscribe && !redo ? (
+    <button type="button" data-testid="voice-retranscribe" style={{ ...linkStyle, color: muted, fontWeight: 500 }} disabled={!!busy} onClick={askRedo}
+      title={`Made with ${data.model || 'an older model'} — redo it with MAI-Transcribe 2`}>
+      {busy === 'estimate' ? <Loader2 size={13} style={spin} /> : null}
+      Re-transcribe (older model)
+    </button>
+  ) : null;
+  const redoPanel = redo ? (
+    <div data-testid="voice-retranscribe-confirm" style={{ marginTop: 6, padding: '8px 10px', borderRadius: 8, fontSize: 13, background: panelBg }}>
+      <div>
+        Re-transcribe with MAI-Transcribe 2 · estimated <strong>{inr(redo.inr)}</strong>
+        {redo.seconds ? ` for ${redo.seconds}s of audio` : ''}.
+        <span style={{ color: muted }}> The current transcript is replaced only if the new one succeeds.</span>
+      </div>
+      <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
+        <button type="button" style={linkStyle} disabled={!!busy} onClick={doRedo}>
+          {busy === 'redo' ? <Loader2 size={13} style={spin} /> : <Mic size={13} />}
+          {busy === 'redo' ? 'Re-transcribing…' : 'Re-transcribe now'}
+        </button>
+        <button type="button" style={{ ...linkStyle, color: muted }} disabled={!!busy} onClick={() => setRedo(null)}>Cancel</button>
+      </div>
+    </div>
+  ) : null;
+
+  const askEstimate = async () => {
+    setErr(''); setBusy('estimate');
+    try {
+      const r = await api.chatAnalyzer.voiceNote(message.message_id);
+      if (r.status === 'ok') { setData(r); setOpen(true); }
+      else setEstimate(r);
+    } catch (e) { setErr(e.message || 'Could not load the estimate'); }
+    finally { setBusy(null); }
+  };
+
+  const transcribe = async () => {
+    setErr(''); setBusy('transcribe');
+    try {
+      const r = await api.chatAnalyzer.transcribeVoiceNote(message.message_id);
+      setData(r); setEstimate(null);
+      if (r.status === 'ok') setOpen(true);
+      else setErr(r.error || 'No speech was found in this voice note');
+    } catch (e) { setErr(e.message || 'Transcription failed'); }
+    finally { setBusy(null); }
+  };
+
+  return (
+    <div data-testid="voice-transcript" style={{ marginTop: 6, fontFamily: FONT }}>
+      {done ? (
+        <>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button type="button" style={linkStyle} onClick={() => setOpen(o => !o)}>
+              <FileText size={13} /> {open ? 'Hide transcript' : 'Transcript'}
+            </button>
+            {redoLink}
+          </div>
+          {redoPanel}
+          {open && (
+            <div data-testid="voice-transcript-text" style={{
+              marginTop: 6, padding: '8px 10px', borderRadius: 8, fontSize: 14, lineHeight: 1.45,
+              background: panelBg, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            }}>
+              {data.transcript}
+            </div>
+          )}
+        </>
+      ) : estimate ? (
+        <div data-testid="voice-transcript-estimate" style={{
+          marginTop: 2, padding: '8px 10px', borderRadius: 8, fontSize: 13,
+          background: panelBg,
+        }}>
+          {estimate.estimate?.overCap ? (
+            <div>
+              This note is about {estimate.estimate.seconds}s — over the {estimate.estimate.capSeconds}s limit set in Chat Analyzer settings, so it will not be transcribed.
+            </div>
+          ) : (
+            <>
+              <div>
+                Estimated cost <strong>{inr(estimate.estimate?.inr)}</strong>
+                {' '}for {estimate.estimate?.measured ? '' : '~'}{estimate.estimate?.seconds}s of audio
+                <span style={{ color: muted }}> · MAI-Transcribe 2 via OpenRouter</span>
+              </div>
+              {estimate.status === 'failed' && estimate.error && (
+                <div style={{ color: muted, marginTop: 2 }}>Last attempt failed: {estimate.error}</div>
+              )}
+              <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
+                <button type="button" style={linkStyle} disabled={!!busy} onClick={transcribe}>
+                  {busy === 'transcribe' ? <Loader2 size={13} style={spin} /> : <Mic size={13} />}
+                  {busy === 'transcribe' ? 'Transcribing…' : 'Transcribe now'}
+                </button>
+                <button type="button" style={{ ...linkStyle, color: muted }} disabled={!!busy} onClick={() => setEstimate(null)}>
+                  Cancel
+                </button>
+              </div>
+            </>
+          )}
+          {estimate.estimate?.overCap && (
+            <button type="button" style={{ ...linkStyle, color: muted, marginTop: 4 }} onClick={() => setEstimate(null)}>Close</button>
+          )}
+        </div>
+      ) : data && data.status && data.status !== 'failed' ? (
+        <>
+          <div style={{ fontSize: 12.5, color: muted }}>{data.error || 'No speech found in this voice note'}</div>
+          {redoLink}
+          {redoPanel}
+        </>
+      ) : (
+        <button type="button" style={linkStyle} disabled={!!busy} onClick={askEstimate}>
+          {busy === 'estimate' ? <Loader2 size={13} style={spin} /> : <FileText size={13} />}
+          Transcribe
+        </button>
+      )}
+      {err && <div style={{ fontSize: 12.5, color: 'var(--c-dangerText, #A32D2D)', marginTop: 4 }}>{err}</div>}
+    </div>
+  );
+}
+
 /* ── WhatsApp-style voice / audio message player ───────────────────── */
+// Playback speed, WhatsApp-style: 1× → 1.5× → 2× → 1×. One setting for every
+// voice note (as in WhatsApp), remembered per browser.
+const VOICE_RATES = [1, 1.5, 2];
+function readVoiceRate() {
+  try { const r = Number(localStorage.getItem('forgecrm.voiceRate')); return VOICE_RATES.includes(r) ? r : 1; }
+  catch { return 1; }
+}
+
 function VoiceMessagePlayer({ src, message, isOutgoing, senderAvatarUrl, contactName }) {
   const audioRef = useRef(null);
+  const [rate, setRate] = useState(readVoiceRate);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -231,9 +416,23 @@ function VoiceMessagePlayer({ src, message, isOutgoing, senderAvatarUrl, contact
       globalAudioControllers.forEach(ctrl => {
         if (ctrl !== pauseMe) ctrl();
       });
+      // Re-read: another note may have changed the shared speed since mount.
+      const r = readVoiceRate();
+      setRate(r);
+      audioRef.current.playbackRate = r;
       audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
     }
   };
+
+  const cycleRate = () => {
+    const next = VOICE_RATES[(VOICE_RATES.indexOf(rate) + 1) % VOICE_RATES.length];
+    setRate(next);
+    try { localStorage.setItem('forgecrm.voiceRate', String(next)); } catch { /* private mode */ }
+    if (audioRef.current) audioRef.current.playbackRate = next;
+  };
+  // Like WhatsApp, the speed control takes the avatar's place once the note is
+  // playing (or paused part-way), and the avatar returns when it finishes.
+  const showRate = isPlaying || currentTime > 0;
 
   const playedColor = isOutgoing ? CHAT.outgoingText : CHAT.incomingText;
   const unplayedColor = isOutgoing ? 'rgba(134,181,150,0.7)' : 'var(--c-textMuted)';
@@ -274,9 +473,24 @@ function VoiceMessagePlayer({ src, message, isOutgoing, senderAvatarUrl, contact
         onEnded={() => { setIsPlaying(false); setCurrentTime(0); }}
       />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {/* Avatar with mic badge — always shown for voice messages */}
-        <div style={{ position: 'relative', width: 40, height: 40, flexShrink: 0 }}>
-          {avatarUrl && !imgError ? (
+        {/* Avatar with mic badge; swapped for the speed control while playing */}
+        <div style={{ position: 'relative', width: 40, height: 40, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {showRate ? (
+            <button
+              type="button"
+              data-testid="voice-rate"
+              onClick={cycleRate}
+              aria-label={`Playback speed ${rate}×, tap to change`}
+              title="Playback speed"
+              style={{
+                minWidth: 38, height: 24, padding: '0 8px', borderRadius: 999, border: 'none', cursor: 'pointer',
+                background: 'rgba(127,127,127,0.28)', color: iconColor,
+                fontSize: 13, fontWeight: 700, fontFamily: FONT, lineHeight: '24px',
+              }}
+            >
+              {rate}×
+            </button>
+          ) : avatarUrl && !imgError ? (
             <img
               src={avatarUrl}
               alt=""
@@ -292,14 +506,16 @@ function VoiceMessagePlayer({ src, message, isOutgoing, senderAvatarUrl, contact
               {avatarInitial}
             </div>
           )}
-          <div style={{
-            position: 'absolute', bottom: -2, right: -2,
-            width: 14, height: 14, borderRadius: '50%', background: '#008069',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            border: `2px solid ${bubbleBg}`,
-          }}>
-            <Mic size={8} color="#fff" />
-          </div>
+          {!showRate && (
+            <div style={{
+              position: 'absolute', bottom: -2, right: -2,
+              width: 14, height: 14, borderRadius: '50%', background: '#008069',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              border: `2px solid ${bubbleBg}`,
+            }}>
+              <Mic size={8} color="#fff" />
+            </div>
+          )}
         </div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -547,13 +763,16 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
       case 'voice': {
         if (mediaStatus === 'stored' && mediaSrc) {
           return (
-            <VoiceMessagePlayer
-              src={mediaSrc}
-              message={message}
-              isOutgoing={isOutgoing}
-              senderAvatarUrl={senderAvatarUrl}
-              contactName={contactName}
-            />
+            <>
+              <VoiceMessagePlayer
+                src={mediaSrc}
+                message={message}
+                isOutgoing={isOutgoing}
+                senderAvatarUrl={senderAvatarUrl}
+                contactName={contactName}
+              />
+              <VoiceTranscript message={message} isOutgoing={isOutgoing} />
+            </>
           );
         }
         return (
@@ -571,6 +790,7 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
                 {formatBytes(message.media_size_bytes)}
               </div>
             )}
+            <VoiceTranscript message={message} isOutgoing={isOutgoing} />
           </div>
         );
       }
@@ -644,6 +864,20 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
             <span style={{ fontSize: 15 }}>{message.message_body || 'Contact shared'}</span>
           </div>
         );
+
+      case 'flow_reply': {
+        // A WhatsApp form submission: "Form submitted" then one
+        // "Question: answer" line per answered question.
+        const [, ...lines] = String(message.message_body || 'Form submitted').split('\n');
+        return (
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.purple, marginBottom: 4 }}>Form submitted</div>
+            {lines.length
+              ? <div style={{ fontSize: 15, whiteSpace: 'pre-wrap' }}>{lines.join('\n')}</div>
+              : <div style={{ fontSize: 15, color: C.textMuted }}>Answers are being recorded…</div>}
+          </div>
+        );
+      }
 
       case 'interactive':
       case 'button':
@@ -799,12 +1033,14 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
   const canCopy = !!message.message_body;
   const openMenu = (e) => {
     e.stopPropagation();
-    const r = e.currentTarget.getBoundingClientRect();
+    // Rect + innerHeight are screen px; the menu is placed in layout px (lib/uiZoom.js).
+    const b = e.currentTarget.getBoundingClientRect();
+    const r = { right: toLayout(b.right), bottom: toLayout(b.bottom), top: toLayout(b.top) };
     const itemCount = 1 /*Info*/ + (canReply ? 1 : 0) + (canForward ? 1 : 0) + (canCopy ? 1 : 0) + (onStar ? 1 : 0);
     const estH = (reactable ? 46 : 0) + itemCount * 41 + 8;
     let x = r.right - MENU_W; if (x < 8) x = 8;
     let y = r.bottom + 4;
-    if (y + estH > window.innerHeight - 8) y = Math.max(8, r.top - estH - 4);
+    if (y + estH > toLayout(window.innerHeight) - 8) y = Math.max(8, r.top - estH - 4);
     setMenu({ x, y });
   };
   const copyText = () => {
@@ -883,6 +1119,15 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
             </div>
           )}
           {renderContent()}
+          {/* One of our own Media Library files — its name and description are
+              what Chat Analyzer, agents and Claude read in place of the file. */}
+          {message.library && (
+            <div data-testid="library-chip" title={message.library.description || 'No description yet — add one in Media Library'}
+              style={{ marginTop: 5, fontSize: 12.5, lineHeight: 1.35, color: C.textMuted, fontFamily: FONT, maxWidth: 340 }}>
+              <span style={{ fontWeight: 600 }}>Media Library:</span> {message.library.name}
+              {message.library.description ? ` — ${message.library.description}` : ''}
+            </div>
+          )}
           {/* Why a send failed — surfaced from Meta's status webhook
               (chat_history.error_message) so a red tick isn't a mystery. */}
           {isOutgoing && message.status === 'failed' && message.error_message && (
@@ -1058,7 +1303,7 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
           <img
             src={mediaSrc}
             alt="Full size"
-            style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 8 }}
+            style={{ maxWidth: 'calc(90vw / var(--fg-zoom, 1))', maxHeight: 'calc(90vh / var(--fg-zoom, 1))', borderRadius: 8 }}
             onClick={e => e.stopPropagation()}
           />
         </div>

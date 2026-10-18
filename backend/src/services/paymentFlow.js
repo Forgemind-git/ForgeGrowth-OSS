@@ -189,9 +189,40 @@ function withLink(text, shortUrl) {
  * 24h window, because every caller here is a background sweeper whose job is to
  * record what happened, not to crash.
  */
-async function sendOnThread({ waNumber, contactNumber, body, requireWindow = true }) {
+/**
+ * @param {{text:string,url:string}} [link] send a tappable BUTTON under the
+ *   body instead of leaving the URL in the text. Same 24-hour rule either way —
+ *   an interactive message is still free-form to Meta — so the guard below is
+ *   deliberately shared rather than duplicated for the button case.
+ */
+/**
+ * @param {{title:string}[]} [buttons] reply buttons under the body. A TAP on one
+ *   arrives as an ordinary inbound, which is what lets a paused automation
+ *   resume on it — the reason this exists rather than another link button.
+ *   Meta allows at most 3, each ≤20 characters.
+ */
+/**
+ * @param {number} [headerMediaLibraryId] a picture above the body, resolved to a
+ *   Meta media id for THIS account. Only valid alongside reply buttons.
+ */
+async function sendOnThread({ waNumber, contactNumber, body, requireWindow = true, link = null, buttons = null, headerMediaLibraryId = null }) {
   const text = (body || '').trim();
   if (!text) return { sent: false, reason: 'empty_message' };
+
+  // Meta caps the button label at 20 characters and refuses a non-https URL.
+  // Checked here so a bad button degrades to a normal text message with the
+  // link in the body, rather than the whole message failing at the API.
+  const replies = Array.isArray(buttons)
+    ? buttons.map((b, i) => ({ type: 'reply', reply: { id: `btn_${i}`, title: String(b.title || b).trim().slice(0, 20) } }))
+        .filter(b => b.reply.title).slice(0, 3)
+    : [];
+
+  let cta = null;
+  if (link && link.url && /^https:\/\//i.test(link.url)) {
+    cta = { display_text: String(link.text || 'Open').trim().slice(0, 20) || 'Open', url: link.url };
+  } else if (link) {
+    console.warn(`[paymentFlow] button dropped, not an https link: ${link.url}`);
+  }
 
   const { account, error } = await resolveAccount({ fromPhoneNumber: waNumber });
   if (error || !account) return { sent: false, reason: `no_account: ${error || waNumber}` };
@@ -214,15 +245,38 @@ async function sendOnThread({ waNumber, contactNumber, body, requireWindow = tru
     }
   }
 
+  // Buttons win over a link button: they are the only one of the two that can
+  // hand the conversation back to an automation.
+  // A picture above the buttons. Resolved per account, and a failure drops the
+  // IMAGE only — the buttons are what move the customer on.
+  let header = null;
+  if (replies.length && headerMediaLibraryId) {
+    try {
+      const { metaMediaIdForLibrary } = require('../engine/automationEngine');
+      const client = await pool.connect();
+      try { header = { type: 'image', image: { id: await metaMediaIdForLibrary(client, headerMediaLibraryId, account.id) } }; }
+      finally { client.release(); }
+    } catch (err) {
+      console.warn(`[paymentFlow] header image skipped (media ${headerMediaLibraryId}): ${err.message}`);
+    }
+  }
+
+  const interactive = replies.length
+    ? { type: 'button', body: { text: text.slice(0, 1024) }, action: { buttons: replies }, ...(header ? { header } : {}) }
+    : cta
+      ? { type: 'cta_url', body: { text: text.slice(0, 1024) }, action: { name: 'cta_url', parameters: cta } }
+      : null;
+
   const localId = await insertPendingRow({
-    account, toNumber: contactNumber, messageType: 'text', messageBody: text,
+    account, toNumber: contactNumber,
+    messageType: interactive ? 'interactive' : 'text', messageBody: text,
   });
   await enqueueSend({
-    kind: 'text',
+    kind: interactive ? 'interactive' : 'text',
     accountId: account.id,
     to: digits(contactNumber),
     localMessageId: localId,
-    payload: { body: text, previewUrl: true },
+    payload: interactive ? { interactive } : { body: text, previewUrl: true },
   });
   return { sent: true, localMessageId: localId };
 }

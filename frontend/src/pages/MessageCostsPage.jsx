@@ -107,7 +107,6 @@ export default function MessageCostsPage({ user, navigate }) {
 
   return (
     <PageShell
-      title="Message Costs"
       subtitle="What WhatsApp messaging costs you, per template and per message type."
       actions={
         <>
@@ -486,8 +485,8 @@ function Reconciliation({ o }) {
 
 function Note({ children, tone = 'info' }) {
   const tones = {
-    info: { bg: 'var(--c-infoBg, #EEF4FF)', border: '#C7D9F7', color: 'var(--c-s1e3a6b, #1E3A6B)', Icon: Info },
-    warn: { bg: 'var(--c-warnBgSoft, #FDF6E3)', border: '#EDD9A3', color: 'var(--c-s7a5a12, #7A5A12)', Icon: AlertTriangle },
+    info: { bg: 'var(--c-infoBg, #EEF4FF)', border: 'transparent', color: 'var(--c-s1e3a6b, #1E3A6B)', Icon: Info },
+    warn: { bg: 'var(--c-warnBgSoft, #FDF6E3)', border: 'transparent', color: 'var(--c-s7a5a12, #7A5A12)', Icon: AlertTriangle },
   };
   const t = tones[tone] || tones.info;
   return (

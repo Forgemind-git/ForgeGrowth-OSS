@@ -23,10 +23,11 @@ const PAGES = [
   // stored per-user override that granted it.
   // 'follow-up-sequence' and 'team-members' removed 2026-08-12 with their pages.
   // Both were safe to drop: 0 users had a stored override.
-  'lead-forms', 'projects',
+  // 'lead-forms' and 'projects' removed 2026-10-16 with the Forms and Projects
+  // features (code and data).
   // Marketing section — Lead Sources folded into mkt-overview; Content Library,
   // Webinars and Organic/Social removed along with the ForgeSocial integration.
-  'mkt-overview', 'campaigns', 'ctwa-ads', 'conversion-api',
+  'mkt-overview', 'campaigns', 'ctwa-ads', 'conversion-api', 'clo',
   // Sales section
   // 'products' was removed 2026-08-12 — the editor moved into Admin Settings →
   // Funnel → Products. Safe to drop: 0 users had a stored override.
@@ -35,12 +36,27 @@ const PAGES = [
   // contacts TABLE stays — it is the chat thread, the RBAC scope and the funnel
   // tag mirror. Both keys were safe to drop: 0 users had a stored override.
   'sales-pipeline', 'leads', 'onboarding',
+  // Chat Analyzer — reads conversations (1:1 and groups) and produces a verdict.
+  // Non-admins are scoped to their own leads and never see groups, which carry
+  // other customers' messages; enforced in routes/chatAnalyser.js canAccess().
+  'chat-analyzer',
   'sales-funnel', 'sales-log',
   // Payments — create + track Razorpay links raised from ForgeGrowth.
   'payments',
   // Message costs — billing data. Lives in the Chats section; admin-only by
   // default (deliberately absent from every other role's defaults below).
   'message-costs',
+  // Workflow Agents (migration 121). 'workflow-agents' = the agents list, builder,
+  // runs and results (admin by default; grant it to team leads who should see
+  // runs or edit memory). 'workflow-agent-approvals' = the approvals queue
+  // (items are further filtered to what each person may decide).
+  // 'my-worklist' = a rep's own ranked leads, tasks and notifications.
+  'workflow-agents', 'workflow-agent-approvals', 'my-worklist',
+  // Follow-up (pinned chats + calendar). The UI also opens it for anyone with
+  // 'leads' (frontend PAGE_ALIASES) so no stored role had to change.
+  'follow-ups',
+  // Social section (ported ForgeSocial, 2026-10-11) — one key for the whole tab.
+  'social',
   // 'admin-settings:team' removed 2026-08-12 with the Team members tab: a
   // WhatsApp account is named in its own tab, and the only people in the system
   // are users.

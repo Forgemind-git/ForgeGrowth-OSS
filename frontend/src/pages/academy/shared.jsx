@@ -2,6 +2,7 @@
 // formatting. Keeps every Marketing/Sales page visually identical (blueprint §A).
 import { useState } from 'react';
 import { Inbox, X } from 'lucide-react';
+import PillStrip from '../../components/PillStrip.jsx';
 import { C, FONT, MONO } from '../../constants.js';
 import { funnelStageMeta, stageTextColor } from '../../hooks/useFunnelConfig.js';
 import { useTheme } from '../../theme.jsx';
@@ -21,23 +22,36 @@ export const STAGE_ORDER = ['new', 'contacted', 'engaged', 'hot', 'enrolled', 'c
 // (or `funnelSourceOptions()`) instead. Kept only as an emergency fallback.
 export const SOURCE_OPTIONS = ['CTWA Ad', 'Instagram', 'YouTube', 'Referral', 'Webinar', 'WhatsApp Direct'];
 
-export function PageShell({ title, subtitle, actions, children }) {
+/**
+ * Page shell. Deliberately renders NO page title: the tab's name is already the
+ * highlighted sidebar item, and repeating it in display type ate the top of
+ * every page. `heading` is for DETAIL views only — an entity name (a customer,
+ * a conversation, a payment link), set compact. `subtitle` is the one-line
+ * description, and `actions` sit on the same row so the header costs one
+ * line at most.
+ */
+export function PageShell({ heading, subtitle, actions, children }) {
+  const hasHeader = !!(heading || subtitle || actions);
   // Fill the whole main area at every display size — no max-width cap, no centering.
   return (
-    <div style={{ padding: '22px 28px 60px', fontFamily: FONT, width: '100%', minWidth: 0, flex: 1, boxSizing: 'border-box' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: C.text }}>{title}</h1>
-          {subtitle && <div style={{ fontSize: 15, color: C.textSecondary, marginTop: 4 }}>{subtitle}</div>}
+    <div className="fg-page" style={{ padding: '20px 28px 60px', fontFamily: FONT, width: '100%', minWidth: 0, flex: 1, boxSizing: 'border-box' }}>
+      {hasHeader && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 16, flexWrap: 'wrap', minHeight: 34 }}>
+          <div style={{ minWidth: 0 }}>
+            {heading && <h1 className="fg-page-heading" style={{ margin: 0, fontSize: 20, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{heading}</h1>}
+            {subtitle && <div className="fg-page-sub" style={{ fontSize: 14, color: C.textSecondary, marginTop: heading ? 2 : 0 }}>{subtitle}</div>}
+          </div>
+          {actions && <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginLeft: 'auto' }}>{actions}</div>}
         </div>
-        {actions && <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>{actions}</div>}
-      </div>
+      )}
       {children}
     </div>
   );
 }
 
 export function Button({ variant = 'secondary', children, icon: Icon, ...p }) {
+  // Hook is inert outside .nui-scope; the scoped layer reshapes it into a pill.
+  const hookCls = `fg-btn fg-btn--${variant}${p.className ? ' ' + p.className : ''}`;
   const base = {
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
     borderRadius: 8, fontFamily: FONT, fontWeight: 600, fontSize: 15, cursor: p.disabled ? 'not-allowed' : 'pointer',
@@ -52,7 +66,7 @@ export function Button({ variant = 'secondary', children, icon: Icon, ...p }) {
   const hoverBg = { primary: C.primaryHover, secondary: C.hover, ghost: C.hover, danger: C.primaryLight };
   const restBg = { primary: C.primary, secondary: C.cardBg, ghost: 'transparent', danger: C.cardBg };
   return (
-    <button {...p} style={{ ...base, ...variants[variant], ...p.style }}
+    <button {...p} className={hookCls} style={{ ...base, ...variants[variant], ...p.style }}
       onMouseEnter={e => { if (!p.disabled) e.currentTarget.style.background = hoverBg[variant]; }}
       onMouseLeave={e => { e.currentTarget.style.background = restBg[variant]; }}>
       {Icon && <Icon size={15} />}{children}
@@ -62,7 +76,7 @@ export function Button({ variant = 'secondary', children, icon: Icon, ...p }) {
 
 export function Badge({ label, color, bg, style }) {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 9px', borderRadius: 99, fontFamily: FONT, fontSize: 13, fontWeight: 600, color, background: bg, whiteSpace: 'nowrap', ...style }}>
+    <span className="fg-badge" style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 9px', borderRadius: 99, fontFamily: FONT, fontSize: 13, fontWeight: 600, color, background: bg, whiteSpace: 'nowrap', ...style }}>
       {label}
     </span>
   );
@@ -74,7 +88,7 @@ export function StageBadge({ stage }) {
   const m = funnelStageMeta(stage) || STAGE_META[stage] || STAGE_META.new;
   const { effective } = useTheme();
   // The stage's own colour is the TINT; the text is that hue retargeted to a
-  // lightness that can actually be read on it. See stageTextColor.
+  // lightness that can be read on it in the CURRENT theme — see stageTextColor.
   return <Badge label={m.label} color={stageTextColor(m.color, effective === 'dark')} bg={m.bg} />;
 }
 
@@ -88,22 +102,15 @@ export function EmptyState({ Icon = Inbox, title = 'Nothing here yet', hint }) {
   );
 }
 
-// Segmented control (period/range toggle).
-export function Segmented({ options, value, onChange }) {
+// Segmented control (period/range toggle). A thin adapter over the ONE
+// PillStrip implementation: `options` keep their `{ value, label }` shape so no
+// caller changes, and the accent pill SLIDES between them rather than popping.
+export function Segmented({ options, value, onChange, size, grow, style, title, persistKey }) {
   return (
-    <div style={{ display: 'inline-flex', background: C.hover, borderRadius: 9, padding: 3, gap: 2 }}>
-      {options.map(o => {
-        const on = value === o.value;
-        return (
-          <button key={o.value} onClick={() => onChange(o.value)}
-            style={{ padding: '6px 12px', borderRadius: 7, border: 'none', cursor: 'pointer', fontFamily: FONT,
-              fontSize: 14, fontWeight: on ? 700 : 500, background: on ? C.cardBg : 'transparent',
-              color: on ? C.text : C.textSecondary, boxShadow: on ? C.shadowSm : 'none', transition: 'all .15s' }}>
-            {o.label}
-          </button>
-        );
-      })}
-    </div>
+    <PillStrip
+      items={options.map(o => ({ id: o.value, label: o.label, Icon: o.Icon, badge: o.badge, title: o.title }))}
+      value={value} onChange={onChange} size={size} grow={grow} style={style} title={title} persistKey={persistKey}
+    />
   );
 }
 
@@ -122,17 +129,21 @@ export function LeadsViewToggle({ view, onChange }) {
     <Segmented
       value={view}
       onChange={onChange}
+      // Table and Board are two different pages, each mounting its own copy of
+      // this toggle. The key lets the fresh copy slide from where the old one was.
+      persistKey="leads-view"
       options={[{ value: 'list', label: 'Table' }, { value: 'board', label: 'Board' }]}
     />
   );
 }
 
 // Table shell — consistent header + row styling.
-export function Table({ columns, rows, renderRow, onRowClick, empty, keyOf }) {
+// `footer` (optional) renders a totals row under the body, e.g. <><Td>Total</Td>…</>.
+export function Table({ columns, rows, renderRow, onRowClick, empty, keyOf, footer }) {
   if (!rows || rows.length === 0) return empty || <EmptyState />;
   return (
-    <div style={{ overflowX: 'auto', border: `1px solid ${C.border}`, borderRadius: 12, background: C.cardBg }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT }}>
+    <div className="fg-tablewrap" style={{ overflowX: 'auto', border: `1px solid ${C.border}`, borderRadius: 12, background: C.cardBg }}>
+      <table className="fg-table" style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT }}>
         <thead>
           <tr>
             {columns.map((c, i) => (
@@ -154,6 +165,11 @@ export function Table({ columns, rows, renderRow, onRowClick, empty, keyOf }) {
             </tr>
           ))}
         </tbody>
+        {footer && (
+          <tfoot>
+            <tr className="fg-table-total" style={{ background: C.surfaceMuted, fontWeight: 700 }}>{footer}</tr>
+          </tfoot>
+        )}
       </table>
     </div>
   );
@@ -210,7 +226,7 @@ export const inputStyle = {
 export function Modal({ title, onClose, children, footer, width = 480, preventBackdropClose = false, showBackButton = false }) {
   return (
     <div onClick={preventBackdropClose ? undefined : onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, fontFamily: FONT, padding: 16 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: C.cardBg, borderRadius: 14, width, maxWidth: '100%', maxHeight: '90vh', overflow: 'auto', boxShadow: C.shadowLg }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: C.cardBg, borderRadius: 14, width, maxWidth: '100%', maxHeight: 'calc(90vh / var(--fg-zoom, 1))', overflow: 'auto', boxShadow: C.shadowLg }}>
         <div style={{ padding: '18px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <span style={{ fontSize: 18, fontWeight: 700, color: C.text }}>{title}</span>
           {showBackButton && (

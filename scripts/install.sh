@@ -68,11 +68,6 @@ Accounts and certificates:
 
 Other:
   --no-build            Skip the image build (source installs only).
-  --proxy-routes <dir>  For a server whose reverse proxy already owns 80/443:
-                        publish routes into <dir>, which that proxy watches, so
-                        domains added in Admin Settings -> Domain need no shell.
-                        The proxy container and its network are detected. Set up
-                        the proxy's own side once first — docs/reverse-proxy.md.
   --yes, -y             Never ask. With no address flag it takes this machine's
                         own public address when it has one, and localhost when it
                         does not (behind NAT, or a laptop).
@@ -117,6 +112,8 @@ while [ $# -gt 0 ]; do
     --images)         MODE=images; shift ;;
     --source)         MODE=source; shift ;;
     --no-build)       DO_BUILD=0; shift ;;
+    # Removed with Admin Settings -> Domain. Still parsed so an old command line
+    # keeps working; reported once the helpers are loaded.
     --proxy-routes)   need_arg "$@"; PROXY_ROUTES="$2"; shift 2 ;;
     -y|--yes)         ASSUME_YES=1; shift ;;
     -h|--help)        usage; exit 0 ;;
@@ -869,8 +866,6 @@ if [ "$SHAPE" = domain ]; then
   set_env TLS_DOMAIN "$DOMAIN"
   set_env TLS_EMAIL "$TLS_EMAIL"
   set_env COMPOSE_PROFILES tls
-  # Admin Settings -> Domain can add more domains later and caddy will obtain
-  # their certificates on first visit, because this install owns 80 and 443.
   set_env TLS_MODE caddy
   # With caddy in front, the plain-HTTP port must not also be public, or the
   # site is reachable twice and once of those has no certificate.
@@ -911,7 +906,7 @@ else
   #   announcing the clear at this point printed a flat contradiction two lines
   #   apart:
   #       ! HTTPS turned off — re-run with --domain <host> to bring it back.
-  #       ✓ HTTPS ready  (add a domain in Admin Settings → Domain whenever you like)
+  #       ✓ HTTPS ready
   #   What is actually lost is the certificate for a specific host, not HTTPS —
   #   so remember the host and report it once the state has settled.
   DROPPED_TLS_DOMAIN=$(get_env TLS_DOMAIN)
@@ -921,120 +916,16 @@ else
     set_env WEB_BIND '0.0.0.0'
   fi
 
-  # ── can this install add domains for itself later? ───────────────────────
-  #
-  # Admin Settings -> Domain lets someone add a domain long after installing,
-  # and the bundled caddy obtains its certificate on the first visit. That only
-  # works if THIS install is the thing answering on 80 and 443, and on a shared
-  # server it will not be — another install, or a reverse proxy, already has
-  # them. There is no way to share a port, so the honest thing is to work out
-  # which situation this is now and let the app say so plainly, rather than
-  # offering a button that silently does nothing on half of all servers.
-  #
-  # `proxy` is not a lesser install. Adding a domain there still widens the
-  # allow-list immediately, which is half of what makes a domain work; only the
-  # certificate has to come from whatever already owns the ports.
-  if [ "$SHAPE" = proxy ]; then
-    # Told explicitly that something else terminates TLS. Believe it, and do not
-    # start a caddy that would fight the proxy for the ports.
-    set_env TLS_MODE proxy
-  elif port_in_use 80 || port_in_use 443; then
-    set_env TLS_MODE proxy
-    ok "another program owns ports 80/443  ${DIM}(domains added later need it pointed here)${N}"
-    ok "   ${DIM}how: docs/reverse-proxy.md — then Admin Settings → Domain → Check${N}"
-  else
-    # Free ports: run caddy now, with no domain of its own, purely so a domain
-    # added later needs nothing but DNS. It costs 64 MB and binds 80/443.
-    set_env COMPOSE_PROFILES tls
-    set_env TLS_MODE caddy
-    export COMPOSE_PROFILES=tls
-    ok "HTTPS ready  ${DIM}(add a domain in Admin Settings → Domain whenever you like)${N}"
-  fi
+  # No domain: nothing terminates TLS here. Something in front may (the `--url`
+  # shape), or the install is plain HTTP on an IP or localhost — either way the
+  # bundled caddy has no hostname to get a certificate for, so it stays off.
+  # To add HTTPS later, re-run with --domain <host> (docs/reverse-proxy.md
+  # covers a server whose ports 80/443 already belong to another proxy).
+  set_env TLS_MODE proxy
 
-  # ── optional: let this install publish its own routes ──────────────────────
-  #
-  # The app cannot configure a proxy it does not run, but this script can see
-  # what the app cannot: it has Docker. So the two values the in-app generator
-  # has to leave as placeholders — which container owns 80/443, and which network
-  # it is on — are detected here and written down once.
   if [ -n "$PROXY_ROUTES" ]; then
-    if [ "$(get_env TLS_MODE)" = caddy ]; then
-      warn "--proxy-routes ignored: this install owns ports 80/443, so a domain added"
-      warn "  in Admin Settings → Domain already gets its certificate on the first visit."
-    else
-      # The proxy is whatever publishes 80 or 443. Identified by behaviour rather
-      # than by name, because it is Traefik here and something else elsewhere.
-      proxy_id=$(docker ps --format '{{.ID}} {{.Ports}}' 2>/dev/null \
-                 | grep -E '(^|[[:space:],])0\.0\.0\.0:(80|443)->' | head -1 | cut -d' ' -f1)
-      proxy_net=''
-      if [ -n "$proxy_id" ]; then
-        # Skip bridge/host: a container on those is not reachable by name, and a
-        # route pointing at an unreachable upstream is a 502 with no explanation.
-        proxy_net=$(docker inspect "$proxy_id" \
-                    --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}' 2>/dev/null \
-                    | grep -vE '^(bridge|host|none|)$' | head -1)
-      fi
-
-      if [ -z "$proxy_net" ]; then
-        warn "could not work out which network your reverse proxy is on, so routes"
-        warn "  were not wired up. Set it by hand — docs/reverse-proxy.md."
-      else
-        mkdir -p "$PROXY_ROUTES" || die "cannot create $PROXY_ROUTES"
-        # shellcheck disable=SC1007
-        routes_abs=$(CDPATH= cd -- "$PROXY_ROUTES" && pwd)
-
-        # ⚠ The overlay lives BESIDE the routes directory, never inside it. That
-        #   directory is parsed by the proxy as route definitions, and a compose
-        #   file dropped in there is a parse error on every reload.
-        routing_overlay="$(dirname "$routes_abs")/forgegrowth-${PROJECT}-routing.yml"
-
-        cat > "$routing_overlay" <<YML
-# Wiring for automatic route publishing — written by install.sh.
-#
-# Mounts the directory your reverse proxy watches into this install's backend,
-# and puts the web container on the proxy's network so it can be reached.
-#
-# Kept outside the install directory: install.sh overwrites docker-compose.yml
-# on every upgrade, and this must survive that.
-services:
-  backend:
-    volumes:
-      - ${routes_abs}:/dynamic
-  web:
-    networks: [default, ${proxy_net}]
-
-networks:
-  ${proxy_net}:
-    external: true
-YML
-
-        set_env TRAEFIK_DYNAMIC_DIR /dynamic
-        set_env PROXY_ROUTES_DIR "$routes_abs"
-        # Compose names containers <project>-<service>-<n>. The CONTAINER name,
-        # not the service name: a service alias is not unique once two installs
-        # share a network, and `web` would resolve to whichever answered first.
-        set_env PROXY_UPSTREAM "http://${PROJECT}-web-1:80"
-
-        # Append without duplicating: an install may already carry an overlay.
-        existing_cf=$(get_env COMPOSE_FILE)
-        case ":$existing_cf:" in
-          *":$routing_overlay:"*) : ;;
-          *) if [ -n "$existing_cf" ]; then
-               set_env COMPOSE_FILE "$existing_cf:$routing_overlay"
-             else
-               set_env COMPOSE_FILE "docker-compose.yml:$routing_overlay"
-             fi ;;
-        esac
-        export COMPOSE_FILE
-        COMPOSE_FILE=$(get_env COMPOSE_FILE)
-
-        ok "routes published to $routes_abs  ${DIM}(proxy network: $proxy_net)${N}"
-        ok "   ${DIM}domains added in Admin Settings → Domain now need no shell${N}"
-        warn "your proxy must watch that directory. For Traefik, once:"
-        warn "  --providers.file.directory=/dynamic --providers.file.watch=true"
-        warn "  and mount $routes_abs at /dynamic inside it."
-      fi
-    fi
+    warn "--proxy-routes was removed along with Admin Settings → Domain; ignoring it."
+    warn "  To serve this install through your own proxy, see docs/reverse-proxy.md."
   fi
 
   # Reported last, and only when a named host really was dropped — this address

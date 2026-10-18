@@ -49,7 +49,55 @@ Published as multi-architecture images tagged `1.0.1`, `1.0` and `1`.
 
 ## [Unreleased]
 
+Brings in two months of work from the internal build. **This is a major release**: it removes
+three features and their data, so read the upgrade notes before re-running the installer.
+
+### Upgrade notes
+
+- **Lead Forms, Projects and custom domains are removed — code and data.** Migrations
+  `131_remove_forms_projects` and `134_remove_custom_domains` drop their tables. Export anything you
+  need from those screens first. A domain that was only ever added in **Admin Settings → Domain**
+  stops being accepted: put it in `CORS_ORIGIN` (and `TLS_DOMAIN`, comma-separated, if the bundled
+  caddy serves it) before upgrading.
+- **`install.sh --proxy-routes` is gone** with the Domain screen. It is still accepted, and ignored
+  with a warning. `TRAEFIK_DYNAMIC_DIR`, `PROXY_UPSTREAM` and `PROXY_ROUTES_DIR` are no longer read.
+- **Without a domain, the bundled caddy no longer starts.** It used to run with no hostname of its
+  own so a domain added later in the app needed only DNS. Re-run with `--domain <host>` for HTTPS.
+- **Voice notes are transcribed through OpenRouter** (`microsoft/mai-transcribe-2`) rather than
+  OpenAI Whisper. Add an OpenRouter key in **Admin Settings → AI Models** to keep transcription on.
+
+### Added
+
+- **Workflow Agents** — scheduled or triggered LLM agents that read leads, chats and sales, draft or
+  take actions behind an approvals queue, and keep a per-rep worklist.
+- **Chat Analyzer** — per-conversation summaries, intent, sentiment, a suggested stage and ready-to-send
+  follow-ups, with voice notes, images and documents read as well as text.
+- **Follow-ups** — pin a lead chat, set a follow-up date, and work them from a calendar view (with
+  optional Google Calendar sync).
+- **Payments dashboard**, refunds on the Sales Log, payment status on leads and saved payment filters.
+- **Conversions API and Lead Optimisation (CLO)** — previously withheld as Coming Soon. Sends mapped
+  funnel stages back to Meta with the lead's click id. Off by default; turning it on is the operator's
+  decision because it changes how Meta spends the ad budget.
+- **Social** — a third header section for Instagram, Facebook, Threads, YouTube and LinkedIn: analytics,
+  a unified inbox, comment automations, a content library and an MCP of its own. Off until
+  `SOCIAL_ENCRYPTION_KEY` is set; see [`docs/social-section.md`](./docs/social-section.md).
+- **Automation templates**, quick-start AI agent templates, a message-gap pause between flow steps and
+  per-number display labels.
+- **MCP**: dedicated tools for most read-only reporting (no `forgechat_request` round-trip), and the
+  MCP Tools screen reorganised into Connect / Permissions / Access / Advanced.
+
+### Changed
+
+- **Images build from the lock files** (`npm ci`). A lockless `npm install` had stopped resolving at
+  all — `Cannot read properties of null (reading 'edgesOut')` — so source installs and image builds
+  failed without a line of this repository changing.
+- **The webhook parses through `services/metaPayload.js`** — the tested copy. `routes/webhook.js`
+  carried its own inline parser, which had drifted from the one the tests covered.
+
 ### Fixed
+
+- **Opening Lead Optimisation → Stages no longer crashes the page** (`navigate` was used without being
+  passed in).
 
 - **The Claude plugin now downloads with the same address the connector actually authenticates
   against.** "What is this install's public URL" was worked out independently in four places — the

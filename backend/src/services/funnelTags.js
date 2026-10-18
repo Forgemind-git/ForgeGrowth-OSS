@@ -132,7 +132,11 @@ async function syncLeadStageTag(leadId) {
   const tag = lead.label
     ? { id: tagIdFor(lead.stage), name: lead.label, color: lead.color || '#6B7280', category_id: CATEGORY_ID }
     : null;
-  return applyFunnelTagByNumber(lead.whatsapp_number, tag);
+  const res = await applyFunnelTagByNumber(lead.whatsapp_number, tag);
+  // The sweep needs the tag's NAME to fire a tagApplied trigger. Returned
+  // rather than re-derived there: this function already resolved the label
+  // against `active = TRUE`, and a second lookup could disagree with it.
+  return { ...res, tagName: tag ? tag.name : null };
 }
 
 // The single write. Removes whatever funnel-category tag the contact had and
@@ -188,18 +192,54 @@ async function sweepStageEvents({ batch = 500 } = {}) {
 
   const leadIds = [...new Set(events.map(e => Number(e.lead_id)).filter(Boolean))];
   let updated = 0;
+  let fired = 0;
   for (const id of leadIds) {
     const res = await syncLeadStageTag(id).catch(err => {
       console.error('[funnel-tags] sync failed for lead', id, err.message);
       return { updated: 0 };
     });
     updated += res.updated;
+    fired += fireStageTagTriggers(res);
   }
   const newCursor = Number(events[events.length - 1].id);
   await pool.query(
     `UPDATE coexistence.funnel_tag_state SET last_event_id = $1, updated_at = NOW() WHERE id = 1`,
     [newCursor]);
-  return { processed: events.length, leads: leadIds.length, contactsUpdated: updated, cursor: newCursor };
+  return { processed: events.length, leads: leadIds.length, contactsUpdated: updated, triggersFired: fired, cursor: newCursor };
+}
+
+/**
+ * Bridge: a stage change that has just been mirrored onto a contact also fires
+ * any `tagApplied` automation waiting on that stage's tag.
+ *
+ * ⚠ WHY THIS LIVES IN THE SWEEP AND NOWHERE ELSE.
+ * `applyFunnelTagByNumber` is the tempting place — it knows the contacts and
+ * the tag. But it is ALSO what `syncAllLeadTags()` calls to backfill every
+ * lead, so firing there would start one automation per lead the first time
+ * anyone pressed a repair button. The sweep is the cursor over real
+ * `stage_changed` events, so it fires on transitions only.
+ *
+ * Deliberately NOT awaited: an automation must never be able to stall the tag
+ * sweep, and a failure inside one must not stop the cursor advancing. Same
+ * shape as the two `Add Tag`/`Remove Tag` call sites in executeActionNode,
+ * which is the only other place tagApplied is fired from.
+ *
+ * Dedupe is `fireOncePerTag` inside fireTagAppliedTriggers, so a contact who
+ * re-enters a stage is not messaged twice.
+ */
+function fireStageTagTriggers(res) {
+  const contacts = (res && res.contacts) || [];
+  if (!res || !res.tagName || !contacts.length) return 0;
+  const { fireTagAppliedTriggers } = require('../engine/automationEngine');
+  for (const c of contacts) {
+    setImmediate(() => fireTagAppliedTriggers({
+      waNumber: c.wa_number,
+      contactNumber: c.contact_number,
+      tagName: res.tagName,
+      direction: 'added',
+    }).catch(err => console.error('[funnel-tags] trigger failed:', err.message)));
+  }
+  return contacts.length;
 }
 
 // Any lead change kicks a sweep within seconds so a tag appears in Chats while

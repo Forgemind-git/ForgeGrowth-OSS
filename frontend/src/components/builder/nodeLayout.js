@@ -32,8 +32,8 @@ export const NODE_W = 300;
 //
 // Measured against the real card: 3px accent bar + 12px padding + a 34px icon
 // beside three text lines (uppercase label, title, subtitle) + 10px padding.
-const HEAD_H = 90;   // type label + title + subtitle
-const BODY_H = 74;   // the WhatsApp bubble drawn on a message card
+export const HEAD_H = 90;   // type label + title + subtitle
+export const BODY_H = 74;   // the WhatsApp bubble drawn on a message card
 export const ROW_H = 40;   // one reply button / list row
 export const SYS_H = 32;   // nomatch / timeout / next step
 const ROW_GAP = 5;
@@ -106,6 +106,13 @@ export const listRowsOf = (n) => {
   return out;
 };
 
+/** How long a waiting step waits, as the canvas says it: "2 min", "3h". */
+export const waitLabel = (n) => {
+  const m = n && n.waitTimeoutMinutes != null && n.waitTimeoutMinutes !== "" ? Number(n.waitTimeoutMinutes) : null;
+  if (m != null && Number.isFinite(m)) return m % 60 === 0 ? `${m / 60}h` : `${m} min`;
+  return `${(n && n.waitTimeoutHours) || 24}h`;
+};
+
 /** True when this node parks the flow until the customer responds. */
 export const isWaitingNode = (n) =>
   n && n.type === "message" && n.waitForReply === true;
@@ -123,7 +130,7 @@ export const bodyPreview = (n) => {
   if (n.messageMode === "direct") {
     const dt = n.directType || "text";
     if (dt === "text" || dt === "quick_reply" || dt === "list"
-      || dt === "cta_url" || dt === "location_request") return String(dd.body || "");
+      || dt === "cta_url" || dt === "location_request" || dt === "flow") return String(dd.body || "");
     if (dt === "link") return String(dd.body || dd.url || "");
     if (dt === "location") return String(dd.name || dd.address || "");
     if (dt === "contact") return String(dd.name || "");
@@ -135,6 +142,10 @@ export const bodyPreview = (n) => {
 /** A media step shows a typed attachment chip above its caption. */
 export const mediaChipFor = (n) => {
   if (!n || n.type !== "message" || n.messageMode !== "direct") return "";
+  // An image ABOVE the buttons of a quick-reply or CTA message. Without this
+  // the preview showed those steps as text-only while the customer received a
+  // picture — the preview under-reporting what is actually sent.
+  if (n.directData?.headerType === "image" && n.directData?.headerMediaLibraryId) return "Photo";
   switch (n.directType) {
     case "image": return "Photo";
     case "video": return "Video";
@@ -144,6 +155,7 @@ export const mediaChipFor = (n) => {
     case "location": return "Location";
     case "contact": return "Contact card";
     case "location_request": return "Asks for location";
+    case "flow": return "WhatsApp form";
     default: return "";
   }
 };
@@ -166,6 +178,20 @@ export const nodeRows = (n) => {
     listRowsOf(n).forEach((r) => {
       rows.push({ handle: `row:${r.si}:${r.ri}`, label: r.label, kind: "row" });
     });
+
+    // A WhatsApp form always waits, and only its SUBMISSION continues it —
+    // typed messages do not. Its Start button opens the form, so it carries no
+    // connector of its own. Mirrors backend services/flowValidator.js.
+    if (n.messageMode === "direct" && n.directType === "flow") {
+      rows.push({
+        handle: null,
+        label: String(n.directData?.button_text || "Start"),
+        kind: "button", buttonKind: "FLOW",
+      });
+      rows.push({ handle: "submitted", label: "Form submitted", kind: "branch", tone: "good" });
+      rows.push({ handle: "timeout", label: `Not submitted in ${waitLabel(n)}`, kind: "system" });
+      return rows;
+    }
 
     // A call-to-action shows its link button so the card matches what the
     // customer sees, but it carries NO connector: Meta fires no webhook when
@@ -197,7 +223,8 @@ export const nodeRows = (n) => {
       // offer described a case that never happens.
       const hasChoices = rows.some(r => r.handle && (r.handle.startsWith("btn:") || r.handle.startsWith("row:")));
       if (hasChoices) {
-        rows.push({ handle: "nomatch", label: "Any other reply", kind: "system" });
+        // A buttons-only step keeps waiting on typed text — no "Any other reply".
+        if (n.buttonsOnly !== true) rows.push({ handle: "nomatch", label: "Any other reply", kind: "system" });
       } else {
         rows.push({ handle: "replied", label: "They reply", kind: "system" });
       }
@@ -273,6 +300,10 @@ export const tapTargetsOf = (n) => {
     if (n.directType === "list") {
       return listRowsOf(n).map(r => ({ label: r.label, handle: `row:${r.si}:${r.ri}` }));
     }
+    if (n.directType === "flow") {
+      // In the simulator, tapping Start stands for filling and submitting the form.
+      return [{ label: String(dd.button_text || "Start"), handle: "submitted" }];
+    }
     if (n.directType === "cta_url") {
       return [{ label: String(dd.button_text || "Open link"), handle: null }];
     }
@@ -322,7 +353,7 @@ const extraBodyH = (n) => {
  * failure mode this whole block of constants exists to prevent.
  */
 const VIA_LINE_H = 22;
-const headH = (n) =>
+export const headH = (n) =>
   HEAD_H + (n && n.type === "message" && n.whatsappAccountId ? VIA_LINE_H : 0);
 
 /** Full geometry: height plus every row's vertical centre. */
@@ -400,7 +431,7 @@ export const handlePos = (n, kind, which = "default") => {
 
 /** Colour family for an edge leaving `handle`. Consumers map these to tokens. */
 export const handleTone = (handle) => {
-  if (handle === "yes" || handle === "paid" || handle === "shared") return "good";
+  if (handle === "yes" || handle === "paid" || handle === "shared" || handle === "submitted") return "good";
   if (handle === "no" || handle === "unpaid") return "bad";
   if (handle === "nomatch") return "warn";
   if (handle === "timeout") return "muted";

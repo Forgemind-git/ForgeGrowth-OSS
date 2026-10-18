@@ -169,7 +169,7 @@ function BulkDeleteModal({ title, message, onConfirm, onCancel }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{ background: 'var(--c-cardBg)', borderRadius: 14, padding: '24px 26px', width: 420, maxWidth: '90vw',
+        style={{ background: 'var(--c-cardBg)', borderRadius: 14, padding: '24px 26px', width: 420, maxWidth: 'calc(90vw / var(--fg-zoom, 1))',
                  boxShadow: '0 24px 60px rgba(0,0,0,.22)' }}
       >
         <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--c-text)', marginBottom: 10 }}>{title}</div>
