@@ -68,9 +68,12 @@ async function sendTemplate({ accessToken, phoneNumberId, to, templateName, lang
  * Send a media message that references either an already-uploaded media_id
  * (preferred) or a public HTTPS link. type ∈ image|video|audio|document|sticker.
  */
-async function sendMedia({ accessToken, phoneNumberId, to, type, mediaId, link, caption, filename, contextMessageId = null }) {
+async function sendMedia({ accessToken, phoneNumberId, to, type, mediaId, link, caption, filename, voice = false, contextMessageId = null }) {
   if (!mediaId && !link) throw new Error('sendMedia: mediaId or link required');
   const media = mediaId ? { id: mediaId } : { link };
+  // A voice note (play button, 1x/1.5x/2x) needs `voice: true` AND an OGG/Opus
+  // mono file of 512 KB or less; without either WhatsApp shows a plain audio file.
+  if (voice && type === 'audio') media.voice = true;
   if (caption && (type === 'image' || type === 'video' || type === 'document')) media.caption = caption;
   if (filename && type === 'document') media.filename = filename;
   return postJson(url(phoneNumberId), accessToken, {

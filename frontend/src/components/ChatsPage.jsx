@@ -1,3 +1,4 @@
+import { toLayout } from '../lib/uiZoom.js';
 import { useState, useEffect, useCallback } from 'react';
 import { ChevronRight } from 'lucide-react';
 import NumberSidebar from './NumberSidebar.jsx';
@@ -37,7 +38,7 @@ export default function ChatsPage({ subParts = [], navigate, user }) {
     const startX = e.clientX;
     const startW = contactWidth;
     const onMove = (ev) => {
-      const next = Math.min(MAX_CONTACT_W, Math.max(MIN_CONTACT_W, startW + (ev.clientX - startX)));
+      const next = Math.min(MAX_CONTACT_W, Math.max(MIN_CONTACT_W, startW + toLayout(ev.clientX - startX)));
       setContactWidth(next);
     };
     const onUp = () => {
@@ -78,6 +79,7 @@ export default function ChatsPage({ subParts = [], navigate, user }) {
         <NumberSidebar
           selectedNumber={selectedNumber}
           onSelectNumber={selectNumber}
+          canRename={user?.role === 'admin'}
           onCollapse={() => setNavCollapsed(true)}
         />
       )}
@@ -112,6 +114,7 @@ export default function ChatsPage({ subParts = [], navigate, user }) {
           key={`${selectedNumber}-${selectedContact}`}
           waNumber={selectedNumber}
           contactNumber={selectedContact}
+          user={user}
           onContactSaved={() => setContactRefreshKey(k => k + 1)}
         />
       ) : (

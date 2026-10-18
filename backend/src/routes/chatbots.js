@@ -4,83 +4,6 @@ const pool = require('../db');
 const { validateFlow } = require('../services/flowValidator');
 const { writableLeadFields } = require('../services/leadFields');
 
-// ─── Automation folders = PROJECTS ─────────────────────────────────────────
-// Migration 094 generalised automation_folders into `projects`, which now also
-// hold message templates and AI agents. These routes are the automations-only
-// view of that table and are kept at their old paths + old response keys
-// (`folder_id`, `automation_count`) so the existing Automations file-manager UI
-// keeps working unchanged. The full cross-entity API lives in routes/projects.js.
-//
-// The SQL below therefore reads `projects` / `project_id` while the JSON still
-// says `folder_id` — the alias is deliberate, not a leftover.
-
-// GET /automation-folders — list projects with a live automation count
-router.get('/automation-folders', async (req, res) => {
-  const { rows } = await pool.query(
-    `SELECT f.id, f.name, f.created_at, f.updated_at,
-            COUNT(c.id)::int AS automation_count
-       FROM coexistence.projects f
-       LEFT JOIN coexistence.chatbots c ON c.project_id = f.id
-      GROUP BY f.id
-      ORDER BY LOWER(f.name) ASC`
-  );
-  res.json(rows);
-});
-
-// POST /automation-folders — create
-router.post('/automation-folders', async (req, res) => {
-  const name = (req.body?.name || '').trim();
-  if (!name) return res.status(400).json({ error: 'Project name is required' });
-  const { rows } = await pool.query(
-    `INSERT INTO coexistence.projects (name) VALUES ($1) RETURNING *`,
-    [name]
-  );
-  res.status(201).json({ ...rows[0], automation_count: 0 });
-});
-
-// PUT /automation-folders/:id — rename
-router.put('/automation-folders/:id', async (req, res) => {
-  const name = (req.body?.name || '').trim();
-  if (!name) return res.status(400).json({ error: 'Project name is required' });
-  const { rows } = await pool.query(
-    `UPDATE coexistence.projects
-        SET name = $1, updated_at = NOW()
-      WHERE id = $2
-      RETURNING *`,
-    [name, req.params.id]
-  );
-  if (rows.length === 0) return res.status(404).json({ error: 'Project not found' });
-  res.json(rows[0]);
-});
-
-// DELETE /automation-folders/:id — blocked while the project still holds
-// anything. Counts templates and agents too, not just automations: this route
-// deletes the whole project row, so checking only automations would let a
-// delete through and then fail on the templates FK with a raw 500.
-router.delete('/automation-folders/:id', async (req, res) => {
-  const { rows: cnt } = await pool.query(
-    `SELECT (SELECT COUNT(*)::int FROM coexistence.chatbots          WHERE project_id = $1) AS automations,
-            (SELECT COUNT(*)::int FROM coexistence.message_templates WHERE project_id = $1) AS templates,
-            (SELECT COUNT(*)::int FROM coexistence.agents            WHERE project_id = $1) AS agents`,
-    [req.params.id]
-  );
-  const c = cnt[0];
-  const parts = [];
-  if (c.automations) parts.push(`${c.automations} automation${c.automations === 1 ? '' : 's'}`);
-  if (c.templates) parts.push(`${c.templates} template${c.templates === 1 ? '' : 's'}`);
-  if (c.agents) parts.push(`${c.agents} AI agent${c.agents === 1 ? '' : 's'}`);
-  if (parts.length) {
-    return res.status(409).json({
-      error: `This project still holds ${parts.join(', ')}. Move or delete them before deleting the project.`,
-    });
-  }
-  const { rowCount } = await pool.query(
-    'DELETE FROM coexistence.projects WHERE id = $1', [req.params.id]
-  );
-  if (rowCount === 0) return res.status(404).json({ error: 'Project not found' });
-  res.json({ ok: true });
-});
-
 // GET /automation-lead-fields — the lead fields a "Set Lead Field" action may
 // write, with their live labels, types and dropdown options.
 //
@@ -97,10 +20,19 @@ router.get('/automation-lead-fields', async (req, res) => {
   }
 });
 
+// GET /automation-landing-sources — the landing pages a keyword trigger can be
+// restricted to. Served from services/landingLeads.js LANDING_SOURCES — the same
+// list the engine resolves `landingSource` against — so the builder cannot offer
+// a page the engine does not know. `configured:false` means the server has no
+// export URL/token for it, so a flow gated on it would never fire.
+router.get('/automation-landing-sources', (req, res) => {
+  res.json({ sources: require('../services/landingLeads').listLandingSources() });
+});
+
 // GET /chatbots — list all
 router.get('/chatbots', async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT id, name, description, status, trigger_type, config, project_id AS folder_id, created_at, updated_at
+    `SELECT id, name, description, status, trigger_type, config, created_at, updated_at
      FROM coexistence.chatbots
      ORDER BY updated_at DESC`
   );
@@ -110,7 +42,7 @@ router.get('/chatbots', async (req, res) => {
 // GET /chatbots/:id — single chatbot
 router.get('/chatbots/:id', async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT id, name, description, status, trigger_type, config, project_id AS folder_id, created_at, updated_at
+    `SELECT id, name, description, status, trigger_type, config, created_at, updated_at
      FROM coexistence.chatbots WHERE id = $1`,
     [req.params.id]
   );
@@ -118,24 +50,19 @@ router.get('/chatbots/:id', async (req, res) => {
   res.json(rows[0]);
 });
 
-// POST /chatbots — create. Optional folder_id places it inside a folder.
+// POST /chatbots — create.
 router.post('/chatbots', async (req, res) => {
-  const { name, description, status, trigger_type, config, folder_id } = req.body;
+  const { name, description, status, trigger_type, config } = req.body;
   if (!name || !name.trim()) {
     return res.status(400).json({ error: 'Name is required' });
   }
-  try {
-    const { rows } = await pool.query(
-      `INSERT INTO coexistence.chatbots (name, description, status, trigger_type, config, project_id)
-       VALUES ($1,$2,$3,$4,$5,$6)
-       RETURNING *, project_id AS folder_id`,
-      [name.trim(), description || null, status || 'draft', trigger_type || 'keyword', JSON.stringify(config || {}), folder_id || null]
-    );
-    res.status(201).json(rows[0]);
-  } catch (err) {
-    if (err.code === '23503') return res.status(400).json({ error: 'That project no longer exists' });
-    throw err;
-  }
+  const { rows } = await pool.query(
+    `INSERT INTO coexistence.chatbots (name, description, status, trigger_type, config)
+     VALUES ($1,$2,$3,$4,$5)
+     RETURNING *`,
+    [name.trim(), description || null, status || 'draft', trigger_type || 'keyword', JSON.stringify(config || {})]
+  );
+  res.status(201).json(rows[0]);
 });
 
 /**
@@ -158,7 +85,7 @@ router.post('/chatbots/validate', async (req, res) => {
 });
 
 // PUT /chatbots/:id — update. Only the fields present in the body are touched, so
-// a folder move (`{ folder_id: <id|null> }`) won't clobber name/description/config.
+// a status-only update (`{ status }`) won't clobber name/description/config.
 router.put('/chatbots/:id', async (req, res) => {
   const body = req.body || {};
   if (body.name !== undefined && !String(body.name).trim()) {
@@ -207,49 +134,42 @@ router.put('/chatbots/:id', async (req, res) => {
   if (body.status !== undefined)       { sets.push(`status = $${i++}`);       params.push(body.status); }
   if (body.trigger_type !== undefined) { sets.push(`trigger_type = $${i++}`); params.push(body.trigger_type); }
   if (body.config !== undefined)       { sets.push(`config = $${i++}`);       params.push(JSON.stringify(body.config)); }
-  if (body.folder_id !== undefined)    { sets.push(`project_id = $${i++}`);    params.push(body.folder_id === null ? null : body.folder_id); }
 
   if (sets.length === 0) {
-    const { rows } = await pool.query('SELECT *, project_id AS folder_id FROM coexistence.chatbots WHERE id = $1', [req.params.id]);
+    const { rows } = await pool.query('SELECT * FROM coexistence.chatbots WHERE id = $1', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'Chatbot not found' });
     return res.json(rows[0]);
   }
 
   sets.push('updated_at = NOW()');
   params.push(req.params.id);
-  try {
-    const { rows } = await pool.query(
-      `UPDATE coexistence.chatbots SET ${sets.join(', ')} WHERE id = $${i} RETURNING *, project_id AS folder_id`,
-      params
-    );
-    if (rows.length === 0) return res.status(404).json({ error: 'Chatbot not found' });
-    res.json(rows[0]);
-  } catch (err) {
-    if (err.code === '23503') return res.status(400).json({ error: 'That project no longer exists' });
-    throw err;
-  }
+  const { rows } = await pool.query(
+    `UPDATE coexistence.chatbots SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
+    params
+  );
+  if (rows.length === 0) return res.status(404).json({ error: 'Chatbot not found' });
+  res.json(rows[0]);
 });
 
 // POST /chatbots/:id/duplicate — clone an automation. The copy is always
 // created DISABLED ('inactive') so it can't fire until reviewed/enabled.
 router.post('/chatbots/:id/duplicate', async (req, res) => {
   const { rows: src } = await pool.query(
-    'SELECT name, description, trigger_type, config, project_id AS folder_id FROM coexistence.chatbots WHERE id = $1',
+    'SELECT name, description, trigger_type, config FROM coexistence.chatbots WHERE id = $1',
     [req.params.id]
   );
   if (src.length === 0) return res.status(404).json({ error: 'Chatbot not found' });
   const c = src[0];
-  // The copy lands in the same folder as the original.
   const { rows } = await pool.query(
-    `INSERT INTO coexistence.chatbots (name, description, status, trigger_type, config, project_id)
-     VALUES ($1,$2,'inactive',$3,$4,$5)
-     RETURNING id, name, description, status, trigger_type, config, project_id AS folder_id, created_at, updated_at`,
-    [`${c.name} (copy)`, c.description, c.trigger_type, JSON.stringify(c.config || {}), c.folder_id]
+    `INSERT INTO coexistence.chatbots (name, description, status, trigger_type, config)
+     VALUES ($1,$2,'inactive',$3,$4)
+     RETURNING id, name, description, status, trigger_type, config, created_at, updated_at`,
+    [`${c.name} (copy)`, c.description, c.trigger_type, JSON.stringify(c.config || {})]
   );
   res.status(201).json(rows[0]);
 });
 
-// GET /chatbots/:id/export — portable automation file (id/folder/timestamps stripped).
+// GET /chatbots/:id/export — portable automation file (id/timestamps stripped).
 router.get('/chatbots/:id/export', async (req, res) => {
   const { rows } = await pool.query(
     'SELECT name, description, trigger_type, config FROM coexistence.chatbots WHERE id = $1',
@@ -270,7 +190,7 @@ router.get('/chatbots/:id/export', async (req, res) => {
 });
 
 // POST /chatbots/import — create a new automation from an export file. Always
-// lands DISABLED ('inactive') at the root (no folder) so it can't fire until
+// lands DISABLED ('inactive') so it can't fire until
 // reviewed/enabled. References inside the flow (templates, models, numbers) are
 // kept as-is; the user fixes any that don't resolve in the builder.
 router.post('/chatbots/import', async (req, res) => {
@@ -280,9 +200,9 @@ router.post('/chatbots/import', async (req, res) => {
   }
   const a = payload.automation;
   const { rows } = await pool.query(
-    `INSERT INTO coexistence.chatbots (name, description, status, trigger_type, config, project_id)
-     VALUES ($1,$2,'inactive',$3,$4,NULL)
-     RETURNING id, name, description, status, trigger_type, config, project_id AS folder_id, created_at, updated_at`,
+    `INSERT INTO coexistence.chatbots (name, description, status, trigger_type, config)
+     VALUES ($1,$2,'inactive',$3,$4)
+     RETURNING id, name, description, status, trigger_type, config, created_at, updated_at`,
     [`${String(a.name).trim()} (imported)`.slice(0, 200), a.description || null, a.trigger_type || 'keyword', JSON.stringify(a.config || {})]
   );
   res.status(201).json(rows[0]);

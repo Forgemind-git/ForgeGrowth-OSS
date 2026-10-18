@@ -234,7 +234,12 @@ adminRouter.get('/mcp/install', adminOnly, (req, res) => {
   // not by two pieces of code happening to agree.
   const base = publicOrigin(req);
   const apiUrl = `${base}/api/mcp/v1`;
-  const remoteUrl = `${base}/api/mcp/http/<YOUR_KEY>`;
+  // Two DISTINCT urls, deliberately not one string the UI has to pull apart.
+  // The panel used to receive only the legacy one and strip the key segment off
+  // with a regex to render the OAuth url — so the legacy form was the value
+  // actually in hand, and it leaked into the places that meant to show OAuth.
+  const oauthUrl = mcpUrl(req);
+  const legacyUrl = `${base}/api/mcp/http/<YOUR_KEY>`;
   // Shown, never executed — it is the `args` entry of a config snippet the admin
   // copies into their own MCP client. The default is a placeholder rather than a
   // real path: whatever is hardcoded here is wrong for every install but the one
@@ -244,10 +249,14 @@ adminRouter.get('/mcp/install', adminOnly, (req, res) => {
     // The OAuth connector URL — the one the plugin ships and the one the admin
     // pastes into Claude. Served rather than rebuilt in the browser so the page
     // cannot show an address the server would not have written.
-    mcpUrl: mcpUrl(req),
-    // Remote (hosted) connector — paste this URL (with a real key) into Claude's
-    // "Add custom connector" dialog or any MCP client. No local files needed.
-    remoteUrl,
+    mcpUrl: oauthUrl,
+    oauthUrl,
+    // Deprecated key-in-URL scheme. Still served so existing connectors keep
+    // working, but it is not what anyone should be setting up now.
+    legacyUrl,
+    // Deprecated alias for legacyUrl, kept so a stale cached bundle still
+    // renders something rather than "undefined".
+    remoteUrl: legacyUrl,
     // Local (stdio) connector — for the node server run from a config file.
     apiUrl,
     serverPath,
@@ -399,6 +408,60 @@ apiRouter.get('/webinars-list', requireTool('list_webinars'), (req, res) =>
 /* --------- courses + payments dedicated tools --------- */
 // Named *-list / *-summary so they can't collide with the real /courses and
 // /payments app routes reachable through the generic proxy.
+// Chat Analyzer. Suffixed (`chat-analysis-*`) so these can never collide with
+// the real /chat-analysis paths that forgechat_request forwards — same
+// convention as /courses-list.
+apiRouter.get('/chat-analysis-list', requireTool('list_analysed_chats'), (req, res) =>
+  discovery(res, () => mcpService.listAnalysedChats(req.query || {}), 'Failed to list conversations'));
+
+apiRouter.get('/chat-analysis-get', requireTool('get_chat_analysis'), (req, res) =>
+  discovery(res, () => mcpService.getChatAnalysis(req.query || {}), 'Failed to read that analysis'));
+
+apiRouter.get('/chat-analysis-transcript', requireTool('get_chat_transcript'), (req, res) =>
+  discovery(res, () => mcpService.getChatTranscript(req.query || {}), 'Failed to read that transcript'));
+
+const mcpWrite = (fn, fallback) => async (req, res) => {
+  try { res.json(await fn(req)); }
+  catch (err) { res.status(err.status || 500).json({ error: err.message || fallback }); }
+};
+apiRouter.get('/follow-ups-list', requireTool('list_follow_ups'), (req, res) =>
+  discovery(res, () => mcpService.listFollowUpsMcp(req.query || {}), 'Failed to read the follow-up calendar'));
+apiRouter.post('/follow-ups-set', requireTool('set_follow_up'), mcpWrite((req) => mcpService.setFollowUpMcp(req.body || {}), 'Could not set that follow-up'));
+apiRouter.post('/follow-ups-update', requireTool('update_follow_up'), mcpWrite((req) => mcpService.updateFollowUpMcp(req.body || {}), 'Could not update that follow-up'));
+apiRouter.post('/follow-ups-suggest', requireTool('suggest_follow_up_date'), mcpWrite((req) => mcpService.suggestFollowUpMcp(req.body || {}), 'Could not suggest a date'));
+
+// Tools declared as data (services/mcpRouteTools.js). One endpoint serves them
+// all for the stdio transport; the gate is the SAME per-tool category check.
+apiRouter.post('/route-tools/:name', (req, res, next) => requireTool(req.params.name)(req, res, next), async (req, res) => {
+  const { isRouteTool, runRouteTool } = require('../services/mcpRouteToolRunner');
+  if (!isRouteTool(req.params.name)) return res.status(404).json({ error: `Unknown tool '${req.params.name}'.` });
+  try { res.json(await runRouteTool(req.params.name, req.body || {})); }
+  catch (err) { res.status(err.status || 500).json({ error: err.message || 'Tool failed' }); }
+});
+
+apiRouter.post('/ad-conversions', requireTool('get_ad_conversions'), async (req, res) => {
+  try { const b = req.body || {}; res.json(await require('../services/adConversions').getAdConversions({ from: b.from, to: b.to, adIds: b.adIds })); }
+  catch (err) { res.status(err.status || 500).json({ error: err.message || 'Could not read ad conversions' }); }
+});
+
+apiRouter.post('/chat-analysis-transcribe', requireTool('transcribe_chat'), async (req, res) => {
+  try { res.json(await mcpService.transcribeChat(req.body || {})); }
+  catch (err) { res.status(err.status || 500).json({ error: err.message || 'Could not transcribe those voice notes' }); }
+});
+
+apiRouter.post('/chat-analysis-images', requireTool('get_chat_image'), async (req, res) => {
+  try { res.json(await mcpService.getChatImages(req.body || {})); }
+  catch (err) { res.status(err.status || 500).json({ error: err.message || 'Could not read those images' }); }
+});
+
+apiRouter.get('/chat-analysis-costs', requireTool('get_chat_analysis_costs'), (req, res) =>
+  discovery(res, () => mcpService.getChatAnalysisCosts(req.query || {}), 'Failed to load analysis costs'));
+
+apiRouter.post('/chat-analysis-run', requireTool('analyze_chat'), async (req, res) => {
+  try { res.json(await mcpService.analyzeChat(req.body || {})); }
+  catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to analyse that conversation' }); }
+});
+
 apiRouter.get('/courses-list', requireTool('list_products'), (req, res) =>
   discovery(res, () => mcpService.listCourses(), 'Failed to list courses'));
 apiRouter.get('/courses-revenue', requireTool('get_product_revenue'), (req, res) =>
@@ -427,7 +490,7 @@ apiRouter.post('/bulk-message', requireTool('send_bulk_message'), async (req, re
   catch (err) { res.status(err.status || 500).json({ error: err.message || 'Bulk send failed' }); }
 });
 
-/* --------- config: media / templates / automations / wa-links / lead forms ---
+/* --------- config: media / templates / automations / wa-links -----------------
    Suffixed (*-create / *-list / *-submit) so they never collide with the real
    app paths the generic proxy forwards. --------- */
 apiRouter.post('/media-upload', requireTool('upload_media'), async (req, res) => {
@@ -450,25 +513,44 @@ apiRouter.post('/automations-create', requireTool('create_automation'), async (r
   try { res.status(201).json(await mcpService.createAutomation(req.body || {})); }
   catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to create automation' }); }
 });
+// The generated create_automation documentation, served so the stdio server can
+// FETCH it instead of shipping a copy. The two transports drifting is exactly
+// how the handle vocabulary went stale, and a second npm package cannot import
+// the backend's modules — so it reads them over the wire at boot instead.
+//
+// Ungated on purpose: it is a description of the tool schema, not workspace
+// data. Reaching it already requires a valid API key.
+apiRouter.get('/automation-schema', (req, res) => {
+  const { automationToolDescription, AUTHORABLE_TYPES, TRIGGER_KINDS, DIRECT_TYPES, describeHandles } =
+    require('../services/flowAuthoring');
+  res.json({
+    description: automationToolDescription(),
+    nodeTypes: AUTHORABLE_TYPES,
+    triggerKinds: TRIGGER_KINDS,
+    directTypes: DIRECT_TYPES,
+    handles: describeHandles(),
+  });
+});
+apiRouter.get('/automations-list', requireTool('list_automations'), (req, res) =>
+  discovery(res, () => mcpService.listAutomations({ id: req.query.id }), 'Failed to list automations'));
+// POST rather than GET despite being read-only: the flow graph is the payload
+// and it does not fit in a query string.
+apiRouter.post('/automations-validate', requireTool('validate_automation'), async (req, res) => {
+  try { res.json(await mcpService.validateAutomation(req.body || {})); }
+  catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to check the flow' }); }
+});
+apiRouter.post('/automations-update', requireTool('update_automation'), async (req, res) => {
+  try { res.json(await mcpService.updateAutomation(req.body || {})); }
+  catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to update automation' }); }
+});
+apiRouter.get('/automations-runs', requireTool('get_automation_runs'), (req, res) =>
+  discovery(res, () => mcpService.getAutomationRuns({
+    automationId: req.query.automationId, executionId: req.query.executionId,
+    status: req.query.status, limit: req.query.limit,
+  }), 'Failed to read the runs'));
 apiRouter.post('/wa-links-create', requireTool('create_wa_link'), async (req, res) => {
   try { res.status(201).json(await mcpService.createWaLink(req.body || {})); }
   catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to create link' }); }
-});
-apiRouter.post('/lead-forms-create', requireTool('create_lead_form'), async (req, res) => {
-  try { res.status(201).json(await mcpService.createLeadForm(req.body || {})); }
-  catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to create lead form' }); }
-});
-apiRouter.get('/lead-forms-list', requireTool('list_lead_forms'), (req, res) =>
-  discovery(res, () => mcpService.listLeadForms(), 'Failed to list lead forms'));
-apiRouter.get('/lead-forms-submissions', requireTool('list_form_submissions'), (req, res) =>
-  discovery(res, () => mcpService.listFormSubmissions({ formId: req.query.formId, page: req.query.page, pageSize: req.query.pageSize }), 'Failed to load submissions'));
-// Suffixed so they can never collide with the real /projects paths the generic
-// proxy forwards — same convention as /courses-list and /lead-forms-list above.
-apiRouter.get('/projects-list', requireTool('list_projects'), (req, res) =>
-  discovery(res, () => mcpService.listProjects({ projectId: req.query.projectId }), 'Failed to list projects'));
-apiRouter.post('/projects-assign', requireTool('move_to_project'), async (req, res) => {
-  try { res.json(await mcpService.moveToProject(req.body || {})); }
-  catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to move the items' }); }
 });
 
 /* --------- mutations --------- */

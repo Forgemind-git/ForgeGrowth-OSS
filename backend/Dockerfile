@@ -20,8 +20,10 @@ RUN apk add --no-cache ffmpeg
 
 WORKDIR /app
 
-COPY backend/package.json ./
-RUN npm install --omit=dev
+# From the lock file, for the same reason as frontend/Dockerfile: the image must
+# be what CI tested, not whatever the registry resolves on the day it is built.
+COPY backend/package.json backend/package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
 
 COPY backend/src/ ./src/
 COPY backend/scripts/ ./scripts/

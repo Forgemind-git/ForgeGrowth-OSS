@@ -4,10 +4,10 @@ description: >-
   Turn a marketing/sales "game plan" into a configured Forge Growth funnel over the
   Forge Growth MCP connector. Use whenever the user wants to set up, launch, or run
   anything in Forge Growth / their WhatsApp AI Academy funnel — posters, WhatsApp
-  message templates (incl. getting Meta approval), automations / chatbot flows, lead
-  forms, bulk broadcasts, click-to-chat links, AI agents, or sending/replying to
+  message templates (incl. getting Meta approval), automations / chatbot flows,
+  bulk broadcasts, click-to-chat links, AI agents, or sending/replying to
   WhatsApp messages. Also triggers on "configure my funnel", "send this poster",
-  "message these leads", "build an automation", "create a lead form", "launch this
+  "message these leads", "build an automation", "launch this
   campaign".
 ---
 
@@ -73,14 +73,14 @@ user sees it before saying yes. Keep them theme-aware and self-contained.
   header (text or the poster image via a data: URI), body with `{{1}}` filled by the
   sample values, footer, and buttons as WhatsApp renders them. Show the template name +
   category above it.
-- **Automation flow preview** — a top-to-bottom node diagram (trigger → message →
+- **Automation flow preview** — a left-to-right node diagram (trigger → message →
   condition(yes/no) → …) matching the `config` you are about to send to
-  `create_automation`, so the user can eyeball the branch logic.
+  `create_automation`, so the user can eyeball the branch logic. Label every connector
+  with the branch it leaves from ("Yes", "No", each button, "No reply in 24h") — an
+  unlabelled arrow is exactly where a wrong branch hides.
 - **Bulk / broadcast preview** — a table of the audience (name + masked number + the
   per-row variables) with a count, plus the rendered message, so they approve *who* and
   *what* before it sends.
-- **Lead form preview** — the form's fields as they'll appear, plus the public
-  `/f/<slug>` link once created.
 
 These previews are the "widgets" — they replace clicking around the Forge Growth UI.
 
@@ -108,21 +108,19 @@ These previews are the "widgets" — they replace clicking around the Forge Grow
 ### Build an automation from a described chat flow
 1. Have the user describe the flow ("when someone messages 'COURSE', reply with the
    brochure, ask their name, wait, then send the fee link"). Map it to nodes + edges
-   (trigger → message(waitForReply) → ai_agent/condition → message…). **Preview the flow
+   (trigger → message with `waitForReply` → condition → message…). **Preview the flow
    diagram.**
-2. On yes: `create_automation` with the `config`. It lands **inactive** on purpose.
-3. Tell the user to review it in the Automations builder, then activate via
-   `forgechat_request` `PUT /chatbots/:id { "status":"active" }` (or in the UI).
-
-### Lead form → collect → share
-1. Design the fields with the user (`create_lead_form` field shape: `{key,label,type,
-   required,mapsTo,options,placeholder}`; `mapsTo` maps an answer onto a real lead column
-   like phone/name/email). Preview the form.
-2. `create_lead_form` with `publish:true` → returns the public `/f/<slug>` link. Every
-   submission upserts a CRM lead by phone.
-3. Share it: put the `/f/<slug>` URL in a template's URL button, or `create_wa_link`, or
-   hand the user the link.
-4. Read what comes in with `list_form_submissions`.
+2. **Run `validate_automation` on the graph before creating it.** Two mistakes are
+   invisible otherwise — an edge naming an output the step does not have, and a step
+   that offers choices without waiting for the reply. Both produce a flow that saves
+   cleanly and then silently does nothing. Load **forge-growth-automations** for the
+   exact handle names; do not guess them.
+3. On yes: `create_automation`. It lands as a **draft**, always — it runs the same
+   check and refuses a flow that would be broken at runtime.
+4. Have the user review it in the builder, then activate with
+   `update_automation { id, active: true }`, which runs the activation check.
+5. If they later say it "did not work", read `get_automation_runs` before theorising —
+   it records every step with its output and usually names the reason outright.
 
 ### One-off send / reply / link
 - Reply in an open conversation: `list_conversations` (check `window.open`) →
@@ -132,7 +130,10 @@ These previews are the "widgets" — they replace clicking around the Forge Grow
 
 ### Build an AI agent
 Follow the built-in `create-forgechat-agent` guide (ask purpose → number → model →
-trigger → tools → media groups, confirm, then `create_agent` + `add_*_tool`).
+trigger → **usage limits** → tools → media groups, confirm, then `create_agent` +
+`add_*_tool`). Every limit defaults to unlimited, so an agent created without one will
+answer a single person forever — ask, do not assume. Offer `testNumbers` so they can try
+it while it is still a draft. See **forge-growth-agents**.
 
 ## Ordering & dependencies (get these right)
 
@@ -140,16 +141,15 @@ trigger → tools → media groups, confirm, then `create_agent` + `add_*_tool`)
   sync_template → send**. You cannot send a template before it is APPROVED.
 - A template can only be sent from the WhatsApp number (WABA) it was approved on. Use the
   same `whatsappAccountId` throughout.
-- Lead-form link in a template: publish the form first (get its slug), then reference
-  `/f/<slug>` in the template's URL button.
-- Automations land inactive — activation is a separate, deliberate step.
+- Automations land as a draft, always — activation is a separate, checked step
+  (`update_automation { id, active: true }`). Validate the graph BEFORE creating it.
 
 ## When something is blocked
 
 - **"The '<name>' tool category is switched off"** → that category is off in Admin Settings
   → MCP Tools. The error names the category exactly as it appears on that screen, so relay
   it verbatim — e.g. *Template Builder*, *Media Library*, *Send Messages*, *Broadcasts*,
-  *Automations*, *Lead Forms*, *Leads & Funnel*. You cannot enable it yourself, by design.
+  *Automations*, *Leads & Funnel*. You cannot enable it yourself, by design.
 - **OUTSIDE_WINDOW** → the customer hasn't messaged in 24h; use `send_template`.
 - **Meta rejection** (template REJECTED) → relay the reason, suggest a fix, re-create +
   re-submit.
@@ -165,14 +165,13 @@ that works and one that silently reports the wrong thing:
 | Task | Skill |
 |---|---|
 | Funnel stages, labels, order, lead sources | **forge-growth-funnel** |
-| Timed chase sequences, steps, enrollment | **forge-growth-followups** |
 | Drafting templates, Meta approval, rejections | **forge-growth-templates** |
-| Sending, replying, files, broadcasts, the 24h window | **forge-growth-messaging** |
-| Automation flows — triggers, branches, waits | **forge-growth-automations** |
-| AI agents and their Sheets / HTTP tools | **forge-growth-agents** |
+| Sending, replying, files, broadcasts, scheduled + repeating sends, the 24h window | **forge-growth-messaging** |
+| Automation flows — triggers, branches, waits, why one did not fire | **forge-growth-automations** |
+| AI agents — models, triggers, usage limits, test numbers, tools | **forge-growth-agents** |
 | Ad spend, click-to-WhatsApp attribution, conversions | **forge-growth-ads** |
 | Revenue, payments, products, message costs | **forge-growth-revenue** |
-| Anything else with no dedicated tool — contacts, team, projects | **forge-growth-api** |
+| Anything else with no dedicated tool — contacts | **forge-growth-api** |
 
 They are separate skills on purpose: pulling in agent and payment detail to answer
 a question about automations wastes context and buries the part that matters. The playbooks

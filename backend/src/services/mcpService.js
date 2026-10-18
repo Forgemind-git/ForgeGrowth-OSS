@@ -35,12 +35,9 @@ const MODEL_CATALOG = {
 const PROVIDER_LABELS = { anthropic: 'Anthropic Claude', openai: 'OpenAI' };
 // Per-area "full access" capabilities for the generic proxy + bulk tool.
 // Each maps to a set of internal /api path prefixes (PROXY_AREAS below).
-const AREA_CAPABILITY_KEYS = [
-  'area_contacts', 'area_messaging', 'area_broadcasts', 'area_automations',
-  'area_admin', 'area_insights',
-  'area_leads', 'area_marketing', 'area_resources',
-  'area_courses', 'area_payments', 'area_leadforms',
-];
+// Derived from the catalog's API_AREAS (the list the Settings screen renders), so
+// a switch can never exist in the UI without a key here, or the reverse.
+const AREA_CAPABILITY_KEYS = mcpCatalog.API_AREAS.map(a => a.key);
 const CAPABILITY_KEYS = [
   'discovery', 'create_agent', 'update_agent', 'manage_tools', 'delete',
   'read_messages', 'send_messages', ...AREA_CAPABILITY_KEYS,
@@ -51,31 +48,54 @@ const CAPABILITY_KEYS = [
 // matches no area (or /mcp, /auth — blocked separately) is denied: default-deny.
 const PROXY_AREAS = [
   { cap: 'area_contacts',   label: 'Contacts & tags',     test: /^\/(contacts|saved-contacts|contact|contact-names|categories|tags|team-members|numbers)(\/|$|\?)/ },
-  { cap: 'area_messaging',  label: 'Messages',            test: /^\/messages(\/|$|\?)/ },
+  // Conversation content. ⚠ This area carries SEND (`POST /messages/send`), so
+  // the read-only surfaces grouped with it below inherit a heavier grant than
+  // they need. Accepted deliberately rather than unnoticed: they are message
+  // content and belong nowhere else, and giving each read-only feature its own
+  // switch is how the capability list became unreadable the first time.
+  //
+  //   /agent-conversation — pause an AI agent on one chat, or hand it back. It
+  //                        reaches nobody and changes no configuration; it
+  //                        decides whether a bot or a person answers next.
+  //
+  // Both were absent entirely, and PROXY_AREAS is default-deny, so both were
+  // unreachable over MCP.
+  { cap: 'area_messaging',  label: 'Messages & conversations', test: /^\/(messages|agent-conversation)(\/|$|\?)/ },
   // PROXY_AREAS is default-deny, so a renamed path must be listed explicitly or
   // it is refused: /message-formats is the canonical name for what /wa-links
   // was, and both are kept.
-  // /projects only sets an organisational pointer (project_id). Its assign
-  // endpoint can touch agents.project_id — and, since migration 100,
-  // lead_forms.project_id too — which is why it sits here rather than needing
-  // an agent or lead-form capability: that column has no runtime effect
-  // whatsoever and cannot create, configure, publish or activate anything.
-  // The named list_projects / move_to_project tools are gated by the `projects`
-  // CATEGORY, which is seeded from this same area so neither route is a way
-  // past the other.
-  { cap: 'area_broadcasts', label: 'Broadcasts & content', test: /^\/(broadcasts|templates|media-library|media|wa-links|message-formats|projects|projects-items)(\/|$|\?)/ },
-  { cap: 'area_automations', label: 'Automations',        test: /^\/(chatbots|automation-folders|automations|executions)(\/|$|\?)/ },
+  // /broadcast-series = a REPEATING broadcast (migration 105). It shipped with
+  // no entry here at all, and PROXY_AREAS is default-deny, so the whole feature
+  // was unreachable over MCP — the rule this file states ("a new route file
+  // needs a PROXY_AREAS entry or MCP clients cannot reach it") going unapplied
+  // to the route that most needed it. It belongs beside /broadcasts: a series
+  // creates real broadcasts on a timer, which is the same reach at the same
+  // tier, and separating them would let one be granted without the other while
+  // reading as the same capability.
+  { cap: 'area_broadcasts', label: 'Broadcasts & content', test: /^\/(broadcasts|broadcast-series|templates|media-library|media|wa-links|message-formats)(\/|$|\?)/ },
+  { cap: 'area_automations', label: 'Automations',        test: /^\/(chatbots|automations|executions)(\/|$|\?)/ },
   // /razorpay/config carries the payment-gateway webhook secret (write) — it is
   // deliberately resolved to the SENSITIVE admin area, not area_payments, so
   // enabling the payment ledger never hands over the gateway credentials. This
   // entry must stay ABOVE area_payments: resolveArea() is first-match-wins.
+  // /capi/* sends real conversion events into the Meta ad account, which moves
+  // ad spend — same sensitivity tier as gateway credentials, so it lives in the
+  // admin area rather than area_marketing. Read-only CTWA analytics (/ctwa) stay
+  // in area_marketing below.
   // /payment-requests CREATES Razorpay payment links a customer can really pay.
   // The gate is path-prefix only and cannot split reads from writes, so the
   // whole path sits at the highest tier rather than letting the ledger
   // capability (area_payments) also mint live links. Note this is
   // `payment-requests`, distinct from `payment-links` under area_courses — that
   // one is the local price registry, which charges nobody.
-  { cap: 'area_admin',      label: 'Admin (users, WA accounts, integrations)', test: /^\/(users|whatsapp-accounts|integrations|ai-models|razorpay\/config|payment-requests)(\/|$|\?)/ },
+  // /marketing/clo/* is Conversion Leads Optimisation — it POSTs conversion
+  // events into the Meta ad account (`/flush`, `/backfill`), which moves ad
+  // spend. That is the same action /capi performs and the same reason /capi
+  // sits here rather than in area_marketing; CLO was only ever in the marketing
+  // area because its path happens to start with /marketing. This entry must
+  // stay ABOVE area_marketing — resolveArea() is first-match-wins.
+  // Read-only CTWA analytics stay in area_marketing.
+  { cap: 'area_admin',      label: 'Admin (users, WA accounts, integrations)', test: /^\/(users|whatsapp-accounts|integrations|ai-models|razorpay\/config|capi|payment-requests|marketing\/clo|workflow-agents)(\/|$|\?)/ },
   // Message costs are REPORTING — they show what Meta charged, and cannot move
   // money or reach a customer. Its mutations only edit fallback rates and
   // trigger a re-read, so it belongs with the other read surfaces rather than
@@ -86,8 +106,11 @@ const PROXY_AREAS = [
   // the route itself, and the proxy calls as admin — hence leads-tier, not
   // admin-tier: changing field labels/visibility moves no money and leaks no
   // credentials).
-  { cap: 'area_leads',      label: 'Leads & funnel',      test: /^\/(leads|lead-sources|funnel|entity-fields)(\/|$|\?)/ },
-  { cap: 'area_leadforms',  label: 'Lead forms',          test: /^\/(lead-forms)(\/|$|\?)/ },
+  { cap: 'area_leads',      label: 'Leads & funnel',      test: /^\/(leads|lead-sources|funnel|entity-fields|follow-ups|my-list)(\/|$|\?)/ },
+  // Reading an analysis is harmless; PRODUCING one bills the AI provider, which
+  // is why the catalog puts these tools in the 'spend' tier. Bulk analysis is
+  // deliberately not reachable from here at all — no route serves it to MCP.
+  { cap: 'area_chat_analysis', label: 'Chat Analyzer', test: /^\/(chat-analysis)(\/|$|\?)/ },
   { cap: 'area_marketing',  label: 'Marketing (campaigns, webinars)', test: /^\/(marketing|campaigns|webinars|webinar-registrations|ctwa)(\/|$|\?)/ },
   { cap: 'area_resources',  label: 'Resources & triggers', test: /^\/(resources|trigger-library|trigger-test)(\/|$|\?)/ },
   // `/products` is the canonical path since the Courses -> Products rename;
@@ -95,6 +118,11 @@ const PROXY_AREAS = [
   // path the proxy does not cover is REFUSED (PROXY_AREAS is default-deny).
   { cap: 'area_courses',    label: 'Products & payment links', test: /^\/(products|courses|payment-links)(\/|$|\?)/ },
   { cap: 'area_payments',   label: 'Payments, sales log & students', test: /^\/(razorpay|sales-log|students)(\/|$|\?)/ },
+  // Social (the ported ForgeSocial sub-app, mounted at /api/social). Its
+  // credential, settings, user and MCP-key surfaces are carved out FIRST so the
+  // broad /social rule below can never reach them — first-match-wins.
+  { cap: 'area_admin',      label: 'Admin (users, WA accounts, integrations)', test: /^\/social\/(credentials|settings|integrations|users|mcp|openrouter|telegram|meta-link|backfill|sync)(\/|$|\?)/ },
+  { cap: 'area_social',     label: 'Social (Instagram, Facebook, Threads, YouTube, LinkedIn)', test: /^\/social(\/|$|\?)/ },
 ];
 
 // Throw a {status,message} error the route handlers map to an HTTP code and the
@@ -195,12 +223,16 @@ async function validateKey(rawKey) {
 
 async function listWaAccounts() {
   const { rows } = await pool.query(
-    `SELECT id, display_name, display_phone_number, is_active, is_default
-       FROM coexistence.whatsapp_accounts ORDER BY is_default DESC, display_name`,
+    `SELECT id, display_name, label, display_phone_number, is_active, is_default
+       FROM coexistence.whatsapp_accounts
+      ORDER BY is_default DESC, COALESCE(NULLIF(btrim(label), ''), display_name)`,
   );
   return rows.map(r => ({
     id: r.id,
-    displayName: r.display_name,
+    // The label (migration 133) is what people call the number in the app.
+    displayName: (r.label && r.label.trim()) || r.display_name,
+    label: (r.label && r.label.trim()) || null,
+    accountName: r.display_name,
     phoneNumber: r.display_phone_number,
     isActive: r.is_active,
     isDefault: r.is_default,
@@ -704,7 +736,7 @@ function resolveArea(path) {
 
 // Call an internal /api route as admin over localhost — the shared primitive
 // behind both the generic proxy AND the dedicated config tools (create_template,
-// create_automation, create_lead_form, …). Reuses the real Express routes so
+// create_automation, create_template, …). Reuses the real Express routes so
 // their validation/RBAC/SSE/queues all still apply; no logic is duplicated.
 // NO capability gating here — the caller (proxyRequest, or a capability-gated
 // dedicated tool) is responsible for authorization.
@@ -802,26 +834,45 @@ const ENDPOINT_CATALOG = {
   area_messaging: [
     'GET /messages?waNumber=&contactNumber= — chat history',
     'POST /messages/send {fromNumber,toNumber,text} — also see send_message tool',
+    'GET /agent-conversation?waNumber=&contactNumber= — is an AI agent paused on this chat, and who paused it',
+    'POST /agent-conversation/pause · /resume {waNumber,contactNumber} — take a chat off the bot for a person, or hand it back',
   ],
   area_broadcasts: [
     'GET /broadcasts · POST /broadcasts {from_number,recipient_numbers,template_id,message_type,variable_mapping}',
     'POST /broadcasts/:id/send — enqueue to saved-contact audience',
     'GET /templates · GET /media-library — content for broadcasts',
     'For an UPLOADED LIST use the send_bulk_message tool (one call).',
-    'GET /projects · GET /projects/:id — campaign folders holding templates, automations, agents and forms (also see the list_projects tool)',
-    'POST /projects/assign {kind:"template"|"automation"|"agent"|"form", ids:[], projectId} — file items into a project, projectId null unfiles (also see the move_to_project tool)',
-    'GET /projects-items/:kind — every item of one kind with the project it is currently in',
+    'POST /broadcasts {..., scheduled_at:"<ISO instant>"} — schedule one send for later; a past time is refused',
+    'GET /broadcast-series · POST /broadcast-series — a REPEATING broadcast. Its audience is a RULE re-resolved on every run, not a frozen list, so it does not re-message the same people. It always starts PAUSED, an end condition is required, and a payment template is refused outright.',
+    'PUT /broadcast-series/:id · PUT /broadcast-series/:id/active {active} — start or pause it · POST /broadcast-series/:id/run — fire one run now',
+    'POST /broadcast-series/preview — who the rule matches right now, without sending',
   ],
   area_automations: [
-    'GET /chatbots · POST /chatbots · GET /chatbots/:id/executions',
+    'Prefer the named tools: list_automations, create_automation, validate_automation, update_automation, get_automation_runs.',
+    'GET /chatbots · GET /chatbots/:id — the full nodes/edges graph',
+    'POST /chatbots/validate {config} — the SAME check the activation gate runs; use it before saving an edited graph',
+    'PUT /chatbots/:id {name,description,config,status} — status:"active" runs the activation check and 409s with blocking[] if the flow would be broken',
+    'GET /chatbots/:id/executions?status=&limit= · GET /executions/:id — what a flow actually did, step by step',
   ],
   area_admin: [
     'GET /users · POST /users (admin) — SENSITIVE',
     'GET /whatsapp-accounts · GET /ai-models · GET /integrations — SENSITIVE',
+    'GET /capi/config — Conversions API state: datasets, stage→event mappings, master switch, counters',
+    'PUT /capi/config {enabled,mode,testEventCode,maxClickAgeDays} — SENSITIVE: enabling in live mode starts influencing Meta ad delivery',
+    'POST/PUT/DELETE /capi/mappings — funnel stage → Meta standard event',
+    'GET /capi/events?status=&days=&search= — transmission history · POST /capi/events/:id/resend',
+    'POST /capi/send {leadId} · POST /capi/backfill {limit} · POST /capi/test — SENSITIVE: these send real conversions',
     'GET /payment-requests?status=&q=&leadId= — Razorpay links raised from ForgeGrowth · GET /payment-requests/summary · GET /payment-requests/:id (link + payments received)',
     'POST /payment-requests {leadId,customerName,customerPhone,customerEmail,courseId,purpose,kind,amount,minAmount,description} — SENSITIVE: creates a REAL Razorpay payment link a customer can pay. kind is "fixed" | "partial" (needs minAmount) | "open". Amounts are in RUPEES.',
     'POST /payment-requests/:id/refresh — re-read status from Razorpay · POST /payment-requests/:id/cancel — stop a link being paid',
     'These sit in the admin area, NOT area_payments: the gate is path-based and cannot separate reading the list from minting a live link.',
+    'GET /workflow-agents — workflow agents (scheduled/event-driven Claude agents that read leads, chats, sales and ads and propose actions)',
+    'GET /workflow-agents/:id · GET /workflow-agents/:id/runs · GET /workflow-agents/runs/:rid · GET /workflow-agents/runs/:rid/steps — config, run history, full trace',
+    'POST /workflow-agents/:id/run {dry_run,pretend_date,config_override} — SENSITIVE: a live run spends Claude credits and files approval requests',
+    'GET /workflow-agents/actions?status=pending · POST /workflow-agents/actions/:aid/approve · /reject — SENSITIVE: approving EXECUTES the action (tags, stage moves, WhatsApp sends)',
+    'Workflow Agents sit in the admin area: runs spend money and approvals change customer-facing state.',
+    'GET /marketing/clo/settings · /readiness · /events · /stage-stats — Conversion Leads Optimisation (Lead Ads only)',
+    'POST /marketing/clo/flush · /backfill — SENSITIVE: these send real conversion events to Meta, which is why CLO sits here and not in area_marketing',
   ],
   area_insights: [
     'GET /dashboard?range=30d · GET /webhook-history',
@@ -837,28 +888,30 @@ const ENDPOINT_CATALOG = {
     'GET /leads/:id/timeline · GET /lead-sources',
     'GET /funnel/config — configured stages (ordered) + sources · GET /funnel/chart?source=&from=&to= — per-stage counts',
     'POST/PUT/DELETE /funnel/stages · PUT /funnel/stages/reorder · POST/PUT/DELETE /funnel/sources — funnel config (admin)',
+    'GET /follow-ups?from=&to=&status=open|done|cancelled|any — the follow-up calendar (also see list_follow_ups) · POST /follow-ups {waNumber,contactNumber,dueDate,dueTime,note} · PATCH/DELETE /follow-ups/:id · POST /follow-ups/google/sync — mirror to Google Calendar',
     'GET /entity-fields — the field registry for the Leads table / Sales Log / Transactions (system + custom fields, labels, options, visibility) + the {{sale.*}} variable tokens',
     'POST /entity-fields {entity:"lead"|"transaction",label,fieldType,options,showInLeads,showInSales} — add a custom field · PUT /entity-fields/:id — relabel/options/visibility · PUT /entity-fields/reorder {entity,ids} · DELETE /entity-fields/:id (soft; values kept) · POST /entity-fields/:id/restore',
     'Leads list/export also accept ?cf_<field_key>=value filters on registry fields.',
   ],
-  area_leadforms: [
-    'GET /lead-forms — list forms + submission counts (also see list_lead_forms tool)',
-    'POST /lead-forms {name,description,formType} — create a draft form; formType "link" (plain URL, phone optional) or "whatsapp" (sent via template, phone captured automatically). Also see create_lead_form tool',
-    'GET /lead-forms/:id — full form incl. fields[]',
-    'PUT /lead-forms/:id {fields,status,successMessage,defaultSource,formType,waAccountId,templateId} — set fields + publish (status="published")',
-    'Field types: text, textarea (paragraph), email, phone, number, date, dropdown, radio, checkbox, boolean, rating, section. ' +
-      'rating = a star row: {type:"rating", scale:3|4|5|10 (default 5), feedback:true to show an optional comment box, feedbackLabel:"…"}; its answer is stored as {rating,feedback} and it cannot map to a lead column. ' +
-      'section = a display-only heading between questions: {type:"section", label:"…", description:"…"}; it collects no answer, so it is never required and never mapped.',
-    'POST /lead-forms/:id/template {category:"UTILITY"|"MARKETING",body,footer,buttonText,waAccountId,submit} — build the WhatsApp template carrying this form link (button attached automatically) and optionally submit it to Meta',
-    'GET /lead-forms/:id/templates?accountId= — templates whose URL button points at this form, with approval status',
-    'GET /lead-forms/:id/submissions — collected responses (also see list_form_submissions tool)',
-    'GET /lead-forms/:id/dashboard — completion counts (total / people / with-phone / anonymous / leads), 30-day trend, per-field breakdown, latest responses, and ratingBreakdown per star-rating field (average over RATED responses only, max, per-star counts, comments)',
-    'A form can be filed under a campaign Project: PUT /lead-forms/:id {projectId} or the move_to_project tool with kind:"form". Filing only — it changes nothing about the form, its link or its responses.',
-    'The public form URL is /f/<slug>; use create_wa_link or a template URL button to share it. Logo/banner upload is multipart (UI only).',
+  area_social: [
+    'Prefer the named social_* tools. Paths below are under /social (the Social workspace).',
+    'GET /social/overview · GET /social/insights/... · GET /social/posts — analytics and the content library',
+    'GET /social/ig-automations · GET /social/ig-automations/meta · POST/PUT/DELETE /social/ig-automations/:id — Instagram automation rules',
+    'GET /social/ig-automations/flows · GET /social/ig-automations/flows/:id · POST/PUT/DELETE /social/ig-automations/flows/:id — Instagram flows',
+    'GET /social/agents · GET /social/agents/:id · POST/PUT/DELETE /social/agents/:id · POST /social/agents/:id/tools — Social AI agents',
+    'Credentials, settings, users, integrations and the Social MCP keys are NOT reachable here — they sit in the admin area.',
+  ],
+  area_chat_analysis: [
+    'GET  /chat-analysis                 conversations and what the analyser found',
+    'GET  /chat-analysis/conversation    one conversation: verdict + what has been read, per modality',
+    'GET  /chat-analysis/runs            run history',
+    'GET  /chat-analysis/summary         estimated spend, split by media type',
+    'POST /chat-analysis/run             analyse ONE conversation (costs money)',
   ],
   area_marketing: [
-    'GET /marketing/overview?days=30 — top-of-funnel KPIs + charts',
-    'GET /campaigns · GET /campaigns/:id/ads — returns {ads[], adsets[]}: the flat ad list plus the Campaign → Ad Set → Ad tree, each ad set carrying its own Meta spend/leads/optimisation goal/budget (also see get_campaign_performance tool)',
+    'Date ranges on /marketing/overview, /campaigns, /lead-sources and /ctwa/overview: ?days=N or ?days=all, or ?from=YYYY-MM-DD&to=YYYY-MM-DD (IST calendar days, both inclusive; from/to win over days). A windowed range reads spend from per-day Meta rows — check spendBasis/spendCoverage.partial: spend before the oldest synced day is NOT included.',
+    'GET /marketing/overview?days=30 — top-of-funnel KPIs + charts (kpis.spend is range-aware; kpis.activeSpend is the legacy lifetime figure)',
+    'GET /campaigns — no range = all campaigns with lifetime figures; with a range = Meta campaigns that delivered in it (per-day spend/leads) plus manual campaigns overlapping it (metricsBasis:"stored", excluded from totals) · GET /campaigns/:id/ads — returns {ads[], adsets[]}: the flat ad list plus the Campaign → Ad Set → Ad tree, each ad set carrying its own Meta spend/leads/optimisation goal/budget (also see get_campaign_performance tool)',
     'GET /webinars · GET /webinars/:id/funnel (also see list_webinars tool)',
     'GET /webinar-registrations?webinarId=',
     'GET /ctwa/overview?days=30&platform=&sourceId= — click-to-WhatsApp ad performance: clicks, leads, enrolled, revenue, spend per ad + placement split',
@@ -1058,10 +1111,63 @@ function leadSummaryRow(r) {
   };
 }
 
-async function listLeads({ stage, search, limit, view } = {}) {
+// Which business WhatsApp number a lead actually talked to.
+//
+// `coexistence.leads` has NO account column — a lead is not tied to a number in the
+// data model at all. The link only exists in chat_history, which carries both
+// `wa_number` (ours) and `contact_number` (theirs). So the scope is expressed as
+// "this lead has at least one message on that number".
+//
+// Numbers are compared on their LAST TEN DIGITS, which is this codebase's existing
+// convention and is already indexed (idx_chat_history_key10) — country-code prefixes
+// are written inconsistently across the table, so an exact string match silently
+// misses rows.
+async function resolveWaAccountNumber(ref) {
+  const raw = String(ref ?? '').trim();
+  if (!raw) return null;
+  const digits = raw.replace(/\D/g, '');
+  const { rows } = await pool.query(
+    `SELECT id, display_phone_number,
+            COALESCE(NULLIF(btrim(label), ''), display_name) AS display_name,
+            display_name AS account_name
+       FROM coexistence.whatsapp_accounts`);
+  if (!rows.length) throw svcErr(404, 'No WhatsApp accounts are configured.');
+  const last10 = (v) => String(v || '').replace(/\D/g, '').slice(-10);
+  // id, then exact number, then a unique name match — and REFUSE when a name is
+  // ambiguous rather than silently scoping the answer to the wrong business.
+  let hit = rows.find((r) => String(r.id) === raw);
+  if (!hit && digits.length >= 10) hit = rows.find((r) => last10(r.display_phone_number) === digits.slice(-10));
+  // EXACT name before substring. "Acme Academy" is the exact name of one
+  // account AND a prefix of "Acme Academy - Sales"; without this, the most
+  // natural way to name the main number is rejected as ambiguous.
+  // The shown name (label) first, then the underlying account name.
+  if (!hit) hit = rows.find((r) => String(r.display_name || '').trim().toLowerCase() === raw.toLowerCase());
+  if (!hit) hit = rows.find((r) => String(r.account_name || '').trim().toLowerCase() === raw.toLowerCase());
+  if (!hit) {
+    const named = rows.filter((r) => String(r.display_name || '').toLowerCase().includes(raw.toLowerCase()));
+    if (named.length === 1) [hit] = named;
+    else if (named.length > 1) {
+      throw svcErr(400, `"${raw}" matches ${named.length} numbers: ${named.map((r) => `${r.display_name} (${r.display_phone_number})`).join(', ')}. Name one exactly.`);
+    }
+  }
+  if (!hit) {
+    throw svcErr(404, `No WhatsApp number matches "${raw}". Available: ${rows.map((r) => `${r.display_name} (${r.display_phone_number})`).join(', ')}.`);
+  }
+  return last10(hit.display_phone_number);
+}
+
+async function listLeads({ stage, search, limit, view, waAccount } = {}) {
   const cap = Math.max(1, Math.min(500, parseInt(limit || 50, 10)));
   const params = [];
   const where = [];
+  if (waAccount !== undefined && waAccount !== null && String(waAccount).trim() !== '') {
+    const num = await resolveWaAccountNumber(waAccount);
+    params.push(num);
+    where.push(`EXISTS (SELECT 1 FROM coexistence.chat_history ch
+                         WHERE right(regexp_replace(ch.contact_number, '\\D', '', 'g'), 10)
+                             = right(regexp_replace(l.whatsapp_number, '\\D', '', 'g'), 10)
+                           AND right(regexp_replace(ch.wa_number, '\\D', '', 'g'), 10) = $${params.length})`);
+  }
   if (stage) {
     if (!funnelCfg.isValidStage(stage)) throw svcErr(400, `Invalid stage. Must be one of: ${funnelCfg.stageKeys().join(', ')}`);
     params.push(stage); where.push(`l.stage = $${params.length}`);
@@ -1073,17 +1179,43 @@ async function listLeads({ stage, search, limit, view } = {}) {
     params.push(`%${String(search).trim()}%`);
     where.push(`(l.name ILIKE $${params.length} OR l.whatsapp_number ILIKE $${params.length} OR l.email ILIKE $${params.length})`);
   }
+  // The page is capped, so the caller MUST be told how many actually match — a bare
+  // array of 50 rows out of 405 reads as "we have 50 leads" to anything consuming this,
+  // and nothing in the old response hinted otherwise. Counted with the same WHERE, minus
+  // the LIMIT.
+  const filterParams = params.slice();
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
   params.push(cap);
-  const { rows } = await pool.query(
-    `SELECT l.*, u.display_name AS assigned_user_name
-       FROM coexistence.leads l
-       LEFT JOIN coexistence.forgecrm_users u ON u.id = l.assigned_user_id
-      ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-      ORDER BY l.last_activity_at DESC NULLS LAST, l.id DESC
-      LIMIT $${params.length}`,
-    params,
-  );
-  return { leads: rows.map(leadSummaryRow) };
+  const [{ rows }, countRes, stageRes] = await Promise.all([
+    pool.query(
+      `SELECT l.*, u.display_name AS assigned_user_name
+         FROM coexistence.leads l
+         LEFT JOIN coexistence.forgecrm_users u ON u.id = l.assigned_user_id
+        ${whereSql}
+        ORDER BY l.last_activity_at DESC NULLS LAST, l.id DESC
+        LIMIT $${params.length}`,
+      params,
+    ),
+    pool.query(`SELECT count(*)::int AS total FROM coexistence.leads l ${whereSql}`, filterParams),
+    // Breakdown under the SAME filters, so "how many are hot?" is answerable without
+    // dragging every row across the wire just to count them.
+    pool.query(
+      `SELECT l.stage, count(*)::int AS n FROM coexistence.leads l ${whereSql}
+        GROUP BY l.stage ORDER BY n DESC`,
+      filterParams,
+    ),
+  ]);
+
+  const total = countRes.rows[0]?.total ?? rows.length;
+  const byStage = Object.fromEntries(stageRes.rows.map((r) => [r.stage, r.n]));
+  return {
+    total,                        // how many match the filters, ignoring the page cap
+    returned: rows.length,        // how many are in this response
+    truncated: total > rows.length,
+    byStage,                      // counts per funnel stage under the same filters
+    leads: rows.map(leadSummaryRow),
+  };
 }
 
 // Change a lead's funnel stage — mirrors PUT /leads/:id/move (audit log + SSE).
@@ -1298,7 +1430,7 @@ async function listPayments({ state, courseId, search, limit } = {}) {
 }
 
 /* -------- dedicated config tools (media / templates / automations /
-   wa-links / lead forms) — the "let Claude configure the app" surface.
+   wa-links) — the "let Claude configure the app" surface.
    Each reuses the real Express routes via internalApiCall so validation,
    RBAC and side-effects are never duplicated. Capability gating happens at
    the tool layer (mcpHttp.js gated() / routes/mcp.js requireCap). ---------- */
@@ -1429,21 +1561,221 @@ async function syncTemplate({ templateId } = {}) {
 // Create an automation (flow) from a nodes/edges config (or a full config
 // object). Lands INACTIVE — the caller reviews it in the builder / sets it
 // active via forgechat_request PUT /chatbots/:id.
-async function createAutomation({ name, description, triggerType, status, nodes, edges, config, folderId } = {}) {
+//
+// ⚠ THIS PATH USED TO WRITE THE CONFIG UNCHECKED. `POST /chatbots` runs no
+// validation at all (only ACTIVATION is gated, in PUT), and the tool did no
+// normalisation — so a hand-written flow with no coordinates stacked every card
+// on the origin, and an edge naming a handle that does not exist was saved
+// silently. `flowValidator` says so in its own header: this tool was the reason
+// a client-only validator would be "a rail an LLM client walks straight past".
+//
+// Now: normalise -> check -> refuse. Refusing (rather than saving and reporting)
+// is the right default HERE specifically, and it is the opposite of the rule for
+// a human pressing Save. A person's draft is half-built on purpose and losing
+// their work would be worse than a broken draft. An MCP call is a one-shot
+// authoring action that CLAIMS to be finished, and the caller can read the
+// findings and immediately try again — so the findings are worth more before
+// the write than after it. `allowIncomplete` is the escape hatch for genuinely
+// parking a work-in-progress.
+async function createAutomation({ name, description, triggerType, status, nodes, edges, config, allowIncomplete } = {}) {
   if (!String(name || '').trim()) throw svcErr(400, 'name is required.');
-  const cfg = (config && typeof config === 'object')
+  const { normalizeFlowConfig, danglingHandles } = require('./flowAuthoring');
+  const { validateFlow } = require('./flowValidator');
+
+  const raw = (config && typeof config === 'object')
     ? config
     : { nodes: Array.isArray(nodes) ? nodes : [], edges: Array.isArray(edges) ? edges : [] };
+  const cfg = normalizeFlowConfig(raw);
+
+  // An edge on a handle the node does not have is invisible to validateFlow —
+  // it looks for handles that are UNwired, and this one matches no handle at
+  // all. Reported separately so the exact `row:N`-style mistake names itself.
+  const dangling = danglingHandles(cfg);
+
+  // Same template context the activation gate uses, so "create_automation said
+  // it was fine" and "Go Live refused it" cannot disagree.
+  let templatesById = {};
+  try {
+    const { rows } = await pool.query('SELECT id, name, status FROM coexistence.message_templates');
+    templatesById = Object.fromEntries(rows.map(t => [String(t.id), t]));
+  } catch { /* validate without template context rather than failing the call */ }
+
+  const check = validateFlow(cfg, { templatesById });
+
+  if ((check.blocking.length || dangling.length) && !allowIncomplete) {
+    const problems = [
+      ...dangling.map(d => `• ${d.message} ${d.fix}`),
+      ...check.blocking.map(b => `• ${b.message} ${b.fix || ''}`.trim()),
+    ];
+    throw svcErr(400,
+      `This flow was not created — it would be broken at runtime:\n${problems.join('\n')}\n\n` +
+      'Fix these and call create_automation again. Pass allowIncomplete:true only if you deliberately want to park an unfinished draft.');
+  }
+
   const created = await internalApiOrThrow({
     method: 'POST', path: '/chatbots',
-    body: { name: String(name).trim(), description: description || null, status: status || 'draft', trigger_type: triggerType || 'keyword', config: cfg, folder_id: folderId || null },
+    body: { name: String(name).trim(), description: description || null, status: 'draft', trigger_type: triggerType || 'keyword', config: cfg },
     failMsg: 'Failed to create the automation.',
   });
+
+  // status:'active' is accepted and then deliberately NOT honoured here. The
+  // activation gate lives in PUT /chatbots/:id, so creating straight to active
+  // would be the one way into the app that skips it — and going live means
+  // replying to real customers. Said out loud rather than ignored silently.
+  const wantedActive = status === 'active';
+
   return {
     ok: true,
     automation: { id: created.id, name: created.name, status: created.status, triggerType: created.trigger_type },
-    note: 'Created (inactive). Review the flow in the Automations builder, then set status:"active" via forgechat_request PUT /chatbots/:id to make it live.',
+    warnings: check.warnings,
+    danglingConnections: dangling,
+    note: [
+      `Created as a draft (id ${created.id}) and laid out left-to-right.`,
+      check.warnings.length
+        ? `${check.warnings.length} thing(s) are unfinished but not broken — see warnings[]; each names the step and the fix.`
+        : 'No warnings.',
+      wantedActive
+        ? 'It was NOT activated: going live runs the activation check, which only PUT /chatbots/:id does. Review it in the builder first, then set status:"active" via forgechat_request.'
+        : 'To go live: forgechat_request PUT /chatbots/:id { "status": "active" }.',
+    ].join(' '),
   };
+}
+
+// Load the template context validateFlow needs. Shared by every automation
+// entry point here so "the checker said it was fine" cannot depend on which
+// door the request came through.
+async function flowTemplateContext() {
+  try {
+    const { rows } = await pool.query('SELECT id, name, status FROM coexistence.message_templates');
+    return Object.fromEntries(rows.map(t => [String(t.id), t]));
+  } catch { return {}; }
+}
+
+// Check a flow WITHOUT saving it — or check one already saved.
+//
+// The gap this closes: the only previous way to discover a hand-authored graph
+// was broken was to create it and open the builder, which turns a wrong guess
+// into a real row somebody has to find and delete.
+async function validateAutomation({ automationId, nodes, edges, config } = {}) {
+  const { normalizeFlowConfig, danglingHandles } = require('./flowAuthoring');
+  const { validateFlow } = require('./flowValidator');
+
+  let cfg;
+  if (automationId != null && automationId !== '') {
+    const row = await internalApiOrThrow({ method: 'GET', path: `/chatbots/${parseInt(automationId, 10)}`, failMsg: 'Automation not found.' });
+    cfg = row.config || {};
+  } else if (config && typeof config === 'object') {
+    cfg = normalizeFlowConfig(config);
+  } else {
+    cfg = normalizeFlowConfig({ nodes: Array.isArray(nodes) ? nodes : [], edges: Array.isArray(edges) ? edges : [] });
+  }
+
+  const check = validateFlow(cfg, { templatesById: await flowTemplateContext() });
+  const dangling = danglingHandles(cfg);
+  const canGoLive = check.ok && dangling.length === 0;
+  return {
+    ok: canGoLive,
+    canGoLive,
+    blocking: check.blocking,
+    warnings: check.warnings,
+    danglingConnections: dangling,
+    note: canGoLive
+      ? (check.warnings.length
+        ? `This flow can go live. ${check.warnings.length} thing(s) are unfinished but not broken.`
+        : 'This flow can go live with nothing outstanding.')
+      : 'This flow cannot go live yet — each entry in blocking[] / danglingConnections[] names the step and how to fix it.',
+  };
+}
+
+// Edit or activate a saved automation.
+//
+// ⚠ Activation deliberately goes through PUT /chatbots/:id rather than writing
+// the column, because that route IS the activation gate. Setting the status any
+// other way would be the one door into the app that skips the check — and what
+// it skips is whether a flow about to reply to real customers actually works.
+async function updateAutomation({ id, name, description, active, nodes, edges, config } = {}) {
+  const aid = parseInt(id, 10);
+  if (!Number.isFinite(aid)) throw svcErr(400, 'id is required (from list_automations).');
+  const { normalizeFlowConfig, danglingHandles } = require('./flowAuthoring');
+
+  const body = {};
+  if (name !== undefined) body.name = String(name).trim();
+  if (description !== undefined) body.description = description;
+
+  let cfg = null;
+  if (config && typeof config === 'object') cfg = normalizeFlowConfig(config);
+  else if (Array.isArray(nodes) || Array.isArray(edges)) {
+    cfg = normalizeFlowConfig({ nodes: Array.isArray(nodes) ? nodes : [], edges: Array.isArray(edges) ? edges : [] });
+  }
+  if (cfg) {
+    // Refused here as well as at activation: an edge on a handle that does not
+    // exist is invisible to the activation gate (it checks whether handles are
+    // wired, not whether they exist), so it would otherwise be saved silently
+    // and go live looking correct.
+    const dangling = danglingHandles(cfg);
+    if (dangling.length) {
+      throw svcErr(400, `The flow was not saved:\n${dangling.map(d => `• ${d.message} ${d.fix}`).join('\n')}`);
+    }
+    body.config = cfg;
+  }
+  if (active !== undefined) body.status = active ? 'active' : 'inactive';
+
+  if (!Object.keys(body).length) throw svcErr(400, 'Nothing to change — pass at least one of name, description, active, nodes/edges/config.');
+
+  const out = await internalApiCall({ method: 'PUT', path: `/chatbots/${aid}`, body });
+  if (!out.ok) {
+    // The activation gate answers 409 with the findings attached. Surfaced in
+    // full rather than flattened to "could not activate", because the whole
+    // value of that gate is that it says WHICH step and WHY.
+    if (out.status === 409 && out.body && Array.isArray(out.body.blocking)) {
+      throw svcErr(409, `${out.body.error}\n${out.body.blocking.map(b => `• ${b.message} ${b.fix || ''}`.trim()).join('\n')}`);
+    }
+    throw svcErr(out.status || 500, (out.body && out.body.error) || 'Failed to update the automation.');
+  }
+  return {
+    ok: true,
+    automation: { id: out.body.id, name: out.body.name, status: out.body.status },
+    note: active === true
+      ? 'This automation is now LIVE and will reply to real customers.'
+      : active === false ? 'This automation is paused.' : 'Saved. It was not activated.',
+  };
+}
+
+async function listAutomations({ id } = {}) {
+  if (id != null && id !== '') {
+    const aid = parseInt(id, 10);
+    if (!Number.isFinite(aid)) throw svcErr(400, 'id must be a number.');
+    const row = await internalApiOrThrow({ method: 'GET', path: `/chatbots/${aid}`, failMsg: 'Automation not found.' });
+    return { automation: row };
+  }
+  const rows = await internalApiOrThrow({ method: 'GET', path: '/chatbots', failMsg: 'Failed to list automations.' });
+  const list = Array.isArray(rows) ? rows : (rows.chatbots || []);
+  return {
+    automations: list.map(r => ({
+      id: r.id, name: r.name, description: r.description, status: r.status,
+      triggerType: r.trigger_type,
+      steps: Array.isArray(r.config && r.config.nodes) ? r.config.nodes.length : null,
+      updatedAt: r.updated_at,
+    })),
+    note: 'status "active" means it is live and replying. Pass an id to read the full nodes/edges graph.',
+  };
+}
+
+// What a flow actually did. The execution log names the step and the reason,
+// which is almost always the answer to "the automation did not work".
+async function getAutomationRuns({ automationId, executionId, status, limit } = {}) {
+  if (executionId != null && executionId !== '') {
+    const eid = parseInt(executionId, 10);
+    if (!Number.isFinite(eid)) throw svcErr(400, 'executionId must be a number.');
+    return internalApiOrThrow({ method: 'GET', path: `/executions/${eid}`, failMsg: 'Run not found.' });
+  }
+  const aid = parseInt(automationId, 10);
+  if (!Number.isFinite(aid)) throw svcErr(400, 'automationId is required (from list_automations).');
+  return internalApiOrThrow({
+    method: 'GET', path: `/chatbots/${aid}/executions`,
+    query: { status, limit: limit || 20 },
+    failMsg: 'Failed to read the runs.',
+  });
 }
 
 // Create a tracked click-to-chat wa.me link.
@@ -1454,161 +1786,267 @@ async function createWaLink({ name, message, accountId } = {}) {
   return { ok: true, link: out.link || out };
 }
 
-// Create a capture form, optionally attaching its fields and publishing in one
-// call. Returns the form incl. its public slug.
+/* ------------------------- chat analyzer -------------------------------- */
 //
-// formType 'link' (default) is shared as a plain URL and the phone is optional
-// — a field with mapsTo:'phone' is the voluntary phone section, and without one
-// responses are stored with the phone column blank. 'whatsapp' is sent through
-// an approved Utility/Marketing template whose link captures the phone itself.
-// Lazy, for the same reason as projectKinds() below: routes/leadForms pulls in
-// the DB pool and MinIO, and a top-level require would drag both into every
-// consumer of this module.
-const formFieldTypes = () => require('../routes/leadForms').FIELD_TYPES;
+// Required lazily: chatAnalyser pulls in the media pipeline (ffprobe, the PDF
+// parser, MinIO), and none of that should load just because something imported
+// mcpService.
+//
+// ⚠ There is no bulk entry point here on purpose. Analysing one conversation
+// that a person just named is a bounded, intended cost; analysing a hundred
+// because a sentence was ambiguous is not.
 
-// Validate the field types an MCP caller sent, BEFORE handing them to the route.
-//
-// The route's sanitizeFields deliberately DOWNGRADES an unknown type to 'text'
-// (forgiving, so a half-built form from the web builder still saves). That is
-// exactly wrong at this boundary: an assistant that guesses 'star_rating' or
-// 'stars' would get a plain text box back and report "created your rating
-// field" — a silent, confident failure. Rejecting with the valid list instead
-// lets the model correct itself on the next call.
-function assertFieldTypes(fields) {
-  if (!Array.isArray(fields)) return;
-  const valid = formFieldTypes();
-  const { RATING_SCALES } = require('./formAnswers');
-  fields.forEach((f, i) => {
-    const t = f && f.type;
-    if (t == null || t === '') return;                 // route defaults it to text
-    if (!valid.includes(t)) {
-      throw svcErr(400, `Field ${i + 1} ("${f.label || f.key || t}") has unknown type "${t}". Valid types: ${valid.join(', ')}.`);
-    }
-    if (t === 'rating' && f.scale != null && !RATING_SCALES.includes(parseInt(f.scale, 10))) {
-      throw svcErr(400, `Field ${i + 1} ("${f.label || f.key}") has scale ${f.scale}. A star rating must be out of ${RATING_SCALES.join(', ')}.`);
-    }
+function _ca() { return require('./chatAnalyser'); }
+
+async function listAnalysedChats({ source = 'all', filter = 'all', search = '', limit = 50 } = {}) {
+  const d = await _ca().listConversations({
+    source, filter, search, limit: Math.min(parseInt(limit, 10) || 50, 200),
   });
+  return {
+    conversations: d.conversations.map(c => ({
+      source: c.source, key: c.conversationKey, name: c.name,
+      messages: c.messageCount, media: c.media,
+      analysed: c.analysed, newMessagesSinceAnalysis: c.newMessages,
+      // Which modalities the standing summary covers. Without this an assistant
+      // reads "analysed" and assumes the voice notes were included.
+      readSoFar: c.modalities,
+      summary: c.summary, intent: c.intent, sentiment: c.sentiment,
+      suggestedStage: c.suggestedStage, nextAction: c.nextAction,
+      lastAnalysedAt: c.lastRunAt,
+    })),
+    total: d.total,
+  };
 }
 
-async function createLeadForm({ name, description, fields, successMessage, defaultSource, publish, formType } = {}) {
-  if (!String(name || '').trim()) throw svcErr(400, 'name is required.');
-  if (formType && !['link', 'whatsapp'].includes(formType)) throw svcErr(400, "formType must be 'link' or 'whatsapp'.");
-  assertFieldTypes(fields);
-  const created = await internalApiOrThrow({ method: 'POST', path: '/lead-forms', body: { name: String(name).trim(), description: description || null, formType: formType || 'link' }, failMsg: 'Failed to create the form.' });
-  const formId = created.form?.id;
-  let form = created.form;
+async function getChatAnalysis({ source = 'chat', key } = {}) {
+  if (!key) throw svcErr(400, 'Which conversation? Pass the key from list_analysed_chats.');
+  const ca = _ca();
+  const convo = await ca.resolveConversation(source, key);
+  if (!convo) throw svcErr(404, 'That conversation could not be found.');
+  const [analysis, coverage, runs] = await Promise.all([
+    ca.loadAnalysis(source, key),
+    ca.loadCoverage(source, key),
+    ca.listRuns({ source, conversationKey: key, limit: 10 }),
+  ]);
+  if (!analysis) {
+    return {
+      conversation: { source, key, name: convo.displayName },
+      analysed: false,
+      note: 'This conversation has not been analysed yet. Call analyze_chat to analyse it.',
+      coverage,
+    };
+  }
+  return {
+    conversation: { source, key, name: convo.displayName, leadId: convo.leadId },
+    analysed: true,
+    summary: analysis.summary,
+    // In the order a salesperson reads it: problems → things to note → what to do.
+    problems: analysis.problems || [], notes: analysis.notes || [],
+    recommendations: analysis.recommendations || [],
+    interestedProducts: analysis.interested_products || [],
+    followUpMessages: analysis.follow_ups || [],
+    ourRepliesReview: analysis.reply_review || null, weMissed: analysis.missed || [],
+    intent: analysis.intent, sentiment: analysis.sentiment,
+    confidence: analysis.confidence == null ? null : Number(analysis.confidence),
+    suggestedStage: analysis.suggested_stage, stageReason: analysis.stage_reason,
+    nextAction: analysis.next_action, risk: analysis.risk,
+    objections: analysis.objections || [], buyingSignals: analysis.buying_signals || [],
+    topics: analysis.topics || [], openQuestions: analysis.open_questions || [],
+    participants: analysis.participants || [],
+    readSoFar: analysis.modalities || [],
+    coverage, lastAnalysedAt: analysis.last_run_at, runs,
+  };
+}
 
+async function analyzeChat({ source = 'chat', key, modalities = null, from = null, to = null, keyword = null, incremental = true } = {}) {
+  if (!key) throw svcErr(400, 'Which conversation? Pass the key from list_analysed_chats.');
+  const scope = (from || to || keyword) ? { from: from || null, to: to || null, keyword: keyword || null } : null;
+  const r = await _ca().analyseConversation({
+    source, conversationKey: key, modalities,
+    scope, incremental: scope ? false : incremental !== false,
+    trigger: 'mcp', actor: 'mcp',
+  });
+  if (r.skipped) {
+    return { ok: true, alreadyUpToDate: true, note: 'Nothing new since the last analysis; nothing was charged.' };
+  }
+  return {
+    ok: true,
+    scoped: r.scoped,
+    note: r.scoped
+      ? 'A filtered run. Saved in the run history, but it does NOT replace the standing summary for this conversation.'
+      : undefined,
+    conversation: { source, key, name: r.conversation.displayName },
+    ...r.verdict,
+    messagesRead: r.messagesAnalysed,
+    newMessages: r.newMessages,
+    readThisRun: r.modalities,
+    mediaSkipped: r.skippedMedia,
+    // Rupees, so the caller can report what it just spent.
+    estimatedCostInr: Number(r.cost.inr.toFixed(4)),
+    mediaReusedFree: r.cost.reusedArtifacts,
+    mediaNewlyRead: r.cost.newArtifacts,
+  };
+}
+
+async function getChatTranscript({ source = 'chat', key, from = null, to = null, audioOnly = false } = {}) {
+  if (!key) throw svcErr(400, 'Which conversation? Pass the key from list_analysed_chats.');
+  const ca = _ca();
+  const scope = (from || to) ? { from: from || null, to: to || null, keyword: null } : null;
+  const t = await ca.buildFullTranscript({ source, conversationKey: key, scope });
+  const entries = (audioOnly ? t.entries.filter(e => e.isTranscript || e.pending) : t.entries)
+    .map(e => ({
+      // The handle get_chat_image needs. Omitting it made every listed
+      // image unreachable, which is the whole point of listing them.
+      messageId: e.messageId,
+      at: e.at, from: e.speaker, direction: e.direction, type: e.type,
+      text: e.text || null,
+      // Flagged rather than dropped: a caller must be able to tell "nobody
+      // spoke" from "nobody has transcribed this yet".
+      voiceNote: !!e.isTranscript || undefined,
+      notTranscribedYet: e.pending || undefined,
+      caption: e.caption || undefined,
+      filename: e.filename || undefined,
+      note: e.note || undefined,
+      // One of OUR prepared files (brochure, course video, voice note) — its
+      // Media Library name + description say what the customer was given.
+      fromMediaLibrary: e.library || undefined,
+    }));
+  return {
+    conversation: { source, key, name: t.conversation.displayName },
+    counts: t.counts,
+    entries,
+    text: ca.transcriptToText(t),
+    // ⚠ Images are listed with their timestamp and caption but NOT their
+    // contents: nothing here returns image bytes, and vision is not run for a
+    // transcript. Say so, or the absence reads as "there was nothing in it".
+    note: t.counts.images
+      ? `${t.counts.images} image(s) are listed by timestamp only — this tool does not return image contents.`
+      : undefined,
+    pendingVoiceNotes: t.counts.audioPending || undefined,
+  };
+}
+
+/**
+ * Transcribe the voice notes in one conversation that have no transcript yet,
+ * then return every voice note's transcript.
+ *
+ * ⚠ ONCE PER NOTE, FOREVER. Transcripts live in chat_message_artifacts keyed by
+ * the message id, so a note that already has one (from the app, an agent, an
+ * earlier MCP call) is returned free and never re-sent to the model. Only notes
+ * without a usable transcript are paid for. Capped per call by the analyser's
+ * max_media_per_run; `remaining` says how many are left for another call.
+ */
+async function transcribeChat({ source = 'chat', key, from = null, to = null } = {}) {
+  if (!key) throw svcErr(400, 'Which conversation? Pass the key from list_analysed_chats.');
+  const ca = _ca();
+  const scope = (from || to) ? { from: from || null, to: to || null, keyword: null } : null;
+  const r = await ca.transcribeConversation({ source, conversationKey: key, scope, actor: 'mcp' });
+  const t = await ca.buildFullTranscript({ source, conversationKey: key, scope });
+  return {
+    conversation: { source, key, name: t.conversation.displayName },
+    transcribedNow: r.transcribed,
+    alreadyTranscribed: r.alreadyDone,
+    remaining: r.remaining || 0,
+    failed: r.failed,
+    costInr: Number((r.costInr || 0).toFixed(4)),
+    model: 'microsoft/mai-transcribe-2 (via OpenRouter)',
+    voiceNotes: t.entries.filter(e => e.isTranscript || e.pending).map(e => ({
+      messageId: e.messageId, at: e.at, from: e.speaker, direction: e.direction,
+      transcript: e.isTranscript ? (e.text || '') : null,
+      notTranscribedYet: e.pending || undefined,
+      note: e.note || undefined,
+    })),
+    note: r.remaining
+      ? `${r.remaining} voice note(s) are still untranscribed (per-call cap). Call transcribe_chat again to continue.`
+      : undefined,
+  };
+}
+
+/**
+ * Images from a conversation, as MCP image content blocks.
+ *
+ * ⚠ COSTS NOTHING — it is a disk read. A model that can see does the seeing,
+ * instead of paying a vision model to write a description and then reading that.
+ * The vision modality still exists for the STORED analysis, which has to be text.
+ */
+async function getChatImages({ source = 'chat', key, messageIds = [] } = {}) {
+  if (!key) throw svcErr(400, 'Which conversation? Pass the key from list_analysed_chats.');
+  const r = await _ca().getConversationImages({ source, conversationKey: key, messageIds });
+  return {
+    conversation: { source, key, name: r.conversation.displayName },
+    images: r.images,
+    skipped: r.skipped,
+    totalBytes: r.totalBytes,
+  };
+}
+
+async function getChatAnalysisCosts({ from = null, to = null } = {}) {
+  const d = await _ca().costSummary({ from, to });
+  return {
+    ...d,
+    note: 'Voice-note transcription costs are the real amounts OpenRouter reported. Analysis, image and older figures are ESTIMATES: OpenAI returns token counts and never a price, so rupees are computed from the rate card in the Chat Analyzer settings.',
+  };
+}
+
+// ── follow-up calendar (Leads → My list) ────────────────────────────────────
+// Same functions the app routes call (services/followUps.js), so a follow-up
+// set from Claude lands on exactly the calendar a rep sees.
+
+const MCP_USER = { role: 'admin', viaMcp: true, displayName: 'MCP' };
+
+async function mcpResolveThread(contactNumber, waNumber) {
+  const d = String(contactNumber || '').replace(/\D/g, '');
+  if (d.length < 8) throw Object.assign(new Error('contactNumber must be the customer\'s phone number'), { status: 400 });
+  if (waNumber) return { waNumber: String(waNumber).replace(/\D/g, ''), contactNumber: d };
+  // The thread they last WROTE on — that is where a follow-up should go.
+  const { rows: [r] } = await pool.query(
+    `SELECT wa_number, contact_number FROM coexistence.chat_history
+      WHERE right(regexp_replace(contact_number,'\\D','','g'),10) = right($1,10)
+      ORDER BY (direction = 'incoming') DESC, timestamp DESC LIMIT 1`, [d]);
+  return r ? { waNumber: r.wa_number, contactNumber: r.contact_number } : { waNumber: null, contactNumber: d };
+}
+
+async function mcpOwnerId(ownerEmail) {
+  if (!ownerEmail) return undefined;
+  const { rows: [u] } = await pool.query(
+    `SELECT id FROM coexistence.forgecrm_users WHERE lower(email) = lower($1) OR lower(username) = lower($1) LIMIT 1`, [String(ownerEmail).trim()]);
+  if (!u) throw Object.assign(new Error(`No user with email/username "${ownerEmail}"`), { status: 400 });
+  return Number(u.id);
+}
+
+async function listFollowUpsMcp({ from, to, status = 'open', contactNumber, limit } = {}) {
+  const fu = require('./followUps');
+  const items = await fu.listFollowUps(MCP_USER, { from, to, status, contact: contactNumber, limit });
+  return { count: items.length, followUps: items };
+}
+
+async function setFollowUpMcp({ contactNumber, waNumber, dueDate, dueTime, note, ownerEmail } = {}) {
+  const fu = require('./followUps');
+  const thread = await mcpResolveThread(contactNumber, waNumber);
+  const ownerUserId = await mcpOwnerId(ownerEmail);
+  const f = await fu.setFollowUp(MCP_USER, {
+    ...thread, dueDate, dueTime, note, source: 'mcp', pin: false,
+    ...(ownerUserId !== undefined ? { ownerUserId } : {}),
+  });
+  return { ok: true, followUp: f, note: 'If this person already had an open follow-up for that owner it was RESCHEDULED, not duplicated.' };
+}
+
+async function updateFollowUpMcp({ id, dueDate, dueTime, note, status, remove } = {}) {
+  const fu = require('./followUps');
+  if (!id) throw Object.assign(new Error('id is required (from list_follow_ups)'), { status: 400 });
+  if (remove) return fu.deleteFollowUp(MCP_USER, Number(id));
   const patch = {};
-  if (Array.isArray(fields)) patch.fields = fields;
-  if (successMessage !== undefined) patch.successMessage = successMessage;
-  if (defaultSource !== undefined) patch.defaultSource = defaultSource;
-  if (publish) patch.status = 'published';
-  if (Object.keys(patch).length) {
-    const upd = await internalApiOrThrow({ method: 'PUT', path: `/lead-forms/${formId}`, body: patch, failMsg: 'Form created but failed to set fields / publish.' });
-    form = upd.form || form;
-  }
-  return {
-    ok: true, form,
-    note: form.status !== 'published'
-      ? 'Created as draft. Add fields and set publish:true (or PUT status:"published") to make it live.'
-      : form.formType === 'whatsapp'
-        ? `Published. Next: POST /lead-forms/${formId}/template {category:"UTILITY"|"MARKETING", body, buttonText, waAccountId, submit:true} to build the template that carries its link, then send once Meta approves it.`
-        : `Published. Public URL path: /f/${form.slug} — share it directly. Responses with no phone are stored with the phone column blank.`,
-  };
+  if (dueDate !== undefined) patch.dueDate = dueDate;
+  if (dueTime !== undefined) patch.dueTime = dueTime;
+  if (note !== undefined) patch.note = note;
+  if (status !== undefined) patch.status = status;
+  return { ok: true, followUp: await fu.updateFollowUp(MCP_USER, Number(id), patch) };
 }
 
-async function listLeadForms() {
-  return internalApiOrThrow({ method: 'GET', path: '/lead-forms', failMsg: 'Failed to list lead forms.' });
-}
-
-// ⚠ A rating answer is rendered to text HERE, at the tool boundary — the same
-// rule as converting paise to rupees before an LLM sees an amount.
-//
-// The stored answer is { rating: 4, feedback: "…" } and it does NOT carry the
-// scale; the scale lives on the field definition. So a model handed "rating: 4"
-// has no way to know whether that is 4 out of 4 or 4 out of 10, and will
-// confidently report "4 out of 5" — the single most likely number to be wrong.
-// Each rating answer therefore gains a `text` of "4/4" alongside the raw value,
-// and every rating field is described in `ratingFields` so a summary of the
-// responses can state the scale.
-async function listFormSubmissions({ formId, page, pageSize } = {}) {
-  if (!formId) throw svcErr(400, 'formId is required (from list_lead_forms).');
-  const id = parseInt(formId, 10);
-  if (!Number.isFinite(id)) throw svcErr(400, 'formId must be a number (from list_lead_forms).');
-
-  const out = await internalApiOrThrow({ method: 'GET', path: `/lead-forms/${id}/submissions`, query: { page, pageSize }, failMsg: 'Failed to load submissions.' });
-
-  // Best-effort enrichment: if the form definition can't be read we still
-  // return the responses rather than failing the whole call over labelling.
-  let fields = [];
-  try {
-    const form = await internalApiOrThrow({ method: 'GET', path: `/lead-forms/${id}`, failMsg: 'x' });
-    fields = (form.form && form.form.fields) || [];
-  } catch { /* fall through with raw answers */ }
-
-  const ratingFields = fields.filter(f => f.type === 'rating');
-  if (!ratingFields.length || !Array.isArray(out.submissions)) return out;
-
-  const { answerToText, ratingScale } = require('./formAnswers');
-  return {
-    ...out,
-    ratingFields: ratingFields.map(f => ({ key: f.key, label: f.label, outOf: ratingScale(f), hasFeedbackBox: !!f.feedback })),
-    submissions: out.submissions.map(s => {
-      const answers = { ...(s.answers || {}) };
-      for (const f of ratingFields) {
-        const v = answers[f.key];
-        if (v == null) continue;
-        const text = answerToText(f, v);
-        answers[f.key] = {
-          ...(typeof v === 'object' && !Array.isArray(v) ? v : { rating: v }),
-          outOf: ratingScale(f),
-          text: text || null,   // "4/4 - loved it", or null when unrated
-        };
-      }
-      return { ...s, answers };
-    }),
-  };
-}
-
-/* ── Projects — the campaign folder a template / automation / agent /
-   form is filed under ────────────────────────────────────────────────────── */
-
-// Required lazily inside the functions: routes/projects pulls in the DB pool,
-// and a top-level require here would drag it into every consumer of this
-// module. PROJECT_KINDS is DERIVED from that route's KINDS map rather than
-// listed again — a second copy would have to be updated in lockstep, and the
-// half that fell behind would refuse a valid kind while naming the wrong set.
-const projectKinds = () => Object.keys(require('../routes/projects').KINDS);
-
-async function listProjects({ projectId } = {}) {
-  if (projectId != null && projectId !== '') {
-    const id = parseInt(projectId, 10);
-    if (!Number.isFinite(id)) throw svcErr(400, 'projectId must be a number.');
-    return internalApiOrThrow({ method: 'GET', path: `/projects/${id}`, failMsg: 'Failed to load the project.' });
-  }
-  return internalApiOrThrow({ method: 'GET', path: '/projects', failMsg: 'Failed to list projects.' });
-}
-
-// Move items into a project, or out of one with projectId null. Filing only —
-// it sets an organisational pointer and cannot create, edit, activate, publish
-// or send anything.
-async function moveToProject(args = {}) {
-  // The SAME validator the route runs, so a bad kind is refused identically
-  // whichever door the request came through — and the id resolution that would
-  // otherwise happen twice cannot drift.
-  let parsed;
-  try { parsed = require('../routes/projects').parseAssignArgs(args); }
-  catch (e) { throw svcErr(e.status || 400, e.message); }
-  const res = await internalApiOrThrow({
-    method: 'POST', path: '/projects/assign', body: parsed,
-    failMsg: 'Failed to move the items.',
-  });
-  return {
-    ...res,
-    note: parsed.projectId === null
-      ? `Moved ${res.moved} ${parsed.kind}(s) out of their project. They still exist — only the filing changed.`
-      : `Filed ${res.moved} ${parsed.kind}(s) into the project. Filing only: nothing was created, edited, published or sent.`,
-  };
+async function suggestFollowUpMcp({ contactNumber, waNumber } = {}) {
+  const fu = require('./followUps');
+  const thread = await mcpResolveThread(contactNumber, waNumber);
+  return { suggestion: await fu.suggestFollowUp(thread), hint: 'Call set_follow_up with this date to put it on the calendar.' };
 }
 
 module.exports = {
@@ -1618,6 +2056,8 @@ module.exports = {
   // one implementation rather than importing it in three places and drifting.
   catalog: mcpCatalog,
   isToolAllowed: mcpCatalog.isToolAllowed,
+  listAnalysedChats, getChatAnalysis, analyzeChat, getChatAnalysisCosts, getChatTranscript, getChatImages, transcribeChat,
+  listFollowUpsMcp, setFollowUpMcp, updateFollowUpMcp, suggestFollowUpMcp,
   toolDeniedMessage: mcpCatalog.toolDeniedMessage,
   listWaAccounts, listModels, searchSpreadsheets, listSheetTabs, readSheetValues, listMedia, listTemplates, getTemplate,
   listConversations, getChatHistory, sendTextMessage, sendTemplateMessage,
@@ -1626,8 +2066,9 @@ module.exports = {
   listLeads, moveLeadStage, getCampaignPerformance, listWebinars,
   listCourses, getCourseRevenue, listPayments,
   uploadMediaFromSource, createTemplate, submitTemplate, syncTemplate,
-  createAutomation, createWaLink, createLeadForm, listLeadForms, listFormSubmissions,
-  projectKinds, listProjects, moveToProject,
+  createAutomation, validateAutomation, updateAutomation, listAutomations, getAutomationRuns,
+  createWaLink,
+  internalApiOrThrow,
   // One literal component builder, shared rather than copied per sender.
   buildLiteralTemplateComponents,
 };

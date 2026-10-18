@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { RotateCcw, AlertCircle, Mic, Square, Loader2, FileText, Film, Music, ImagePlus, X } from 'lucide-react';
 import { api } from '../../api.js';
 import { C, FONT } from '../../constants.js';
-import { PhoneFrame } from '../WhatsAppPreview.jsx';
+import { PhoneFrame, templateButtonView, VideoThumb } from '../WhatsAppPreview.jsx';
+import { SimShell, RestartBtn, Bubble, ChatDay, ChatEmpty, ChatNote, DocChip, mediaStyle, WA } from '../sim/SimKit.jsx';
 
 // Downscale + JPEG-compress an image File to keep the base64 payload well under
 // the backend's 1MB JSON limit. Returns { dataUrl, mime, data (base64, no prefix) }.
@@ -44,7 +45,7 @@ function downscaleImage(file, maxDim = 1024, quality = 0.8) {
  * Sheets tools ARE real (they hit the configured spreadsheet). When `canTest`
  * is false (an unsaved agent) the composer is disabled.
  */
-export default function AgentLivePreview({ agentId, headerTitle, canTest = true, fill = false }) {
+export default function AgentLivePreview({ agentId, headerTitle, canTest = true, fill = false, hint, onReply }) {
   const [messages, setMessages] = useState([]); // see message shape below
   const [input, setInput] = useState('');
   const [pendingImage, setPendingImage] = useState(null); // { dataUrl, mime, data }
@@ -90,6 +91,8 @@ export default function AgentLivePreview({ agentId, headerTitle, canTest = true,
         templates: Array.isArray(res.templates) ? res.templates : [],
         status: res.status,
       }]);
+      // Lets the editor tick "Try it out" on its checklist.
+      onReply?.();
     } catch (e) {
       setError(pretty(e));
     } finally {
@@ -194,7 +197,7 @@ export default function AgentLivePreview({ agentId, headerTitle, canTest = true,
   const showSend = (!!input.trim() || !!pendingImage) && !recording;
 
   const composer = (
-    <div style={{ padding: '7px 9px 22px' }}>
+    <div style={{ padding: '7px 9px 20px' }}>
       {pendingImage && !recording && !transcribing && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 2px 7px', padding: 5, background: 'var(--c-cardBg)', border: '1px solid var(--c-border)', borderRadius: 10, width: 'fit-content', position: 'relative' }}>
           <img src={pendingImage.dataUrl} alt="attachment" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 6, display: 'block' }} />
@@ -207,17 +210,17 @@ export default function AgentLivePreview({ agentId, headerTitle, canTest = true,
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
       {recording ? (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: 'var(--c-cardBg)', borderRadius: 99, border: '1px solid var(--c-border)' }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: 'var(--c-surface, #fff)', borderRadius: 99 }}>
           <span style={{ width: 8, height: 8, borderRadius: 99, background: '#EF4444', animation: 'agentRecPulse 1s ease-in-out infinite' }} />
           <span style={{ fontSize: 14, color: C.text, fontFamily: FONT }}>Recording… tap ◼ to send</span>
         </div>
       ) : transcribing ? (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: 'var(--c-cardBg)', borderRadius: 99, border: '1px solid var(--c-border)' }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: 'var(--c-surface, #fff)', borderRadius: 99 }}>
           <Loader2 size={13} style={{ animation: 'spin 1s linear infinite', color: C.textMuted }} />
           <span style={{ fontSize: 14, color: C.textMuted, fontFamily: FONT }}>Transcribing…</span>
         </div>
       ) : (
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, background: 'var(--c-cardBg)', borderRadius: 99, padding: '3px 4px 3px 6px', border: '1px solid var(--c-border)', opacity: canTest ? 1 : 0.6 }}>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, background: 'var(--c-surface, #fff)', borderRadius: 99, padding: '3px 4px 3px 6px', opacity: canTest ? 1 : 0.6 }}>
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
@@ -237,7 +240,7 @@ export default function AgentLivePreview({ agentId, headerTitle, canTest = true,
             placeholder={canTest ? (pendingImage ? 'Add a caption (optional)' : 'Message') : 'Save the agent to test'}
             style={{
               flex: 1, minWidth: 0, background: 'transparent', border: 'none',
-              padding: '5px 2px', fontSize: 14, color: C.text, fontFamily: FONT, outline: 'none',
+              padding: '4px 2px', fontSize: 12.5, color: 'var(--c-t1, #111)', fontFamily: FONT, outline: 'none',
             }}
           />
         </div>
@@ -264,256 +267,148 @@ export default function AgentLivePreview({ agentId, headerTitle, canTest = true,
     </div>
   );
 
+  const status = recording ? 'Recording a voice note…'
+    : transcribing ? 'Transcribing your voice note…'
+    : sending ? 'The agent is replying…'
+    : !canTest ? 'Save the agent to test it'
+    : messages.length ? 'Waiting for your next message' : 'Ready';
+  const turns = messages.filter(m => m.role === 'user').length;
+
   return (
-    // `fill` lets the editor hand the phone the full height of a pinned pane.
-    // PhoneFrame's internals are already flex:1/minHeight:0, so a '100%'
-    // height stretches it correctly rather than overflowing.
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, fontFamily: FONT,
-      ...(fill ? { height: '100%', minHeight: 0 } : null),
-    }}>
+    // Same card, strip and phone as the flow builder's simulator (SimKit), so
+    // the two read as one tool. `fill` hands the phone the pane's full height.
+    <SimShell
+      title="Test chat"
+      testId="agent-sim"
+      fill={fill}
+      width={fill ? '100%' : 340}
+      status={status}
+      meta={turns ? `${turns} message${turns === 1 ? '' : 's'}` : ''}
+      hint={hint || 'Chat as a customer would. Runs the live model; nothing is sent on WhatsApp.'}
+      actions={<RestartBtn onClick={() => { setMessages([]); setError(''); }} disabled={messages.length === 0 && !error} data-testid="agent-sim-restart" />}
+    >
       <style>{`@keyframes agentTypingBlink{0%,80%,100%{opacity:.25}40%{opacity:1}}@keyframes agentRecPulse{0%,100%{opacity:1}50%{opacity:.3}}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       <PhoneFrame
         headerTitle={(headerTitle || '').trim() || 'Test Agent'}
         headerSubtitle={sending ? 'typing…' : (recording ? 'recording…' : 'online')}
         inputBar={composer}
         bodyRef={bodyRef}
-        height={fill ? '100%' : 580}
+        bodyTestId="agent-chat"
+        height={fill ? '100%' : 620}
       >
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
-          <span style={{ background: 'var(--c-infoBg, #E1F2FA)', color: 'var(--c-s3c6678, #3C6678)', fontSize: 11, padding: '2px 9px', borderRadius: 99, fontWeight: 600 }}>TODAY</span>
-        </div>
+        <ChatDay />
 
         {messages.length === 0 && !sending && !transcribing && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', textAlign: 'center' }}>
-            <div style={{ fontSize: 30, marginBottom: 6, opacity: 0.4 }}>💬</div>
-            <div style={{ fontSize: 12, color: 'var(--c-x5b6b73, #5b6b73)', fontWeight: 500, lineHeight: 1.5, whiteSpace: 'pre-line' }}>
-              {canTest ? 'Send a message or 🎤 voice note\nto chat with this agent live' : 'Save the agent first,\nthen test it here'}
-            </div>
-          </div>
+          <ChatEmpty>{canTest ? 'Send a message or a voice note\nto chat with this agent live' : 'Save the agent first,\nthen test it here'}</ChatEmpty>
         )}
 
         {messages.map((m, i) => <MessageBlock key={i} message={m} />)}
 
         {(sending || transcribing) && (
-          <div style={{ marginRight: 'auto', maxWidth: '80%' }}>
-            <div style={{ background: 'var(--c-cardBg)', borderRadius: '7.5px 7.5px 7.5px 0', padding: '8px 12px', boxShadow: '0 1px 0.5px rgba(11,20,26,.13)', display: 'flex', gap: 4, alignItems: 'center' }}>
+          <div style={{ display: 'flex', marginBottom: 4, flexShrink: 0 }}>
+            <div style={{ background: WA.incoming, borderRadius: '0 8px 8px 8px', padding: '9px 12px', boxShadow: WA.shadow, display: 'flex', gap: 4, alignItems: 'center' }}>
               <Dot delay="0s" /><Dot delay=".15s" /><Dot delay=".3s" />
             </div>
           </div>
         )}
 
-        {error && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '8px auto 0', maxWidth: '92%', padding: '6px 9px', borderRadius: 8, background: 'var(--c-dangerBg, #FCEBEB)', color: 'var(--c-dangerText, #A32D2D)', fontSize: 12, lineHeight: 1.4 }}>
-            <AlertCircle size={12} style={{ flexShrink: 0 }} />
-            <span style={{ wordBreak: 'break-word' }}>{error}</span>
-          </div>
-        )}
+        {error && <ChatNote tone="error">{error}</ChatNote>}
       </PhoneFrame>
-
-      <button
-        type="button"
-        onClick={() => { setMessages([]); setError(''); }}
-        disabled={messages.length === 0 && !error}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 5,
-          background: 'transparent', border: 'none',
-          fontSize: 14, color: C.textSecondary, fontFamily: FONT, fontWeight: 600,
-          cursor: (messages.length === 0 && !error) ? 'default' : 'pointer',
-          opacity: (messages.length === 0 && !error) ? 0.45 : 1,
-        }}
-      >
-        <RotateCcw size={12} /> Reset chat
-      </button>
-    </div>
+    </SimShell>
   );
 }
 
 // All the bubbles for one message: text, a recorded voice note (user), and any
-// media / links / templates the agent sent.
+// media / links / templates the agent sent. Drawn with the shared kit Bubble —
+// the agent on the left, you on the right, as on the customer's phone.
 function MessageBlock({ message }) {
-  const isUser = message.role === 'user';
+  const from = message.role === 'user' ? 'user' : 'bot';
   const media = message.media || [];
   const links = message.links || [];
   const templates = message.templates || [];
+  const warn = { fontSize: 11, color: 'var(--c-sb45309, #B45309)', marginTop: 3 };
   return (
     <>
       {message.voice && (
-        <Bubble isUser={isUser}>
-          <audio controls src={message.audioUrl} style={{ width: 200, maxWidth: '100%', height: 34, display: 'block' }} />
-          {message.content && <div style={textStyle}>{message.content}</div>}
-          {message.note && <div style={{ fontSize: 12, color: 'var(--c-sb45309, #B45309)', marginTop: 3 }}>{message.note}</div>}
-          <MetaRow isUser={isUser} />
+        <Bubble from={from} media={<audio controls src={message.audioUrl} style={{ width: 200, maxWidth: '100%', height: 34, display: 'block' }} />}>
+          {message.content}
+          {message.note && <div style={warn}>{message.note}</div>}
         </Bubble>
       )}
 
       {message.image && (
-        <Bubble isUser={isUser} pad={3}>
-          <img src={message.image.dataUrl} alt="sent attachment" style={{ display: 'block', width: '100%', maxWidth: 230, borderRadius: 5 }} />
-          {message.content && <div style={{ ...textStyle, padding: '4px 6px 0' }}>{message.content}</div>}
-          <div style={{ padding: '0 6px' }}><MetaRow isUser={isUser} /></div>
+        <Bubble from={from} media={<img src={message.image.dataUrl} alt="sent attachment" style={mediaStyle} />}>
+          {message.content}
         </Bubble>
       )}
 
       {!message.voice && !message.image && message.content && (
-        <Bubble isUser={isUser}>
-          <div style={textStyle}>{message.content}</div>
-          {message.status === 'capped' && (
-            <div style={{ fontSize: 11, color: 'var(--c-sb45309, #B45309)', marginTop: 3 }}>Hit the tool-iteration cap; reply may be partial.</div>
-          )}
-          <MetaRow isUser={isUser} />
+        <Bubble from={from}>
+          {message.content}
+          {message.status === 'capped' && <div style={warn}>Hit the tool-iteration cap; reply may be partial.</div>}
         </Bubble>
       )}
 
-      {media.map((m, i) => (
-        <Bubble key={`m${i}`} isUser={isUser} pad={m.type === 'image' || m.type === 'video' ? 3 : undefined}>
-          <MediaItem item={m} />
-          <MetaRow isUser={isUser} />
-        </Bubble>
-      ))}
+      {media.map((m, i) => <Bubble key={`m${i}`} from={from} media={<MediaItem item={m} />} />)}
 
       {links.map((url, i) => (
-        <Bubble key={`l${i}`} isUser={isUser}>
-          <a href={url} target="_blank" rel="noreferrer" style={{ fontSize: 15, color: 'var(--c-s027eb5, #027EB5)', textDecoration: 'underline', wordBreak: 'break-all', fontFamily: FONT }}>{url}</a>
-          <MetaRow isUser={isUser} />
+        <Bubble key={`l${i}`} from={from}>
+          <a href={url} target="_blank" rel="noreferrer" style={{ color: WA.link, textDecoration: 'underline', wordBreak: 'break-all' }}>{url}</a>
         </Bubble>
       ))}
 
-      {templates.map((t, i) => <TemplateBubble key={`t${i}`} template={t} isUser={isUser} />)}
+      {templates.map((t, i) => <TemplateBubble key={`t${i}`} template={t} from={from} />)}
     </>
   );
 }
 
 /**
- * An approved template, drawn the way WhatsApp draws it.
+ * An approved template, drawn the way WhatsApp draws it: the media header,
+ * text, footer, and its buttons inside the bubble.
  *
  * Deliberately NOT the shared `WhatsAppPreview`: that component wraps its
  * output in a whole `PhoneFrame`, and this already sits inside one — nesting
  * them would render a phone inside a phone. Same content, no chrome.
- *
- * Buttons are rendered on a separate panel under the bubble with a divider
- * between each, which is how WhatsApp actually shows template buttons; drawing
- * them as inline text is what made the earlier preview unrecognisable.
  */
-function TemplateBubble({ template, isUser }) {
+function TemplateBubble({ template, from }) {
   const t = template || {};
-  const buttons = Array.isArray(t.buttons) ? t.buttons : [];
+  const buttons = (Array.isArray(t.buttons) ? t.buttons : []).map(templateButtonView);
   const mediaHeader = ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(t.headerType);
+  // A media header shows the actual file when the template still points at a
+  // Media Library row (header_media_library_id). Meta's own upload handle is
+  // single-use and not a URL, so without that pointer there is genuinely
+  // nothing to show — a neutral placeholder is the honest answer.
+  const src = t.headerMediaLibraryId ? api.mediaLibrary.downloadUrl(t.headerMediaLibraryId) : null;
+  const media = !mediaHeader ? null
+    : t.headerType === 'VIDEO' ? (src ? <video src={src} controls style={mediaStyle} /> : <VideoThumb src={null} height={96} />)
+    : t.headerType === 'DOCUMENT' ? <DocChip name="Document" kind="PDF" href={src || undefined} />
+    : src ? <img src={src} alt="" style={mediaStyle} />
+    : <div style={{ height: 96, borderRadius: 6, background: 'var(--c-surfaceInner, #F5F5F0)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: WA.time }}>{t.headerType} header</div>;
+  // Named, because a template is not free text: which one went out is the
+  // thing an operator is checking in the simulator.
   return (
-    <div style={{ marginLeft: isUser ? 'auto' : 0, marginRight: isUser ? 0 : 'auto', maxWidth: '82%', marginBottom: 6 }}>
-      <div style={{
-        background: isUser ? 'var(--c-sdcf8c6, #DCF8C6)' : 'var(--c-cardBg)',
-        borderRadius: isUser ? '7.5px 7.5px 0 7.5px' : '7.5px 7.5px 7.5px 0',
-        padding: mediaHeader ? 3 : '6px 9px 5px',
-        boxShadow: '0 1px 0.5px rgba(11,20,26,.13)', overflow: 'hidden',
-      }}>
-        {/* A media header shows the actual file when the template still points
-            at a Media Library row (header_media_library_id). Meta's own upload
-            handle is single-use and not a URL, so without that pointer there is
-            genuinely nothing to show — a neutral placeholder is the honest
-            answer rather than a broken image. */}
-        {mediaHeader && (
-          t.headerMediaLibraryId ? (
-            t.headerType === 'VIDEO'
-              ? <video src={api.mediaLibrary.downloadUrl(t.headerMediaLibraryId)} controls style={{ display: 'block', width: '100%', maxWidth: 230, borderRadius: 5 }} />
-              : <img src={api.mediaLibrary.downloadUrl(t.headerMediaLibraryId)} alt="" style={{ display: 'block', width: '100%', maxWidth: 230, borderRadius: 5 }} />
-          ) : (
-            <div style={{ height: 96, borderRadius: 5, background: 'var(--c-surfaceAlt)', display: 'flex',
-              alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--c-textMuted)', fontFamily: FONT }}>
-              {t.headerType} header
-            </div>
-          )
-        )}
-
-        <div style={{ padding: mediaHeader ? '5px 6px 2px' : 0 }}>
-          {t.headerType === 'TEXT' && t.headerText && (
-            <div style={{ ...textStyle, fontWeight: 700, marginBottom: 3 }}>{t.headerText}</div>
-          )}
-          {t.body && <div style={{ ...textStyle, whiteSpace: 'pre-wrap' }}>{t.body}</div>}
-          {t.footer && (
-            <div style={{ fontSize: 13, color: 'var(--c-textMuted)', fontFamily: FONT, marginTop: 3 }}>{t.footer}</div>
-          )}
-          <MetaRow isUser={isUser} />
-        </div>
-      </div>
-
-      {buttons.length > 0 && (
-        <div style={{ marginTop: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {buttons.map((b, i) => (
-            <div key={i} style={{
-              background: 'var(--c-cardBg)', borderRadius: 6, padding: '7px 9px', textAlign: 'center',
-              fontSize: 14, fontFamily: FONT, fontWeight: 500, color: 'var(--c-s027eb5, #027EB5)',
-              boxShadow: '0 1px 0.5px rgba(11,20,26,.13)',
-            }}>
-              {b.text || b.label || 'Button'}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Named, because a template is not free text: which one went out is the
-          thing an operator is checking in the simulator. */}
-      <div style={{ fontSize: 11, color: 'var(--c-textMuted)', fontFamily: FONT, marginTop: 3, textAlign: isUser ? 'right' : 'left' }}>
-        Template · {t.name}{t.language ? ` · ${t.language}` : ''}
-      </div>
-    </div>
-  );
-}
-
-function Bubble({ isUser, children, pad }) {
-  return (
-    <div style={{ marginLeft: isUser ? 'auto' : 0, marginRight: isUser ? 0 : 'auto', maxWidth: '82%', marginBottom: 6 }}>
-      <div style={{
-        background: isUser ? 'var(--c-sdcf8c6, #DCF8C6)' : 'var(--c-cardBg)',
-        borderRadius: isUser ? '7.5px 7.5px 0 7.5px' : '7.5px 7.5px 7.5px 0',
-        padding: pad != null ? pad : '6px 9px 5px',
-        boxShadow: '0 1px 0.5px rgba(11,20,26,.13)', overflow: 'hidden',
-      }}>
-        {children}
-      </div>
-    </div>
+    <Bubble from={from} media={media} buttons={buttons} below={`Template · ${t.name}${t.language ? ` · ${t.language}` : ''}`}>
+      {t.headerType === 'TEXT' && t.headerText && <div style={{ fontWeight: 700, marginBottom: 3 }}>{t.headerText}</div>}
+      {t.body}
+      {t.footer && <div style={{ fontSize: 12, color: WA.time, marginTop: 3 }}>{t.footer}</div>}
+    </Bubble>
   );
 }
 
 function MediaItem({ item }) {
   const src = api.mediaLibrary.downloadUrl(item.id);
-  if (item.type === 'image') {
-    return <img src={src} alt={item.name} style={{ display: 'block', width: '100%', maxWidth: 230, borderRadius: 5 }} />;
-  }
-  if (item.type === 'video') {
-    return <video src={src} controls style={{ display: 'block', width: '100%', maxWidth: 230, borderRadius: 5 }} />;
-  }
+  if (item.type === 'image') return <img src={src} alt={item.name} style={mediaStyle} />;
+  if (item.type === 'video') return <video src={src} controls style={mediaStyle} />;
   if (item.type === 'audio') {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 180 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 180, padding: '2px 4px' }}>
         <Music size={16} color="#00A884" style={{ flexShrink: 0 }} />
         <audio controls src={src} style={{ width: 180, maxWidth: '100%', height: 34 }} />
       </div>
     );
   }
   // document / other → a file card that opens on tap
-  return (
-    <a href={src} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 170, textDecoration: 'none', padding: '2px 0' }}>
-      <div style={{ width: 34, height: 38, background: 'var(--c-surface, #fff)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 1px 3px rgba(0,0,0,.15)' }}>
-        <FileText size={16} color="var(--c-xe94235, #e94235)" />
-      </div>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--c-text)', fontFamily: FONT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
-        <div style={{ fontSize: 11, color: 'var(--c-textMuted)', fontFamily: FONT, textTransform: 'uppercase' }}>{(item.type || 'file')}</div>
-      </div>
-    </a>
-  );
-}
-
-function MetaRow({ isUser }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 3, marginTop: 2, marginBottom: -1 }}>
-      <span style={{ fontSize: 12, color: 'var(--c-textSecondary)', fontFamily: FONT }}>9:41</span>
-      {isUser && (
-        <svg width="16" height="11" viewBox="0 0 16 11" fill="none"><path d="M1 5.5L5 9.5L11.5 1" stroke="#53BDEB" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /><path d="M5 5.5L9 9.5L15.5 1" stroke="#53BDEB" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-      )}
-    </div>
-  );
+  return <DocChip name={item.name} kind={(item.type || 'file').toUpperCase()} href={src} />;
 }
 
 function CircleBtn({ children, color, onClick, disabled, label }) {
@@ -521,7 +416,7 @@ function CircleBtn({ children, color, onClick, disabled, label }) {
     <button
       type="button" onClick={onClick} disabled={disabled} aria-label={label} title={label}
       style={{
-        width: 32, height: 32, background: color, borderRadius: '50%', border: 'none',
+        width: 30, height: 30, background: color, borderRadius: '50%', border: 'none',
         display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff',
         flexShrink: 0, boxShadow: '0 1px 2px rgba(0,0,0,.15)',
         cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.55 : 1,
@@ -532,10 +427,6 @@ function CircleBtn({ children, color, onClick, disabled, label }) {
   );
 }
 
-const textStyle = {
-  fontSize: 15, color: 'var(--c-text)', lineHeight: 1.5,
-  whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere', fontFamily: FONT,
-};
 
 function Dot({ delay }) {
   return (

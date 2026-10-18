@@ -1,59 +1,52 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback } from 'react';
 
-// Theme manager: 'light' | 'dark' | 'system'. Persisted per-device in
-// localStorage (the standard for dark mode). 'system' follows the OS setting
-// live via matchMedia. The effective theme is applied as data-theme on <html>,
-// which swaps the CSS-variable palette defined in index.css.
+// Theme manager: 'light' | 'dark', persisted per device in localStorage. The
+// choice is applied as data-theme on <html>, which swaps the palettes in
+// index.css and styles/forge.css.
+//
+// ⚠ DEFAULT IS DARK, not the OS preference. ForgeGrowth ran dark-only from
+// 2026-09-02 until light mode came back, so every existing user's eye is on
+// dark; following the OS would silently flip half of them to light on their
+// next load. index.html applies the same rule before React mounts, so there is
+// no flash — keep the two in step.
 const ThemeCtx = createContext(null);
 const KEY = 'forgecrm.theme';
+const THEMES = ['light', 'dark'];
 
-function systemDark() {
-  return typeof window !== 'undefined'
-    && window.matchMedia
-    && window.matchMedia('(prefers-color-scheme: dark)').matches;
+function readStored() {
+  try {
+    const v = localStorage.getItem(KEY);
+    return THEMES.includes(v) ? v : 'dark';
+  } catch { return 'dark'; }
 }
-function resolve(pref) {
-  return pref === 'system' ? (systemDark() ? 'dark' : 'light') : pref;
+
+function apply(theme) {
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.style.colorScheme = theme;
 }
 
 export function ThemeProvider({ children }) {
   const [theme, setThemeState] = useState(() => {
-    try { return localStorage.getItem(KEY) || 'system'; } catch { return 'system'; }
+    const t = readStored();
+    apply(t);
+    return t;
   });
-  const [effective, setEffective] = useState(() => resolve(theme));
 
-  const apply = useCallback((pref) => {
-    const eff = resolve(pref);
-    document.documentElement.dataset.theme = eff;
-    document.documentElement.style.colorScheme = eff;
-    setEffective(eff);
+  const setTheme = useCallback((next) => {
+    const t = THEMES.includes(next) ? next : 'dark';
+    try { localStorage.setItem(KEY, t); } catch { /* private mode: still switch for this tab */ }
+    apply(t);
+    setThemeState(t);
   }, []);
 
-  const setTheme = useCallback((pref) => {
-    try { localStorage.setItem(KEY, pref); } catch { /* ignore */ }
-    setThemeState(pref);
-    apply(pref);
-  }, [apply]);
-
-  // Apply on mount.
-  useEffect(() => { apply(theme); /* eslint-disable-next-line */ }, []);
-
-  // When following the system, re-apply whenever the OS theme flips.
-  useEffect(() => {
-    if (theme !== 'system' || !window.matchMedia) return;
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const onChange = () => apply('system');
-    mq.addEventListener ? mq.addEventListener('change', onChange) : mq.addListener(onChange);
-    return () => { mq.removeEventListener ? mq.removeEventListener('change', onChange) : mq.removeListener(onChange); };
-  }, [theme, apply]);
-
+  // `effective` is kept for callers that pick a colour per theme (StageBadge).
   return (
-    <ThemeCtx.Provider value={{ theme, setTheme, effective }}>
+    <ThemeCtx.Provider value={{ theme, setTheme, effective: theme }}>
       {children}
     </ThemeCtx.Provider>
   );
 }
 
 export function useTheme() {
-  return useContext(ThemeCtx) || { theme: 'light', setTheme: () => {}, effective: 'light' };
+  return useContext(ThemeCtx) || { theme: 'dark', setTheme: () => {}, effective: 'dark' };
 }

@@ -5,9 +5,8 @@ app. `install.sh` detects that case and records `TLS_MODE=proxy` in `.env`, whic
 Caddy is **not** started and this install cannot obtain its own certificate. It is reachable only at
 `http://<server>:<WEB_PORT>` until you route a domain to it.
 
-If your server had the ports free, you do not need any of this: `install.sh` set `TLS_MODE=caddy`,
-and adding a domain in **Admin Settings → Domain** is the whole job — DNS, then open it in a
-browser.
+If your server has the ports free, you do not need any of this: run `install.sh --domain <host>`
+and the bundled Caddy obtains and renews the certificate itself.
 
 ---
 
@@ -156,125 +155,17 @@ server {
 
 ---
 
-## Optional: let the app publish its own routes
+## Finish in `.env`, then verify
 
-Everything above is per-domain manual work. If this server's Traefik is yours to
-configure, one setup makes it automatic: adding a domain in Admin Settings → Domain
-then needs no shell at all, the same as on a server that owns ports 80/443.
+1. **Add the hostname to `CORS_ORIGIN`** in `.env` (comma-separated if there is more than one), then
+   `./up.sh`. Until you do, the API refuses browser requests from it and sign-in fails with a generic
+   error. Re-running `install.sh --url https://<domain>` writes it for you.
+2. **Check it from outside**, not just in your own browser:
 
-Traefik can watch a **directory** for route files alongside the container labels it
-already reads. Give it one this install can write to, and the app publishes a route
-per domain you add — and deletes it when you remove the domain.
-
-### What it can and cannot do
-
-This matters more than the setup, because the directory is honoured by a Traefik
-that also serves your other sites.
-
-| | |
-|---|---|
-| Routes are generated from | `custom_domains` only — nothing reachable from a request, header or webhook |
-| Route priority | **1**, the lowest Traefik accepts |
-| Can it take a hostname another site already serves? | **No.** A router's default priority is its rule length (~30), so any existing router wins. The route applies only where nothing else claims the name |
-| Can it delete other route files? | **No.** Only files carrying this install's own prefix, which is derived from its upstream container |
-| Certificates | never requested on this path — a file-provider route cannot tell whether a CDN fronts the name, and guessing wrong burns a per-account ACME rate limit |
-
-So it takes the domain you entered, and cannot take anybody else's.
-
-### Setup — once per server
-
-**1. Give Traefik a file provider.** Add to its flags:
-
-```
---providers.file.directory=/dynamic
---providers.file.watch=true
-```
-
-and mount the directory into it:
-
-```yaml
-    volumes:
-      - /opt/forgegrowth-routes:/dynamic
-```
-
-Traefik has to restart once for the flags (about five seconds). It keeps its
-certificates — they live in its own volume.
-
-**2. Point this install at the same directory**, in your `.env`:
-
-```bash
-TRAEFIK_DYNAMIC_DIR=/dynamic
-PROXY_UPSTREAM=http://forgegrowth-web-1:80
-PROXY_ROUTES_DIR=/opt/forgegrowth-routes
-```
-
-`PROXY_UPSTREAM` is how Traefik reaches this install over the shared network —
-use the **container name**, not the compose service name. A service alias is not
-unique once two installs share a network, and `web` would then resolve to
-whichever container answered first.
-
-Find it with:
-
-```bash
-docker compose ps --format '{{.Name}}' | grep web
-```
-
-**3. Mount the directory into this install** and join the proxy network, in an
-overlay kept outside the install directory:
-
-```yaml
-# /opt/forgegrowth-routing.yml
-services:
-  backend:
-    volumes:
-      - ${PROXY_ROUTES_DIR}:${TRAEFIK_DYNAMIC_DIR}
-  web:
-    networks: [default, proxy_default]
-
-networks:
-  proxy_default:
-    external: true
-```
-
-```bash
-echo 'COMPOSE_FILE=docker-compose.yml:/opt/forgegrowth-routing.yml' >> .env
-docker compose up -d
-```
-
-The route directory is deliberately **not** mounted by the shipped compose files:
-the path exists only on a server whose proxy watches it, and it belongs in the same
-overlay that adds the proxy's own flags so the two halves cannot drift apart.
-
-### Confirming it is on
-
-Admin Settings → Domain no longer offers a **Setup file** button, and the wording
-changes to say routes are published automatically. Add a domain, point its DNS
-here, press **Check**.
-
-If a route does not appear, the backend log says why — a directory that is
-read-only or unmounted is reported there and never turned into a failed request:
-
-```bash
-docker compose logs backend | grep '\[traefik\]'
-```
-
----
-
-## Finish in the app, then verify
-
-1. **Admin Settings → Domain → add the hostname.** Until you do, the API refuses browser requests
-   from it and sign-in fails with a generic error. It takes effect within ten seconds; nothing
-   restarts.
-2. **Press Check on that row.** The server fetches the domain from the outside and reports what
-   came back:
-
-   | Result | Meaning |
-   |---|---|
-   | Working over HTTPS | done — and it reached *this* install, not another one |
-   | Reachable over plain HTTP only | routing is right, the certificate is missing |
-   | Something answered, but it is not this install | the proxy has no route for it — usually a typo in the `Host` rule |
-   | Another install answered | more than one install on this machine; the domain is on the wrong one |
-   | Does not resolve | DNS |
+   ```bash
+   curl -sI https://crm.example.com/          # 200 from nginx: the SPA is reachable
+   curl -sI https://crm.example.com/api/auth/me # 401 JSON: the API answers through the same route
+   ```
 
 Do not skip step 2 for a working page in your own browser. A page that loads proves the SPA was
 served; it does not prove the API accepts that origin, and that is the half that breaks logins.

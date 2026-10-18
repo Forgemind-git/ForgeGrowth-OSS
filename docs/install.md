@@ -276,7 +276,6 @@ pressing return. To skip them:
 | `--dir <path>` | install here rather than `./forge-growth` |
 | `--admin-email <addr>` | first-run admin |
 | `--admin-password <pw>` | first-run password (omit and one is generated) |
-| `--proxy-routes <dir>` | emit a config fragment for a reverse proxy that already owns 80/443 |
 | `--no-build` | skip the image build (source installs only) |
 | `--yes` / `-y` | never prompt. Takes this machine's public address when it has one, localhost when it does not |
 
@@ -373,16 +372,14 @@ COMPOSE_FILE=/path/to/docker-compose.yml:/path/to/your-proxy.yml
 > and the install that follows **comes up healthy with no domain attached** — every container green,
 > the site 404. Nothing in the stack can detect that, because from the inside nothing is wrong.
 
-`--proxy-routes <dir>` generates the fragment for you, without letting this install claim a hostname
-that already belongs to something else on the machine.
-
 **[`reverse-proxy.md`](./reverse-proxy.md) is the full version** — a ready-to-edit Traefik overlay
 ([`examples/traefik-overlay.yml`](../examples/traefik-overlay.yml)), the nginx equivalent, when a
 `certresolver` is actively harmful, and the two mistakes that produce a 404 while every container
 reports healthy.
 
-After routing the domain, add it in **Admin Settings → Domain** and press **Check** — the server
-fetches the address from the outside and tells you which link in the chain is broken.
+After routing the domain, make sure it is in `CORS_ORIGIN` in `.env` (re-running `install.sh --url
+https://<domain>` writes it for you) — the API refuses browser requests from an origin it does not
+know.
 
 Deploying to a host you already run? See [`DEPLOY.md`](../DEPLOY.md).
 

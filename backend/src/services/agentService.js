@@ -28,11 +28,6 @@ function agentShape(row) {
     id: row.id,
     name: row.name,
     description: row.description,
-    // Organisational only — which project (campaign) this agent belongs to.
-    // Has no effect on how the agent runs. projectName is only present on the
-    // list query, which joins it.
-    projectId: row.project_id == null ? null : Number(row.project_id),
-    projectName: row.project_name || null,
     systemPrompt: row.system_prompt,
     aiModelId: row.ai_model_id,
     aiProvider: row.ai_provider || null,
@@ -200,12 +195,10 @@ async function listAgents() {
     `SELECT a.*,
             am.provider AS ai_provider,
             am.label    AS ai_label,
-            pr.name     AS project_name,
             (SELECT COUNT(*)::int FROM coexistence.agent_tools t WHERE t.agent_id = a.id) AS tool_count,
             (SELECT MAX(started_at) FROM coexistence.agent_runs r WHERE r.agent_id = a.id) AS last_run_at
        FROM coexistence.agents a
        LEFT JOIN coexistence.ai_models am ON am.id = a.ai_model_id
-       LEFT JOIN coexistence.projects  pr ON pr.id = a.project_id
        ORDER BY a.updated_at DESC`,
   );
   return rows.map(r => ({
@@ -728,40 +721,7 @@ function validateHttpConfig(cfg = {}) {
   return { label: label.slice(0, 120), description: description.slice(0, 1000), method, url, headers, params, timeout_ms: timeoutMs };
 }
 
-/**
- * Validate + normalise a `lead_form` tool config.
- *
- * Stores ONLY the form id as the live reference, plus a name/slug SNAPSHOT for
- * the tool row's label. The snapshot is display-only and deliberately never
- * read at run time — buildFormTools re-reads the form on every run, so renaming
- * a form, editing its questions or unpublishing it takes effect immediately
- * instead of leaving the agent asking last month's questions.
- *
- * `published` is NOT required here: attaching the tool while the form is still a
- * draft is a reasonable order of work. The engine refuses to build a tool for an
- * unpublished form (and says why), and the picker flags it.
- */
-async function validateLeadFormConfig(config) {
-  const formId = parseInt(config?.form_id, 10);
-  if (!Number.isFinite(formId)) throw new ApiError(400, 'Pick a form for the agent to fill.');
-  const { rows } = await pool.query(
-    'SELECT id, name, slug, status, fields FROM coexistence.lead_forms WHERE id = $1',
-    [formId],
-  );
-  const form = rows[0];
-  if (!form) throw new ApiError(400, 'That form no longer exists.');
-  // A form of nothing but section headings has no questions to ask, so the tool
-  // would be built and then never be usable. Refuse it here, where the operator
-  // can see the message, rather than logging it at run time.
-  const askable = (Array.isArray(form.fields) ? form.fields : []).filter(f => f && f.type !== 'section' && f.mapsTo !== 'phone');
-  if (askable.length === 0) {
-    throw new ApiError(400, `"${form.name}" has no questions the agent could ask. Add at least one field that is not a section heading, then try again.`);
-  }
-  return { form_id: form.id, form_name: form.name, form_slug: form.slug };
-}
-
 // Validate a tool body by type; returns the cleaned config to persist.
-// Async because some types (lead_form) validate against the database.
 async function validateToolConfig(toolType, config) {
   if (toolType === 'google_sheets') {
     const cfg = config;
@@ -777,7 +737,7 @@ async function validateToolConfig(toolType, config) {
     return validateHttpConfig(config);
   }
   if (toolType === 'lead_form') {
-    return await validateLeadFormConfig(config);
+    throw new ApiError(400, 'Form tools were removed. Use a Google Sheets or HTTP tool instead.');
   }
   return config;
 }

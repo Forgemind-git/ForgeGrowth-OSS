@@ -104,7 +104,7 @@ you replay them. It is the most useful tool in this loop by a distance.
 ## Three things that bite
 
 **Opening the interface *through the tunnel*** rather than through `localhost` requires adding
-`your-name.ngrok-free.app` in **Admin Settings → Domain**. Otherwise API calls from that origin are
+`https://your-name.ngrok-free.app` to `CORS_ORIGIN` in `.env` (then `./scripts/up.sh`). Otherwise API calls from that origin are
 refused, and the refusal reaches the login screen as *"Incorrect email or password"* — which sends
 you looking at the wrong thing entirely.
 

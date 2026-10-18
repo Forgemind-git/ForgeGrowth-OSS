@@ -25,13 +25,17 @@ const { resumeExpiredWaits } = require('./engine/automationEngine');
 const { router: mediaRouter } = require('./routes/media');
 const { router: mediaLibraryRouter } = require('./routes/mediaLibrary');
 const minioClient = require('./util/minioClient');
-const { router: whatsappAccountsRouter } = require('./routes/whatsappAccounts');
+const { router: whatsappAccountsRouter, ensureWhatsappAccountColumns } = require('./routes/whatsappAccounts');
 const { router: aiModelsRouter } = require('./routes/aiModels');
 const { router: usersRouter } = require('./routes/users');
 const roleConfig = require('./services/roleConfig');
 const { router: eventsRouter } = require('./routes/events');
 const { router: webhookHistoryRouter } = require('./routes/webhookHistory');
 const { router: waLinksRouter, publicRouter: waLinksPublicRouter } = require('./routes/waLinks');
+// Public /pay/<token> redirect — the destination of a payment template's URL
+// button. Mounted at the ROOT (not /api) so the customer-facing link is short.
+const { publicRouter: payLinkPublicRouter } = require('./routes/payLink');
+const messageFormats = require('./services/messageFormats');
 const { router: dashboardRouter } = require('./routes/dashboard');
 const { router: pipelinesRouter } = require('./routes/pipelines');
 const { router: leadsRouter } = require('./routes/leads');
@@ -39,14 +43,18 @@ const { router: funnelRouter, ensureFunnelTables } = require('./routes/funnel');
 const funnelTags = require('./services/funnelTags');
 const productTags = require('./services/productTags');
 const { router: salesLogRouter, ensureSalesLogTables } = require('./routes/salesLog');
+const { router: entityFieldsRouter, ensureEntityFieldTables } = require('./routes/entityFields');
 const { router: marketingRouter, syncMetaAds, ensureAdSetTables } = require('./routes/marketing');
 const { router: resourcesRouter } = require('./routes/resources');
-const { router: leadFormsRouter, publicRouter: leadFormsPublicRouter, ensureLeadFormTables } = require('./routes/leadForms');
-// Custom domains: the allow-list behind Admin Settings -> Domain, consulted by
-// the CORS check above and by Caddy's on-demand-TLS `ask` endpoint.
-const { router: domainsRouter, publicRouter: domainsPublicRouter, ensureDomainTables } = require('./routes/domains');
-const domainService = require('./services/domainService');
-const { router: ctwaRouter, ensureCtwaTables } = require('./routes/ctwa');
+const { router: chatAnalyserRouter } = require('./routes/chatAnalyser');
+const { router: leadFollowUpsRouter } = require('./routes/leadFollowUps');
+const { router: paymentFilterPresetsRouter, ensurePresetTables: ensurePaymentFilterPresetTables } = require('./routes/paymentFilterPresets');
+const { ensureFollowUpTables } = require('./services/followUps');
+const { ensureChatAnalyserTables } = require('./services/chatAnalyser');
+const { router: ctwaRouter, ensureCtwaTables, sweepStageEvents } = require('./routes/ctwa');
+const { router: cloRouter, ensureCloTables } = require('./routes/clo');
+// Per-template message costs — what we owe Meta for every message sent.
+const { router: messageCostsRouter, ensureCostTables } = require('./routes/messageCosts');
 const { router: integrationsRouter, publicRouter: integrationsPublicRouter } = require('./routes/integrations');
 const { router: agentsRouter } = require('./routes/agents');
 const { router: agentConversationRouter } = require('./routes/agentConversation');
@@ -57,17 +65,10 @@ const {
   ensureMcpOAuthTables,
 } = require('./routes/mcpOAuth');
 const { mcpHttpHandler } = require('./mcpHttp');
-// Public /pay/<token> redirect — the destination of a payment template's URL
-// button. Mounted at the ROOT (not /api) so the customer-facing link is short.
-const { publicRouter: payLinkPublicRouter } = require('./routes/payLink');
-const { router: projectsRouter, ensureProjectTables } = require('./routes/projects');
-const messageFormats = require('./services/messageFormats');
-const { router: entityFieldsRouter, ensureEntityFieldTables } = require('./routes/entityFields');
-// Per-template message costs — what Meta actually charged.
-const { router: messageCostsRouter, ensureCostTables } = require('./routes/messageCosts');
 const { startWorker: startMediaWorker, shutdown: shutdownMediaQueue } = require('./queue/mediaQueue');
 const { startSendWorker, shutdownSendQueue } = require('./queue/sendQueue');
 const { startAgentWorker, shutdownAgentQueue } = require('./queue/agentQueue');
+const { router: workflowAgentsRouter } = require('./routes/workflowAgents');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -105,30 +106,67 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-app.use(cors({
+// The app's own surface: cookie-authenticated, so the origin allow-list is
+// strict and a stranger is refused outright.
+const strictCors = cors({
   credentials: true,
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
     if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-    // Domains added in Admin Settings -> Domain widen this list without a
-    // restart. They have to be consulted HERE and not merged into
-    // ALLOWED_ORIGINS at startup, because the whole point of that screen is that
-    // a domain starts working the moment it is added — CORS_ORIGIN comes from
-    // .env, which the container cannot re-read while it is running.
-    //
-    // Served from a ten-second cache in domainService, so this is a Set lookup
-    // on all but the first request. A failure resolves to "not allowed", which
-    // is the same answer the line above would have given.
-    domainService.allowedOriginsFromDb()
-      .then((extra) => {
-        if (extra.includes(origin)) return callback(null, true);
-        callback(new Error('Not allowed by CORS'));
-      })
-      .catch(() => callback(new Error('Not allowed by CORS')));
+    callback(new Error('Not allowed by CORS'));
   },
-}));
+});
+
+// ⚠ The MCP surface is reached from ANOTHER ORIGIN by design — Claude's
+// connector runs on claude.ai, and RFC 8414/9728 discovery plus the OAuth
+// authorize/token legs are all cross-origin. Running them through the strict
+// list above threw "Not allowed by CORS", which the global handler turns into a
+// 500 — that WAS the "Internal server error" on /api/mcp/oauth/authorize.
+// Registration still succeeded (a server-to-server POST sends no Origin and hit
+// the `!origin` arm), so the connector looked half-alive: clients kept being
+// created while no token was ever issued.
+//
+// ⚠ `credentials` MUST stay false here, and that is the whole reason this is
+// safe. These endpoints authenticate with a Bearer token, never the session
+// cookie, so no Access-Control-Allow-Credentials is sent and a browser can
+// neither attach forgegrowth_token nor read a logged-in user's response.
+// Reflecting an arbitrary origin WITH credentials on a cookie-authenticated
+// route is the real vulnerability — never merge these two into one policy.
+//
+// The admin routes that share the /api/mcp prefix (settings, keys,
+// oauth/clients) are deliberately NOT listed: they are cookie-authenticated and
+// belong to the strict policy.
+const MCP_PUBLIC_PATHS = [
+  /^\/\.well-known\/oauth-(authorization-server|protected-resource)(\/|$)/,
+  /^\/api\/mcp\/oauth\/(authorize|token|register)(\/|$)/,
+  /^\/api\/mcp$/,               // Streamable HTTP transport (OAuth bearer)
+  /^\/api\/mcp\/http\/[^/]+$/,  // legacy key-in-URL transport
+  /^\/api\/mcp\/v1(\/|$)/,      // REST surface the stdio server calls
+  /^\/api\/social\/mcp\/http\/[^/]+$/,  // Social section's key-in-URL MCP transport
+];
+const isMcpPublicPath = (p) => MCP_PUBLIC_PATHS.some((re) => re.test(p));
+
+const mcpCors = cors({
+  origin: true,        // reflect whoever asked
+  credentials: false,  // ← load-bearing; see above
+  methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  // allowedHeaders is omitted on purpose so the preflight reflects whatever the
+  // client asked for — a fixed list silently breaks the day a client adds a
+  // header (MCP-Protocol-Version arrived exactly that way).
+  // The 401 that STARTS the OAuth dance carries the resource-metadata pointer;
+  // a browser client cannot read it unless it is explicitly exposed.
+  exposedHeaders: ['WWW-Authenticate', 'Mcp-Session-Id'],
+  maxAge: 86400,
+});
+
+app.use((req, res, next) => (isMcpPublicPath(req.path) ? mcpCors : strictCors)(req, res, next));
 
 app.use(cookieParser());
+// Social section (ported ForgeSocial) — mounted BEFORE the JSON parsers below
+// because it parses its own bodies (the Instagram webhook verifies the raw bytes)
+// and before the API rate limiter (it has its own per-platform budget).
+const social = require('./social');
+app.use('/api/social', (req, res, next) => { req.url = req.originalUrl; social.app(req, res, next); });
 // MCP transports accept inline file uploads (base64) for send_media — those
 // bodies blow past the default 1mb. Mount a larger parser for the MCP paths
 // BEFORE the global parser; express.json no-ops once req._body is set, so the
@@ -171,6 +209,26 @@ const apiLimiter = rateLimit({
 });
 app.use(apiLimiter);
 
+// Diagnostic request log for the MCP + OAuth surface. OFF unless
+// MCP_REQUEST_LOG=1, because /api bypasses nginx (Traefik routes PathPrefix
+// /api straight to the backend) and Traefik has no access log — so without
+// this there is NO record of whether a client's request even arrived.
+// Never logs the token itself, only whether one was present.
+if (process.env.MCP_REQUEST_LOG === '1') {
+  app.use((req, res, next) => {
+    if (!/^\/(api\/mcp|\.well-known\/oauth)/.test(req.path)) return next();
+    const started = Date.now();
+    const auth = req.headers.authorization || '';
+    const kind = auth.startsWith('Bearer ') ? `bearer(${auth.length - 7}ch)` : auth ? 'other-auth' : 'none';
+    res.on('finish', () => {
+      console.log(`[mcp-req] ${req.method} ${req.originalUrl} auth=${kind} ` +
+        `ua="${(req.headers['user-agent'] || '').slice(0, 40)}" ip=${req.headers['cf-connecting-ip'] || req.ip} ` +
+        `-> ${res.statusCode} ${Date.now() - started}ms`);
+    });
+    next();
+  });
+}
+
 // Health check
 app.get('/health', (req, res) => res.json({ ok: true }));
 
@@ -182,11 +240,7 @@ app.use('/', waLinksPublicRouter);
 app.use('/', payLinkPublicRouter);
 // Google OAuth callback is public — Google posts back without our cookie
 app.use('/api', integrationsPublicRouter);
-// Lead Forms — public fill/submit endpoints (no auth; visitors reach these from a shared link)
-app.use('/api', leadFormsPublicRouter);
-// Caddy's on-demand-TLS check. Must be public: it is called during the TLS
-// handshake, before any session or even a completed HTTPS connection exists.
-app.use('/api', domainsPublicRouter);
+
 // MCP API — authenticates via its OWN bearer middleware (not the JWT cookie)
 app.use('/api/mcp/v1', mcpApiRouter);
 // MCP OAuth 2.1 — discovery, authorize, token, register. Public by necessity:
@@ -215,8 +269,6 @@ app.use('/api', authMiddleware, chatbotsRouter);
 app.use('/api', authMiddleware, mediaRouter);
 app.use('/api', authMiddleware, mediaLibraryRouter);
 app.use('/api', authMiddleware, whatsappAccountsRouter);
-// Admin Settings -> Domain. Every route inside is adminOnly.
-app.use('/api', authMiddleware, domainsRouter);
 app.use('/api', authMiddleware, aiModelsRouter);
 app.use('/api', authMiddleware, usersRouter);
 app.use('/api', authMiddleware, eventsRouter);
@@ -229,18 +281,21 @@ app.use('/api', authMiddleware, dashboardRouter);
 app.use('/api', authMiddleware, pipelinesRouter);
 // AI Academy Dashboard (leads funnel + marketing + BDA)
 app.use('/api', authMiddleware, leadsRouter);
+app.use('/api', authMiddleware, chatAnalyserRouter);
+app.use('/api', authMiddleware, leadFollowUpsRouter);
+app.use('/api', authMiddleware, paymentFilterPresetsRouter);
 app.use('/api', authMiddleware, funnelRouter);
 app.use('/api', authMiddleware, salesLogRouter);
+app.use('/api', authMiddleware, entityFieldsRouter);
 app.use('/api', authMiddleware, marketingRouter);
 app.use('/api', authMiddleware, ctwaRouter);
-app.use('/api', authMiddleware, resourcesRouter);
-app.use('/api', authMiddleware, leadFormsRouter);
-app.use('/api', authMiddleware, projectsRouter);
-app.use('/api', authMiddleware, entityFieldsRouter);
+app.use('/api', authMiddleware, cloRouter);
 app.use('/api', authMiddleware, messageCostsRouter);
+app.use('/api', authMiddleware, resourcesRouter);
 app.use('/api', authMiddleware, integrationsRouter);
 app.use('/api', authMiddleware, agentsRouter);
 app.use('/api', authMiddleware, agentConversationRouter);
+app.use('/api', authMiddleware, workflowAgentsRouter);
 app.use('/api', authMiddleware, mcpAdminRouter);
 app.use('/api', authMiddleware, mcpOAuthAdminRouter);
 
@@ -253,6 +308,9 @@ app.use((err, req, res, next) => {
 // Start server
 async function start() {
   await ensureTables();
+  await ensureWhatsappAccountColumns().catch(err =>
+    console.error('[whatsapp-accounts] label ensure failed (apply migration 133):', err.message)
+  );
   await ensureMcpTables().catch(err =>
     console.error('[mcp] table ensure failed (apply migration 053):', err.message)
   );
@@ -286,6 +344,13 @@ async function start() {
   await ensurePaymentRequestTables().catch(err =>
     console.error('[payment-requests] table ensure failed (apply migration 085):', err.message)
   );
+  // Chat payments: ALTERs payment_requests + automation_executions + agents and
+  // ALTERs payment_requests + automation_executions + agents, so it runs AFTER
+  // ensurePaymentRequestTables (whose
+  // table it references) and after ensureTables (which owns agents).
+  await require('./services/paymentFlow').ensurePaymentFlowTables().catch(err =>
+    console.error('[payment-flow] table ensure failed (apply migration 091):', err.message)
+  );
   // The pulled payment ledger. ALTERs razorpay_config, so it runs after
   // ensureRazorpayTables.
   await ensurePaymentLedgerTables().catch(err =>
@@ -308,57 +373,74 @@ async function start() {
   await ensureSalesLogTables().catch(err =>
     console.error('[salesLog] table ensure failed (apply migration 064):', err.message)
   );
-  await ensureDomainTables().catch(err =>
-    console.error('[startup] ensureDomainTables failed:', err.message));
-  await ensureLeadFormTables().catch(err =>
-    console.error('[leadForms] table ensure failed (apply migration 066):', err.message)
-  );
-  await ensureAdSetTables().catch(err =>
-    console.error('[marketing] ad set table ensure failed (apply migration 074):', err.message)
-  );
-  // Chat Analyser references leads(id) + ai_models(id) — run AFTER those exist.
-  await ensureCtwaTables().catch(err =>
-    console.error('[ctwa] table ensure failed (apply migration 073):', err.message)
-  );
-  // Chat payments: ALTERs payment_requests + automation_executions + agents and
-  // creates payment_watches, so it runs AFTER ensurePaymentRequestTables (whose
-  // table it references) and after ensureTables (which owns agents).
-  await require('./services/paymentFlow').ensurePaymentFlowTables().catch(err =>
-    console.error('[payment-flow] table ensure failed (apply migration 091):', err.message)
-  );
   // Entity-field registry (Leads / Sales Log / Transaction fields). ALTERs
   // sales_log (custom_fields) so it runs AFTER ensureSalesLogTables, and it
   // loads the fieldRegistry cache the leads routes + variable resolver read.
   await ensureEntityFieldTables().catch(err =>
     console.error('[entity-fields] table ensure failed (apply migration 097):', err.message)
   );
-  // Projects group templates + automations + agents + follow-ups + forms. Only
-  // ALTERs those tables, so ordering against the rest of this sequence does not
-  // matter — but it MUST perform the automation_folders rename itself, not just
-  // create-if-missing, or an upgrading instance ends up with an empty projects
-  // table beside the real folder table.
-  await ensureProjectTables().catch(err =>
-    console.error('[projects] table ensure failed (apply migration 094):', err.message)
+  await ensureChatAnalyserTables().catch(err =>
+    console.error('[chat-analyzer] table ensure failed (apply migration 110):', err.message)
+  );
+  // My list + follow-up calendar (migration 128). After the analyser's ensure:
+  // it adds chat_analysis.next_follow_up.
+  await ensureFollowUpTables().catch(err =>
+    console.error('[follow-ups] table ensure failed (apply migration 128):', err.message)
+  );
+  await ensurePaymentFilterPresetTables().catch(err =>
+    console.error('[payment-filter-presets] table ensure failed (apply migration 129):', err.message)
+  );
+  await ensureAdSetTables().catch(err =>
+    console.error('[marketing] ad set table ensure failed (apply migration 074):', err.message)
   );
   // Message-format cache. The inbound webhook reads it SYNCHRONOUSLY to
   // attribute a conversation to the link that produced it, so it must be warm
   // before the first message lands. A failure here only costs attribution —
   // refreshMessageFormats swallows its own errors.
   await messageFormats.refreshMessageFormats();
-  // Message costs: ALTERs chat_history, which every other ensure has finished
-  // with by now.
-  await ensureCostTables().catch(err =>
-    console.error('[message-costs] table ensure failed (apply migration 098):', err.message)
+  // Chat Analyser references leads(id) + ai_models(id) — run AFTER those exist.
+  await ensureCtwaTables().catch(err =>
+    console.error('[ctwa] table ensure failed (apply migration 073):', err.message)
+  );
+  // CLO references leads(id) — run after the leads table exists.
+  await ensureCloTables().catch(err =>
+    console.error('[clo] table ensure failed (apply migration 077):', err.message)
+  );
+  // Landing-page visitor links (migration 122). References leads(id). The
+  // table stays empty unless LANDING_SOURCES connects a landing page.
+  await require('./services/landingLeads').ensureLandingTables().catch(err =>
+    console.error('[landing] table ensure failed (apply migration 122):', err.message)
   );
   await require('./services/agentService').ensureAgentTables().catch(err =>
     console.error('[agents] limit column ensure failed (apply migration 102):', err.message)
   );
+  // Workflow Agents (migration 121). References forgecrm_users, whatsapp_accounts,
+  // leads, ai_models and chat_message_artifacts, so it runs after all of their
+  // ensures. A failure disables the module, never the rest of the app.
+  let workflowAgentsReady = false;
+  try {
+    await require('./services/workflowAgents/schema').ensureWorkflowAgentTables();
+    await require('./services/workflowAgents/presets').syncPresets();
+    workflowAgentsReady = true;
+  } catch (err) {
+    console.error('[workflow-agents] table ensure failed (apply migration 121):', err.message);
+  }
   minioClient.ensureBucket().catch(err =>
     console.error('[minio] bucket ensure failed (will retry on first upload):', err.message)
   );
   startMediaWorker();
   startSendWorker();
   startAgentWorker();
+  if (workflowAgentsReady && process.env.WORKFLOW_AGENTS_DISABLED !== '1') {
+    require('./services/workflowAgents/queue').startWorkflowAgentWorker();
+    require('./services/workflowAgents/triggers').startWorkflowAgentScheduler();
+  }
+
+  // Message costs. ensureCostTables ALTERs chat_history, which every other
+  // ensure has finished with by now.
+  await ensureCostTables().catch(err =>
+    console.error('[message-costs] table ensure failed (apply migration 098):', err.message)
+  );
 
   // Stale-pause sweeper: mark paused automation executions that have outlived
   // their expires_at as error. Resume already inline-checks expires_at, so
@@ -406,6 +488,7 @@ async function start() {
       console.error('[sweeper] error:', err.message);
     }
   }, 30 * 60 * 1000).unref();
+
 
   // (The agent close-summary sweeper used to run here. The capability was
   // removed from the agent, so the timer went with it rather than being left
@@ -521,15 +604,6 @@ async function start() {
   setTimeout(runRazorpayLedgerSync, 2 * 60 * 1000).unref();
   setInterval(runRazorpayLedgerSync, RZP_LEDGER_MS).unref();
 
-  // Funnel-stage tags: a cursor over the append-only lead_events log. The bus
-  // kick inside funnelTags.js does the real-time work; this is the safety net
-  // for a stage change that never emitted. Override with
-  // FUNNEL_TAG_SWEEP_INTERVAL_MS.
-  const TAG_SWEEP_MS = parseInt(process.env.FUNNEL_TAG_SWEEP_INTERVAL_MS || '', 10) || 5 * 60 * 1000;
-  const sweepFunnelTags = () => funnelTags.sweepStageEvents()
-    .catch(err => console.error('[funnel-tags] sweep failed:', err.message));
-  setTimeout(sweepFunnelTags, 45 * 1000).unref();
-  setInterval(sweepFunnelTags, TAG_SWEEP_MS).unref();
 
   // Message costs: pulls Meta's own pricing_analytics, which is the ONLY source
   // of the actual money cost — the status webhook says what was billed but never
@@ -549,6 +623,46 @@ async function start() {
   setTimeout(runPricingSync, 4 * 60 * 1000).unref();
   setInterval(runPricingSync, PRICING_SYNC_MS).unref();
 
+  // Conversions API sweeper: walks new 'stage_changed' rows in lead_events and
+  // sends the mapped conversion back to Meta with the lead's CTWA click id. The
+  // bus already kicks a sweep seconds after any lead change — this interval is
+  // the safety net for anything that changed a stage without emitting. Idle
+  // unless the master switch is on. Override with CAPI_SWEEP_INTERVAL_MS.
+  const CAPI_SWEEP_MS = parseInt(process.env.CAPI_SWEEP_INTERVAL_MS || '', 10) || 5 * 60 * 1000;
+  setTimeout(sweepStageEvents, 60 * 1000).unref();
+  setInterval(sweepStageEvents, CAPI_SWEEP_MS).unref();  // every 5 min (gated by capi_config.enabled)
+
+  // Funnel-stage tags: same cursor-over-lead_events shape as CAPI above. The
+  // bus kick inside funnelTags.js does the real-time work; this is the safety
+  // net for a stage change that never emitted. Override with
+  // FUNNEL_TAG_SWEEP_INTERVAL_MS.
+  const TAG_SWEEP_MS = parseInt(process.env.FUNNEL_TAG_SWEEP_INTERVAL_MS || '', 10) || 5 * 60 * 1000;
+  const sweepFunnelTags = () => funnelTags.sweepStageEvents()
+    .catch(err => console.error('[funnel-tags] sweep failed:', err.message));
+  setTimeout(sweepFunnelTags, 45 * 1000).unref();
+  setInterval(sweepFunnelTags, TAG_SWEEP_MS).unref();
+
+  // Conversion Leads Optimisation: sweep new stage changes into clo_events, then
+  // ship the pending ones to Meta's CRM dataset. Meta asks for at least one
+  // upload per day; 15 minutes gives a wide margin and keeps the optimiser fed
+  // with fresh signal. Idle unless clo_settings.enabled. CLO_FLUSH_INTERVAL_MS.
+  const CLO_FLUSH_MS = parseInt(process.env.CLO_FLUSH_INTERVAL_MS || '', 10) || 15 * 60 * 1000;
+  const runCloCycle = async () => {
+    try {
+      const d = require('./services/cloDispatcher');
+      const swept = await d.sweepStageChanges();
+      if (swept.reason === 'disabled') return;
+      const flushed = await d.flush();
+      if (flushed.sent || flushed.failed) {
+        console.log(`[clo] flushed ${flushed.sent} sent, ${flushed.failed} failed`);
+      }
+    } catch (err) {
+      console.error('[clo] cycle error:', err.message);
+    }
+  };
+  setTimeout(runCloCycle, 2 * 60 * 1000).unref();
+  setInterval(runCloCycle, CLO_FLUSH_MS).unref();
+
   // NOTE: the payment-watch sweeper was retired with the automation Payment
   // node (2026-08-12). Its only two callers were that node and the agent
   // payment tools (removed with migration 104), so it had nothing left to
@@ -558,6 +672,7 @@ async function start() {
   const server = app.listen(PORT, () => {
     console.log(`[ForgeChat] Backend running on port ${PORT}`);
   });
+  social.start();
 
   // Graceful shutdown so BullMQ marks in-flight jobs as stalled (not lost)
   const shutdown = async (sig) => {
@@ -566,6 +681,7 @@ async function start() {
     await shutdownMediaQueue();
     await shutdownSendQueue();
     await shutdownAgentQueue();
+    await require('./services/workflowAgents/queue').shutdownWorkflowAgentQueue();
     process.exit(0);
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));

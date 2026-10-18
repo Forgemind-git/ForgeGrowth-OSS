@@ -87,7 +87,7 @@ const SELECT_FORMAT = `
          COALESCE((
            SELECT json_agg(json_build_object(
                     'id', t.id, 'wa_account_id', t.wa_account_id,
-                    'account_name', a.display_name,
+                    'account_name', COALESCE(NULLIF(btrim(a.label), ''), a.display_name),
                     'phone_number', t.phone_number, 'slug', t.slug)
                   ORDER BY t.sort_order, t.id)
              FROM coexistence.wa_link_targets t
@@ -108,7 +108,7 @@ async function resolveTargets(accountIds) {
   const ids = [...new Set((accountIds || []).map(Number).filter(Number.isFinite))];
   if (!ids.length) return { error: 'Pick at least one WhatsApp number.' };
   const { rows } = await pool.query(
-    `SELECT id, display_name, display_phone_number
+    `SELECT id, COALESCE(NULLIF(btrim(label), ''), display_name) AS display_name, display_phone_number
        FROM coexistence.whatsapp_accounts WHERE id = ANY($1::bigint[])`,
     [ids]
   );
@@ -380,7 +380,7 @@ router.get(P('/:id/stats'), async (req, res) => {
         [id, since]
       ),
       pool.query(
-        `SELECT t.id, t.phone_number, a.display_name,
+        `SELECT t.id, t.phone_number, COALESCE(NULLIF(btrim(a.label), ''), a.display_name) AS display_name,
                 (SELECT COUNT(*) FROM coexistence.wa_link_clicks c
                   WHERE c.target_id = t.id AND c.clicked_at >= NOW() - $2::interval) AS clicks,
                 (SELECT COUNT(*) FROM coexistence.wa_link_hits h

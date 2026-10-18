@@ -1,5 +1,5 @@
 ---
-description: Give Forge Growth a marketing/sales game plan and let Claude configure the funnel (posters, templates, automations, lead forms, bulk sends) with a confirmation step before anything goes live.
+description: Give Forge Growth a marketing/sales game plan and let Claude configure the funnel (posters, templates, automations, bulk sends) with a confirmation step before anything goes live.
 ---
 
 Use the **forge-growth-marketer** skill to act on the following Forge Growth game plan.

@@ -40,10 +40,14 @@ router.get('/events', (req, res) => {
   const handlers = {
     'contact-assignment-changed': (payload) => writeEvent('contact-assignment-changed', payload),
     'contact-saved': (payload) => writeEvent('contact-saved', payload),
+    'numbers-changed': (payload) => writeEvent('numbers-changed', payload),
     'conversation-read': (payload) => writeEvent('conversation-read', payload),
     'pipeline-changed': (payload) => writeEvent('pipeline-changed', payload),
     'message-status': (payload) => writeEvent('message-status', payload),
     'lead-changed': (payload) => writeEvent('lead-changed', payload),
+    // Workflow Agents: ids only; clients refetch through permission-checked endpoints.
+    'workflow-agent-run': (payload) => writeEvent('workflow-agent-run', payload),
+    'workflow-agent-actions': (payload) => writeEvent('workflow-agent-actions', payload),
   };
   for (const [event, handler] of Object.entries(handlers)) {
     bus.on(event, handler);

@@ -1,23 +1,25 @@
 <!DOCTYPE html>
-<html lang="en">
+<!-- data-theme="dark" is only the no-JS default. The script below applies the
+     saved choice before first paint; theme.jsx owns it after that. Both default
+     to DARK when nothing is saved — keep them in step. -->
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('forgecrm.theme');
+        if (t !== 'light' && t !== 'dark') t = 'dark';
+        document.documentElement.dataset.theme = t;
+        document.documentElement.style.colorScheme = t;
+      } catch (e) {}
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Forge Growth — WhatsApp CRM</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <script>
-    // Apply the saved theme before React mounts to avoid a flash of light mode.
-    (function () {
-      try {
-        var p = localStorage.getItem('forgecrm.theme') || 'system';
-        var dark = p === 'dark' || (p === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-        document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
-      } catch (e) {}
-    })();
-  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@200..800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 </head>
 <body>
   <div id="root"></div>

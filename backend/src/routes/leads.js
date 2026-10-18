@@ -30,6 +30,8 @@ const cfg = require('../services/funnelConfig');
 const funnelTags = require('../services/funnelTags');
 const productTags = require('../services/productTags');
 const registry = require('../services/fieldRegistry');
+const paymentStatus = require('../services/paymentStatus');
+const { parseDateRange, isWindowed, timestampClause, dateClause } = require('../util/dateRange');
 
 const multer = require('multer');
 const router = Router();
@@ -64,6 +66,27 @@ function emitLeadChanged(payload = {}) {
 // `typeof === 'object'`, so the guard must be explicit.
 const asBag = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
 
+// Payment status of a sale, derived from whatever the row carries: the manual
+// override, the paid total (the live deduped union when the query computed
+// `total_paid_paise`, else the stamped leads.paid_amount_paise) and the
+// product's default price when the query joined it (`product_price_paise`).
+function paymentStatusOf(r) {
+  const d = paymentStatus.derivePaymentStatus({
+    override: r.payment_status,
+    totalPaidPaise: r.total_paid_paise != null ? r.total_paid_paise : r.paid_amount_paise,
+    pricePaise: r.product_price_paise,
+    refundedPaise: r.total_refunded_paise,
+  });
+  return {
+    paymentStatus: d.status,
+    paymentStatusSource: d.source,
+    paymentStatusOverride: paymentStatus.isPaymentStatus(r.payment_status) ? r.payment_status : null,
+    productPrice: r.product_price_paise == null ? null : Math.round(Number(r.product_price_paise)) / 100,
+    outstandingAmount: d.outstandingPaise == null ? null : d.outstandingPaise / 100,
+    totalRefunded: r.total_refunded_paise == null ? 0 : Math.round(Number(r.total_refunded_paise)) / 100,
+  };
+}
+
 function leadRow(r) {
   return {
     id: Number(r.id),
@@ -97,6 +120,7 @@ function leadRow(r) {
     paymentDate: r.payment_date,
     paidCourse: r.paid_course,
     paidAmount: r.paid_amount_paise == null ? null : Math.round(Number(r.paid_amount_paise)) / 100,
+    ...paymentStatusOf(r),
     formStatus: r.form_status,
     zip: r.zip,
     state: r.state,
@@ -177,20 +201,42 @@ function buildLeadFilter(req) {
   return { clause, params };
 }
 
+// The product's default price rides along on every lead read so the payment
+// status can be derived. Matched by NAME (leads.paid_course is TEXT), the same
+// rule productSales.js uses to attribute a sale to a product.
+const PRODUCT_PRICE_LATERAL = `
+    LEFT JOIN LATERAL (
+      SELECT c.default_price_paise FROM coexistence.courses c
+       WHERE l.paid_course IS NOT NULL
+         AND lower(btrim(c.name)) = lower(btrim(l.paid_course))
+       ORDER BY c.id LIMIT 1
+    ) pr ON TRUE`;
+
+// Refunds recorded on the sale (migration 132) — summed alongside every lead
+// so the payment status and the Sales Log can net them off.
+const REFUNDS_LATERAL = `
+    LEFT JOIN LATERAL (
+      SELECT COALESCE(SUM(sr.amount_paise), 0)::bigint AS total_refunded_paise
+        FROM coexistence.sale_refunds sr WHERE sr.lead_id = l.id
+    ) rf ON TRUE`;
+
 const SELECT_LEAD = `
-  SELECT l.*, u.display_name AS assigned_user_name
+  SELECT l.*, u.display_name AS assigned_user_name, pr.default_price_paise AS product_price_paise,
+         rf.total_refunded_paise
     FROM coexistence.leads l
-    LEFT JOIN coexistence.forgecrm_users u ON u.id = l.assigned_user_id`;
+    LEFT JOIN coexistence.forgecrm_users u ON u.id = l.assigned_user_id${PRODUCT_PRICE_LATERAL}${REFUNDS_LATERAL}`;
 
 // ── list ──────────────────────────────────────────────────────────────────────
 router.get('/leads', async (req, res) => {
   try {
     const { clause, params } = buildLeadFilter(req);
-    const { rows } = await pool.query(
-      `${SELECT_LEAD} ${clause} ORDER BY l.last_activity_at DESC NULLS LAST, l.id DESC LIMIT 1000`,
-      params
-    );
-    res.json({ leads: rows.map(leadRow) });
+    const [{ rows }, { rows: [cnt] }] = await Promise.all([
+      pool.query(`${SELECT_LEAD} ${clause} ORDER BY l.last_activity_at DESC NULLS LAST, l.id DESC LIMIT 1000`, params),
+      // The list is capped at 1000 rows; the total says how many match, so the
+      // page can say "newest 1,000 of 1,239" instead of implying that is all.
+      pool.query(`SELECT COUNT(*)::int AS n FROM coexistence.leads l ${clause}`, params),
+    ]);
+    res.json({ leads: rows.map(leadRow), total: cnt.n });
   } catch (err) {
     console.error('[leads] list error:', err.message);
     res.status(500).json({ error: 'Failed to fetch leads' });
@@ -293,7 +339,7 @@ const RZP_CAPTURED = (leadPred) => `
 // UNION of a student's payments (gateway + manual), keyed by lead_id.
 const PAYMENTS_CTE = `
   payments AS (
-    SELECT lead_id, amount_paise, created_at::date AS pay_date FROM ( ${RZP_CAPTURED('matched_lead_id IS NOT NULL')} ) rz
+    SELECT lead_id, amount_paise, (created_at AT TIME ZONE 'Asia/Kolkata')::date AS pay_date FROM ( ${RZP_CAPTURED('matched_lead_id IS NOT NULL')} ) rz
     UNION ALL
     SELECT lead_id, amount_paise, payment_date AS pay_date
       FROM coexistence.sales_log WHERE lead_id IS NOT NULL
@@ -319,8 +365,19 @@ router.get('/students', async (req, res) => {
               (SELECT COUNT(*) FROM payments p WHERE p.lead_id=l.id)::int AS installment_count,
               (SELECT COALESCE(SUM(amount_paise),0) FROM payments p WHERE p.lead_id=l.id)::bigint AS total_paid_paise,
               (SELECT MAX(pay_date) FROM payments p WHERE p.lead_id=l.id) AS last_payment_at,
-              ch.wa_number AS chat_wa_number, ch.contact_number AS chat_contact_number
-         FROM coexistence.leads l
+              (SELECT MIN(pay_date) FROM payments p WHERE p.lead_id=l.id) AS first_payment_at,
+              COALESCE(l.payment_date, (SELECT MIN(pay_date) FROM payments p WHERE p.lead_id=l.id),
+                       (l.created_at AT TIME ZONE 'Asia/Kolkata')::date)::text AS logged_on,
+              -- Every payment's date + amount, so the Sales Log can filter and
+              -- total collections by month / date range on the client.
+              (SELECT COALESCE(json_agg(json_build_object('date', p.pay_date, 'paise', p.amount_paise) ORDER BY p.pay_date), '[]'::json)
+                 FROM payments p WHERE p.lead_id=l.id) AS payments_json,
+              ch.wa_number AS chat_wa_number, ch.contact_number AS chat_contact_number,
+              pr.default_price_paise AS product_price_paise,
+              rf.total_refunded_paise,
+              (SELECT COALESCE(json_agg(json_build_object('date', x.refunded_on, 'paise', x.amount_paise) ORDER BY x.refunded_on), '[]'::json)
+                 FROM coexistence.sale_refunds x WHERE x.lead_id = l.id) AS refunds_json
+         FROM coexistence.leads l${PRODUCT_PRICE_LATERAL}${REFUNDS_LATERAL}
          LEFT JOIN LATERAL (
            SELECT c.wa_number, c.contact_number FROM coexistence.contacts c
             WHERE regexp_replace(c.contact_number, '[^0-9]', '', 'g')
@@ -338,6 +395,13 @@ router.get('/students', async (req, res) => {
       installmentCount: Number(r.installment_count || 0),
       totalPaid: paise2r(r.total_paid_paise),
       lastPaymentAt: r.last_payment_at,
+      firstPaymentAt: r.first_payment_at,
+      // "Logged on" = the sale's payment date as recorded, else its first
+      // payment, else when the lead was created — every sale has one.
+      loggedOn: r.logged_on,   // 'YYYY-MM-DD' (IST calendar day)
+      payments: (r.payments_json || []).map(p => ({ date: p.date, amount: paise2r(p.paise) })),
+      refunds: (r.refunds_json || []).map(p => ({ date: p.date, amount: paise2r(p.paise) })),
+      netPaid: paise2r(Math.max(0, Number(r.total_paid_paise || 0) - Number(r.total_refunded_paise || 0))),
       chatWaNumber: r.chat_wa_number || null,
       chatContactNumber: r.chat_contact_number || null,
     }));
@@ -357,13 +421,14 @@ router.get('/students/export', async (req, res) => {
     const { rows } = await pool.query(
       `WITH ${PAYMENTS_CTE}
        SELECT l.*,
-              (SELECT COALESCE(SUM(amount_paise),0) FROM payments p WHERE p.lead_id=l.id)::bigint AS total_paid_paise
-         FROM coexistence.leads l
+              (SELECT COALESCE(SUM(amount_paise),0) FROM payments p WHERE p.lead_id=l.id)::bigint AS total_paid_paise,
+              pr.default_price_paise AS product_price_paise
+         FROM coexistence.leads l${PRODUCT_PRICE_LATERAL}
         WHERE l.stage = ANY($${params.length}) ${scope}
         ORDER BY l.id DESC LIMIT 5000`,
       params
     );
-    const baseCols = ['Customer', 'WhatsApp', 'Email', 'Age', 'Profession', 'Pincode', 'Course', 'Total Paid (INR)', 'Source', 'Payment Date', 'Created At'];
+    const baseCols = ['Customer', 'WhatsApp', 'Email', 'Age', 'Profession', 'Pincode', 'Course', 'Total Paid (INR)', 'Payment Status', 'Source', 'Payment Date', 'Created At'];
     // Custom Sales-Log fields (registry entity 'lead', sale-visible) ride along.
     const customCols = registry.customFields('lead').filter(f => f.showInSales);
     const cols = [...baseCols, ...customCols.map(f => f.label)];
@@ -375,6 +440,7 @@ router.get('/students/export', async (req, res) => {
       r.name || '', r.whatsapp_number || '', r.email || '',
       r.age ?? '', r.profession || '', r.pincode || '',
       r.paid_course || '', paise2r(r.total_paid_paise),
+      paymentStatus.LABELS[paymentStatusOf(r).paymentStatus] || '',
       r.source || '', r.payment_date ? new Date(r.payment_date).toISOString().slice(0, 10) : '',
       r.created_at ? new Date(r.created_at).toISOString().slice(0, 10) : '',
       ...customCols.map(f => bagStr((r.custom_fields || {})[f.fieldKey])),
@@ -383,7 +449,7 @@ router.get('/students/export', async (req, res) => {
 
     if (req.query.format === 'xlsx') {
       const ws = XLSX.utils.aoa_to_sheet(aoa);
-      ws['!cols'] = [{ wch: 22 }, { wch: 16 }, { wch: 24 }, { wch: 6 }, { wch: 20 }, { wch: 10 }, { wch: 22 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 12 },
+      ws['!cols'] = [{ wch: 22 }, { wch: 16 }, { wch: 24 }, { wch: 6 }, { wch: 20 }, { wch: 10 }, { wch: 22 }, { wch: 16 }, { wch: 15 }, { wch: 16 }, { wch: 14 }, { wch: 12 },
         ...customCols.map(() => ({ wch: 16 }))];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Sales Log');
@@ -408,35 +474,101 @@ router.get('/students/export', async (req, res) => {
   }
 });
 
+// Every payment attached to one lead: the gateway's captured rows UNION the
+// manual sales_log rows, both keyed on lead_id.
+//
+// ⚠ Razorpay writes SEVERAL rows with status='captured' for ONE payment
+// (payment.captured + order.paid, and a third for a payment link), so this goes
+// through RZP_CAPTURED, which dedupes by payment_id. A private copy of this
+// query double-counts, and the only place that shows up is the money.
+async function installmentsFor(leadId) {
+  const { rows } = await pool.query(
+    `SELECT kind, id, amount_paise, pay_date, method, ref, notes, custom_fields, product_label FROM (
+       SELECT 'razorpay' AS kind, id, amount_paise, created_at::date AS pay_date,
+              COALESCE(NULLIF(method,''),'Razorpay') AS method, payment_id AS ref, NULL::text AS notes,
+              NULL::jsonb AS custom_fields, NULL::text AS product_label
+         FROM ( ${RZP_CAPTURED('matched_lead_id = $1')} ) rz
+       UNION ALL
+       SELECT 'manual' AS kind, id, amount_paise, payment_date AS pay_date,
+              COALESCE(NULLIF(method,''),'Manual') AS method, NULL AS ref, notes, custom_fields, product_label
+         FROM coexistence.sales_log WHERE lead_id=$1
+     ) t ORDER BY pay_date ASC NULLS LAST, id ASC`,
+    [leadId]
+  );
+  return rows.map(r => ({
+    kind: r.kind, id: Number(r.id), amount: paise2r(r.amount_paise),
+    date: r.pay_date, method: r.method, ref: r.ref, notes: r.notes,
+    customFields: r.custom_fields || {},
+    productLabel: r.product_label || null,
+  }));
+}
+
+// A single lead's row with the LIVE paid total attached, so the payment status
+// in a one-lead response is derived from the deduped payment union rather than
+// the stamped leads.paid_amount_paise, which can lag a reconcile.
+async function withLivePaidTotal(row) {
+  const { rows } = await pool.query(
+    `SELECT COALESCE(SUM(amount_paise),0)::bigint AS total FROM (
+       SELECT amount_paise FROM ( ${RZP_CAPTURED('matched_lead_id = $1')} ) rz
+       UNION ALL SELECT amount_paise FROM coexistence.sales_log WHERE lead_id = $1) s`,
+    [row.id]);
+  return { ...row, total_paid_paise: rows[0]?.total ?? 0 };
+}
+
+// ── the person behind a WhatsApp thread ───────────────────────────────────────
+// Everything the CRM knows about whoever is on the other end of a chat, in one
+// round trip: the lead record, every payment attached to it, and whether that
+// makes them a customer.
+//
+// ⚠ MATCHED ON THE LAST 10 DIGITS, like every other lead lookup in this app.
+// A chat's contact_number and leads.whatsapp_number are written by different
+// paths and disagree about the country code often enough that an equality match
+// silently finds nobody — which reads as "this person is not in the CRM" rather
+// than as a bug.
+router.get('/leads/by-phone/:number', async (req, res) => {
+  try {
+    const last10 = String(req.params.number || '').replace(/\D/g, '').slice(-10);
+    if (last10.length < 10) return res.status(400).json({ error: 'A 10-digit number is required' });
+    const { rows } = await pool.query(
+      `${SELECT_LEAD} WHERE right(regexp_replace(l.whatsapp_number,'\\D','','g'),10) = $1
+        ORDER BY l.id LIMIT 1`, [last10]);
+    // Not every chat has a lead — a thread can predate the funnel. That is an
+    // ordinary answer, not a 404: the panel says so and offers to create one.
+    if (!rows.length) return res.json({ lead: null, installments: [], totalPaid: 0, isCustomer: false });
+    const lead = rows[0];
+    if (!(await canAccessLead(req, lead.id))) return res.status(403).json({ error: 'You can only view your own leads' });
+    const installments = await installmentsFor(lead.id);
+    res.json({
+      lead: leadRow(lead),
+      installments,
+      totalPaid: installments.reduce((a, x) => a + x.amount, 0),
+      // "Customer" is the WON STAGE, read from the funnel config — never the
+      // literal 'enrolled', which would stop being true the day someone adds a
+      // second won stage in Funnel Settings.
+      isCustomer: SALE_STAGE_KEYS().includes(lead.stage),
+    });
+  } catch (err) {
+    console.error('[leads] by-phone error:', err.message);
+    res.status(500).json({ error: 'Failed to load the profile' });
+  }
+});
+
 router.get('/students/:id/installments', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!(await canAccessLead(req, id))) return res.status(403).json({ error: 'You can only view your own students' });
     const { rows: lrows } = await pool.query(`${SELECT_LEAD} WHERE l.id = $1`, [id]);
     if (!lrows.length) return res.status(404).json({ error: 'Student not found' });
-    const { rows } = await pool.query(
-      `SELECT kind, id, amount_paise, pay_date, method, ref, notes, custom_fields, product_label FROM (
-         SELECT 'razorpay' AS kind, id, amount_paise, created_at::date AS pay_date,
-                COALESCE(NULLIF(method,''),'Razorpay') AS method, payment_id AS ref, NULL::text AS notes,
-                NULL::jsonb AS custom_fields, NULL::text AS product_label
-           FROM ( ${RZP_CAPTURED('matched_lead_id = $1')} ) rz
-         UNION ALL
-         SELECT 'manual' AS kind, id, amount_paise, payment_date AS pay_date,
-                COALESCE(NULLIF(method,''),'Manual') AS method, NULL AS ref, notes, custom_fields, product_label
-           FROM coexistence.sales_log WHERE lead_id=$1
-       ) t ORDER BY pay_date ASC NULLS LAST, id ASC`,
-      [id]
-    );
-    const installments = rows.map(r => ({
-      kind: r.kind, id: Number(r.id), amount: paise2r(r.amount_paise),
-      date: r.pay_date, method: r.method, ref: r.ref, notes: r.notes,
-      customFields: r.custom_fields || {},
-      productLabel: r.product_label || null,
-    }));
+    const installments = await installmentsFor(id);
+    const totalPaidPaise = installments.reduce((a, x) => a + Math.round(x.amount * 100), 0);
     res.json({
-      student: { ...leadRow(lrows[0]), ...(await chatLinkFor(lrows[0].whatsapp_number)) },
+      student: {
+        ...leadRow({ ...lrows[0], total_paid_paise: totalPaidPaise }),
+        ...(await chatLinkFor(lrows[0].whatsapp_number)),
+      },
       installments,
       totalPaid: installments.reduce((a, x) => a + x.amount, 0),
+      refunds: await refundsFor(id),
     });
   } catch (err) {
     console.error('[leads] installments error:', err.message);
@@ -476,6 +608,70 @@ router.post('/students/:id/installments', async (req, res) => {
   }
 });
 
+// ── refunds (migration 132) ───────────────────────────────────────────────────
+// Money given back to a customer, usually by bank/UPI outside the gateway.
+// Several per sale. Same access rule as adding a transaction.
+async function refundsFor(leadId) {
+  const { rows } = await pool.query(
+    `SELECT id, amount_paise, refunded_on::text AS refunded_on, method, note, created_by, created_at
+       FROM coexistence.sale_refunds WHERE lead_id = $1 ORDER BY refunded_on DESC, id DESC`, [leadId]);
+  return rows.map(r => ({
+    id: Number(r.id), amount: paise2r(r.amount_paise), date: r.refunded_on,
+    method: r.method || null, note: r.note || null, createdBy: r.created_by || null, createdAt: r.created_at,
+  }));
+}
+
+router.post('/students/:id/refunds', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!(await canAccessLead(req, id))) return res.status(403).json({ error: 'You can only update your own sales' });
+    const b = req.body || {};
+    const amount = Number(b.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'Enter how much was refunded' });
+    const date = String(b.date || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) return res.status(400).json({ error: 'Enter the date of the refund' });
+    if (Date.parse(date) > Date.now() + 36 * 3600 * 1000) return res.status(400).json({ error: "A refund date can't be in the future" });
+    const { rows: lr } = await pool.query(`SELECT id FROM coexistence.leads WHERE id = $1`, [id]);
+    if (!lr.length) return res.status(404).json({ error: 'Sale not found' });
+    // Refunds can never add up to more than was paid — a typo here (an extra
+    // zero) would otherwise flip a paying customer to "Refunded" silently.
+    const paid = Number((await withLivePaidTotal({ id })).total_paid_paise || 0);
+    const { rows: rr } = await pool.query(`SELECT COALESCE(SUM(amount_paise),0)::bigint AS t FROM coexistence.sale_refunds WHERE lead_id = $1`, [id]);
+    const already = Number(rr[0].t || 0);
+    const asked = Math.round(amount * 100);
+    if (already + asked > paid) {
+      const left = Math.max(0, paid - already) / 100;
+      return res.status(400).json({ error: left > 0
+        ? `That's more than was paid. At most ₹${left.toLocaleString('en-IN')} can still be refunded on this sale.`
+        : 'Everything paid on this sale has already been refunded.' });
+    }
+    await pool.query(
+      `INSERT INTO coexistence.sale_refunds (lead_id, amount_paise, refunded_on, method, note, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [id, asked, date, String(b.method || '').trim().slice(0, 40) || null,
+        String(b.note || '').trim().slice(0, 500) || null, actorOf(req)]);
+    emitLeadChanged({ leadId: id });
+    res.status(201).json({ refunds: await refundsFor(id) });
+  } catch (err) {
+    console.error('[leads] add refund error:', err.message);
+    res.status(500).json({ error: 'Failed to save the refund' });
+  }
+});
+
+router.delete('/students/:id/refunds/:refundId', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!(await canAccessLead(req, id))) return res.status(403).json({ error: 'You can only update your own sales' });
+    const r = await pool.query(`DELETE FROM coexistence.sale_refunds WHERE id = $1 AND lead_id = $2`, [parseInt(req.params.refundId, 10), id]);
+    if (!r.rowCount) return res.status(404).json({ error: 'Refund not found' });
+    emitLeadChanged({ leadId: id });
+    res.json({ refunds: await refundsFor(id) });
+  } catch (err) {
+    console.error('[leads] delete refund error:', err.message);
+    res.status(500).json({ error: 'Failed to remove the refund' });
+  }
+});
+
 // Add a sale = enrol a student (match/create their lead) + record the first
 // installment. The Students-page "Add Sale" modal posts here.
 router.post('/students', async (req, res) => {
@@ -495,6 +691,10 @@ router.post('/students', async (req, res) => {
     // Sale-level custom fields (registry entity 'lead') — merged IN SQL so a
     // concurrent editor's keys survive.
     const saleCustom = asBag(b.customFields);
+    if (b.paymentStatus != null && b.paymentStatus !== '' && !paymentStatus.isPaymentStatus(b.paymentStatus)) {
+      return res.status(400).json({ error: 'Payment status must be paid, partial or unpaid' });
+    }
+    const payStatus = paymentStatus.isPaymentStatus(b.paymentStatus) ? b.paymentStatus : null;
 
     const { rows: found } = await pool.query(
       `SELECT id, stage FROM coexistence.leads WHERE right(regexp_replace(whatsapp_number,'\\D','','g'),10)=$1 ORDER BY id LIMIT 1`, [last10]);
@@ -510,17 +710,18 @@ router.post('/students', async (req, res) => {
                 email = COALESCE($4, email), age = COALESCE($5, age),
                 profession = COALESCE($6, profession), pincode = COALESCE($7, pincode),
                 source = COALESCE($8, source),
-                custom_fields = custom_fields || $9::jsonb, updated_at = NOW()
+                custom_fields = custom_fields || $9::jsonb,
+                payment_status = COALESCE($10, payment_status), updated_at = NOW()
           WHERE id = $1`,
         [leadId, b.paymentDate || null, name, email, ageVal, profession, pincode, b.source || null,
-         JSON.stringify(saleCustom)]);
+         JSON.stringify(saleCustom), payStatus]);
       if (!wasEnrolled) await logEvent(leadId, 'stage_changed', found[0].stage, 'enrolled', actorOf(req));
     } else {
       const ins = await pool.query(
-        `INSERT INTO coexistence.leads (whatsapp_number, name, email, age, profession, pincode, source, stage, has_whatsapp_thread, payment_date, custom_fields, stage_changed_at, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,'enrolled',FALSE,$8,$9::jsonb,NOW(),NOW(),NOW()) RETURNING id`,
+        `INSERT INTO coexistence.leads (whatsapp_number, name, email, age, profession, pincode, source, stage, has_whatsapp_thread, payment_date, custom_fields, payment_status, stage_changed_at, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'enrolled',FALSE,$8,$9::jsonb,$10,NOW(),NOW(),NOW()) RETURNING id`,
         [phone, name, email, ageVal, profession, pincode, b.source || 'Direct', b.paymentDate || null,
-         JSON.stringify(saleCustom)]);
+         JSON.stringify(saleCustom), payStatus]);
       leadId = ins.rows[0].id;
       await logEvent(leadId, 'stage_changed', null, 'enrolled', actorOf(req));
     }
@@ -591,10 +792,15 @@ router.delete('/students/:id', async (req, res) => {
 });
 
 // ── lead sources (ranked channel quality) ─────────────────────────────────────
+// Optional ?days=N or ?from=&to= (IST, inclusive) — counts leads that ARRIVED in
+// the range. No range = all time, unchanged.
 router.get('/lead-sources', async (req, res) => {
   try {
+    const range = parseDateRange(req.query);
+    if (range.error) return res.status(400).json({ error: range.error });
     const scope = leadScopeClause(req, 1);
     const params = isAdmin(req) ? [] : [meId(req)];
+    const created = timestampClause(range, 'l.created_at', (v) => { params.push(v); return `$${params.length}`; });
     const { rows } = await pool.query(
       `SELECT
           COALESCE(l.source, 'Unknown') AS source,
@@ -602,15 +808,28 @@ router.get('/lead-sources', async (req, res) => {
           COUNT(*) FILTER (WHERE l.stage IN ('hot','enrolled'))::int AS hot_count,
           COUNT(*) FILTER (WHERE l.stage = 'enrolled')::int AS enrolled_count
          FROM coexistence.leads l
-        WHERE 1=1 ${scope}
+        WHERE 1=1 ${scope} ${created ? `AND ${created}` : ''}
         GROUP BY COALESCE(l.source, 'Unknown')
         ORDER BY leads DESC`,
       params
     );
     // Cost/lead joins campaigns spend by platform≈source (best-effort; manual now).
+    // A windowed range reads per-day Meta spend — the stored campaign totals are
+    // lifetime and would overstate cost for any shorter range.
+    const campParams = [];
+    const dayClause = isWindowed(range)
+      ? dateClause(range, 'd.stat_date', (v) => { campParams.push(v); return `$${campParams.length}`; })
+      : '';
     const { rows: campRows } = await pool.query(
-      `SELECT COALESCE(platform,'') AS platform, SUM(spend)::numeric AS spend, SUM(leads_generated)::int AS gen
-         FROM coexistence.campaigns GROUP BY COALESCE(platform,'')`
+      dayClause
+        ? `SELECT COALESCE(c.platform,'') AS platform, SUM(d.spend)::numeric AS spend, SUM(d.leads)::int AS gen
+             FROM coexistence.ad_daily_stats d
+             JOIN coexistence.campaigns c ON c.external_id = d.campaign_external_id
+            WHERE ${dayClause}
+            GROUP BY COALESCE(c.platform,'')`
+        : `SELECT COALESCE(platform,'') AS platform, SUM(spend)::numeric AS spend, SUM(leads_generated)::int AS gen
+             FROM coexistence.campaigns GROUP BY COALESCE(platform,'')`,
+      campParams
     );
     const costByPlatform = {};
     for (const c of campRows) {
@@ -672,7 +891,7 @@ router.get('/leads/export', async (req, res) => {
 // a bulk upload should create LEADS, not a parallel people-table that only
 // becomes leads if those people happen to message first.
 //
-// ⚠ The row write goes through services/formSubmission.upsertLeadFromSubmission
+// ⚠ The row write goes through services/leadUpsert.upsertLeadFromSubmission
 // — the SAME function the public form and the agent form-fill use. That is what
 // keeps last-10-digit matching, blank-only COALESCE writes (an import can fill an
 // empty field but never overwrite something a human set) and the first-stage
@@ -740,7 +959,7 @@ router.post('/leads/import', leadSheetUpload.single('file'), async (req, res) =>
       return res.status(400).json({ error: `Too many rows (${rows.length}). The limit is ${MAX_ROWS} per import.` });
     }
 
-    const { upsertLeadFromSubmission } = require('../services/formSubmission');
+    const { upsertLeadFromSubmission } = require('../services/leadUpsert');
     // A source typed in the modal applies to every row that has none of its own,
     // so an import is attributable instead of arriving as a nameless batch.
     const fallbackSource = String(req.body.source || '').trim() || 'Imported';
@@ -820,10 +1039,32 @@ router.get('/leads/:id', async (req, res) => {
     if (!isAdmin(req) && Number(rows[0].assigned_user_id) !== meId(req)) {
       return res.status(403).json({ error: 'You can only view your own leads' });
     }
-    res.json({ lead: leadRow(rows[0]) });
+    res.json({ lead: leadRow(await withLivePaidTotal(rows[0])) });
   } catch (err) {
     console.error('[leads] get error:', err.message);
     res.status(500).json({ error: 'Failed to fetch lead' });
+  }
+});
+
+// ── profile (the contact pop-up) ──────────────────────────────────────────────
+// System fields, custom fields, chat threads, automation + agent runs and the
+// stage history for one contact, in one round trip. Same access rule as
+// GET /leads/:id: a non-admin sees only their own contacts (and only the chat
+// threads assigned to them, since ChatWindow would refuse the others anyway).
+router.get('/leads/:id/profile', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(404).json({ error: 'Contact not found' });
+    const { rows } = await pool.query(`${SELECT_LEAD} WHERE l.id = $1`, [id]);
+    if (!rows.length) return res.status(404).json({ error: 'Contact not found' });
+    if (!isAdmin(req) && Number(rows[0].assigned_user_id) !== meId(req)) {
+      return res.status(403).json({ error: 'You can only view your own contacts' });
+    }
+    const lead = leadRow(await withLivePaidTotal(rows[0]));
+    res.json(await require('../services/leadProfile').buildProfile(lead, { userId: meId(req), admin: isAdmin(req) }));
+  } catch (err) {
+    console.error('[leads] profile error:', err.message);
+    res.status(500).json({ error: 'Failed to load this contact' });
   }
 });
 
@@ -922,6 +1163,15 @@ router.put('/leads/:id', async (req, res) => {
       const ageVal = b.age === '' || b.age === null ? null : parseInt(b.age, 10);
       fields.push(`age = $${i++}`); vals.push(Number.isFinite(ageVal) ? ageVal : null);
     }
+    // Payment status: a key or blank. Blank/null clears the override so the
+    // status goes back to being derived from payments vs the product price.
+    if (b.paymentStatus !== undefined) {
+      const v = b.paymentStatus === '' || b.paymentStatus === null || b.paymentStatus === 'auto' ? null : b.paymentStatus;
+      if (v !== null && !paymentStatus.isPaymentStatus(v)) {
+        return res.status(400).json({ error: 'Payment status must be paid, partial, unpaid or blank (automatic)' });
+      }
+      fields.push(`payment_status = $${i++}`); vals.push(v);
+    }
     if (b.customFields !== undefined) { fields.push(`custom_fields = $${i++}`); vals.push(asBag(b.customFields)); }
     // Merge-based custom-field write — the field editors use THIS, never the
     // wholesale replace above: the merge happens IN SQL so two concurrent
@@ -942,7 +1192,7 @@ router.put('/leads/:id', async (req, res) => {
     await pool.query(`UPDATE coexistence.leads SET ${fields.join(', ')} WHERE id = $${i}`, vals);
     const { rows } = await pool.query(`${SELECT_LEAD} WHERE l.id = $1`, [id]);
     emitLeadChanged({ leadId: id });
-    res.json({ lead: leadRow(rows[0]) });
+    res.json({ lead: leadRow(await withLivePaidTotal(rows[0])) });
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'Another lead already uses this WhatsApp number' });
     console.error('[leads] update error:', err.message);

@@ -1,11 +1,18 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { toLayout } from '../lib/uiZoom.js';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { notify } from '../lib/feedback.js';
-import { Search, Loader2, MoreVertical, Phone, Pencil, X, Send, Lock, Paperclip, Image as ImageIcon, FileText, Video, Music, Library, RefreshCw, CheckCircle2, AlertTriangle, Mic, Square, Trash2, User, Download, Reply, Forward, Tag, UserPlus, Check, Bot } from 'lucide-react';
+import { Search, ScanSearch, Loader2, MoreVertical, Phone, Pencil, X, Send, Lock, Paperclip, Image as ImageIcon, FileText, Video, Music, Library, RefreshCw, CheckCircle2, AlertTriangle, Mic, Square, Trash2, User, Download, Reply, Forward, Tag, UserPlus, Check, Bot, Pin, PinOff, CalendarClock, Flag } from 'lucide-react';
+import PillStrip from './PillStrip.jsx';
 import { usePolling } from '../hooks/usePolling.js';
 import { useServerEvents } from '../hooks/useServerEvents.js';
 import { api } from '../api.js';
 import { C, FONT, MONO, relativeTime, formatTime, maskPhone } from '../constants.js';
 import MaskedNumber from './MaskedNumber.jsx';
+import ChatProfilePanel from './ChatProfilePanel.jsx';
+import ChatAnalyzerPanel from './ChatAnalyzerPanel.jsx';
+import FollowUpModal from './FollowUpModal.jsx';
+import { useFunnelConfig } from '../hooks/useFunnelConfig.js';
+import { relativeDay, todayIST } from '../lib/followUpDates.js';
 import MessageBubble, { quoteSnippet } from './MessageBubble.jsx';
 
 // Tick progression rank — used to merge live SSE status with polled data so a
@@ -69,7 +76,7 @@ function ForwardModal({ waNumber, message, onClose }) {
   };
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 330, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, boxShadow: C.shadowLg, width: 'min(420px,100%)', maxHeight: '80vh', display: 'flex', flexDirection: 'column', fontFamily: FONT, overflow: 'hidden' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, boxShadow: C.shadowLg, width: 'min(420px,100%)', maxHeight: 'calc(80vh / var(--fg-zoom, 1))', display: 'flex', flexDirection: 'column', fontFamily: FONT, overflow: 'hidden' }}>
         <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontWeight: 700, fontSize: 16, color: C.text }}>Forward message</div>
           <button onClick={onClose} style={{ border: 'none', background: C.pageBg, borderRadius: 8, width: 28, height: 28, cursor: 'pointer', color: C.textSecondary }}><X size={15} /></button>
@@ -117,7 +124,7 @@ function ForwardModal({ waNumber, message, onClose }) {
   );
 }
 
-export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) {
+export default function ChatWindow({ waNumber, contactNumber, user, onContactSaved, onListChange }) {
   const [page, setPage] = useState(1);
   const [limit] = useState(50);
   const [search, setSearch] = useState('');
@@ -137,12 +144,50 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
   const [hasScrolled, setHasScrolled] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // The WhatsApp-style profile pane, opened from the avatar or the name.
+  const [profileOpen, setProfileOpen] = useState(false);
   const menuRef = useRef(null);
   const [tagPopoverOpen, setTagPopoverOpen] = useState(false);
   const [assignPopoverOpen, setAssignPopoverOpen] = useState(false);
+  const [stagePopoverOpen, setStagePopoverOpen] = useState(false);
+  // This chat's lead (funnel stage). null = not loaded / no lead for this number.
+  const [chatLead, setChatLead] = useState(null);
+  const [chatLeadState, setChatLeadState] = useState('loading'); // loading | ready | none | error
+  const [stageSaving, setStageSaving] = useState(false);
+  const { stages: funnelStages, stageMeta } = useFunnelConfig();
   const [headerSaving, setHeaderSaving] = useState(false);
+  const [analyzerOpen, setAnalyzerOpen] = useState(false);
+  // My list + follow-up: is this chat pinned, does it have an open follow-up?
+  const [fuState, setFuState] = useState({ pinned: false, followUp: null, suggestion: null });
+  const [fuOpen, setFuOpen] = useState(false);
+  const loadFuState = useCallback(() => {
+    if (!waNumber || !contactNumber) return;
+    api.followUps.chat(waNumber, contactNumber).then(setFuState).catch(() => {});
+  }, [waNumber, contactNumber]);
+  useEffect(() => { loadFuState(); }, [loadFuState]);
+  const togglePin = async () => {
+    const was = fuState.pinned;
+    setFuState(s => ({ ...s, pinned: !was }));
+    try {
+      if (was) await api.myList.unpin(contactNumber); else await api.myList.pin(waNumber, contactNumber);
+      onListChange?.();
+    } catch (e) { setFuState(s => ({ ...s, pinned: was })); notify({ variant: 'error', message: e.message }); }
+  };
   const tagMenuRef = useRef(null);
   const assignMenuRef = useRef(null);
+  const stageMenuRef = useRef(null);
+  // The header carries ~10 controls; on a narrow chat pane they overflowed and the
+  // contact name collapsed to nothing. Below this width, Pin / Analyse / Search
+  // move into the ⋮ menu.
+  const headerRef = useRef(null);
+  const [headerCompact, setHeaderCompact] = useState(false);
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setHeaderCompact(el.clientWidth < 680));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const fetchMessages = useCallback(() => {
     return api.messages({
@@ -173,14 +218,27 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
   // Real-time delivery/read ticks: when the webhook advances a message's status
   // it pushes a `message-status` SSE event; apply it instantly (monotonically)
   // so the tick turns blue without waiting for the 15s poll.
+  const loadChatLead = useCallback(async () => {
+    if (!contactNumber) return;
+    try {
+      const r = await api.leads.byPhone(contactNumber);
+      setChatLead(r?.lead || null);
+      setChatLeadState(r?.lead ? 'ready' : 'none');
+    } catch (_) {
+      setChatLead(null); setChatLeadState('error');
+    }
+  }, [contactNumber]);
+  useEffect(() => { setChatLead(null); setChatLeadState('loading'); setStagePopoverOpen(false); loadChatLead(); }, [loadChatLead]);
+
   const onServerEvent = useCallback((ev) => {
+    if (ev.type === 'lead-changed') { loadChatLead(); return; }
     if (ev.type !== 'message-status') return;
     const d = ev.data || {};
     const digits = (s) => String(s || '').replace(/\D/g, '');
     if (digits(d.waNumber) !== digits(waNumber) || digits(d.contactNumber) !== digits(contactNumber)) return;
     if (!d.messageId || !d.status) return;
     setStatusOverrides(prev => ({ ...prev, [d.messageId]: higherStatus(prev[d.messageId] || 'sent', d.status) }));
-  }, [waNumber, contactNumber]);
+  }, [waNumber, contactNumber, loadChatLead]);
   useServerEvents(onServerEvent);
 
   // Clear stale status overrides when switching conversations.
@@ -461,6 +519,32 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
     if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
   }, [waNumber, contactNumber]);
 
+  // Auto-size the composer to its content (up to its CSS max-height).
+  const composerRef = useRef(null);
+  const fitComposer = useCallback(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const max = toLayout(window.innerHeight) * 0.5;
+    const h = el.scrollHeight;
+    el.style.height = `${Math.min(h, max)}px`;
+    el.style.overflowY = h > max ? 'auto' : 'hidden';
+  }, []);
+  // The placeholder changes as the reply window loads, and a long placeholder
+  // wraps too — so re-measure when anything that picks it changes.
+  useLayoutEffect(fitComposer, [composerText, isRecording, windowStatus?.canSendFreeForm, windowStatus?.reason, !!pendingFile, !!audioBlob, fitComposer]);
+  // Re-measure when the box's WIDTH changes (first layout, the profile or
+  // analyser panel opening, a window resize) — the same text wraps differently.
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let w = el.clientWidth;
+    const ro = new ResizeObserver(() => { if (el.clientWidth !== w) { w = el.clientWidth; fitComposer(); } });
+    ro.observe(el);
+    window.addEventListener('resize', fitComposer);
+    return () => { ro.disconnect(); window.removeEventListener('resize', fitComposer); };
+  }, [isRecording, fitComposer]);
+
   const handleSend = async () => {
     if (audioBlob) return sendAudio();
     if (pendingFile) return handleSendMedia();
@@ -630,14 +714,19 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
 
   // Close the header Tag / Assign popovers on outside click
   useEffect(() => {
-    if (!tagPopoverOpen && !assignPopoverOpen) return;
+    if (!tagPopoverOpen && !assignPopoverOpen && !stagePopoverOpen) return;
     const onDown = (e) => {
+      if (stagePopoverOpen && stageMenuRef.current && !stageMenuRef.current.contains(e.target)) setStagePopoverOpen(false);
       if (tagPopoverOpen && tagMenuRef.current && !tagMenuRef.current.contains(e.target)) setTagPopoverOpen(false);
       if (assignPopoverOpen && assignMenuRef.current && !assignMenuRef.current.contains(e.target)) setAssignPopoverOpen(false);
     };
+    // The popovers are pinned to the screen (see anchorStyle), so they would not
+    // follow the button if the window changes — close them instead.
+    const onResize = () => { setTagPopoverOpen(false); setAssignPopoverOpen(false); setStagePopoverOpen(false); };
     document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [tagPopoverOpen, assignPopoverOpen]);
+    window.addEventListener('resize', onResize);
+    return () => { document.removeEventListener('mousedown', onDown); window.removeEventListener('resize', onResize); };
+  }, [tagPopoverOpen, assignPopoverOpen, stagePopoverOpen]);
 
   const handleLoadOlder = () => {
     setPage(p => p + 1);
@@ -795,11 +884,54 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
     cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
     color: '#fff', flexShrink: 0,
   };
+  // A popover ROW: no fill of its own, radius 10, hover is the only fill. It
+  // must not inherit the panel's own colour — two identical fills stacked flush
+  // is what made these menus read as one clumsy block.
   const menuItemStyle = {
-    display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 14px',
-    border: 'none', background: 'var(--c-cardBg)', cursor: 'pointer', fontSize: 15, fontWeight: 500,
-    color: C.text, fontFamily: FONT, textAlign: 'left',
+    display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px',
+    border: 'none', borderRadius: 12, background: 'transparent', cursor: 'pointer',
+    fontSize: 15, fontWeight: 500, color: C.text, fontFamily: FONT, textAlign: 'left',
   };
+  // The panel itself, shared by all three header popovers.
+  const popoverStyle = {
+    position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+    background: 'var(--fc-raised)', borderRadius: 'var(--fc-r-md)',
+    boxShadow: 'var(--fc-shadow-lg)', padding: 6, zIndex: 50,
+    fontFamily: FONT, animation: 'fc-pop-in .18s ease',
+  };
+  // The chat pane clips its overflow, so a popover hung off a header button and
+  // opening leftwards was cut off by the pane edge (the Tag menu slid under the
+  // contact list). Pin it to the SCREEN instead: below the button, right-aligned
+  // to it, and clamped inside the window. Rects are screen px under the app's CSS
+  // zoom, so convert with toLayout before using them as style px.
+  const anchorStyle = (ref, width, maxH) => {
+    const el = ref.current;
+    if (!el) return { ...popoverStyle, width };
+    const r = el.getBoundingClientRect();
+    const vw = toLayout(window.innerWidth), vh = toLayout(window.innerHeight);
+    const top = toLayout(r.bottom) + 6;
+    const left = Math.max(8, Math.min(toLayout(r.right) - width, vw - width - 8));
+    return {
+      ...popoverStyle, position: 'fixed', top, left, right: 'auto', width, zIndex: 400,
+      maxHeight: Math.max(160, Math.min(maxH, vh - top - 12)), overflowY: 'auto',
+    };
+  };
+
+  const handleStagePick = async (stageKey) => {
+    if (!chatLead || stageKey === chatLead.stage) { setStagePopoverOpen(false); return; }
+    const prev = chatLead;
+    setChatLead({ ...chatLead, stage: stageKey });
+    setStageSaving(true);
+    try {
+      const r = await api.leads.move(prev.id, stageKey);
+      if (r?.lead) setChatLead(r.lead);
+      setStagePopoverOpen(false);
+    } catch (err) {
+      setChatLead(prev);
+      notify({ variant: 'error', message: err.message || 'Could not change the stage.' });
+    } finally { setStageSaving(false); }
+  };
+  const currentStage = chatLead ? stageMeta(chatLead.stage) : null;
 
   return (
     <div style={{
@@ -808,10 +940,10 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
       background: 'var(--c-chatWall)',
     }}>
       {/* Chat header — WhatsApp green in light, deep slate in dark */}
-      <div style={{
-        padding: '10px 16px',
+      <div ref={headerRef} style={{
+        padding: headerCompact ? '10px 10px' : '10px 16px',
         background: 'var(--c-chatHeaderBg)',
-        display: 'flex', alignItems: 'center', gap: 12,
+        display: 'flex', alignItems: 'center', gap: headerCompact ? 6 : 12,
         flexShrink: 0,
       }}>
         {searchOpen ? (
@@ -838,27 +970,34 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
           </>
         ) : (
           <>
-            {/* Avatar */}
-            <div style={{
-              width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
-              background: 'rgba(255,255,255,0.2)',
-              color: '#fff',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 18, fontWeight: 700,
-            }}>
+            {/* Avatar — the way into the full profile, as in WhatsApp. */}
+            <button
+              onClick={() => setProfileOpen(true)}
+              title="View profile"
+              style={{
+                width: 40, height: 40, borderRadius: '50%', flexShrink: 0, padding: 0,
+                border: 'none', background: 'rgba(255,255,255,0.2)', color: '#fff', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 18, fontWeight: 700, fontFamily: FONT,
+              }}
+            >
               {contactName ? contactName.charAt(0).toUpperCase() : <Phone size={18} />}
-            </div>
+            </button>
 
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ flex: 1, minWidth: headerCompact ? 64 : 84 }}>
               <div style={{
                 fontSize: 18, fontWeight: 600, color: '#fff',
                 fontFamily: FONT,
                 display: 'flex', alignItems: 'center', gap: 6, minWidth: 0,
               }}>
-                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+                <span
+                  onClick={() => setProfileOpen(true)}
+                  title="View profile"
+                  style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, cursor: 'pointer' }}
+                >
                   {contactName || <MaskedNumber number={contactNumber} prefix="+" />}
                 </span>
-                <button
+                {!headerCompact && <button
                   onClick={handleEditClick}
                   title="Edit contact name"
                   style={{
@@ -869,7 +1008,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
                   }}
                 >
                   <Pencil size={12} />
-                </button>
+                </button>}
               </div>
               <div style={{
                 fontSize: 14, color: 'rgba(255,255,255,0.8)', fontFamily: FONT,
@@ -877,6 +1016,61 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
               }}>
                 <MaskedNumber number={contactNumber} prefix="+" />
               </div>
+            </div>
+
+            {/* Funnel stage quick-action — moves this chat's LEAD through the audited
+                /leads/:id/move route (the one CAPI, follow-ups and the stage tags read). */}
+            <div ref={stageMenuRef} style={{ position: 'relative', flexShrink: 1, minWidth: 32, display: 'flex' }}>
+              <button
+                onClick={() => { setStagePopoverOpen(o => !o); setTagPopoverOpen(false); setAssignPopoverOpen(false); }}
+                title={currentStage ? `Funnel stage: ${currentStage.label}` : 'Funnel stage'}
+                data-testid="chat-stage-btn"
+                style={{
+                  ...headerIconBtn, width: 'auto', maxWidth: 118, flexShrink: 1, minWidth: 32, padding: '0 9px', gap: 6, borderRadius: 16,
+                  background: stagePopoverOpen ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.12)',
+                }}
+              >
+                {currentStage
+                  ? <span style={{ width: 8, height: 8, borderRadius: '50%', background: currentStage.color, flexShrink: 0, boxShadow: '0 0 0 1.5px rgba(255,255,255,0.8)' }} />
+                  : <Flag size={15} />}
+                <span style={{ fontSize: 13, fontWeight: 650, fontFamily: FONT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+                  {currentStage ? currentStage.label : 'Stage'}
+                </span>
+              </button>
+              {stagePopoverOpen && (
+                <div style={anchorStyle(stageMenuRef, 260, 380)} data-testid="chat-stage-menu">
+                  <div style={{ padding: '8px 12px 6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 12, fontWeight: 650, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '.04em' }}>Funnel stage</span>
+                    {stageSaving && <Loader2 size={13} style={{ animation: 'spin 1s linear infinite', color: C.textMuted }} />}
+                  </div>
+                  {chatLeadState === 'loading' ? (
+                    <div style={{ padding: '6px 12px 10px', fontSize: 14, color: C.textMuted }}>Loading…</div>
+                  ) : chatLeadState === 'error' ? (
+                    <div style={{ padding: '6px 12px 10px', fontSize: 14, color: C.textMuted }}>Could not load this chat's lead.</div>
+                  ) : !chatLead ? (
+                    <div style={{ padding: '6px 12px 10px', fontSize: 14, color: C.textMuted, lineHeight: 1.45 }}>
+                      This number is not a lead yet. Open the profile to create one.
+                    </div>
+                  ) : funnelStages.map(st => {
+                    const sel = st.stageKey === chatLead.stage;
+                    return (
+                      <button
+                        key={st.stageKey}
+                        disabled={stageSaving}
+                        onClick={() => handleStagePick(st.stageKey)}
+                        className="fc-menu-row" style={{ ...menuItemStyle, cursor: stageSaving ? 'default' : 'pointer' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'var(--fc-surface)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                      >
+                        <span style={{ width: 15, display: 'inline-flex', flexShrink: 0 }}>{sel && <Check size={15} color={C.primary} />}</span>
+                        <span style={{ width: 9, height: 9, borderRadius: '50%', background: st.color, flexShrink: 0 }} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: sel ? 650 : 500 }}>{st.label}</span>
+                        {st.isWon && <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: C.successText, background: C.successBg, padding: '1px 6px', borderRadius: 6 }}>WON</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Tag quick-action */}
@@ -896,14 +1090,10 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
                 )}
               </button>
               {tagPopoverOpen && (
-                <div style={{
-                  position: 'absolute', top: '112%', right: 0, background: 'var(--c-cardBg)', borderRadius: 10,
-                  boxShadow: C.shadowLg, width: 300, maxHeight: 380, overflowY: 'auto', zIndex: 50,
-                  border: `1px solid ${C.border}`, fontFamily: FONT,
-                }}>
+                <div style={{ ...anchorStyle(tagMenuRef, 300, 380), padding: 0 }}>
                   <div style={{
-                    padding: '12px 14px 8px', position: 'sticky', top: 0, background: 'var(--c-cardBg)',
-                    borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '12px 14px 6px', position: 'sticky', top: 0, background: 'var(--fc-raised)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   }}>
                     <span style={{ fontSize: 14, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '.04em' }}>Tags</span>
                     {headerSaving && <Loader2 size={13} style={{ animation: 'spin 1s linear infinite', color: C.textMuted }} />}
@@ -957,18 +1147,14 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
                   <UserPlus size={18} />
                 </button>
                 {assignPopoverOpen && (
-                  <div style={{
-                    position: 'absolute', top: '112%', right: 0, background: 'var(--c-cardBg)', borderRadius: 10,
-                    boxShadow: C.shadowLg, width: 260, zIndex: 50, border: `1px solid ${C.border}`,
-                    fontFamily: FONT, overflow: 'hidden',
-                  }}>
-                    <div style={{ padding: '12px 14px 8px', borderBottom: `1px solid ${C.border}`, fontSize: 14, fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '.04em' }}>Assign to</div>
-                    <div style={{ padding: '6px 0', maxHeight: 280, overflowY: 'auto' }}>
+                  <div style={anchorStyle(assignMenuRef, 260, 340)}>
+                    <div style={{ padding: '8px 12px 6px', fontSize: 12, fontWeight: 650, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '.04em' }}>Assign to</div>
+                    <div style={{ maxHeight: 280, overflowY: 'auto' }}>
                       <button
                         onClick={() => handleHeaderAssign(null)}
-                        style={menuItemStyle}
-                        onMouseEnter={e => { e.currentTarget.style.background = 'var(--c-xf3f4f6, #F3F4F6)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'var(--c-cardBg)'; }}
+                        className="fc-menu-row" style={menuItemStyle}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'var(--fc-surface)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                       >
                         <span style={{ width: 15, display: 'inline-flex', flexShrink: 0 }}>{assignedUserId == null && <Check size={15} color={C.primary} />}</span>
                         <span style={{ color: C.textSecondary }}>Unassigned</span>
@@ -979,9 +1165,9 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
                           <button
                             key={u.id}
                             onClick={() => handleHeaderAssign(u.id)}
-                            style={menuItemStyle}
-                            onMouseEnter={e => { e.currentTarget.style.background = 'var(--c-xf3f4f6, #F3F4F6)'; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = 'var(--c-cardBg)'; }}
+                            className="fc-menu-row" style={menuItemStyle}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'var(--fc-surface)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                           >
                             <span style={{ width: 15, display: 'inline-flex', flexShrink: 0 }}>{sel && <Check size={15} color={C.primary} />}</span>
                             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1022,10 +1208,47 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
               </button>
             )}
 
-            {/* Search toggle */}
-            <button onClick={() => setSearchOpen(true)} title="Search messages" style={headerIconBtn}>
-              <Search size={18} />
+            {/* Pin to Sales → Follow-up */}
+            {!headerCompact && <button
+              onClick={togglePin}
+              title={fuState.pinned ? 'Unpin from Follow-up' : 'Pin to Follow-up'}
+              aria-pressed={fuState.pinned}
+              style={{ ...headerIconBtn, background: fuState.pinned ? 'rgba(255,255,255,0.22)' : 'transparent' }}
+            >
+              {fuState.pinned ? <Pin size={17} fill="#fff" /> : <Pin size={17} />}
+            </button>}
+
+            {/* Follow-up: set a date; shows when the next one is due. */}
+            <button
+              onClick={() => setFuOpen(true)}
+              title={fuState.followUp ? `Follow-up ${relativeDay(fuState.followUp.dueDate).toLowerCase()} — click to change` : 'Set a follow-up date'}
+              style={{
+                ...headerIconBtn, width: 'auto', borderRadius: 999, gap: 6, padding: fuState.followUp ? '0 10px 0 8px' : 0,
+                minWidth: 32, fontSize: 12.5, fontWeight: 700, fontFamily: FONT,
+                background: fuState.followUp
+                  ? (fuState.followUp.dueDate <= todayIST() ? 'rgba(254,202,202,0.30)' : 'rgba(255,255,255,0.18)')
+                  : 'transparent',
+              }}
+            >
+              <CalendarClock size={17} />
+              {fuState.followUp && <span style={{ whiteSpace: 'nowrap' }}>{relativeDay(fuState.followUp.dueDate)}</span>}
             </button>
+
+            {/* Analyse this conversation. Opens the same panel as the Chat
+                Analyzer tab — one implementation, so the controls here and there
+                cannot drift. */}
+            {!headerCompact && <button
+              onClick={() => setAnalyzerOpen(true)}
+              title="Analyse this conversation"
+              style={{ ...headerIconBtn, background: analyzerOpen ? 'rgba(255,255,255,0.22)' : 'transparent' }}
+            >
+              <ScanSearch size={18} />
+            </button>}
+
+            {/* Search toggle */}
+            {!headerCompact && <button onClick={() => setSearchOpen(true)} title="Search messages" style={headerIconBtn}>
+              <Search size={18} />
+            </button>}
 
             {/* 3-dot menu */}
             <div ref={menuRef} style={{ position: 'relative', flexShrink: 0 }}>
@@ -1033,34 +1256,45 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
                 <MoreVertical size={18} />
               </button>
               {menuOpen && (
-                <div style={{
-                  position: 'absolute', top: '110%', right: 0,
-                  background: 'var(--c-cardBg)', borderRadius: 10, boxShadow: C.shadowLg,
-                  minWidth: 180, zIndex: 50, overflow: 'hidden', fontFamily: FONT,
-                  border: `1px solid ${C.border}`,
-                }}>
+                <div style={anchorStyle(menuRef, 220, 420)}>
+                  {headerCompact && [
+                    { key: 'edit', Icon: Pencil, label: 'Edit contact name', run: handleEditClick },
+                    { key: 'pin', Icon: Pin, label: fuState.pinned ? 'Unpin from Follow-up' : 'Pin to Follow-up', run: togglePin },
+                    { key: 'analyse', Icon: ScanSearch, label: 'Analyse conversation', run: () => setAnalyzerOpen(true) },
+                    { key: 'search', Icon: Search, label: 'Search messages', run: () => setSearchOpen(true) },
+                  ].map(it => (
+                    <button
+                      key={it.key}
+                      onClick={() => { setMenuOpen(false); it.run(); }}
+                      className="fc-menu-row" style={menuItemStyle}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--fc-surface)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                    >
+                      <it.Icon size={15} color={C.textSecondary} /><span>{it.label}</span>
+                    </button>
+                  ))}
                   <button
-                    onClick={() => { handleEditClick(); setMenuOpen(false); }}
-                    style={menuItemStyle}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--c-xf3f4f6, #F3F4F6)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--c-cardBg)'; }}
+                    onClick={() => { setProfileOpen(true); setMenuOpen(false); }}
+                    className="fc-menu-row" style={menuItemStyle}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--fc-surface)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                   >
                     <User size={15} color={C.textSecondary} /><span>Contact info</span>
                   </button>
                   <button
                     onClick={() => { refetch(); setMenuOpen(false); }}
-                    style={menuItemStyle}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--c-xf3f4f6, #F3F4F6)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--c-cardBg)'; }}
+                    className="fc-menu-row" style={menuItemStyle}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--fc-surface)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                   >
                     <RefreshCw size={15} color={C.textSecondary} /><span>Refresh</span>
                   </button>
                   <button
                     onClick={handleExportChat}
                     disabled={messages.length === 0}
-                    style={{ ...menuItemStyle, opacity: messages.length === 0 ? 0.5 : 1, cursor: messages.length === 0 ? 'not-allowed' : 'pointer' }}
-                    onMouseEnter={e => { if (messages.length) e.currentTarget.style.background = 'var(--c-xf3f4f6, #F3F4F6)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--c-cardBg)'; }}
+                    className="fc-menu-row" style={{ ...menuItemStyle, opacity: messages.length === 0 ? 0.5 : 1, cursor: messages.length === 0 ? 'not-allowed' : 'pointer' }}
+                    onMouseEnter={e => { if (messages.length) e.currentTarget.style.background = 'var(--fc-surface)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                   >
                     <Download size={15} color={C.textSecondary} /><span>Export chat</span>
                   </button>
@@ -1163,6 +1397,59 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
         <ForwardModal waNumber={waNumber} message={forwardMsg} onClose={() => setForwardMsg(null)} />
       )}
 
+      {fuOpen && (
+        <FollowUpModal
+          waNumber={waNumber}
+          contactNumber={contactNumber}
+          name={contactName || `+${contactNumber}`}
+          existing={fuState.followUp}
+          suggestion={fuState.followUp ? null : fuState.suggestion}
+          onClose={() => setFuOpen(false)}
+          onSaved={() => { loadFuState(); onListChange?.(); }}
+        />
+      )}
+
+      {/* Chat Analyzer slide-over. A panel rather than a modal because reading
+          the verdict against the conversation behind it is the whole point. */}
+      {analyzerOpen && (
+        <>
+          <div onClick={() => setAnalyzerOpen(false)} style={{
+            position: 'fixed', inset: 0, background: 'var(--c-overlaySoft, rgba(0,0,0,.25))', zIndex: 190,
+          }} />
+          <aside style={{
+            position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(440px, calc(100vw / var(--fg-zoom, 1)))',
+            background: 'var(--c-cardBg)', borderLeft: `1px solid ${C.border}`,
+            boxShadow: C.shadowLg, zIndex: 200,
+            display: 'flex', flexDirection: 'column', fontFamily: FONT,
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '13px 15px', borderBottom: `1px solid ${C.border}`, flexShrink: 0,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <ScanSearch size={16} color={C.textSecondary} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Chat Analyzer</div>
+                  <div style={{
+                    fontSize: 11.5, color: C.textMuted, overflow: 'hidden',
+                    textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>{contactName || contactNumber}</div>
+                </div>
+              </div>
+              <button onClick={() => setAnalyzerOpen(false)} title="Close" style={{
+                background: 'transparent', border: 'none', cursor: 'pointer',
+                color: C.textMuted, padding: 4, display: 'flex',
+              }}><X size={17} /></button>
+            </div>
+            {/* Only this half scrolls, so the header stays put on a long verdict. */}
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 15 }}>
+              <ChatAnalyzerPanel source="chat" conversationKey={contactNumber} waNumber={waNumber} compact
+                onFollowUpSet={() => { loadFuState(); onListChange?.(); }} />
+            </div>
+          </aside>
+        </>
+      )}
+
       {/* Reply composer */}
       <div style={{ borderTop: `1px solid ${C.borderDark}`, background: 'var(--c-chatPanel)', flexShrink: 0 }}>
         {windowStatus && !windowStatus.canSendFreeForm && (
@@ -1248,7 +1535,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
         )}
 
         <div
-          style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, position: 'relative' }}
+          style={{ padding: '10px 16px', display: 'flex', alignItems: 'flex-end', gap: 10, position: 'relative' }}
           onDragOver={e => { e.preventDefault(); if (windowStatus?.canSendFreeForm) setDragOver(true); }}
           onDragLeave={e => { e.preventDefault(); setDragOver(false); }}
           onDrop={e => {
@@ -1317,7 +1604,9 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
               <style>{`@keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.3 } }`}</style>
             </div>
           ) : (
-            <input
+            <textarea
+              ref={composerRef}
+              rows={1}
               value={composerText}
               onChange={e => setComposerText(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
@@ -1330,8 +1619,12 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
               }
               disabled={!windowStatus?.canSendFreeForm || sending || !!pendingFile || !!audioBlob}
               style={{
-                flex: 1, padding: '10px 14px', borderRadius: 8, border: 'none',
+                flex: 1, padding: '9px 14px', borderRadius: 8, border: 'none',
                 fontSize: 15, fontFamily: FONT, outline: 'none',
+                // Grows with the text so a pasted message can be read and edited
+                // whole; only past half the screen does it start scrolling.
+                resize: 'none', lineHeight: '22px', minHeight: 40, maxHeight: 'calc(50vh / var(--fg-zoom, 1))', overflowY: 'hidden',
+                whiteSpace: 'pre-wrap', wordBreak: 'break-word', boxSizing: 'border-box', display: 'block',
                 background: windowStatus?.canSendFreeForm && !pendingFile && !audioBlob ? 'var(--c-cardBg)' : 'var(--c-hover)',
                 color: windowStatus?.canSendFreeForm && !pendingFile && !audioBlob ? C.text : C.textMuted,
                 boxShadow: C.shadowSm, cursor: windowStatus?.canSendFreeForm && !pendingFile && !audioBlob ? 'text' : 'not-allowed',
@@ -1371,7 +1664,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
             title="Send"
             style={{
               width: 40, height: 40, borderRadius: 20, border: 'none',
-              background: isRecording || ((!composerText.trim() && !pendingFile && !audioBlob) || !windowStatus?.canSendFreeForm) ? 'var(--c-borderStrong, #ccc)' : C.primary,
+              background: isRecording || ((!composerText.trim() && !pendingFile && !audioBlob) || !windowStatus?.canSendFreeForm) ? 'var(--c-fillMuted, #d5d5d0)' : C.primary,
               color: '#fff', cursor: isRecording || ((!composerText.trim() && !pendingFile && !audioBlob) || !windowStatus?.canSendFreeForm) ? 'not-allowed' : 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
             }}
@@ -1390,8 +1683,8 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
         }}>
           <div style={{
             background: C.cardBg, borderRadius: 14,
-            padding: '30px 32px 26px', width: 560, maxWidth: '94vw',
-            minHeight: 380, maxHeight: '90vh',
+            padding: '30px 32px 26px', width: 560, maxWidth: 'calc(94vw / var(--fg-zoom, 1))',
+            minHeight: 380, maxHeight: 'calc(90vh / var(--fg-zoom, 1))',
             boxShadow: C.shadowLg, overflowY: 'auto',
             display: 'flex', flexDirection: 'column',
           }}>
@@ -1457,6 +1750,20 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
           sending={librarySending}
           onClose={() => setLibraryOpen(false)}
           onSend={handleSendLibraryMedia}
+        />
+      )}
+
+      {/* The full CRM profile for this person — lead record, funnel position and
+          every payment — opened from the avatar, the name, or Contact info.
+          Keyed on the number so switching chats with it open refetches rather
+          than showing the previous person's details. */}
+      {profileOpen && (
+        <ChatProfilePanel
+          key={contactNumber}
+          contactNumber={contactNumber}
+          contactName={contactName}
+          user={user}
+          onClose={() => setProfileOpen(false)}
         />
       )}
     </div>
@@ -1528,7 +1835,7 @@ function LibraryPickerModal({ waNumber, sending, onClose, onSend }) {
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          background: 'var(--c-cardBg)', borderRadius: 14, width: 720, maxHeight: '85vh',
+          background: 'var(--c-cardBg)', borderRadius: 14, width: 720, maxHeight: 'calc(85vh / var(--fg-zoom, 1))',
           display: 'flex', flexDirection: 'column', boxShadow: C.shadowLg,
         }}
       >
@@ -1539,7 +1846,7 @@ function LibraryPickerModal({ waNumber, sending, onClose, onSend }) {
             <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>Send from Media Library</div>
             <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 2 }}>
               {account
-                ? <>Sending as <strong><MaskedNumber number={account.displayPhoneNumber} /></strong> — items synced for this WABA send immediately, others auto-sync first.</>
+                ? <>Sending as <strong>{account.displayName ? <>{account.displayName} · </> : null}<MaskedNumber number={account.displayPhoneNumber} /></strong> — items synced for this WABA send immediately, others auto-sync first.</>
                 : 'Resolving WABA…'}
             </div>
           </div>
@@ -1550,29 +1857,14 @@ function LibraryPickerModal({ waNumber, sending, onClose, onSend }) {
         </div>
 
         {/* Filter chips */}
-        <div style={{ padding: '10px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', gap: 6 }}>
-          {[
+        <div style={{ padding: '10px 22px', borderBottom: `1px solid ${C.border}` }}>
+          <PillStrip size="sm" value={filter} onChange={id => { setFilter(id); setSelected(null); }} items={[
             { id: 'all', label: 'All' },
             { id: 'image', label: 'Images' },
             { id: 'video', label: 'Videos' },
             { id: 'audio', label: 'Audio' },
             { id: 'document', label: 'Documents' },
-          ].map(f => {
-            const active = filter === f.id;
-            return (
-              <button
-                key={f.id}
-                onClick={() => { setFilter(f.id); setSelected(null); }}
-                style={{
-                  padding: '5px 12px', borderRadius: 14,
-                  border: `1px solid ${active ? C.primary : C.border}`,
-                  background: active ? C.primary : 'var(--c-cardBg)',
-                  color: active ? '#fff' : C.text,
-                  cursor: 'pointer', fontSize: 14, fontWeight: 600, fontFamily: FONT,
-                }}
-              >{f.label}</button>
-            );
-          })}
+          ]} />
         </div>
 
         {/* List */}

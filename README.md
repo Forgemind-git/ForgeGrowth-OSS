@@ -220,18 +220,22 @@ Nothing else. No Node, Postgres, Redis or MinIO on the host — it all runs in c
 |---|---|
 | **Campaigns** | Real spend from the Meta Marketing API, arranged Campaign → Ad Set → Ad |
 | **Click-to-WhatsApp** | Per-ad CPL and ROAS, placement breakdown, and the exact creative each person saw |
+| **Conversions API & CLO** | Funnel stages sent back to Meta with the click id, so the optimiser learns who pays — off by default |
 | **Leads** | Pipeline, funnel and list views of one model, with tags, custom fields and CSV/XLSX import |
-| **Payments** | Razorpay links stamped with the lead id, so a payment attributes itself |
+| **Payments** | Razorpay links stamped with the lead id, so a payment attributes itself, plus a payments dashboard |
 | **Sales Log** | Gateway payments deduped and unioned with manually logged sales |
-| **Forms** | Shareable lead capture at `/f/<slug>`, prefillable from a WhatsApp send token |
-| **Inbox** | 3-pane WhatsApp client with media, voice notes and 24-hour window enforcement |
+| **Inbox** | 3-pane WhatsApp client with media, transcribed voice notes and 24-hour window enforcement |
+| **Chat Analyzer** | Summary, intent, suggested stage and ready-to-send follow-ups for any conversation |
+| **Follow-ups** | Pinned lead chats and a follow-up calendar, optionally mirrored to Google Calendar |
 | **Templates** | The full Meta lifecycle — submit, sync, edit, quality score, carousels |
 | **Broadcasts** | 7 message types, scheduling, per-recipient status, stage and tag filters |
 | **Message Costs** | What each send actually owes Meta, derived from your WABA's own pricing |
 | **Automations** | A visual flow builder — 20 block types, every branch visibly wired |
 | **AI Agents** | A no-code LLM agent per number, with tools, memory, handoff and spend limits |
+| **Workflow Agents** | Scheduled or triggered agents that work across leads, chats and sales, behind an approvals queue |
+| **Social** | Instagram, Facebook, Threads, YouTube and LinkedIn — analytics, one inbox, comment automations |
 | **Google** | Sheets, Calendar and Gmail, with discovery browsers and automation actions |
-| **MCP** | Drive the whole app from Claude — 46 tools in 17 categories, all off by default |
+| **MCP** | Drive the whole app from Claude — every capability off by default |
 | **Users & RBAC** | Roles are rows, not an enum, so adding one needs no migration |
 
 Each of these has a "why it works this way" worth knowing — **[`docs/features.md`](./docs/features.md)**

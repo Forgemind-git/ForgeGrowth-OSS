@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Save, Trash2, Loader2, AlertCircle, ExternalLink, Download,
+import { Save, Trash2, Loader2, AlertCircle, ExternalLink, Download, Check, ChevronRight,
   Images, Settings2, Brain, Wrench, Gauge, History,
   Mic, ImagePlus, Type } from 'lucide-react';
 import { api } from '../../api.js';
-import { C, FONT, MONO, downloadJson, slugifyName } from '../../constants.js';
+import { C, FONT, MONO, downloadJson, slugifyName, maskPhone } from '../../constants.js';
 import { notify } from '../../lib/feedback.js';
 import DeleteConfirmModal from '../DeleteConfirmModal.jsx';
 import SearchableSelect from '../SearchableSelect.jsx';
@@ -13,8 +13,12 @@ import AgentToolsList from './AgentToolsList.jsx';
 import AgentRunsViewer from './AgentRunsViewer.jsx';
 import AgentLivePreview from './AgentLivePreview.jsx';
 import AgentMediaGroups from './AgentMediaGroups.jsx';
-import { modelsForProvider, providerDisplay } from './modelCatalog.js';
+import { modelsForProvider, providerDisplay, isAgentProvider, defaultModelFor } from './modelCatalog.js';
 import { useFunnelConfig } from '../../hooks/useFunnelConfig.js';
+import { useConfirm } from '../ConfirmDialog.jsx';
+import {
+  DEFAULT_PROMPT, agentReadiness, tabMarks, ReadinessPanel, StarterPicker, InstructionTips,
+} from './agentSetupGuide.jsx';
 
 // Pre-filled into the "what to send at the limit" box for a new agent. It is a
 // suggestion sitting in an editable field, not a fallback — clearing it means
@@ -70,18 +74,20 @@ function setCap(f, key, v) {
  * who it is and when it answers · which brain and what to say · what it can
  * do · how far it may go · what it has actually done.
  */
+// `optional` tabs carry a muted "optional" tag so a first-timer can see at a
+// glance that only Setup and AI stand between them and a working agent.
 const AGENT_TABS = [
-  { key: 'setup',    label: 'Setup',    icon: Settings2, hint: 'Name, WhatsApp number and when it engages' },
-  { key: 'ai',       label: 'AI',       icon: Brain,     hint: 'Model, instructions, and what it understands' },
-  { key: 'tools',    label: 'Tools',    icon: Wrench,    hint: 'What it can do mid-conversation' },
-  { key: 'limits',   label: 'Limits',   icon: Gauge,     hint: 'How much it may spend and say' },
-  { key: 'activity', label: 'Activity', icon: History,   hint: 'Recent runs' },
+  { key: 'setup',    label: 'Setup',    icon: Settings2, hint: 'Name, WhatsApp number and when it replies' },
+  { key: 'ai',       label: 'AI',       icon: Brain,     hint: 'What it should do, which model, and what it understands' },
+  { key: 'tools',    label: 'Tools',    icon: Wrench,    hint: 'Files it can send, spreadsheets and APIs it can use', optional: true },
+  { key: 'limits',   label: 'Limits',   icon: Gauge,     hint: 'How much it may say and spend', optional: true },
+  { key: 'activity', label: 'Activity', icon: History,   hint: 'What it has actually done' },
 ];
 
-const BLANK = {
+export const BLANK = {
   name: '',
   description: '',
-  systemPrompt: 'You are a helpful WhatsApp assistant. Keep replies concise.',
+  systemPrompt: DEFAULT_PROMPT,
   aiModelId: '',
   llmModel: '',
   waAccountId: '',
@@ -122,6 +128,55 @@ const BLANK = {
   mediaGroups: [],
 };
 
+/**
+ * The create/update body agentService validates. Shared by the full editor and
+ * the Quick AI Agent editor — the saved shape is the contract, so it lives once.
+ */
+export function buildAgentPayload(form, isAdmin, overrides = {}) {
+  const complete = !!(form.aiModelId && form.llmModel);
+  const status = overrides.status || (complete ? 'active' : 'draft');
+  return {
+    name: form.name,
+    description: form.description,
+    systemPrompt: form.systemPrompt,
+    aiModelId: form.aiModelId || null,
+    llmModel: form.llmModel || null,
+    status,
+    waAccountId: form.waAccountId || null,
+    isActive: status === 'active' ? form.isActive : false,
+    contextWindowMessages: form.contextWindowMessages,
+    maxToolIterations: form.maxToolIterations,
+    maxRepliesPerConversation: form.maxRepliesPerConversation,
+    maxRepliesPerMinute: form.maxRepliesPerMinute,
+    maxRunsPerDay: form.maxRunsPerDay,
+    limitReachedMessage: form.limitReachedMessage,
+    limitHandoff: form.limitHandoff,
+    quotaReplies: form.quotaReplies,
+    quotaConversations: form.quotaConversations,
+    quotaWindowValue: form.quotaWindowValue,
+    quotaWindowUnit: form.quotaWindowUnit,
+    quotaHandoff: form.quotaHandoff,
+    testNumbers: form.testNumbers,
+    transcribeAudio: form.transcribeAudio,
+    maxVoiceSeconds: form.maxVoiceSeconds,
+    acceptImages: form.acceptImages,
+    maxImagesPerConversation: form.maxImagesPerConversation,
+    triggerMode: form.triggerMode,
+    triggerKeyword: form.triggerKeyword,
+    triggerMatchType: form.triggerMatchType,
+    triggerCaseSensitive: form.triggerCaseSensitive,
+    triggerSessionMinutes: form.triggerSessionMinutes,
+    // Sent only by an admin — a non-admin's editor never renders the control,
+    // and the server refuses the field outright rather than trusting that.
+    ...(isAdmin ? {
+      triggerStageKeys: form.triggerStageKeys,
+      triggerTagIds: form.triggerTagIds,
+    } : {}),
+    mediaGroups: form.mediaGroups,
+    ...overrides,
+  };
+}
+
 export default function AgentEditor({ agentId, waAccounts, user, navigate, onDone, onCancel }) {
   // `liveId` is the agent's real id. It starts as the prop (null in create
   // mode) but flips to a real id the moment we auto-persist a draft — e.g. when
@@ -145,6 +200,24 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
   // than the hash, so there is nothing to refresh back INTO and a routed tab
   // would be a promise the page cannot keep.
   const [tab, setTab] = useState('setup');
+  // Set once the test chat has produced a reply this session — the "Try it
+  // out" step of the checklist. Session-only on purpose: it is advice, and a
+  // stale "tested" from last week says nothing about today's instructions.
+  const [tested, setTested] = useState(false);
+  // Shown once, right after "Create agent": the editor now STAYS open (it used
+  // to drop you back on the list), so the next steps — test, then go live —
+  // are on the same screen as the thing you just made.
+  const [justCreated, setJustCreated] = useState(false);
+  // Briefly outlines the test phone when a checklist step points at it.
+  const [flashPreview, setFlashPreview] = useState(false);
+  const [confirmEl, confirm] = useConfirm();
+  // The form column scrolls on its own; switching tab from the checklist or
+  // the footer must land at the top of the new tab, not halfway down it.
+  const scrollRef = useRef(null);
+  const goTab = (key) => {
+    setTab(key);
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  };
 
   // Declared here, above every consumer — the funnel trigger control and
   // buildPayload both read it. Keeping it beside the other top-level state
@@ -284,70 +357,70 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
     || (form.aiModelId && form.aiProvider ? { id: form.aiModelId, provider: form.aiProvider, label: null } : null);
   const modelOptions = modelsForProvider(selectedModelRow?.provider);
   const hasModelSelected = !!(form.aiModelId && form.llmModel);
-  // Only treat the workspace as "no provider connected" when the registry is
-  // genuinely empty AND this agent isn't already bound to one.
-  const showNotIntegrated = aiModels.length === 0 && !form.aiModelId;
+  // Only the providers an agent can run on. The registry also holds keys for
+  // things like OpenRouter (voice transcription) that have no model list here —
+  // offering them produced an empty Model box and a save the server refuses.
+  const agentModels = aiModels.filter(m => isAgentProvider(m.provider));
+  // Only treat the workspace as "no provider connected" when there is no
+  // usable key AND this agent isn't already bound to one.
+  const showNotIntegrated = agentModels.length === 0 && !form.aiModelId;
   // Registry rows to offer, always including the agent's current binding.
-  const modelRowOptions = (selectedModelRow && !aiModels.some(m => String(m.id) === String(selectedModelRow.id)))
-    ? [...aiModels, selectedModelRow]
-    : aiModels;
+  const modelRowOptions = (selectedModelRow && !agentModels.some(m => String(m.id) === String(selectedModelRow.id)))
+    ? [...agentModels, selectedModelRow]
+    : agentModels;
 
   // When the registry credential changes, snap the model dropdown to the first
   // model of that provider (the previously-selected model may belong to the
   // other provider).
   const setAiModelId = (id) => {
     const row = aiModels.find(m => String(m.id) === String(id));
-    const first = modelsForProvider(row?.provider)[0]?.value || '';
-    setForm(f => ({ ...f, aiModelId: id, llmModel: first }));
+    setForm(f => ({ ...f, aiModelId: id, llmModel: defaultModelFor(row?.provider) }));
   };
+
+  // Sensible defaults for a brand-new agent, applied once the pickers have
+  // their options: the only WhatsApp number when there is exactly one, and the
+  // first connected provider on its recommended model. Both are ordinary form
+  // values the operator can change, and neither touches an existing agent.
+  const defaultsApplied = useRef(false);
+  useEffect(() => {
+    if (agentId != null || loading || defaultsApplied.current) return;
+    defaultsApplied.current = true;
+    const row = aiModels.find(m => isAgentProvider(m.provider));
+    setForm(f => ({
+      ...f,
+      waAccountId: f.waAccountId || (waAccounts.length === 1 ? String(waAccounts[0].id) : ''),
+      ...(f.aiModelId || !row ? {} : { aiModelId: String(row.id), llmModel: defaultModelFor(row.provider) }),
+    }));
+  }, [agentId, loading, aiModels, waAccounts]);
+
+  const checks = agentReadiness({ form, hasModel: hasModelSelected, isCreate, tested, waAccounts });
+  const marks = tabMarks(checks);
+  const blockers = checks.filter(c => c.blocking && !c.done);
+
+  const showTestPhone = () => {
+    setFlashPreview(true);
+    setTimeout(() => setFlashPreview(false), 1600);
+  };
+
+  const applyStarter = (s) => setForm(f => ({
+    ...f,
+    systemPrompt: s.prompt,
+    description: f.description || s.description || '',
+    ...(s.triggerMode ? { triggerMode: s.triggerMode } : {}),
+  }));
+  const confirmReplace = (s) => confirm({
+    title: s.key === 'blank' ? 'Clear the instructions?' : `Use the "${s.title}" template?`,
+    body: s.key === 'blank'
+      ? 'This empties the Instructions box so you can write your own.'
+      : 'This replaces the instructions you have written with the template. You can edit it afterwards.',
+  });
 
   // Build the create/update payload from the form. `status` is derived: an
   // agent with a model fully chosen is 'active' (can be toggled on); otherwise
   // it's saved as a 'draft'.
-  const buildPayload = (overrides = {}) => {
-    const complete = !!(form.aiModelId && form.llmModel);
-    const status = overrides.status || (complete ? 'active' : 'draft');
-    return {
-      name: form.name,
-      description: form.description,
-      systemPrompt: form.systemPrompt,
-      aiModelId: form.aiModelId || null,
-      llmModel: form.llmModel || null,
-      status,
-      waAccountId: form.waAccountId || null,
-      isActive: status === 'active' ? form.isActive : false,
-      contextWindowMessages: form.contextWindowMessages,
-      maxToolIterations: form.maxToolIterations,
-      maxRepliesPerConversation: form.maxRepliesPerConversation,
-      maxRepliesPerMinute: form.maxRepliesPerMinute,
-      maxRunsPerDay: form.maxRunsPerDay,
-      limitReachedMessage: form.limitReachedMessage,
-      limitHandoff: form.limitHandoff,
-      quotaReplies: form.quotaReplies,
-      quotaConversations: form.quotaConversations,
-      quotaWindowValue: form.quotaWindowValue,
-      quotaWindowUnit: form.quotaWindowUnit,
-      quotaHandoff: form.quotaHandoff,
-      testNumbers: form.testNumbers,
-      transcribeAudio: form.transcribeAudio,
-      maxVoiceSeconds: form.maxVoiceSeconds,
-      acceptImages: form.acceptImages,
-      maxImagesPerConversation: form.maxImagesPerConversation,
-      triggerMode: form.triggerMode,
-      triggerKeyword: form.triggerKeyword,
-      triggerMatchType: form.triggerMatchType,
-      triggerCaseSensitive: form.triggerCaseSensitive,
-      triggerSessionMinutes: form.triggerSessionMinutes,
-      // Sent only by an admin — a non-admin's editor never renders the control,
-      // and the server refuses the field outright rather than trusting that.
-      ...(isAdmin ? {
-        triggerStageKeys: form.triggerStageKeys,
-        triggerTagIds: form.triggerTagIds,
-      } : {}),
-      mediaGroups: form.mediaGroups,
-      ...overrides,
-    };
-  };
+  // One payload builder for every editor (the full one here and the Quick AI
+  // Agent editor), so the two can never save different shapes.
+  const buildPayload = (overrides = {}) => buildAgentPayload(form, isAdmin, overrides);
 
   const handleSave = async () => {
     setSaving(true);
@@ -356,8 +429,14 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
       const payload = buildPayload();
       const existing = liveIdRef.current;
       if (existing == null) {
+        // Stay in the editor: the next two steps — try it in the test chat,
+        // then Go Live — both happen here, and dropping back to the list made
+        // the operator find and reopen the agent they had just made.
         const created = await api.agents.create(payload);
-        onDone(created.id);
+        setLive(created.id);
+        setJustCreated(true);
+        setSaving(false);
+        if (scrollRef.current) scrollRef.current.scrollTop = 0;
       } else {
         // Covers both a normal edit AND a create where a draft was already
         // auto-persisted (e.g. the operator added a tool first).
@@ -391,8 +470,11 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
 
   const handleToggleLive = async () => {
     const next = !form.isActive;
-    if (next && !hasModelSelected) {
-      setError('Connect an AI model and pick a model before going live.');
+    if (next && blockers.length) {
+      // Say exactly what is missing and open the tab that fixes the first one,
+      // instead of a disabled button with a reason hidden in a tooltip.
+      setError(`Before going live: ${blockers.map(b => b.label.toLowerCase()).join(', ')}.`);
+      goTab(blockers[0].tab);
       return;
     }
     setTogglingLive(true);
@@ -423,7 +505,7 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
       } else {
         await api.agents.update(liveIdRef.current, payload);
       }
-      navigate('admin-settings', 'integrations', 'ai-models');
+      navigate('admin-settings', 'ai-models');
     } catch (e) {
       setError(prettyError(e));
       setSaving(false);
@@ -467,11 +549,35 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
           flex child defaults to min-height:auto and would refuse to shrink,
           leaving the inner div unable to scroll at all. */}
       <div style={{ flex: '1 1 auto', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '20px 24px 24px', boxSizing: 'border-box' }}>
+      <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '20px 24px 24px', boxSizing: 'border-box' }}>
       {error && (
         <div style={{ padding: '10px 14px', borderRadius: 8, marginBottom: 16,
           background: 'var(--c-dangerBg, #FCEBEB)', color: 'var(--c-dangerText, #A32D2D)', border: '1px solid var(--c-dangerBorder, #FBC8C8)', fontSize: 15 }}>
           {error}
+        </div>
+      )}
+
+      {/* Create mode has no Go Live yet (nothing to switch on), but it still
+          needs to say what this screen is and that nothing is live. */}
+      {isCreate && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: C.text, letterSpacing: '-.01em' }}>New agent</div>
+          <div style={{ fontSize: 14, color: C.textMuted, fontWeight: 600, marginTop: 2 }}>
+            Not saved yet — work through the steps below, then create it. Every setting can be changed later.
+          </div>
+        </div>
+      )}
+
+      {justCreated && (
+        <div data-testid="created-banner" style={{
+          display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, marginBottom: 16,
+          background: C.successBgSoft, border: `1px solid ${C.successBorder}`, color: C.successText, fontSize: 15, fontWeight: 600,
+        }}>
+          <span style={{ flex: 1 }}>
+            Agent created. Chat with it in the test phone on the right, then press <strong>Go Live</strong> when you are happy.
+          </span>
+          <button type="button" onClick={() => setJustCreated(false)} title="Dismiss"
+            style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: C.successText, fontSize: 18, lineHeight: 1, padding: 2 }}>×</button>
         </div>
       )}
 
@@ -506,8 +612,11 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
             <button
               type="button"
               onClick={handleToggleLive}
-              disabled={togglingLive || (!form.isActive && !hasModelSelected)}
-              title={!form.isActive && !hasModelSelected ? 'Connect & pick an AI model first' : (form.isActive ? 'Deactivate this agent' : 'Activate this agent')}
+              disabled={togglingLive}
+              data-testid="go-live"
+              title={!form.isActive && blockers.length
+                ? `Still needed: ${blockers.map(b => b.label.toLowerCase()).join(', ')}`
+                : (form.isActive ? 'Deactivate this agent' : 'Activate this agent')}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 8,
                 padding: '10px 20px', borderRadius: 99,
@@ -515,8 +624,8 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
                 background: form.isActive ? 'var(--c-successBg, #E1F5EE)' : '#1D9E75',
                 color: form.isActive ? 'var(--c-successText, #0F6E56)' : '#fff',
                 fontSize: 15, fontFamily: FONT, fontWeight: 700, whiteSpace: 'nowrap',
-                cursor: (togglingLive || (!form.isActive && !hasModelSelected)) ? 'not-allowed' : 'pointer',
-                opacity: (togglingLive || (!form.isActive && !hasModelSelected)) ? 0.6 : 1,
+                cursor: togglingLive ? 'wait' : 'pointer',
+                opacity: (togglingLive || (!form.isActive && blockers.length)) ? 0.6 : 1,
               }}
             >
               {togglingLive
@@ -533,7 +642,15 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
       <div>
         <div style={{ minWidth: 0 }}>
 
-      <TabStrip tabs={AGENT_TABS} value={tab} onChange={setTab} />
+      <ReadinessPanel
+        checks={checks}
+        isActive={form.isActive}
+        isCreate={isCreate}
+        onJump={goTab}
+        onTest={showTestPhone}
+      />
+
+      <TabStrip tabs={AGENT_TABS} value={tab} onChange={goTab} marks={marks} />
 
       {tab === 'setup' && (
       <Section title="Identity" subtitle="What this agent is called, and which WhatsApp number it answers on.">
@@ -554,7 +671,7 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
               onChange={(val) => setForm(f => ({ ...f, waAccountId: val }))}
               placeholder="— None —"
               searchPlaceholder="Search accounts…"
-              options={[{ value: '', label: '— None —' }, ...waAccounts.map(w => ({ value: String(w.id), label: `${w.displayName}${w.displayPhoneNumber ? ` (+${w.displayPhoneNumber})` : ''}` }))]}
+              options={[{ value: '', label: '— None —' }, ...waAccounts.map(w => ({ value: String(w.id), label: w.displayName || maskPhone(w.displayPhoneNumber), sublabel: w.displayPhoneNumber ? maskPhone(w.displayPhoneNumber) : undefined }))]}
             />
           </Field>
         </FieldRow>
@@ -572,14 +689,17 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
           space), and every Tools control moved inside its own tool row. */}
       {tab === 'limits' && (
         <div style={{ marginBottom: 28, padding: '16px 20px', background: C.cardBg, borderRadius: 10, border: `1px solid ${C.border}` }}>
+            <div data-testid="limits-summary" style={{ fontSize: 14, color: C.textSecondary, lineHeight: 1.55, marginBottom: 14, padding: '9px 12px', borderRadius: 8, background: 'var(--c-surfaceInner)' }}>
+              {limitsSummary(form)}
+            </div>
             <FieldRow>
-              <Field label="Context window (messages)" info="How many recent messages from the chat are fed to the model on each turn. Higher = more memory, but costs more per reply.">
+              <Field label="Memory (recent messages)" info="How many recent messages from the chat are fed to the model on each turn. Higher = more memory, but costs more per reply.">
                 <input type="number" min={1} max={100}
                   value={form.contextWindowMessages}
                   onChange={e => setForm(f => ({ ...f, contextWindowMessages: parseInt(e.target.value, 10) || 20 }))}
                   style={inputStyle} />
               </Field>
-              <Field label="Max tool iterations" info="Hard cap on how many times the model can call a tool (Sheets, send media, …) while handling one message. Stops runaway loops.">
+              <Field label="Tool steps per message" info="Hard cap on how many times the model can call a tool (Sheets, send media, …) while handling one message. Stops runaway loops.">
                 <input type="number" min={1} max={20}
                   value={form.maxToolIterations}
                   onChange={e => setForm(f => ({ ...f, maxToolIterations: parseInt(e.target.value, 10) || 6 }))}
@@ -748,19 +868,39 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
         </div>
       )}
 
+      {/* Instructions first: "what should it do?" is the question a first-time
+          builder arrives with, and the model is usually already picked for
+          them. Starters fill the box; nothing else about them is stored. */}
+      {tab === 'ai' && (
+      <Section title="What should it do?" subtitle="These instructions are the agent's brief — it reads them before every reply (its system prompt).">
+        <StarterPicker prompt={form.systemPrompt} onPick={applyStarter} confirmReplace={confirmReplace} />
+        <Field label="Instructions *" info="Who the agent is, what it knows, how it should talk and what it must never say. Plain sentences work best.">
+          <textarea
+            value={form.systemPrompt}
+            onChange={e => setForm(f => ({ ...f, systemPrompt: e.target.value }))}
+            rows={10}
+            data-testid="instructions"
+            placeholder="You are the WhatsApp assistant for … Answer questions about … Never …"
+            style={{ ...inputStyle, fontFamily: MONO, fontSize: 15, lineHeight: 1.5, resize: 'vertical', minHeight: 160 }}
+          />
+        </Field>
+        <InstructionTips prompt={form.systemPrompt} />
+      </Section>
+      )}
+
       {/* The model picker and what the agent can understand, side by side.
           These were two stacked cards, and the understanding one held exactly
           two checkboxes — so the tab opened on a screen of mostly empty space
           and still had to be scrolled. Two columns that wrap at narrow widths
           fill it without shrinking anything. */}
       {tab === 'ai' && (
-      <Section title="Brain" subtitle="Which model answers, and what kinds of message it can understand. API keys live in Integrations → AI Models, not on the agent.">
+      <Section title="Model & understanding" subtitle="Which model answers, and what kinds of message it can understand. API keys live in Integrations → AI Models, not on the agent.">
         {showNotIntegrated ? (
           <NotIntegratedCard onGo={handleGoToIntegrations} saving={saving} canGo={!!navigate} />
         ) : (
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
             <div style={{ flex: '1 1 300px', minWidth: 0 }}>
-              <Field label="AI Model *" info="The connected provider credential (from Integrations → AI Models) this agent uses.">
+              <Field label="AI provider *" info="Which connected AI account (from Integrations → AI Models) writes this agent's replies.">
                 <SearchableSelect
                   value={form.aiModelId}
                   onChange={setAiModelId}
@@ -776,7 +916,7 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
                       value={form.llmModel}
                       onChange={(val) => setForm(f => ({ ...f, llmModel: val }))}
                       placeholder="— Select —"
-                      options={modelOptions.map(m => ({ value: m.value, label: m.label }))}
+                      options={modelOptions.map(m => ({ value: m.value, label: m.label, sublabel: m.recommended ? 'Recommended — good quality, low cost' : undefined }))}
                     />
                   </Field>
                 </div>
@@ -784,7 +924,7 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
               <div style={{ fontSize: 13, color: C.textMuted, marginTop: 10 }}>
                 Need another provider?{' '}
                 <a
-                  href="#/admin-settings/integrations/ai-models"
+                  href="#/admin-settings/ai-models"
                   onClick={(e) => { if (navigate) { e.preventDefault(); handleGoToIntegrations(); } }}
                   style={{ color: C.primary, fontWeight: 600, textDecoration: 'none' }}
                 >
@@ -807,17 +947,6 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
       </Section>
       )}
 
-      {tab === 'ai' && (
-      <Section title="Instructions" subtitle="The agent uses this as its system prompt on every turn.">
-        <textarea
-          value={form.systemPrompt}
-          onChange={e => setForm(f => ({ ...f, systemPrompt: e.target.value }))}
-          rows={8}
-          placeholder="You are a helpful WhatsApp assistant..."
-          style={{ ...inputStyle, fontFamily: MONO, fontSize: 15, lineHeight: 1.5, resize: 'vertical', minHeight: 140 }}
-        />
-      </Section>
-      )}
 
       {/* ONE card, ONE list. Built-in abilities and attached tools are the same
           kind of thing to the person reading this — "what can it do?" — and each
@@ -850,6 +979,9 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
 
       <ActionBar
         isCreate={isCreate}
+        nextTab={isCreate ? NEXT_TAB[tab] : null}
+        onNext={() => goTab(NEXT_TAB[tab])}
+        blockers={isCreate ? blockers : []}
         saving={saving}
         onSave={handleSave}
         onCancel={onCancel}
@@ -860,24 +992,27 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
       {/* RIGHT — pinned pane. Full height of the editor area, never scrolls,
           never resizes. The phone stretches to fill it. */}
       <aside style={{
-        flex: '0 0 326px', height: '100%', minHeight: 0,
+        flex: '0 0 356px', height: '100%', minHeight: 0,
         borderLeft: `1px solid ${C.border}`, background: C.sidebarBg,
         display: 'flex', flexDirection: 'column', alignItems: 'center',
-        gap: 8, padding: '14px 12px 16px', boxSizing: 'border-box', overflow: 'hidden',
+        gap: 10, padding: '14px 12px 16px', boxSizing: 'border-box', overflow: 'hidden',
       }}>
-        <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--c-t6, #888)', fontWeight: 700, flexShrink: 0 }}>
-          Live test chat
-        </div>
-        <div style={{ flex: 1, minHeight: 0, width: '100%', display: 'flex', justifyContent: 'center' }}>
+        {/* The same simulator card the flow builder uses (sim/SimKit). */}
+        <div data-testid="preview-wrap" style={{
+          flex: 1, minHeight: 0, width: '100%', display: 'flex', justifyContent: 'center',
+          borderRadius: 14, transition: 'box-shadow .25s ease',
+          boxShadow: flashPreview ? `0 0 0 3px ${C.primary}` : 'none',
+        }}>
           <AgentLivePreview
+            onReply={() => setTested(true)}
             agentId={isCreate ? null : liveId}
             headerTitle={form.name}
             canTest={!isCreate}
             fill
+            hint={isCreate
+              ? 'Create the agent first — then chat with it here. Nothing is sent to WhatsApp.'
+              : 'Runs the live model — not sent to WhatsApp, not saved to run history. Sheets tools hit the real spreadsheet.'}
           />
-        </div>
-        <div style={{ fontSize: 12, color: C.textMuted, textAlign: 'center', lineHeight: 1.4, maxWidth: 290, flexShrink: 0 }}>
-          Runs the live model — not sent to WhatsApp, not saved to run history. Sheets tools hit the real spreadsheet.
         </div>
 
         {/* Sits directly under the test chat because it answers the next
@@ -889,6 +1024,7 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
         />
       </aside>
 
+      {confirmEl}
       <DeleteConfirmModal
         open={pendingDelete}
         title="Delete this agent?"
@@ -977,9 +1113,9 @@ function UnderstandingConfig({ form, setForm }) {
         icon={Mic}
         title="Voice notes"
         subtitle={form.transcribeAudio
-          ? 'Transcribed with OpenAI Whisper and handled like a typed message.'
-          : 'Off — a voice note gets no reply. Needs an OpenAI key in Integrations.'}
-        info="Incoming WhatsApp voice notes are transcribed to text with OpenAI Whisper and handled like a typed message. It reuses the OpenAI key from Integrations → AI Models, so connect one there first."
+          ? 'Transcribed with MAI-Transcribe 2 (via OpenRouter) and handled like a typed message.'
+          : 'Off — a voice note gets no reply.'}
+        info="Incoming WhatsApp voice notes are transcribed to text with Microsoft MAI-Transcribe 2 through OpenRouter (multilingual, including mixed Tamil/English) and handled like a typed message. Each note is transcribed once and the transcript is shared with the Chat Analyzer, so it is never paid for twice."
         checked={form.transcribeAudio}
         onChange={(next) => setForm(f => ({ ...f, transcribeAudio: next }))}
       >
@@ -1090,7 +1226,7 @@ function Section({ title, subtitle, children, rightSlot, ...rest }) {
  * horizontally on a narrow window instead of wrapping to two rows, which would
  * push the form down every time the window narrowed.
  */
-function TabStrip({ tabs, value, onChange }) {
+function TabStrip({ tabs, value, onChange, marks = {} }) {
   return (
     <div style={{
       display: 'flex', gap: 2, marginBottom: 20,
@@ -1117,6 +1253,17 @@ function TabStrip({ tabs, value, onChange }) {
             }}
           >
             <Icon size={14} /> {t.label}
+            {/* A tab that still holds a step of the checklist carries a dot;
+                a finished one a tick; the optional ones say so. */}
+            {marks[t.key] === 'todo' && (
+              <span data-mark="todo" title="Something here still needs doing" style={{ width: 7, height: 7, borderRadius: 99, background: C.amber, marginLeft: 1 }} />
+            )}
+            {marks[t.key] === 'done' && (
+              <Check data-mark="done" size={13} strokeWidth={3} color={C.successBright} />
+            )}
+            {t.optional && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: C.textMuted, letterSpacing: '.02em' }}>optional</span>
+            )}
           </button>
         );
       })}
@@ -1569,7 +1716,7 @@ function Pill({ active, onClick, children }) {
   );
 }
 
-function ActionBar({ isCreate, saving, onSave, onCancel, onDelete }) {
+function ActionBar({ isCreate, nextTab, onNext, blockers = [], saving, onSave, onCancel, onDelete }) {
   return (
     // flexShrink:0 so the footer keeps its height however long the form gets —
     // it is the sibling of the scroll area, not a child of it, so it can never
@@ -1602,7 +1749,22 @@ function ActionBar({ isCreate, saving, onSave, onCancel, onDelete }) {
         }}>
         Cancel
       </button>
+      {/* Create mode only: walk the required tabs in order. "Create agent"
+          stays beside it, so someone who knows what they are doing is never
+          made to click through. */}
+      {nextTab && (
+        <button type="button" onClick={onNext} data-testid="next-step"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '10px 14px', borderRadius: 8,
+            border: `1px solid ${C.border}`, background: C.cardBg,
+            color: C.text, fontSize: 15, fontFamily: FONT, fontWeight: 700, cursor: 'pointer',
+          }}>
+          Next: {TAB_LABEL[nextTab]} <ChevronRight size={14} />
+        </button>
+      )}
       <button type="button" onClick={onSave} disabled={saving}
+        title={isCreate && blockers.length ? `It will be saved as a draft until you: ${blockers.map(b => b.label.toLowerCase()).join(', ')}` : undefined}
         style={{
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '10px 18px', borderRadius: 8,
@@ -1615,6 +1777,23 @@ function ActionBar({ isCreate, saving, onSave, onCancel, onDelete }) {
       </button>
     </div>
   );
+}
+
+// The order "Next" walks in create mode — the two tabs a working agent needs,
+// then Tools as the last stop (optional, but where most people go next).
+const NEXT_TAB = { setup: 'ai', ai: 'tools' };
+const TAB_LABEL = Object.fromEntries(AGENT_TABS.map(t => [t.key, t.label]));
+
+// One sentence on the Limits tab saying what is actually in force, so nobody
+// has to read eight boxes to learn that the answer is "nothing".
+function limitsSummary(f) {
+  const parts = [];
+  if (f.maxRepliesPerConversation != null) parts.push(`${f.maxRepliesPerConversation} replies per conversation`);
+  if (f.maxRepliesPerMinute != null) parts.push(`${f.maxRepliesPerMinute} per minute`);
+  if (f.maxRunsPerDay != null) parts.push(`${f.maxRunsPerDay} per day in total`);
+  if (f.quotaReplies != null || f.quotaConversations != null) parts.push(quotaSummary(f).replace(/\.$/, ''));
+  if (!parts.length) return 'No limits set — the agent answers as often as people write. Optional: add a ceiling below if you want to cap cost or chattiness.';
+  return `In force: ${parts.join(' · ')}.`;
 }
 
 function prettyError(e) {

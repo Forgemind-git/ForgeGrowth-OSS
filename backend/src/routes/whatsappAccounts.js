@@ -4,6 +4,30 @@ const { encrypt, decrypt, maskSecret } = require('../util/crypto');
 
 const router = Router();
 
+// ── Display label (migration 133) ─────────────────────────────────────────────
+// `label` is a short, human name for a number ("Acme – Sales desk"). It is a
+// DISPLAY label only: the real number, phone_number_id and Meta's verified name
+// are never touched. NULL/blank falls back to display_name (the account name).
+// Every place that shows or picks a sending number reads the name through
+// accountNameSql() / effectiveName(), so the two can never disagree.
+const LABEL_MAX = 60;
+const accountNameSql = (alias = '') => {
+  const a = alias ? `${alias}.` : '';
+  return `COALESCE(NULLIF(btrim(${a}label), ''), ${a}display_name)`;
+};
+const effectiveName = (row) => {
+  const l = row && typeof row.label === 'string' ? row.label.trim() : '';
+  return l || row?.display_name || null;
+};
+function cleanLabel(v) {
+  if (v === null || v === undefined) return null;
+  const t = String(v).replace(/\s+/g, ' ').trim();
+  return t ? t.slice(0, LABEL_MAX) : null;
+}
+async function ensureWhatsappAccountColumns() {
+  await pool.query('ALTER TABLE coexistence.whatsapp_accounts ADD COLUMN IF NOT EXISTS label TEXT');
+}
+
 function adminOnly(req, res, next) {
   if (req.user?.role !== 'admin') {
     return res.status(403).json({ error: 'Admin access required' });
@@ -16,7 +40,11 @@ function publicShape(row, { reveal = false } = {}) {
   const token = decrypt(row.access_token_encrypted);
   return {
     id: row.id,
-    displayName: row.display_name,
+    // displayName = what to SHOW (label when set). accountName = the stored
+    // account name underneath it, which the Admin form edits as "Account name".
+    displayName: effectiveName(row),
+    label: row.label && row.label.trim() ? row.label.trim() : null,
+    accountName: row.display_name,
     displayPhoneNumber: row.display_phone_number,
     phoneNumberId: row.phone_number_id,
     wabaId: row.waba_id,
@@ -41,7 +69,7 @@ router.get('/whatsapp-accounts', async (req, res) => {
     const { rows } = await pool.query(
       `SELECT * FROM coexistence.whatsapp_accounts
         WHERE ($1::boolean IS NULL OR is_active = $1)
-        ORDER BY is_default DESC, display_name ASC`,
+        ORDER BY is_default DESC, ${accountNameSql()} ASC`,
       [req.query.activeOnly === 'true' ? true : null]
     );
     res.json(rows.map(r => publicShape(r)));
@@ -208,7 +236,7 @@ router.post('/whatsapp-accounts', adminOnly, async (req, res) => {
 
 router.put('/whatsapp-accounts/:id', adminOnly, async (req, res) => {
   try {
-    const { displayName, displayPhoneNumber, phoneNumberId, wabaId, metaAppId, accessToken, verifyToken, isDefault, isActive } = req.body || {};
+    const { displayName, displayPhoneNumber, phoneNumberId, wabaId, metaAppId, accessToken, verifyToken, isDefault, isActive, label } = req.body || {};
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -220,6 +248,8 @@ router.put('/whatsapp-accounts/:id', adminOnly, async (req, res) => {
       let i = 1;
       const push = (col, val) => { sets.push(`${col} = $${i++}`); params.push(val); };
       if (displayName != null) push('display_name', displayName.trim());
+      // label: undefined = leave alone, null/'' = clear (fall back to the account name).
+      if (label !== undefined) push('label', cleanLabel(label));
       if (displayPhoneNumber != null) push('display_phone_number', displayPhoneNumber.trim().replace(/\D/g, ''));
       if (phoneNumberId != null) push('phone_number_id', phoneNumberId.trim());
       if (wabaId != null) push('waba_id', wabaId.trim());
@@ -255,6 +285,32 @@ router.put('/whatsapp-accounts/:id', adminOnly, async (req, res) => {
   }
 });
 
+// PUT /whatsapp-accounts/:id/label { label } — rename a number for display.
+// Admin-only. Touches ONLY the label column; '' or null clears it.
+router.put('/whatsapp-accounts/:id/label', adminOnly, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(404).json({ error: 'Not found' });
+    const raw = req.body?.label;
+    if (raw !== null && raw !== undefined && typeof raw !== 'string') {
+      return res.status(400).json({ error: 'label must be text' });
+    }
+    if (typeof raw === 'string' && raw.trim().length > LABEL_MAX) {
+      return res.status(400).json({ error: `Keep the label to ${LABEL_MAX} characters or fewer.` });
+    }
+    const { rows } = await pool.query(
+      `UPDATE coexistence.whatsapp_accounts SET label = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+      [cleanLabel(raw), id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    try { require('../events').emit('numbers-changed', { accountId: id }); } catch { /* best effort */ }
+    res.json(publicShape(rows[0]));
+  } catch (err) {
+    console.error('[whatsapp-accounts] label error:', err.message);
+    res.status(500).json({ error: 'Failed to rename number' });
+  }
+});
+
 router.delete('/whatsapp-accounts/:id', adminOnly, async (req, res) => {
   try {
     const { rowCount } = await pool.query(
@@ -278,7 +334,7 @@ function rowToCreds(r) {
   if (!r) return null;
   return {
     id: r.id,
-    displayName: r.display_name,
+    displayName: effectiveName(r),
     displayPhoneNumber: r.display_phone_number,
     phoneNumberId: r.phone_number_id,
     wabaId: r.waba_id,
@@ -339,4 +395,4 @@ async function assertCanSend(acc) {
   return { ok: true };
 }
 
-module.exports = { router, getAccountWithToken, getAccountByPhoneNumber, assertCanSend };
+module.exports = { router, getAccountWithToken, getAccountByPhoneNumber, assertCanSend, ensureWhatsappAccountColumns, accountNameSql, effectiveName, cleanLabel, LABEL_MAX };

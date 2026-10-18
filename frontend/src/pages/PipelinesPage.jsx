@@ -9,6 +9,7 @@ import { C, FONT, MONO, maskPhone } from '../constants.js';
 import { useConfirm } from '../components/ConfirmDialog.jsx';
 import { useServerEvents } from '../hooks/useServerEvents.js';
 import SearchableSelect from '../components/SearchableSelect.jsx';
+import PillStrip from '../components/PillStrip.jsx';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -988,20 +989,8 @@ function StageModal({ mode, stage, onClose, onSave }) {
         <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2 }}>Used to compute the Weighted Value KPI.</div>
       </Field>
       <Field label="Outcome">
-        <div style={{ display: 'flex', gap: 8 }}>
-          {[
-            { k: 'open', label: 'In progress' },
-            { k: 'won', label: 'Won' },
-            { k: 'lost', label: 'Lost' },
-          ].map(o => (
-            <button key={o.k} onClick={() => setOutcome(o.k)} style={{
-              flex: 1, padding: '8px', borderRadius: 8, cursor: 'pointer', fontFamily: FONT, fontSize: 14, fontWeight: 700,
-              border: `1px solid ${outcome === o.k ? C.primary : C.border}`,
-              background: outcome === o.k ? C.primaryLight : C.cardBg,
-              color: outcome === o.k ? C.primary : C.textSecondary,
-            }}>{o.label}</button>
-          ))}
-        </div>
+        <PillStrip grow value={outcome} onChange={setOutcome}
+          items={[{ id: 'open', label: 'In progress' }, { id: 'won', label: 'Won' }, { id: 'lost', label: 'Lost' }]} />
         <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
           Deals landing in a Won/Lost stage are marked accordingly and feed the monthly KPIs.
         </div>
@@ -1022,7 +1011,7 @@ function ModalShell({ title, onClose, width = 420, children }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, fontFamily: FONT, padding: 16 }}
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background: C.cardBg, borderRadius: 16, width, maxWidth: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: C.shadowLg }}>
+      <div style={{ background: C.cardBg, borderRadius: 16, width, maxWidth: '100%', maxHeight: 'calc(90vh / var(--fg-zoom, 1))', overflowY: 'auto', boxShadow: C.shadowLg }}>
         <div style={{ display: 'flex', alignItems: 'center', padding: '16px 20px', borderBottom: `1px solid ${C.border}` }}>
           <div style={{ fontSize: 18, fontWeight: 800, color: C.text }}>{title}</div>
           <button onClick={onClose} style={{ ...iconBtn, marginLeft: 'auto', width: 32, height: 32 }}><X size={16} /></button>

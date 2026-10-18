@@ -22,6 +22,7 @@ const { syncRazorpayPayments } = require('../services/razorpayLedger');
 const { matchLink, applyCoursePayment } = require('./courses');
 const { resolveLinkContext, applyLinkStatus } = require('./paymentRequests');
 const rzpClient = require('../integrations/razorpayClient');
+const { paymentTrend, ledgerWhere } = require('../services/paymentTrend');
 const { modeFromKeyId } = rzpClient;
 
 const publicRouter = Router();
@@ -600,25 +601,10 @@ router.get('/razorpay/payments', requirePermission('payments'), async (req, res)
   try {
     const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
     const offset = parseInt(req.query.offset, 10) || 0;
-    const { status, from, to, method } = req.query;
-    const q = (req.query.q || '').trim();
     const orderBy = LEDGER_SORTS[req.query.sort] || LEDGER_SORTS.newest;
-
-    const params = [];
-    let where = 'WHERE 1=1';
-    if (status === 'captured') where += ` AND p.status = 'captured'`;
-    else if (status === 'failed') where += ` AND p.status = 'failed'`;
-    else if (status === 'refunded') where += ` AND (p.status = 'refunded' OR p.amount_refunded_paise > 0)`;
-    else if (status) { params.push(status); where += ` AND p.status = $${params.length}`; }
-    if (from) { params.push(from); where += ` AND p.paid_at >= $${params.length}::date`; }
-    if (to) { params.push(to); where += ` AND p.paid_at < ($${params.length}::date + INTERVAL '1 day')`; }
-    if (method) { params.push(method); where += ` AND p.method = $${params.length}`; }
-    if (q) {
-      params.push(`%${q}%`);
-      where += ` AND (p.payer_email ILIKE $${params.length} OR p.payer_contact ILIKE $${params.length}
-                      OR p.description ILIKE $${params.length} OR p.payment_id ILIKE $${params.length}
-                      OR p.matched_lead_name ILIKE $${params.length})`;
-    }
+    // Shared with /summary and /trend so a filter selects the same payments in
+    // all three (IST calendar days, both ends inclusive).
+    const { where, params } = ledgerWhere(req.query, true);
 
     const [{ rows }, { rows: [tot] }] = await Promise.all([
       pool.query(
@@ -654,19 +640,7 @@ router.get('/razorpay/payments/summary', requirePermission('payments'), async (r
     // view", not all-time. `status` is deliberately NOT accepted here — the
     // cards themselves are the status breakdown, so filtering by it would
     // just zero every other card.
-    const { from, to, method } = req.query;
-    const q = (req.query.q || '').trim();
-    const params = [];
-    let where = 'WHERE 1=1';
-    if (from) { params.push(from); where += ` AND paid_at >= $${params.length}::date`; }
-    if (to) { params.push(to); where += ` AND paid_at < ($${params.length}::date + INTERVAL '1 day')`; }
-    if (method) { params.push(method); where += ` AND method = $${params.length}`; }
-    if (q) {
-      params.push(`%${q}%`);
-      where += ` AND (payer_email ILIKE $${params.length} OR payer_contact ILIKE $${params.length}
-                      OR description ILIKE $${params.length} OR payment_id ILIKE $${params.length}
-                      OR matched_lead_name ILIKE $${params.length})`;
-    }
+    const { where, params } = ledgerWhere(req.query, false);
 
     // One query: separate COUNTs can disagree if a sync lands between them.
     const { rows } = await pool.query(`
@@ -678,7 +652,7 @@ router.get('/razorpay/payments/summary', requirePermission('payments'), async (r
              COALESCE(SUM(amount_refunded_paise),0)                             AS refunded_paise,
              COUNT(*) FILTER (WHERE status='captured' AND matched_lead_id IS NOT NULL)::int AS matched,
              MIN(paid_at) AS first_payment, MAX(paid_at) AS last_payment
-        FROM coexistence.razorpay_payments ${where}`, params);
+        FROM coexistence.razorpay_payments p ${where}`, params);
     const { rows: cfg } = await pool.query(
       `SELECT payments_synced_at, payments_sync_error, (key_secret_encrypted IS NOT NULL) AS has_keys
          FROM coexistence.razorpay_config WHERE id = 1`);
@@ -704,6 +678,17 @@ router.get('/razorpay/payments/summary', requirePermission('payments'), async (r
   } catch (err) {
     console.error('[razorpay] ledger summary error:', err.message);
     res.status(500).json({ error: 'Failed to load payment summary' });
+  }
+});
+
+// Payments dashboard: money over time, bucketed by IST day/week/month and
+// split by method / product / status. Same filters as the list.
+router.get('/razorpay/payments/trend', requirePermission('payments'), async (req, res) => {
+  try {
+    res.json(await paymentTrend(pool, req.query));
+  } catch (err) {
+    console.error('[razorpay] ledger trend error:', err.message);
+    res.status(500).json({ error: 'Failed to load the payments dashboard' });
   }
 });
 

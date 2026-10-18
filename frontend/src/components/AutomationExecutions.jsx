@@ -296,7 +296,7 @@ function NodeDetailPanel({ step, onClose }) {
 
         {/* Error */}
         {step.error_message && (
-          <div style={{ background: C.redBg, border: `1px solid #F4C9C9`, borderRadius: 10, padding: 10, marginBottom: 14 }}>
+          <div style={{ background: C.redBg, border: `1px solid transparent`, borderRadius: 10, padding: 10, marginBottom: 14 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: C.red, marginBottom: 4 }}>Error</div>
             <div style={{ fontSize: 13, color: C.red, fontFamily: FONT }}>{step.error_message}</div>
           </div>

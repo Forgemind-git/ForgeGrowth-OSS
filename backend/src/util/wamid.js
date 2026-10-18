@@ -5,7 +5,7 @@
 // event and a DIFFERENT wamid on its `statuses` receipts:
 //
 //   echo   → …\x0c 919876543210        …\x18\x14 2AB9A0F8DDBFF3B06C52
-//   status → …\x13 IN.1402240581713773 …\x18\x14 2AB9A0F8DDBFF3B06C52
+//   status → …\x13 IN.1000000000000000 …\x18\x14 2AB9A0F8DDBFF3B06C52
 //
 // The trailing uppercase-hex message hash is identical. It is the only reliable
 // key for correlating a receipt back to the message row it refers to.

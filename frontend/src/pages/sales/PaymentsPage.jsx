@@ -1,36 +1,33 @@
-// Sales → Payments. Create Razorpay payment links from inside ForgeGrowth and
-// track what comes back.
+// Sales → Payments: the Razorpay ledger, as a Dashboard (money over time) and an
+// All payments list, each with saved views.
 //
-// WHY THIS PAGE EXISTS
-// A link created in the Razorpay dashboard arrives at our webhook with no way
-// to tell who it was for — it can only be matched by its rupee amount, which
-// collides between products, is impossible for an open amount, and mis-books
-// when the payer checks out with a different phone. A link created HERE carries
-// the lead id, so the payment attributes itself and lands in the Sales Log with
-// no manual step.
-//
-// Three link types, because collecting money is not always "the full price":
-//   Fixed        — one exact amount.
-//   Part payment — a total, with the least they may pay now. They can come back
-//                  and pay the rest against the same link.
-//   Open         — they decide the amount. (Razorpay requires an amount on every
-//                  link, so this is a part-payment link with a ₹1 floor and the
-//                  figure shown as a suggestion.)
-import { useState, useEffect, useCallback, useRef } from 'react';
+// The "Links raised here" tab (create a payment link for a lead and track it)
+// was removed on 2026-10-07. Payment links are still minted by automations, AI
+// agents and payment templates (routes/paymentRequests.js, services/paymentFlow.js),
+// and a link's detail page still opens at #/payments/<id> for old bookmarks.
+// Campaign-level money (spend vs revenue per Meta campaign) lives in
+// Marketing → Campaign ROI.
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  CreditCard, Plus, Copy, Check, ExternalLink, RefreshCw, XCircle, Trash2,
+  CreditCard, Copy, Check, ExternalLink, RefreshCw, XCircle,
   Download, Search, IndianRupee, AlertTriangle, MessageCircle, ArrowLeft, Loader2,
 } from 'lucide-react';
 import { api } from '../../api.js';
 import { C, FONT, MONO, maskPhone } from '../../constants.js';
 import {
-  PageShell, Button, Modal, Field, inputStyle, EmptyState, Table, Td,
+  PageShell, Button, inputStyle, EmptyState, Table, Td,
   Segmented, fmtDate,
 } from '../academy/shared.jsx';
 import SearchableSelect from '../../components/SearchableSelect.jsx';
 import MaskedNumber from '../../components/MaskedNumber.jsx';
+import { DateFromTo } from '../../components/DateRangeControl.jsx';
 import { useConfirm } from '../../components/ConfirmDialog.jsx';
 import { notify } from '../../lib/feedback.js';
+import PaymentsDashboard from './PaymentsDashboard.jsx';
+import {
+  RANGE_PRESETS, cleanDate, oneOf, resolveRange, rangeText, SinceInput, monthStart,
+  useSavedViews, SavedViewsBar,
+} from './savedViews.jsx';
 
 const rupee = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
@@ -62,22 +59,9 @@ const METHOD_LABELS = {
 };
 const methodLabel = (m) => METHOD_LABELS[m] || (m ? m.charAt(0).toUpperCase() + m.slice(1) : m);
 
-function DateRangeFilter({ from, to, setFrom, setTo }) {
-  const dateStyle = { ...inputStyle, width: 138 };
-  return (
-    <div style={{ display: 'flex', gap: 7, alignItems: 'center', fontFamily: FONT, fontSize: 14, color: C.textSecondary }}>
-      <input type="date" value={from} onChange={e => setFrom(e.target.value)} title="From date" style={dateStyle} />
-      <span>to</span>
-      <input type="date" value={to} onChange={e => setTo(e.target.value)} title="To date" style={dateStyle} />
-      {(from || to) && (
-        <button onClick={() => { setFrom(''); setTo(''); }} title="Clear dates"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textMuted, display: 'inline-flex', padding: 2 }}>
-          <XCircle size={14} />
-        </button>
-      )}
-    </div>
-  );
-}
+// The shared from–to pair (components/DateRangeControl), so Payments and the
+// Marketing pages render one date control rather than a copy each.
+const DateRangeFilter = DateFromTo;
 
 function StatusPill({ request }) {
   const key = request.created ? request.status : 'not_created';
@@ -132,203 +116,6 @@ function WhatsAppSendButton({ request, compact }) {
   );
 }
 
-function Kpi({ label, value, hint, accent }) {
-  return (
-    <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 16px' }}>
-      <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase',
-        color: C.textMuted, marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 700, fontFamily: MONO, color: accent || C.text, letterSpacing: '-.02em' }}>{value}</div>
-      {hint && <div style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>{hint}</div>}
-    </div>
-  );
-}
-
-// ─── Create modal ────────────────────────────────────────────────────────────
-function NewLinkModal({ onClose, onCreated, presetLead }) {
-  const [kind, setKind] = useState('fixed');
-  const [leadId, setLeadId] = useState(presetLead?.id || '');
-  const [leads, setLeads] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [courseId, setCourseId] = useState('');
-  const [name, setName] = useState(presetLead?.name || '');
-  const [phone, setPhone] = useState(presetLead?.whatsappNumber || '');
-  const [email, setEmail] = useState(presetLead?.email || '');
-  const [purpose, setPurpose] = useState('');
-  const [amount, setAmount] = useState('');
-  const [minAmount, setMinAmount] = useState('');
-  const [description, setDescription] = useState('');
-  const [notifySms, setNotifySms] = useState(false);
-  const [notifyEmail, setNotifyEmail] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState(null);
-  const amountTouched = useRef(false);
-
-  useEffect(() => { api.products.list().then(d => setProducts(d.products || [])).catch(() => {}); }, []);
-
-  // Loaded once and filtered inside SearchableSelect (which searches label +
-  // sublabel client-side, so name AND number both match). A server-side search
-  // would need an onSearch prop the component does not have, and at this scale
-  // one fetch is cheaper than a request per keystroke anyway.
-  // GET /leads returns the 1000 most recently active leads (a fixed cap in the
-  // route, not a parameter) — well above the current book, but if the list ever
-  // outgrows it this picker is the thing that needs a real search.
-  useEffect(() => {
-    api.leads.list()
-      .then(d => setLeads(d.leads || []))
-      .catch(() => setLeads([]));
-  }, []);
-
-  // Picking a product pre-fills the amount, but never clobbers a figure someone
-  // typed — same rule as prefillAmount() in the Sales Log. A negotiated rate
-  // must survive correcting the product.
-  const pickProduct = (v) => {
-    setCourseId(v);
-    const p = products.find(x => String(x.id) === String(v));
-    const dflt = p?.default_price_paise != null ? Number(p.default_price_paise) / 100 : null;
-    if (dflt != null && !amountTouched.current) setAmount(String(dflt));
-  };
-
-  const pickLead = (v) => {
-    setLeadId(v);
-    const l = leads.find(x => String(x.id) === String(v));
-    if (l) {
-      if (!name) setName(l.name || '');
-      if (!phone) setPhone(l.whatsappNumber || '');
-      if (!email) setEmail(l.email || '');
-    }
-  };
-
-  const submit = async () => {
-    setErr(null);
-    if (!leadId && !phone.trim() && !email.trim()) {
-      setErr('Pick a lead, or enter a phone number or email so we know who this link is for.');
-      return;
-    }
-    if (!amount || Number(amount) <= 0) { setErr('Enter the amount to collect.'); return; }
-    if (kind === 'partial' && (!minAmount || Number(minAmount) <= 0)) {
-      setErr('A part payment needs a minimum first amount.'); return;
-    }
-    if (kind === 'partial' && Number(minAmount) > Number(amount)) {
-      setErr('The minimum first payment cannot be more than the total.'); return;
-    }
-    try {
-      setSaving(true);
-      const created = await api.paymentRequests.create({
-        leadId: leadId || null,
-        customerName: name.trim() || null,
-        customerPhone: phone.trim() || null,
-        customerEmail: email.trim() || null,
-        courseId: courseId || null,
-        purpose: purpose.trim() || null,
-        kind,
-        amount: Number(amount),
-        minAmount: kind === 'partial' ? Number(minAmount) : null,
-        description: description.trim() || null,
-        notifySms, notifyEmail,
-      });
-      onCreated(created);
-    } catch (e) { setErr(e.message); }
-    finally { setSaving(false); }
-  };
-
-  const KIND_HINT = {
-    fixed: 'One exact amount. Best for a full-price sale.',
-    partial: 'They can pay part of the total now and the rest later against the same link.',
-    open: 'They choose what to pay. The amount below is shown as a suggestion.',
-  };
-
-  return (
-    <Modal title="New payment link" onClose={onClose} width={620} preventBackdropClose
-      footer={<>
-        <Button onClick={onClose} disabled={saving}>Cancel</Button>
-        <Button variant="primary" onClick={submit} disabled={saving} icon={saving ? Loader2 : Plus}>
-          {saving ? 'Creating…' : 'Create link'}
-        </Button>
-      </>}>
-      {err && (
-        <div style={{ background: 'var(--c-dangerBg, #FCEBEB)', color: 'var(--c-dangerText, #A32D2D)', padding: '10px 12px', borderRadius: 8,
-          fontSize: 14, marginBottom: 14, fontFamily: FONT }}>{err}</div>
-      )}
-
-      <Field label="Payment type">
-        <Segmented
-          options={[{ value: 'fixed', label: 'Fixed' }, { value: 'partial', label: 'Part payment' }, { value: 'open', label: 'Open amount' }]}
-          value={kind} onChange={setKind} />
-        <div style={{ fontSize: 13, color: C.textMuted, marginTop: 6 }}>{KIND_HINT[kind]}</div>
-      </Field>
-
-      <Field label="Lead" hint="Search by name or number. Leave blank and fill the details below to raise a link for someone new.">
-        <SearchableSelect
-          value={leadId} onChange={pickLead}
-          options={leads.map(l => ({
-            value: String(l.id),
-            label: l.name || maskPhone(l.whatsappNumber),
-            sublabel: maskPhone(l.whatsappNumber),
-          }))}
-          placeholder="Search leads…" searchPlaceholder="Type a name or number…"
-          emptyText="No leads match" />
-      </Field>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-        <Field label="Customer name">
-          <input style={inputStyle} value={name} onChange={e => setName(e.target.value)} placeholder="Full name" />
-        </Field>
-        <Field label="Phone">
-          <input style={inputStyle} value={phone} onChange={e => setPhone(e.target.value)} placeholder="919876543210" />
-        </Field>
-        <Field label="Email">
-          <input style={inputStyle} value={email} onChange={e => setEmail(e.target.value)} placeholder="name@example.com" />
-        </Field>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-        <Field label="Product">
-          <SearchableSelect
-            value={courseId} onChange={pickProduct}
-            options={products.filter(p => p.active).map(p => ({
-              value: String(p.id), label: p.name,
-              sublabel: p.default_price_paise != null ? rupee(Number(p.default_price_paise) / 100) : undefined,
-            }))}
-            placeholder="No product" emptyText="No products yet" />
-        </Field>
-        <Field label="Purpose" hint="What kind of payment this is — shows in the log and the export.">
-          <input style={inputStyle} value={purpose} onChange={e => setPurpose(e.target.value)}
-            placeholder="Advance / 2nd instalment / workshop seat" />
-        </Field>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: kind === 'partial' ? '1fr 1fr' : '1fr', gap: 12 }}>
-        <Field label={kind === 'open' ? 'Suggested amount (₹)' : kind === 'partial' ? 'Total amount (₹)' : 'Amount (₹)'}>
-          <input style={inputStyle} type="number" min="1" value={amount}
-            onChange={e => { amountTouched.current = true; setAmount(e.target.value); }} placeholder="5000" />
-        </Field>
-        {kind === 'partial' && (
-          <Field label="Minimum first payment (₹)">
-            <input style={inputStyle} type="number" min="1" value={minAmount}
-              onChange={e => setMinAmount(e.target.value)} placeholder="2000" />
-          </Field>
-        )}
-      </div>
-
-      <Field label="Description" hint="Shown to the customer on the Razorpay checkout page.">
-        <input style={inputStyle} value={description} onChange={e => setDescription(e.target.value)}
-          placeholder="Applied AI with Claude — part payment" />
-      </Field>
-
-      <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 4 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 14, color: C.textSecondary, fontFamily: FONT, cursor: 'pointer' }}>
-          <input type="checkbox" checked={notifySms} onChange={e => setNotifySms(e.target.checked)} />
-          Let Razorpay SMS the link
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 14, color: C.textSecondary, fontFamily: FONT, cursor: 'pointer' }}>
-          <input type="checkbox" checked={notifyEmail} onChange={e => setNotifyEmail(e.target.checked)} />
-          Let Razorpay email the link
-        </label>
-      </div>
-    </Modal>
-  );
-}
-
 // ─── Detail (routed at #/payments/<id>) ──────────────────────────────────────
 function PaymentDetail({ id, navigate }) {
   const [data, setData] = useState(null);
@@ -360,10 +147,10 @@ function PaymentDetail({ id, navigate }) {
     catch (e) { notify(e.message); } finally { setBusy(false); }
   };
 
-  if (loading && !data) return <PageShell title="Payment link"><div style={{ padding: 60, textAlign: 'center', color: C.textMuted, fontFamily: FONT }}>Loading…</div></PageShell>;
+  if (loading && !data) return <PageShell><div style={{ padding: 60, textAlign: 'center', color: C.textMuted, fontFamily: FONT }}>Loading…</div></PageShell>;
   if (error || !data) {
     return (
-      <PageShell title="Payment link" actions={<Button icon={ArrowLeft} onClick={() => navigate('payments')}>Payments</Button>}>
+      <PageShell actions={<Button icon={ArrowLeft} onClick={() => navigate('payments')}>Payments</Button>}>
         <EmptyState Icon={AlertTriangle} title="Payment link not found" hint={error || 'It may have been removed.'} />
       </PageShell>
     );
@@ -388,8 +175,7 @@ function PaymentDetail({ id, navigate }) {
   ];
 
   return (
-    <PageShell
-      title={r.customerName || 'Payment link'}
+    <PageShell heading={r.customerName || 'Payment link'}
       subtitle={[KIND_LABEL[r.kind], r.purpose, r.productLabel].filter(Boolean).join(' · ')}
       actions={<>
         <Button icon={ArrowLeft} onClick={() => navigate('payments')}>Payments</Button>
@@ -461,225 +247,22 @@ function PaymentDetail({ id, navigate }) {
   );
 }
 
-// ─── List ────────────────────────────────────────────────────────────────────
-const STATUS_TABS = [
-  { value: '', label: 'All' },
-  { value: 'created', label: 'Awaiting' },
-  { value: 'partially_paid', label: 'Part paid' },
-  { value: 'paid', label: 'Paid' },
-  { value: 'cancelled', label: 'Cancelled' },
-];
-
-function PaymentsList({ navigate, user, tab, setTab }) {
-  const [requests, setRequests] = useState(null);
-  const [summary, setSummary] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [status, setStatus] = useState('');
-  const [q, setQ] = useState('');
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
-  const [sort, setSort] = useState('newest');
-  const [showNew, setShowNew] = useState(false);
-  const [busyId, setBusyId] = useState(null);
-  const [confirmEl, confirm] = useConfirm();
-  const isAdmin = user?.role === 'admin';
-
-  // The export honours status + dates (its backend ignores q/sort — a
-  // reconciliation CSV is always newest-first).
-  const filters = { status: status || undefined, q: q || undefined, from: from || undefined, to: to || undefined };
-
-  const load = useCallback(async () => {
-    try {
-      setLoading(true); setError(null);
-      const [list, sum] = await Promise.all([
-        api.paymentRequests.list({
-          status: status || undefined, q: q || undefined,
-          from: from || undefined, to: to || undefined,
-          sort: sort !== 'newest' ? sort : undefined,
-          limit: 100,
-        }),
-        // KPIs follow the date slice (the backend summary accepts from/to only).
-        api.paymentRequests.summary({
-          from: from || undefined, to: to || undefined,
-        }).catch(() => null),
-      ]);
-      setRequests(list.requests || []);
-      setSummary(sum);
-    } catch (e) { setError(e.message); }
-    finally { setLoading(false); }
-  }, [status, q, from, to, sort]);
-
-  // Debounce the search so typing doesn't fire a request per keystroke.
-  useEffect(() => { const t = setTimeout(load, q ? 300 : 0); return () => clearTimeout(t); }, [load, q]);
-
-  const doRefresh = async (r) => {
-    try { setBusyId(r.id); await api.paymentRequests.refresh(r.id); await load(); }
-    catch (e) { notify(e.message); } finally { setBusyId(null); }
-  };
-  const doCancel = async (r) => {
-    const ok = await confirm({
-      title: 'Cancel this payment link?',
-      body: `${r.customerName || 'The customer'} will no longer be able to pay with it. Payments already received stay recorded.`,
-      confirmLabel: 'Cancel link',
-      danger: true,
-    });
-    if (!ok) return;
-    try { setBusyId(r.id); await api.paymentRequests.cancel(r.id); await load(); }
-    catch (e) { notify(e.message); } finally { setBusyId(null); }
-  };
-  const doDelete = async (r) => {
-    const ok = await confirm({
-      title: 'Remove this row?',
-      body: 'This request never reached Razorpay, so there is no link to cancel — the row is just noise.',
-      confirmLabel: 'Remove',
-      danger: true,
-    });
-    if (!ok) return;
-    try { setBusyId(r.id); await api.paymentRequests.delete(r.id); await load(); }
-    catch (e) { notify(e.message); } finally { setBusyId(null); }
-  };
-
-  return (
-    <PageShell
-      title="Payments"
-      subtitle="Create a Razorpay link for a lead — full amount, part payment, or let them choose. Because the link is raised here, the payment attributes itself and shows up in the Sales Log on its own."
-      actions={<>
-        <a href={api.paymentRequests.exportUrl(filters)} download
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 13px', borderRadius: 9,
-            border: `1.5px solid ${C.border}`, background: C.cardBg, color: C.text, fontSize: 15,
-            fontWeight: 600, fontFamily: FONT, textDecoration: 'none' }}>
-          <Download size={15} /> Export
-        </a>
-        <Button variant="primary" icon={Plus} onClick={() => setShowNew(true)}>New payment link</Button>
-      </>}>
-      <PaymentsTabs tab={tab} setTab={setTab} />
-
-      {confirmEl}
-
-      {error && (
-        <div style={{ background: 'var(--c-dangerBg, #FCEBEB)', color: 'var(--c-dangerText, #A32D2D)', padding: '10px 12px', borderRadius: 8,
-          fontSize: 14, marginBottom: 14, fontFamily: FONT }}>{error}</div>
-      )}
-
-      {summary && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 18 }}>
-          <Kpi label="Collected" value={rupee(summary.collected)} accent="var(--c-successText, #0F6E56)"
-            hint="Received against links raised here" />
-          <Kpi label="Outstanding" value={rupee(summary.outstanding)}
-            hint="Still owed on open links" />
-          <Kpi label="Paid links" value={summary.paid} hint={`${summary.partial} part paid`} />
-          <Kpi label="Awaiting payment" value={summary.pending}
-            hint={summary.notCreated ? `${summary.notCreated} never reached Razorpay` : 'All links created'} />
-        </div>
-      )}
-
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
-        <Segmented options={STATUS_TABS} value={status} onChange={setStatus} />
-        <div style={{ position: 'relative', flex: 1, minWidth: 200, maxWidth: 320 }}>
-          <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: C.textMuted }} />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name, number, purpose…"
-            style={{ ...inputStyle, paddingLeft: 30 }} />
-        </div>
-        <DateRangeFilter from={from} to={to} setFrom={setFrom} setTo={setTo} />
-        <div style={{ width: 190 }}>
-          <SearchableSelect value={sort} onChange={setSort} options={SORT_OPTIONS}
-            placeholder="Sort" triggerStyle={{ padding: '8px 30px 8px 11px' }} />
-        </div>
-      </div>
-
-      {loading && !requests ? (
-        <div style={{ padding: 60, textAlign: 'center', color: C.textMuted, fontFamily: FONT }}>Loading payment links…</div>
-      ) : requests && requests.length === 0 ? (
-        <EmptyState Icon={CreditCard} title="No payment links yet"
-          hint="Raise one for a lead — the payment will attribute itself when it lands." />
-      ) : (
-        <Table
-          columns={[
-            { label: 'Customer' }, { label: 'Purpose' }, { label: 'Product' }, { label: 'Type' },
-            { label: 'Amount', align: 'right' }, { label: 'Paid', align: 'right' },
-            { label: 'Status' }, { label: 'Created' }, { label: '', align: 'right' },
-          ]}
-          rows={requests || []} keyOf={r => r.id}
-          onRowClick={r => navigate('payments', String(r.id))}
-          renderRow={r => (<>
-            <Td bold>
-              {r.customerName || '—'}
-              {r.customerPhone && (
-                <div style={{ fontSize: 13, color: C.textMuted, fontFamily: MONO, fontWeight: 400 }}>
-                  <MaskedNumber number={r.customerPhone} />
-                </div>
-              )}
-            </Td>
-            <Td color={r.purpose ? C.text : C.textMuted}>{r.purpose || '—'}</Td>
-            <Td color={r.productLabel ? C.text : C.textMuted}>{r.productLabel || '—'}</Td>
-            <Td color={C.textSecondary}>{KIND_LABEL[r.kind] || r.kind}</Td>
-            <Td mono align="right">{rupee(r.amount)}</Td>
-            <Td mono align="right" bold color={r.amountPaid > 0 ? 'var(--c-successText, #0F6E56)' : C.textMuted}>{rupee(r.amountPaid)}</Td>
-            <Td><StatusPill request={r} /></Td>
-            <Td color={C.textSecondary}>{fmtDate(r.createdAt)}</Td>
-            <Td align="right">
-              <div style={{ display: 'inline-flex', gap: 5, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
-                {r.created && <CopyLinkButton url={r.shortUrl} compact />}
-                {r.created && r.status !== 'paid' && r.status !== 'cancelled' && <WhatsAppSendButton request={r} compact />}
-                {r.created && (
-                  <button onClick={() => doRefresh(r)} disabled={busyId === r.id} title="Refresh from Razorpay"
-                    style={{ background: C.cardBg, border: `1.5px solid ${C.border}`, borderRadius: 7,
-                      padding: '4px 7px', cursor: 'pointer', color: C.textSecondary, display: 'inline-flex' }}>
-                    <RefreshCw size={13} />
-                  </button>
-                )}
-                {r.created && r.status !== 'paid' && r.status !== 'cancelled' && (
-                  <button onClick={() => doCancel(r)} disabled={busyId === r.id} title="Cancel link"
-                    style={{ background: C.cardBg, border: `1.5px solid ${C.border}`, borderRadius: 7,
-                      padding: '4px 7px', cursor: 'pointer', color: C.primary, display: 'inline-flex' }}>
-                    <XCircle size={13} />
-                  </button>
-                )}
-                {!r.created && isAdmin && (
-                  <button onClick={() => doDelete(r)} disabled={busyId === r.id} title="Remove this row"
-                    style={{ background: C.cardBg, border: `1.5px solid ${C.border}`, borderRadius: 7,
-                      padding: '4px 7px', cursor: 'pointer', color: C.primary, display: 'inline-flex' }}>
-                    <Trash2 size={13} />
-                  </button>
-                )}
-              </div>
-            </Td>
-          </>)} />
-      )}
-
-      {showNew && (
-        <NewLinkModal
-          onClose={() => setShowNew(false)}
-          onCreated={(created) => {
-            setShowNew(false);
-            load();
-            if (created?.id) navigate('payments', String(created.id));
-          }} />
-      )}
-    </PageShell>
-  );
-}
-
 // Detail is a routed sub-part (#/payments/<id>) rather than a drawer, so the
 // Payments nav item stays highlighted and the section stays `sales` — same
 // pattern as the Sales Log.
 export default function PaymentsPage({ user, navigate, subParts = [] }) {
-  // Two views of money, kept deliberately separate:
-  //   links  — what ForgeGrowth raised. Exact attribution, because the lead id
-  //            is stamped on the link itself.
-  //   all    — the ledger pulled from Razorpay. Everything the gateway holds,
-  //            including payments taken before this app existed, matched to a
-  //            lead only where phone or email lines up.
-  // Merging them would blur an exact attribution into a guessed one.
-  const [tab, setTab] = useState('links');
+  // Two tabs over the Razorpay ledger: Dashboard (money over time) and All
+  // payments (the list). The "Links raised here" tab was removed on 2026-10-07;
+  // payment links are still minted by automations, agents and payment templates,
+  // and an old #/payments/<id> link still opens that link's detail page below.
+  const [tab, setTab] = useState('dashboard');
   const sub = subParts[0];
   if (sub && /^\d+$/.test(sub)) {
     return <PaymentDetail id={sub} navigate={navigate} />;
   }
   return tab === 'all'
     ? <AllPaymentsList tab={tab} setTab={setTab} user={user} />
-    : <PaymentsList navigate={navigate} user={user} tab={tab} setTab={setTab} />;
+    : <PaymentsDashboardTab tab={tab} setTab={setTab} />;
 }
 
 function PaymentsTabs({ tab, setTab }) {
@@ -695,13 +278,62 @@ function PaymentsTabs({ tab, setTab }) {
   );
   return (
     <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${C.border}`, marginBottom: 16 }}>
-      {item('links', 'Links raised here')}
+      {item('dashboard', 'Dashboard')}
       {item('all', 'All payments')}
     </div>
   );
 }
 
+// ── Dashboard: money over time from the ledger ──────────────────────────────
+function PaymentsDashboardTab({ tab, setTab }) {
+  return (
+    <PageShell subtitle="When payments came in, how much, and how each day splits by method, product or status — from every payment Razorpay holds. Click any point, bar or row to see the payments behind it.">
+      <PaymentsTabs tab={tab} setTab={setTab} />
+      <PaymentsDashboard />
+    </PageShell>
+  );
+}
+
 // ── All payments: the ledger pulled from Razorpay ────────────────────────────
+//
+// Saved views for this tab (scope 'ledger'): same bar and range rules as the
+// Dashboard, its own filter set. Default range 'all' = what the tab always showed.
+const LEDGER_STATUSES = [
+  { value: 'captured', label: 'Captured' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'refunded', label: 'Refunded' },
+  { value: '', label: 'All' },
+];
+const LEDGER_VIEW_KEYS = ['preset', 'from', 'to', 'since', 'status', 'method', 'q', 'sort'];
+function normalizeLedgerView(f) {
+  const o = f && typeof f === 'object' ? f : {};
+  return {
+    preset: oneOf(RANGE_PRESETS, o.preset, 'all'),
+    from: cleanDate(o.from), to: cleanDate(o.to), since: cleanDate(o.since),
+    status: oneOf(LEDGER_STATUSES, o.status, 'captured'),
+    method: typeof o.method === 'string' ? o.method : '',
+    q: typeof o.q === 'string' ? o.q : '',
+    sort: oneOf(SORT_OPTIONS, o.sort, 'newest'),
+  };
+}
+function canonicalLedgerView(v) {
+  const n = normalizeLedgerView(v);
+  if (n.preset !== 'custom') { n.from = ''; n.to = ''; }
+  if (n.preset !== 'since') n.since = '';
+  n.q = n.q.trim();
+  return JSON.stringify(LEDGER_VIEW_KEYS.map(k => n[k]));
+}
+function describeLedgerView(v) {
+  const n = normalizeLedgerView(v);
+  return [
+    rangeText(n),
+    LEDGER_STATUSES.find(x => x.value === n.status)?.label,
+    n.method && methodLabel(n.method),
+    n.q.trim() && `“${n.q.trim()}”`,
+    SORT_OPTIONS.find(x => x.value === n.sort)?.label,
+  ].filter(Boolean).join(' · ');
+}
+
 //
 // Read-only by design. This records what the gateway holds and changes no CRM
 // state — it will not enrol anyone or create a lead. That is what makes it safe
@@ -715,8 +347,22 @@ function AllPaymentsList({ tab, setTab, user }) {
   const [q, setQ] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [preset, setPreset] = useState('all');   // range rule; 'custom' uses from/to
+  const [since, setSince] = useState('');
   const [method, setMethod] = useState('');
   const [sort, setSort] = useState('newest');
+  const range = useMemo(() => resolveRange(preset, from, to, since), [preset, from, to, since]);
+  const applyView = useCallback((f) => {
+    const n = normalizeLedgerView(f);
+    setPreset(n.preset); setFrom(n.from); setTo(n.to); setSince(n.since);
+    setStatus(n.status); setMethod(n.method); setQ(n.q); setSort(n.sort);
+  }, []);
+  const views = useSavedViews('ledger', applyView);
+  const currentView = { preset, from, to, since, status, method, q, sort };
+  const pickRange = (v) => {
+    setPreset(v);
+    if (v === 'since' && !since) setSince(monthStart());
+  };
   // The method option list lives in its OWN state so a failed summary refetch
   // can't unmount the control that created the filter (anti-pattern #25).
   const [methods, setMethods] = useState([]);
@@ -724,12 +370,14 @@ function AllPaymentsList({ tab, setTab, user }) {
   const isAdmin = user?.role === 'admin';
 
   const load = useCallback(async () => {
+    // Hold the first request until the default view (if any) is applied.
+    if (!views.ready) return;
     try {
       setLoading(true); setError(null);
       const [list, sum] = await Promise.all([
         api.razorpay.payments({
           status: status || undefined, q: q || undefined,
-          from: from || undefined, to: to || undefined,
+          from: range.from || undefined, to: range.to || undefined,
           method: method || undefined,
           sort: sort !== 'newest' ? sort : undefined,
           limit: 100,
@@ -737,7 +385,7 @@ function AllPaymentsList({ tab, setTab, user }) {
         // KPIs follow the slice (dates/method/search) but NOT the status pills —
         // the cards themselves are the status breakdown.
         api.razorpay.paymentsSummary({
-          from: from || undefined, to: to || undefined,
+          from: range.from || undefined, to: range.to || undefined,
           method: method || undefined, q: q || undefined,
         }).catch(() => null),
       ]);
@@ -746,7 +394,7 @@ function AllPaymentsList({ tab, setTab, user }) {
       if (Array.isArray(sum?.methods)) setMethods(sum.methods);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
-  }, [status, q, from, to, method, sort]);
+  }, [status, q, range, method, sort, views.ready]);
 
   useEffect(() => { const t = setTimeout(load, q ? 300 : 0); return () => clearTimeout(t); }, [load, q]);
 
@@ -764,15 +412,13 @@ function AllPaymentsList({ tab, setTab, user }) {
 
   return (
     <PageShell
-      title="Payments"
       subtitle="Every payment Razorpay holds, pulled straight from the gateway — including the ones taken before this dashboard existed. Read-only: nothing here changes a lead or the funnel."
       actions={isAdmin ? (
         <>
           <Button variant="ghost" onClick={() => doSync(false)} disabled={syncing || noKeys}>
             {syncing ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />} Sync now
           </Button>
-          <Button variant="ghost" onClick={() => doSync(true)} disabled={syncing || noKeys}
-            title="Walk the entire payment history. Slower, and only needed once.">
+          <Button variant="ghost" onClick={() => doSync(true)} disabled={syncing || noKeys}>
             <Download size={15} /> Import all history
           </Button>
         </>
@@ -813,15 +459,18 @@ function AllPaymentsList({ tab, setTab, user }) {
       )}
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
-        <Segmented
-          options={[
-            { value: 'captured', label: 'Captured' },
-            { value: 'failed', label: 'Failed' },
-            { value: 'refunded', label: 'Refunded' },
-            { value: '', label: 'All' },
-          ]}
-          value={status} onChange={setStatus}
-        />
+        <Segmented options={RANGE_PRESETS} value={preset} onChange={pickRange} />
+        {preset === 'custom' && <DateRangeFilter from={from} to={to} setFrom={setFrom} setTo={setTo} />}
+        {preset === 'since' && <SinceInput value={since} onChange={setSince} />}
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <SavedViewsBar scope="ledger" views={views} current={currentView} applyView={applyView}
+          normalize={normalizeLedgerView} canonical={canonicalLedgerView} describe={describeLedgerView} />
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
+        <Segmented options={LEDGER_STATUSES} value={status} onChange={setStatus} />
         <div style={{ position: 'relative', flex: 1, minWidth: 220, maxWidth: 380 }}>
           <Search size={15} color={C.textMuted} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)' }} />
           <input value={q} onChange={e => setQ(e.target.value)}
@@ -836,7 +485,6 @@ function AllPaymentsList({ tab, setTab, user }) {
       </div>
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
-        <DateRangeFilter from={from} to={to} setFrom={setFrom} setTo={setTo} />
         <div style={{ width: 160 }}>
           <SearchableSelect value={method} onChange={setMethod}
             options={[{ value: '', label: 'All methods' }, ...methods.map(m => ({ value: m, label: methodLabel(m) }))]}

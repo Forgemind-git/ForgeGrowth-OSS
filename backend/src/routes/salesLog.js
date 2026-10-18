@@ -21,6 +21,20 @@ const router = Router();
 // Self-healing table bootstrap (mirror of migration 064). courses must exist
 // first (ensureCourseTables) for the FK.
 async function ensureSalesLogTables() {
+  // Refunds against a sale (migration 132). Created first so every lead query
+  // that sums refunds can rely on the table existing.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS coexistence.sale_refunds (
+      id            BIGSERIAL PRIMARY KEY,
+      lead_id       BIGINT NOT NULL REFERENCES coexistence.leads(id) ON DELETE CASCADE,
+      amount_paise  BIGINT NOT NULL CHECK (amount_paise > 0),
+      refunded_on   DATE NOT NULL,
+      method        TEXT,
+      note          TEXT,
+      created_by    TEXT,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_sale_refunds_lead ON coexistence.sale_refunds (lead_id)`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS coexistence.sales_log (
       id            BIGSERIAL PRIMARY KEY,

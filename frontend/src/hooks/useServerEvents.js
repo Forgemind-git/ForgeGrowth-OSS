@@ -12,7 +12,7 @@
 
 import { useEffect } from 'react';
 
-const SUBSCRIBED_EVENTS = ['contact-assignment-changed', 'contact-saved', 'conversation-read', 'pipeline-changed', 'message-status', 'lead-changed', 'hello'];
+const SUBSCRIBED_EVENTS = ['contact-assignment-changed', 'contact-saved', 'numbers-changed', 'conversation-read', 'pipeline-changed', 'message-status', 'lead-changed', 'workflow-agent-run', 'workflow-agent-actions', 'hello'];
 
 export function useServerEvents(onEvent) {
   useEffect(() => {

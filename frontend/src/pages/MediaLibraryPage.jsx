@@ -49,6 +49,7 @@ export default function MediaLibraryPage() {
   const [error, setError] = useState(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [previewMedia, setPreviewMedia] = useState(null);
+  const [replaceMedia, setReplaceMedia] = useState(null);
   const [syncingKey, setSyncingKey] = useState(null);  // `${mediaId}:${accountId}`
   const [toast, setToast] = useState(null);
 
@@ -112,12 +113,25 @@ export default function MediaLibraryPage() {
     showToast('Copied to clipboard', 'ok');
   };
 
+  const handleReplaced = async ({ resync = [] } = {}) => {
+    setReplaceMedia(null);
+    await load();
+    const failed = resync.filter(r => !r.ok).length;
+    const plural = (n) => `WhatsApp number${n === 1 ? '' : 's'}`;
+    if (failed) {
+      showToast(`Replaced. Re-sync failed on ${failed} ${plural(failed)}; the next send uploads it again.`, 'err');
+    } else if (resync.length) {
+      showToast(`Replaced and re-synced to ${resync.length} ${plural(resync.length)}`, 'ok');
+    } else {
+      showToast('Replaced', 'ok');
+    }
+  };
+
   return (
     <div style={{ padding: 24, fontFamily: FONT, color: C.text, maxWidth: 1400, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 20 }}>
         <div>
-          <h1 style={{ fontSize: 26, fontWeight: 700, margin: 0, letterSpacing: '-0.02em' }}>Media Library</h1>
           <p style={{ fontSize: 15, color: C.textSecondary, margin: '6px 0 0' }}>
             Upload media once, sync to each WhatsApp account on demand. Meta media IDs expire after 28 days —
             toggle <strong>Auto-resync</strong> to keep them fresh.
@@ -158,6 +172,7 @@ export default function MediaLibraryPage() {
               onSync={handleSync}
               onToggleAutoResync={() => handleToggleAutoResync(m)}
               onDelete={() => handleDelete(m)}
+              onReplace={() => setReplaceMedia(m)}
               onCopy={handleCopy}
               onPreview={() => setPreviewMedia(m)}
             />
@@ -174,7 +189,17 @@ export default function MediaLibraryPage() {
       )}
 
       {previewMedia && (
-        <PreviewModal media={previewMedia} onClose={() => setPreviewMedia(null)} />
+        <PreviewModal media={previewMedia} onClose={() => setPreviewMedia(null)}
+          onSaved={async (m) => { setPreviewMedia(m); await load(); showToast('Description saved', 'ok'); }}
+          onError={(msg) => showToast(msg, 'err')} />
+      )}
+
+      {replaceMedia && (
+        <ReplaceModal
+          media={replaceMedia}
+          onClose={() => setReplaceMedia(null)}
+          onReplaced={handleReplaced}
+        />
       )}
 
       {toast && (
@@ -189,7 +214,7 @@ export default function MediaLibraryPage() {
   );
 }
 
-function MediaRow({ media, accounts, syncingKey, isLast, onSync, onToggleAutoResync, onDelete, onCopy, onPreview }) {
+function MediaRow({ media, accounts, syncingKey, isLast, onSync, onToggleAutoResync, onDelete, onReplace, onCopy, onPreview }) {
   const meta = TYPE_META[media.mediaType] || TYPE_META.document;
   const Icon = meta.Icon;
   // Auto-expand any row that has at least one synced/failed/expired WABA so
@@ -213,13 +238,13 @@ function MediaRow({ media, accounts, syncingKey, isLast, onSync, onToggleAutoRes
         }}>
           {media.mediaType === 'image' ? (
             <img
-              src={api.mediaLibrary.downloadUrl(media.id)}
+              src={api.mediaLibrary.downloadUrl(media.id, media.sha256)}
               alt={media.originalName}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
           ) : media.mediaType === 'video' ? (
             <video
-              src={api.mediaLibrary.downloadUrl(media.id)}
+              src={api.mediaLibrary.downloadUrl(media.id, media.sha256)}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               preload="metadata"
               muted
@@ -293,7 +318,7 @@ function MediaRow({ media, accounts, syncingKey, isLast, onSync, onToggleAutoRes
             padding: '7px 12px', borderRadius: 6,
             background: media.autoResync ? 'var(--c-secfdf5, #ECFDF5)' : 'var(--c-hover)',
             color: media.autoResync ? 'var(--c-s059669, #059669)' : 'var(--c-textSecondary, #6B7280)',
-            border: `1px solid ${media.autoResync ? 'var(--c-sa7f3d0, #A7F3D0)' : 'var(--c-se5e7eb, #E5E7EB)'}`,
+            border: '1px solid transparent',
             cursor: 'pointer', fontFamily: FONT, fontSize: 14, fontWeight: 600,
           }}
         >
@@ -309,6 +334,19 @@ function MediaRow({ media, accounts, syncingKey, isLast, onSync, onToggleAutoRes
           }}
         >
           {expanded ? 'Hide' : 'Show'} sync ({media.syncs.length}/{accounts.length})
+        </button>
+
+        <button
+          onClick={onReplace}
+          title="Swap in a new file — everything that uses this item sends the new one"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '7px 12px', borderRadius: 6, background: 'var(--c-cardBg)',
+            border: `1px solid ${C.border}`, cursor: 'pointer',
+            fontFamily: FONT, fontSize: 14, fontWeight: 600, color: C.text,
+          }}
+        >
+          <Upload size={13} /> Replace
         </button>
 
         <button
@@ -502,7 +540,7 @@ function UploadModal({ onClose, onUploaded, onError }) {
           style={{
             border: `2px dashed ${file ? C.primary : C.border}`,
             borderRadius: 8, padding: 28, textAlign: 'center', cursor: 'pointer',
-            background: file ? 'var(--c-selectedTint, #FFF7F7)' : '#FAFAF8',
+            background: file ? 'var(--c-selectedTint, #FFF7F7)' : 'var(--c-surfaceInner, #FAFAF8)',
           }}
         >
           <Upload size={28} style={{ color: file ? C.primary : C.textMuted, marginBottom: 8 }} />
@@ -547,13 +585,13 @@ function UploadModal({ onClose, onUploaded, onError }) {
 
         <div style={{ marginTop: 12 }}>
           <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.textSecondary, marginBottom: 4 }}>
-            Notes <span style={{ fontWeight: 400, color: C.textMuted }}>(optional)</span>
+            Description <span style={{ fontWeight: 400, color: C.textMuted }}>(optional — what this file is; Chat Analyzer, AI agents and Claude read it whenever the file is sent)</span>
           </label>
           <input
             type="text"
             value={notes}
             onChange={e => setNotes(e.target.value)}
-            placeholder="Internal notes about this media"
+            placeholder="e.g. Course brochure — syllabus, fees, batch dates and how to enrol"
             style={{
               width: '100%', padding: '8px 10px', borderRadius: 6,
               border: `1px solid ${C.border}`, fontFamily: FONT, fontSize: 15,
@@ -592,12 +630,247 @@ function UploadModal({ onClose, onUploaded, onError }) {
 }
 
 
-function PreviewModal({ media, onClose }) {
+const ARTICLE_TYPE = { image: 'an image', video: 'a video', audio: 'an audio file', document: 'a document' };
+
+const ACCEPT_BY_TYPE = {
+  image: 'image/*',
+  video: 'video/*',
+  audio: 'audio/*',
+  document: '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt',
+};
+
+// Mirrors inferMediaType() in backend routes/mediaLibrary.js. Both read the
+// browser-reported type, so this warning and the server's refusal agree.
+function inferMediaType(mime) {
+  const m = String(mime || '');
+  if (m.startsWith('image/')) return 'image';
+  if (m.startsWith('video/')) return 'video';
+  if (m.startsWith('audio/')) return 'audio';
+  return 'document';
+}
+
+function FilePreview({ kind, src, name }) {
+  if (kind === 'image') {
+    return <img src={src} alt={name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />;
+  }
+  if (kind === 'video') {
+    return <video src={src} muted controls preload="metadata" style={{ maxWidth: '100%', maxHeight: '100%' }} />;
+  }
+  const Icon = (TYPE_META[kind] || TYPE_META.document).Icon;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, color: C.textSecondary, padding: 12, textAlign: 'center' }}>
+      <Icon size={28} />
+      <span style={{ fontSize: 14, wordBreak: 'break-word' }}>{name}</span>
+    </div>
+  );
+}
+
+function ReplaceModal({ media, onClose, onReplaced }) {
+  const [file, setFile] = useState(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const inputRef = useRef(null);
+  const busyRef = useRef(false);
+
   const displayName = media.name || media.originalName;
+  const syncedCount = media.syncs.filter(s => s.metaMediaId).length;
+  const kindText = ARTICLE_TYPE[media.mediaType] || ARTICLE_TYPE.document;
+  const newKind = file ? inferMediaType(file.type) : null;
+  const mismatch = !!file && newKind !== media.mediaType;
+
+  const choose = (f) => {
+    if (!f || busyRef.current) return;
+    setError(null);
+    setFile(f);
+  };
+
+  // Derived in render, not set from an effect: an effect lags one frame, so a
+  // newly chosen file rendered against the PREVIOUS url just as it was revoked
+  // ("Failed to load resource: blob … ERR_FILE_NOT_FOUND").
+  const fileUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
+  useEffect(() => () => { if (fileUrl) URL.revokeObjectURL(fileUrl); }, [fileUrl]);
+
+  // Ctrl+V a copied file or screenshot straight in; Escape closes.
+  useEffect(() => {
+    const onPaste = (e) => {
+      const f = e.clipboardData?.files?.[0];
+      if (f) { e.preventDefault(); choose(f); }
+    };
+    const onKey = (e) => { if (e.key === 'Escape' && !busyRef.current) onClose(); };
+    window.addEventListener('paste', onPaste);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('paste', onPaste);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, []);
+
+  const submit = async () => {
+    if (!file || mismatch || busy) return;
+    setBusy(true); busyRef.current = true; setError(null);
+    try {
+      const result = await api.mediaLibrary.replace(media.id, file);
+      await onReplaced(result);
+    } catch (err) {
+      setError(err.message);
+      setBusy(false); busyRef.current = false;
+    }
+  };
+
+  const panel = {
+    height: 190, borderRadius: 8, overflow: 'hidden',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: 'var(--c-surfaceInner, #FAFAF8)',
+  };
+  const colLabel = {
+    fontSize: 13, fontWeight: 600, color: C.textSecondary, marginBottom: 6,
+    textTransform: 'uppercase', letterSpacing: '.04em',
+  };
+
+  return (
+    <div
+      onClick={() => { if (!busyRef.current) onClose(); }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', padding: 16,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
+      }}
+    >
+      <div
+        role="dialog"
+        aria-label="Replace file"
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--c-cardBg)', borderRadius: 12, padding: 24,
+          width: 620, maxWidth: '100%', maxHeight: 'calc(90vh / var(--fg-zoom, 1))', overflowY: 'auto',
+          boxShadow: C.shadowLg,
+        }}
+      >
+        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Replace file</h2>
+        <div style={{ fontSize: 15, color: C.textSecondary, margin: '4px 0 16px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {displayName}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+          <div>
+            <div style={colLabel}>Current</div>
+            <div style={{ ...panel, border: `1px solid ${C.border}` }}>
+              <FilePreview kind={media.mediaType} src={api.mediaLibrary.downloadUrl(media.id, media.sha256)} name={media.originalName} />
+            </div>
+            <div style={{ fontSize: 14, color: C.textMuted, marginTop: 6 }}>
+              {fmtBytes(media.sizeBytes)} · uploaded {fmtDate(media.uploadedAt)}
+            </div>
+          </div>
+
+          <div>
+            <div style={colLabel}>New</div>
+            <div
+              data-testid="replace-dropzone"
+              onClick={() => { if (!busyRef.current) inputRef.current?.click(); }}
+              onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={e => { e.preventDefault(); setDragOver(false); choose(e.dataTransfer?.files?.[0]); }}
+              style={{
+                ...panel, cursor: busy ? 'wait' : 'pointer',
+                border: `2px dashed ${dragOver || (file && !mismatch) ? C.primary : C.border}`,
+                background: dragOver ? 'var(--c-selectedTint, #FFF7F7)' : panel.background,
+              }}
+            >
+              {file && fileUrl ? (
+                <FilePreview kind={newKind} src={fileUrl} name={file.name} />
+              ) : (
+                <div style={{ textAlign: 'center', padding: 12 }}>
+                  <Upload size={26} style={{ color: C.textMuted, marginBottom: 8 }} />
+                  <div style={{ fontWeight: 600, fontSize: 15 }}>Choose {kindText}</div>
+                  <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 4 }}>
+                    Click, drop it here, or paste with Ctrl+V
+                  </div>
+                </div>
+              )}
+              <input
+                ref={inputRef}
+                type="file"
+                accept={ACCEPT_BY_TYPE[media.mediaType] || ACCEPT_BY_TYPE.document}
+                style={{ display: 'none' }}
+                onChange={(e) => { choose(e.target.files?.[0] || null); e.target.value = ''; }}
+              />
+            </div>
+            <div style={{ fontSize: 14, color: C.textMuted, marginTop: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {file ? `${file.name} · ${fmtBytes(file.size)}` : 'Nothing chosen yet'}
+            </div>
+          </div>
+        </div>
+
+        {mismatch && (
+          <div style={{
+            marginTop: 14, padding: '10px 12px', borderRadius: 8, fontSize: 14, fontWeight: 500,
+            background: 'var(--c-sfef3c7, #FEF3C7)', color: 'var(--c-sb45309, #B45309)',
+            display: 'flex', gap: 8, alignItems: 'flex-start',
+          }}>
+            <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>
+              This item is {kindText}, so it can only be replaced with {kindText}.
+              Upload {ARTICLE_TYPE[newKind]} as a new item instead.
+            </span>
+          </div>
+        )}
+
+        <div style={{ marginTop: 14, fontSize: 14, color: C.textSecondary, lineHeight: 1.5 }}>
+          The name and notes stay the same, and every automation, form, template and broadcast that
+          uses this item sends the new file from now on.
+          {syncedCount > 0 && ` It is synced to ${syncedCount} WhatsApp number${syncedCount === 1 ? '' : 's'}, which ${syncedCount === 1 ? 'is' : 'are'} re-synced automatically.`}
+        </div>
+
+        {error && (
+          <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, fontSize: 14, background: 'var(--c-dangerBgSoft, #FEF2F2)', color: 'var(--c-dangerStrong, #991B1B)' }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
+          <button
+            onClick={onClose}
+            disabled={busy}
+            style={{
+              padding: '9px 14px', borderRadius: 6, background: 'var(--c-cardBg)',
+              border: `1px solid ${C.border}`, cursor: busy ? 'not-allowed' : 'pointer',
+              fontFamily: FONT, fontSize: 15, fontWeight: 600, color: C.text,
+            }}
+          >Cancel</button>
+          <button
+            onClick={submit}
+            disabled={!file || mismatch || busy}
+            style={{
+              padding: '9px 16px', borderRadius: 6,
+              background: !file || mismatch ? 'var(--c-hover)' : C.primary,
+              color: !file || mismatch ? C.textMuted : '#fff', border: 'none',
+              cursor: !file || mismatch || busy ? 'not-allowed' : 'pointer',
+              fontFamily: FONT, fontSize: 15, fontWeight: 600,
+            }}
+          >{busy ? 'Replacing…' : 'Replace file'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PreviewModal({ media, onClose, onSaved, onError }) {
+  const displayName = media.name || media.originalName;
+  const [desc, setDesc] = useState(media.notes || '');
+  const [saving, setSaving] = useState(false);
+  const dirty = desc.trim() !== (media.notes || '').trim();
+  const saveDesc = async () => {
+    setSaving(true);
+    try {
+      const r = await api.mediaLibrary.update(media.id, { notes: desc.trim() || null });
+      onSaved?.(r.media || { ...media, notes: desc.trim() || null });
+    } catch (e) { onError?.(e.message || 'Could not save the description'); }
+    finally { setSaving(false); }
+  };
   const isImage = media.mediaType === 'image';
   const isVideo = media.mediaType === 'video';
   const isAudio = media.mediaType === 'audio';
-  const downloadUrl = api.mediaLibrary.downloadUrl(media.id);
+  const downloadUrl = api.mediaLibrary.downloadUrl(media.id, media.sha256);
 
   return (
     <div
@@ -612,7 +885,7 @@ function PreviewModal({ media, onClose }) {
         onClick={e => e.stopPropagation()}
         style={{
           background: 'var(--c-cardBg)', borderRadius: 12, maxWidth: 720, width: '100%',
-          maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+          maxHeight: 'calc(90vh / var(--fg-zoom, 1))', display: 'flex', flexDirection: 'column', overflowY: 'auto',
           boxShadow: '0 24px 48px rgba(0,0,0,.35)',
         }}
       >
@@ -645,13 +918,13 @@ function PreviewModal({ media, onClose }) {
             <img
               src={downloadUrl}
               alt={displayName}
-              style={{ maxWidth: '100%', maxHeight: '60vh', borderRadius: 8, objectFit: 'contain' }}
+              style={{ maxWidth: '100%', maxHeight: 'calc(60vh / var(--fg-zoom, 1))', borderRadius: 8, objectFit: 'contain' }}
             />
           ) : isVideo ? (
             <video
               src={downloadUrl}
               controls
-              style={{ maxWidth: '100%', maxHeight: '60vh', borderRadius: 8 }}
+              style={{ maxWidth: '100%', maxHeight: 'calc(60vh / var(--fg-zoom, 1))', borderRadius: 8 }}
             />
           ) : isAudio ? (
             <div style={{ textAlign: 'center', color: '#fff' }}>
@@ -675,7 +948,6 @@ function PreviewModal({ media, onClose }) {
           <span><strong>Type:</strong> {(TYPE_META[media.mediaType] || TYPE_META.document).label}</span>
           <span><strong>Size:</strong> {fmtBytes(media.sizeBytes)}</span>
           <span><strong>Uploaded:</strong> {fmtDate(media.uploadedAt)}</span>
-          {media.notes && <span style={{ color: C.textMuted }}><strong>Notes:</strong> {media.notes}</span>}
           <a
             href={downloadUrl}
             download={displayName}
@@ -683,6 +955,31 @@ function PreviewModal({ media, onClose }) {
           >
             Download
           </a>
+        </div>
+
+        {/* Description — what Chat Analyzer, AI agents and Claude read in place
+            of this file whenever it is sent in a chat. */}
+        <div style={{ padding: '12px 18px 16px', borderTop: `1px solid ${C.border}` }}>
+          <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.textSecondary, marginBottom: 4 }}>
+            Description
+          </label>
+          <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 6 }}>
+            Chat Analyzer, AI agents and Claude (MCP) read this whenever this file is sent in a chat, so they know what the customer was given.
+          </div>
+          <textarea
+            data-testid="media-description"
+            value={desc}
+            onChange={e => setDesc(e.target.value)}
+            rows={3}
+            placeholder="e.g. Course brochure — syllabus, fees, batch dates and how to enrol"
+            style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: `1px solid ${C.border}`, fontFamily: FONT, fontSize: 15, boxSizing: 'border-box', resize: 'vertical', background: 'var(--c-cardBg)', color: C.text }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+            <button type="button" onClick={saveDesc} disabled={!dirty || saving}
+              style={{ padding: '7px 14px', borderRadius: 8, border: 'none', cursor: dirty && !saving ? 'pointer' : 'default', background: dirty ? C.primary : 'var(--c-surfaceAlt)', color: dirty ? '#fff' : C.textMuted, fontWeight: 600, fontFamily: FONT }}>
+              {saving ? 'Saving…' : 'Save description'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

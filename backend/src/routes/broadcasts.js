@@ -4,7 +4,6 @@ const pool = require('../db');
 const { resolveAccount, insertPendingRow } = require('../services/messageSender');
 const { assertCanSend } = require('./whatsappAccounts');
 const { enqueueSend } = require('../queue/sendQueue');
-const { mintSendToken, mintTokenForButtonUrl } = require('./leadForms');
 
 /**
  * WABA guard: a WhatsApp template only exists on the account (WABA) it was
@@ -107,13 +106,13 @@ function urlButtonFallbackValue(b) {
 /**
  * Build Meta template `components` array from variable_mapping + recipient ctx.
  * variable_mapping is { "1": "<field-key>" } chosen in the builder dropdown.
- * `leadFormToken` (if given) fills any dynamic URL button with the real
- * per-recipient value; otherwise a placeholder is used (see
+ * `buttonToken` (if given) fills any dynamic URL button with the real
+ * per-recipient value (a payment link's public token); otherwise a placeholder is used (see
  * urlButtonFallbackValue) so the send doesn't hard-fail. Meta rejects the
  * send outright if a URL button has a {{n}} variable and no button component
  * is supplied at all.
  */
-function buildTemplateComponents(template, variableMapping, recipient, headerMediaId, leadFormToken) {
+function buildTemplateComponents(template, variableMapping, recipient, headerMediaId, buttonToken) {
   const components = [];
 
   // Header component. Media headers (IMAGE/VIDEO/DOCUMENT) require the header
@@ -151,7 +150,7 @@ function buildTemplateComponents(template, variableMapping, recipient, headerMed
   // payload in routes/templates.js, a completely different transform).
   (Array.isArray(template.buttons) ? template.buttons : []).forEach((b, idx) => {
     if (b.type === 'URL' && /\{\{\s*\d+\s*\}\}/.test(b.value || '')) {
-      const text = leadFormToken || urlButtonFallbackValue(b);
+      const text = buttonToken || urlButtonFallbackValue(b);
       components.push({ type: 'button', sub_type: 'url', index: idx, parameters: [{ type: 'text', text }] });
     }
   });
@@ -164,34 +163,10 @@ async function enqueueBroadcastRecipient({ broadcast, template, account, recipie
 
   // ── Template ──────────────────────────────────────────────────────────
   if (msgType === 'template') {
-    // Mint one opaque single-use token per recipient so the form link they tap
-    // silently identifies them (no phone number ever asked on the form). This
-    // happens for a broadcast explicitly linked to a Lead Form AND for ANY
-    // template whose dynamic URL button points at a published form — so Test
-    // Send / regular Broadcast auto-identify recipients too, not just the
-    // dedicated "Send via WhatsApp" flow.
-    let leadFormToken = null;
-    if (broadcast.lead_form_id) {
-      leadFormToken = await mintSendToken({
-        formId: broadcast.lead_form_id,
-        phoneNumber: recipient.contact_number,
-        contactName: recipient.name || null,
-        broadcastId: broadcast.id,
-        waAccountId: account.id,
-      });
-    } else {
-      const urlBtn = (Array.isArray(template.buttons) ? template.buttons : [])
-        .find(b => b.type === 'URL' && /\{\{\s*\d+\s*\}\}/.test(b.value || ''));
-      if (urlBtn) {
-        leadFormToken = await mintTokenForButtonUrl(urlBtn.value, recipient.contact_number, {
-          contactName: recipient.name || null, broadcastId: broadcast.id, waAccountId: account.id,
-        });
-      }
-    }
+    let buttonToken = null;
 
     // ── Payment templates: one LIVE link per recipient ───────────────────────
-    // Checked AFTER the lead-form paths and only when the button actually points
-    // at /pay/, so an ordinary dynamic-URL template is completely unaffected.
+    // Only when the button actually points at /pay/, so an ordinary dynamic-URL template is completely unaffected.
     //
     // ⚠ This is the one place in the app that mints real payment links in a
     // loop. `payment_amount_paise` is required on the broadcast — without it we
@@ -214,12 +189,10 @@ async function enqueueBroadcastRecipient({ broadcast, template, account, recipie
         createdBy: `broadcast:${broadcast.id}`,
       });
       if (created.error) throw new Error(`Could not raise a payment link: ${created.error}`);
-      // Overwrites the lead-form token deliberately — a template cannot be both
-      // a form link and a payment link on the same button.
-      leadFormToken = await paymentFlow.ensurePublicToken(created.request.id);
+      buttonToken = await paymentFlow.ensurePublicToken(created.request.id);
     }
     // resolvedMediaId doubles as the header image for media-header templates.
-    const components = buildTemplateComponents(template, broadcast.variable_mapping, recipient, resolvedMediaId, leadFormToken);
+    const components = buildTemplateComponents(template, broadcast.variable_mapping, recipient, resolvedMediaId, buttonToken);
     // CAROUSEL templates: append the prebuilt carousel component (resolved once
     // per broadcast — cards are static, identical for every recipient).
     if (template && String(template.template_type || '').toUpperCase() === 'CAROUSEL' && resolvedCarouselComponent) {
@@ -496,7 +469,7 @@ router.post('/broadcasts', async (req, res) => {
     const {
       from_number, recipient_numbers, template_id, status, test_number,
       name, variable_mapping, message_type, body, url, media_library_id, caption,
-      lead_form_id, scheduled_at, recipient_filter,
+      scheduled_at, recipient_filter,
       payment_course_id, payment_amount, payment_purpose,
     } = req.body;
 
@@ -530,10 +503,10 @@ router.post('/broadcasts', async (req, res) => {
       const { rows } = await client.query(
         `INSERT INTO coexistence.broadcasts
          (from_number, recipient_numbers, template_id, status, test_number, name,
-          variable_mapping, message_type, body, url, media_library_id, caption, lead_form_id,
+          variable_mapping, message_type, body, url, media_library_id, caption,
           scheduled_at, recipient_filter,
           payment_course_id, payment_amount_paise, payment_purpose, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW())
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW())
          RETURNING *`,
         [
           from_number,
@@ -548,7 +521,6 @@ router.post('/broadcasts', async (req, res) => {
           url || null,
           media_library_id || null,
           caption || null,
-          lead_form_id || null,
           schedAt ? schedAt.toISOString() : null,
           recipient_filter ? JSON.stringify(recipient_filter) : null,
           payment_course_id || null,
@@ -615,7 +587,7 @@ router.put('/broadcasts/:id', async (req, res) => {
     const {
       from_number, recipient_numbers, template_id, test_number, name,
       variable_mapping, message_type, body, url, media_library_id, caption,
-      lead_form_id, scheduled_at, recipient_filter,
+      scheduled_at, recipient_filter,
       payment_course_id, payment_amount, payment_purpose,
     } = req.body;
 
@@ -651,17 +623,16 @@ router.put('/broadcasts/:id', async (req, res) => {
         url = COALESCE($9, url),
         media_library_id = COALESCE($10, media_library_id),
         caption = COALESCE($11, caption),
-        lead_form_id = COALESCE($12, lead_form_id),
-        -- $14 says whether scheduled_at was in the payload at all, so an
+        -- $13 says whether scheduled_at was in the payload at all, so an
         -- explicit null can CLEAR the time while an omitted key cannot.
-        scheduled_at = CASE WHEN $14 THEN $13::timestamptz ELSE scheduled_at END,
-        status = COALESCE($15, status),
-        recipient_filter = CASE WHEN $17 THEN $16::jsonb ELSE recipient_filter END,
-        payment_course_id = COALESCE($18, payment_course_id),
-        payment_amount_paise = COALESCE($19, payment_amount_paise),
-        payment_purpose = COALESCE($20, payment_purpose),
+        scheduled_at = CASE WHEN $13 THEN $12::timestamptz ELSE scheduled_at END,
+        status = COALESCE($14, status),
+        recipient_filter = CASE WHEN $16 THEN $15::jsonb ELSE recipient_filter END,
+        payment_course_id = COALESCE($17, payment_course_id),
+        payment_amount_paise = COALESCE($18, payment_amount_paise),
+        payment_purpose = COALESCE($19, payment_purpose),
         updated_at = NOW()
-       WHERE id = $21 AND status = ANY($22::text[])
+       WHERE id = $20 AND status = ANY($21::text[])
        RETURNING *`,
       [
         from_number || null,
@@ -675,7 +646,6 @@ router.put('/broadcasts/:id', async (req, res) => {
         url || null,
         media_library_id || null,
         caption || null,
-        lead_form_id || null,
         schedAt === undefined ? null : schedAt,
         scheduled_at !== undefined,
         nextStatus,

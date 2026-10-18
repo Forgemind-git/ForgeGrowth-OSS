@@ -33,7 +33,7 @@ export default function LoginGate({ onLogin }) {
   };
 
   return (
-    <div style={{
+    <div className="fc-ui" style={{
       display: 'flex',
       width: '100%',
       height: '100%',

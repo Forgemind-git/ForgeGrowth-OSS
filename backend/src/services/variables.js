@@ -9,7 +9,6 @@
 //         the leads row, custom fields from leads.custom_fields.
 //   {{sale.<token>}}       — the lead's sales data: computed tokens (SALE_TOKENS)
 //         plus transaction custom fields, read from the latest installment.
-//   {{form.<slug>.<key>}}  — the lead's LATEST submission to that form.
 //
 // Policies (kept from fillVars):
 //   * Unknown tokens are left as-is at SEND time — but routes/followUps.js now
@@ -18,12 +17,13 @@
 //   * {{1}}-style positional template variables are NOT matched here (the token
 //     grammar requires a leading letter/underscore) — they are Meta's grammar,
 //     filled by the component builders.
-//   * sale.* / form.* need context the caller loads via loadTokenContext();
+//   * sale.* needs context the caller loads via loadTokenContext();
 //     when that context is absent the token is left as-is rather than guessed.
 
 const pool = require('../db');
 const cfg = require('./funnelConfig');
 const registry = require('./fieldRegistry');
+const paymentStatus = require('./paymentStatus');
 
 // Leading letter/underscore so {{1}} positionals never match.
 const TOKEN_RE = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_.-]*)\s*\}\}/g;
@@ -48,6 +48,7 @@ const LEAD_DERIVED_KEYS = new Set([
   'name', 'first_name', 'phone', 'whatsapp_number', 'email', 'source', 'stage',
   'city', 'age', 'profession', 'pincode', 'paid_course', 'payment_date',
   'assigned_to', 'created_at', 'last_activity_at', 'follow_up_count', 'total_paid',
+  'payment_status',
 ]);
 
 // ── formatting helpers ───────────────────────────────────────────────────────
@@ -65,13 +66,10 @@ function stringifyVal(v) {
   if (v == null) return '';
   if (Array.isArray(v)) return v.map(x => String(x)).join(', ');
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
-  // A form answer can be an OBJECT — a rating field stores { rating, feedback }.
-  // Without this the final String(v) resolves the token to the literal text
-  // "[object Object]", and because a token that resolves to *something* is
-  // never flagged anywhere, that text goes out to the customer over WhatsApp.
-  // Rendered here rather than via services/formAnswers.js because this resolver
-  // only ever sees the answers bag, never the field definition that would say
-  // what scale the rating was out of.
+  // A bag value can be an OBJECT — leads imported from the old Forms feature
+  // carry rating answers as { rating, feedback }. Without this the final
+  // String(v) resolves the token to the literal text "[object Object]", and
+  // that text would go out to the customer over WhatsApp.
   if (typeof v === 'object') {
     if (Number.isFinite(Number(v.rating))) {
       const text = typeof v.feedback === 'string' ? v.feedback.trim() : '';
@@ -83,8 +81,8 @@ function stringifyVal(v) {
   return String(v);
 }
 
-// Case-tolerant bag lookup: keys are minted lowercase, but form answers store
-// whatever key the form carries.
+// Case-tolerant bag lookup: keys are minted lowercase, but older bag entries
+// keep whatever key they were written with.
 function bagGet(bag, key) {
   if (!bag || typeof bag !== 'object') return undefined;
   if (key in bag) return bag[key];
@@ -131,6 +129,15 @@ function resolveLeadKey(key, lead) {
     case 'last_activity_at': return fmtDate(lead?.last_activity_at);
     case 'follow_up_count': return String(lead?.follow_up_count ?? 0);
     case 'total_paid': return rupees(lead?.paid_amount_paise);
+    // The manual override, else derived from the stamped paid total. The
+    // product price is not loaded here, so with money paid and no override
+    // this is '' rather than a guess — same rule as the Sales Log column.
+    case 'payment_status': {
+      const d = paymentStatus.derivePaymentStatus({
+        override: lead?.payment_status, totalPaidPaise: lead?.paid_amount_paise, pricePaise: lead?.product_price_paise,
+      });
+      return d.status ? paymentStatus.LABELS[d.status] : '';
+    }
     default: return undefined;
   }
 }
@@ -156,7 +163,7 @@ function resolveSaleKey(key, lead, saleData) {
   }
 }
 
-// resolveTokens(text, { lead, saleData?, formAnswers? }) → filled string.
+// resolveTokens(text, { lead, saleData? }) → filled string.
 function resolveTokens(text, ctx = {}) {
   if (!text) return text;
   const lead = ctx.lead || {};
@@ -199,17 +206,6 @@ function resolveTokens(text, ctx = {}) {
       return v === undefined ? raw : v;
     }
 
-    if (lower.startsWith('form.')) {
-      if (ctx.formAnswers === undefined) return raw; // context not loaded
-      const parts = rawName.split('.');
-      if (parts.length < 3) return raw;
-      const slug = parts[1];
-      const key = parts.slice(2).join('.');
-      const answers = ctx.formAnswers[slug];
-      if (answers === undefined) return raw;
-      return stringifyVal(bagGet(answers, key));
-    }
-
     return raw; // unknown token — left as-is (fillVars policy)
   });
 }
@@ -223,10 +219,6 @@ function neededContext(texts) {
     // lead.total_paid also loads sale data so it reads the live union rather
     // than the stamped column.
     sale: names.some(n => n.toLowerCase().startsWith('sale.') || n.toLowerCase() === 'lead.total_paid'),
-    formSlugs: [...new Set(
-      names.filter(n => n.toLowerCase().startsWith('form.'))
-        .map(n => n.split('.')[1]).filter(Boolean)
-    )],
   };
 }
 
@@ -258,38 +250,20 @@ async function loadSaleData(leadId) {
   };
 }
 
-async function loadFormAnswers(leadId, slugs) {
-  const out = {};
-  for (const slug of slugs) out[slug] = {}; // loaded-but-no-submission → empty
-  if (!slugs.length) return out;
-  const { rows } = await pool.query(
-    `SELECT DISTINCT ON (f.slug) f.slug, s.answers
-       FROM coexistence.lead_form_submissions s
-       JOIN coexistence.lead_forms f ON f.id = s.form_id
-      WHERE s.lead_id = $1 AND f.slug = ANY($2)
-      ORDER BY f.slug, s.submitted_at DESC`,
-    [leadId, slugs]);
-  for (const r of rows) out[r.slug] = r.answers || {};
-  return out;
-}
-
 // One call for the engine: which extra context do these texts need, loaded.
 async function loadTokenContext(texts, leadId) {
   const need = neededContext(texts);
   const ctx = {};
   if (need.sale) ctx.saleData = await loadSaleData(leadId);
-  if (need.formSlugs.length) ctx.formAnswers = await loadFormAnswers(leadId, need.formSlugs);
   return ctx;
 }
 
 // ── save-time validation (routes/followUps.js) ───────────────────────────────
-// Returns a human error string for the first invalid token, else null. Async
-// because form.* tokens are checked against the live lead_forms rows.
+// Returns a human error string for the first invalid token, else null.
 async function stepTokenError(texts) {
   const tokens = new Set();
   for (const t of texts) extractTokens(t).forEach(n => tokens.add(n));
 
-  const formChecks = new Map(); // slug → Set(keys)
   for (const rawName of tokens) {
     const lower = rawName.toLowerCase();
     if (LEGACY_KEYS.has(lower)) continue;
@@ -303,29 +277,9 @@ async function stepTokenError(texts) {
       if (SALE_TOKEN_KEYS.has(key) || registry.isKnownField('transaction', key)) continue;
       return `Unknown variable {{sale.${key}}} — pick variables from the Insert variable menu.`;
     }
-    if (lower.startsWith('form.')) {
-      const parts = rawName.split('.');
-      if (parts.length < 3) return `{{${rawName}}} is incomplete — form variables look like {{form.<form>.<field>}}.`;
-      const slug = parts[1];
-      const key = parts.slice(2).join('.');
-      if (!formChecks.has(slug)) formChecks.set(slug, new Set());
-      formChecks.get(slug).add(key);
-      continue;
-    }
     return `Unknown variable {{${rawName}}} — pick variables from the Insert variable menu.`;
   }
 
-  for (const [slug, keys] of formChecks) {
-    const { rows: [form] } = await pool.query(
-      `SELECT fields FROM coexistence.lead_forms WHERE slug = $1`, [slug]);
-    if (!form) return `The form behind {{form.${slug}.…}} no longer exists.`;
-    const known = new Set((Array.isArray(form.fields) ? form.fields : []).map(f => String(f.key)));
-    for (const key of keys) {
-      if (![...known].some(k => k === key || k.toLowerCase() === key.toLowerCase())) {
-        return `The form "${slug}" has no field "${key}" — re-pick the variable from the Insert variable menu.`;
-      }
-    }
-  }
   return null;
 }
 
@@ -338,7 +292,6 @@ module.exports = {
   resolveTokens,
   neededContext,
   loadSaleData,
-  loadFormAnswers,
   loadTokenContext,
   stepTokenError,
   // exported for tests

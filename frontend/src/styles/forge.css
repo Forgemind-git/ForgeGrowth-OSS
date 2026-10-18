@@ -1,0 +1,567 @@
+/* ============================================================================
+   FORGE BORDERLESS UI — the whole of ForgeGrowth, one design language.
+   ============================================================================
+
+   ONE RULE ABOVE ALL: nothing separates from its background with an OUTLINE.
+   Surfaces differ by FILL (page -> pane -> card -> tint), state differs by TINT
+   (accent-soft, then solid accent), and hierarchy comes from WEIGHT and SIZE.
+
+   HOW THIS FILE REACHES ~250 FILES WITHOUT EDITING THEM
+   ----------------------------------------------------
+   Every colour in this app is already read through a `--c-*` custom property
+   (constants.js `C` maps each token to `var(--c-*, <light fallback>)`, and
+   ~1,400 call sites read it). So the design system is installed by REDEFINING
+   those tokens in terms of the `--fc-*` ones below — one bridge, and Chats,
+   the builders, Admin Settings and every dashboard follow at once. Editing the
+   call sites instead would be ~2,300 edits and would drift the first time
+   somebody added a page.
+
+   ORDER MATTERS: this file is imported AFTER index.css. index.css declares its
+   dark palette at `:root[data-theme="dark"]` — specificity (0,2,0) — so the
+   bridge below repeats that exact selector rather than a bare `:root`, or the
+   dark palette would win and dark mode would keep the old colours.
+
+   WHY THE BRIDGE IS THEME-BLIND: `--fc-*` already flips with `data-theme`, so
+   the bridge is written ONCE and follows automatically. Only the few tokens
+   that must differ per theme carry a dark override.
+   ========================================================================== */
+
+/* ── 1. Design tokens (verbatim from the forge-borderless-ui skill) ───────── */
+
+:root,
+:root[data-theme="light"] {
+  /* LIGHT — warm white. Restored 2026-09-13 exactly as it stood before the
+     dark-only period (c10fce4^), plus the two tokens added during it. */
+  --fc-page:          #f1f1f0;
+  --fc-sidebar:       #ffffff;
+  --fc-card:          #ffffff;
+  --fc-raised:        #f4f4f2;   /* a surface sitting ON a card */
+  --fc-border:        transparent;
+  --fc-border-strong: transparent;
+  --fc-text:          #0b0b0b;
+  --fc-text-secondary:#4d4d55;
+  --fc-text-muted:    #6b6b73;
+  --fc-primary:       #dc2626;
+  --fc-primary-hover: #b91c1c;
+  --fc-primary-soft:  rgba(220, 38, 38, 0.12);
+  --fc-primary-ring:  rgba(220, 38, 38, 0.28);
+  --fc-primary-faint: rgba(220, 38, 38, 0.08);
+  --fc-surface:       rgba(0, 0, 0, 0.05);
+  --fc-surface-2:     rgba(0, 0, 0, 0.09);
+  --fc-on-accent:     #FFFFFF;
+  --fc-green:         #16a34a;
+  --fc-amber:         #B45309;
+  --fc-amber-soft:    #FEF3C7;
+  --fc-err-bg:        #FCEBEB;
+  --fc-err-text:      #A32D2D;
+  --fc-shadow-sm:     0 1px 2px rgba(0, 0, 0, 0.08);
+  --fc-shadow-md:     0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.04);
+  --fc-shadow-lg:     0 8px 16px rgba(0, 0, 0, 0.08), 0 24px 48px rgba(0, 0, 0, 0.12);
+  --fc-scrim:         rgba(0, 0, 0, 0.45);
+
+  /* Shape and type are theme-blind; they live here once. */
+  /* Tightened 2026-10-11 to match ForgeSocial (was 24 / 16 / 12 + pill buttons). */
+  --fc-r-lg:          16px;   /* page-level panels: the header bar, the two panes */
+  --fc-r-md:          12px;   /* content cards, modals, KPI tiles */
+  --fc-r-sm:          8px;    /* controls: inputs, nav rows, small surfaces */
+  --fc-r-ctl:         8px;    /* buttons, chips, badges — soft corners, not pills */
+  --fc-gutter:        16px;
+  --fc-header-h:      64px;
+  --fc-pill:          999px;
+  --fc-font:          'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --fc-mono:          'DM Mono', ui-monospace, SFMono-Regular, monospace;
+  --fc-header-bottom: calc(var(--fc-gutter) + var(--fc-header-h));
+}
+
+:root[data-theme="dark"] {
+  /* DARK — neutral black, never blue-cast. */
+
+  --fc-page:          #0a0a0a;
+  --fc-sidebar:       #141414;
+  --fc-card:          #141414;
+  --fc-raised:        #1c1c1c;
+  --fc-border:        transparent;
+  --fc-border-strong: transparent;
+  --fc-text:          #f5f5f5;
+  --fc-text-secondary:#c4c4c4;
+  --fc-text-muted:    #939393;
+  --fc-primary:       #f05252;   /* lifted: #dc2626 goes muddy on a dark ground */
+  --fc-primary-hover: #dc2626;
+  --fc-primary-soft:  rgba(240, 82, 82, 0.18);
+  --fc-primary-ring:  rgba(240, 82, 82, 0.38);
+  --fc-surface:       rgba(255, 255, 255, 0.07);
+  --fc-surface-2:     rgba(255, 255, 255, 0.12);
+  --fc-on-accent:     #ffffff;
+  --fc-green:         #4ade80;
+  --fc-amber:         #FBBF24;
+  --fc-amber-soft:    rgba(251, 191, 36, 0.16);
+  --fc-err-bg:        rgba(248, 113, 113, 0.14);
+  --fc-err-text:      #FCA5A5;
+  --fc-shadow-sm:     0 1px 2px rgba(0, 0, 0, 0.5);
+  --fc-shadow-md:     0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --fc-shadow-lg:     0 8px 16px rgba(0, 0, 0, 0.45), 0 24px 48px rgba(0, 0, 0, 0.5);
+  --fc-scrim:         rgba(0, 0, 0, 0.62);
+
+  /* A SELECTED LIST ROW, softer than --fc-primary-soft. At 0.18 the tint
+     over #1c1c1c reads as a muddy red-brown block, which is what made the
+     chat lists look heavy; a selected row should whisper, not shout. */
+  --fc-primary-faint: rgba(240, 82, 82, 0.10);
+}
+
+/* ── 2. The bridge: every legacy --c-* token, expressed in --fc-* ─────────── */
+
+:root,
+:root[data-theme="light"],
+:root[data-theme="dark"] {
+
+  /* Typeface. ~980 inline `fontFamily: FONT` uses read --fg-font, so setting it
+     here re-typesets the entire app. DM Mono stays for slugs, ids, timestamps
+     and masked keys — nothing else. */
+  --fg-font: var(--fc-font);
+  --fg-mono: var(--fc-mono);
+
+  /* — Grounds and panes —
+     The two SHELL panes are --fc-card, so a page's own cards must sit a step
+     ABOVE them: --c-cardBg is --fc-raised, not --fc-card. Mapping both to the
+     same fill is how you get an invisible card once the outlines are gone. */
+  --c-pageBg:        var(--fc-page);
+  --c-sidebarBg:     var(--fc-card);
+  --c-cardBg:        var(--fc-raised);
+  --c-surface:       var(--fc-card);
+  --c-surfaceAlt:    var(--fc-raised);
+  --c-surfaceInner:  var(--fc-surface);
+  --c-surfaceSection:var(--fc-surface);
+  --c-surfaceMuted:  var(--fc-surface);
+  --c-surfaceSubtle: var(--fc-surface-2);
+  --c-hover:         var(--fc-surface);
+  --c-rowHover:      var(--fc-surface);
+  --c-rowActive:     var(--fc-primary-faint);
+  --c-chatPanel:     var(--fc-card);
+  --c-chatIncoming:  var(--fc-card);
+  /* A real, visible neutral fill. Disabled buttons and toggle-off tracks used
+     to borrow --c-borderStrong for this; now that the border tokens are
+     transparent, borrowing one would make every disabled button invisible. */
+  --c-fillMuted:     var(--fc-surface-2);
+  --c-overlaySoft:   var(--fc-surface);
+
+  /* — Outlines. All of them. This is the design. —
+     Every tokenised border in the app resolves to nothing, so hairline rules,
+     table gridlines, card outlines and divider strips all disappear at once.
+     The 1px still occupies space, so no layout moves. */
+  --c-border:        transparent;
+  --c-borderDark:    transparent;
+  --c-borderSubtle:  transparent;
+  --c-borderStrong:  transparent;
+  --c-sidebarBorder: transparent;
+  --c-headerBorder:  transparent;
+  --c-divider:       transparent;
+  --c-rowSep:        transparent;
+  --c-dangerBorder:  transparent;
+  --c-successBorder: transparent;
+  --c-warnBorder:    transparent;
+  --c-infoBorder:    transparent;
+  --c-orangeBorder:  transparent;
+  --c-nodeBorder:    var(--fc-surface-2);   /* a flow-node's FILL step, not an outline */
+
+  /* — Text ramp — */
+  --c-text:          var(--fc-text);
+  --c-textSecondary: var(--fc-text-secondary);
+  --c-textMuted:     var(--fc-text-muted);
+  --c-primaryText:   var(--fc-text);
+  --c-t1:            var(--fc-text);
+  --c-t2:            var(--fc-text);
+  --c-t3:            var(--fc-text-secondary);
+  --c-t4:            var(--fc-text-secondary);
+  --c-t5:            var(--fc-text-secondary);
+  --c-t6:            var(--fc-text-muted);
+  --c-t7:            var(--fc-text-muted);
+  --c-t8:            var(--fc-text-muted);
+  --c-watermark:     var(--fc-text-muted);
+
+  /* — The one accent — */
+  --c-primary:       var(--fc-primary);
+  --c-primaryHover:  var(--fc-primary-hover);
+  --c-primaryLight:  var(--fc-primary-soft);
+  --c-selectedTint:  var(--fc-primary-soft);
+  --c-selectionBg:   var(--fc-primary-ring);
+  --c-dangerSolid:   var(--fc-primary);
+  --c-dangerText:    var(--fc-err-text);
+  --c-dangerStrong:  var(--fc-err-text);
+  --c-dangerBg:      var(--fc-err-bg);
+  --c-dangerBgSoft:  var(--fc-primary-soft);
+
+  /* — Status hues. The ONLY second colours, and only ever for data/status. — */
+  --c-green:         var(--fc-green);
+  --c-successText:   var(--fc-green);
+  --c-successBright: var(--fc-green);
+  --c-successBg:     rgba(22, 163, 74, .12);
+  --c-successBgSoft: rgba(22, 163, 74, .08);
+  --c-successTint:   rgba(22, 163, 74, .08);
+  --c-amber:         var(--fc-amber);
+  --c-warnText:      var(--fc-amber);
+  --c-warnDeep:      var(--fc-amber);
+  --c-warnBg:        var(--fc-amber-soft);
+  --c-warnBgSoft:    var(--fc-amber-soft);
+
+  /* — Elevation. Only floating things cast one. — */
+  --c-shadowSm:      var(--fc-shadow-sm);
+  --c-shadowMd:      var(--fc-shadow-md);
+  --c-shadowLg:      var(--fc-shadow-lg);
+
+  /* — The header is BLACK in both themes: constant chrome, like the reference. — */
+  --c-headerBg:      #000000;
+  --c-headerText:    #ffffff;
+  --c-headerMuted:   rgba(255, 255, 255, .72);
+  --c-headerSurface: rgba(255, 255, 255, .08);
+
+  /* — Scrollbars: a thumb, no track. — */
+  --c-scrollTrack:   transparent;
+  --c-scrollThumb:   var(--fc-surface-2);
+
+  /* — Neutral literals left over from the hex migration. These are surfaces and
+       hovers written as `var(--c-xf5f5f0, #F5F5F0)`; without them a few dozen
+       rows would stay on the old cream while everything around them moved. — */
+  --c-xf5f5f0: var(--fc-surface);
+  --c-xf0f0f0: var(--fc-surface);
+  --c-xf2f2ec: var(--fc-surface);
+  --c-xfafaf7: var(--fc-raised);
+  --c-xfafaf9: var(--fc-raised);
+  --c-xf9fafb: var(--fc-raised);
+  --c-xf3f4f6: var(--fc-surface);
+  --c-xf1f0eb: var(--fc-raised);
+  --c-xf8f7f2: var(--fc-raised);
+  --c-xe8e8e2: var(--fc-surface-2);
+  --c-xf0f2f5: var(--fc-surface);
+  --c-xf5f6f6: var(--fc-surface);
+  --c-xf0e8e8: var(--fc-surface);
+  --c-sf0efea: var(--fc-surface);
+  --c-sbfbfc5: var(--fc-text-muted);
+  --c-sd8d8de: var(--fc-surface-2);
+  --c-s333333: var(--fc-text);
+  --c-s555555: var(--fc-text-secondary);
+  --c-x444444: var(--fc-text-secondary);
+  --c-x52525b: var(--fc-text-secondary);
+  --c-s667781: var(--fc-text-muted);
+  --c-se5e7eb: var(--fc-surface-2);
+  /* Red tints — every one of them is now the single accent-soft. */
+  --c-xfdf6f6: var(--fc-primary-soft);
+  --c-xfcebeb: var(--fc-primary-soft);
+  --c-xfff5f5: var(--fc-primary-soft);
+  --c-xfdf2f2: var(--fc-primary-soft);
+  --c-xfdf0f0: var(--fc-primary-soft);
+  --c-xf5ecec: var(--fc-primary-soft);
+  --c-xf4ecec: var(--fc-primary-soft);
+  --c-xfaf0f0: var(--fc-primary-soft);
+  --c-xf8f0f0: var(--fc-primary-soft);
+  --c-sfdf3f3: var(--fc-primary-soft);
+
+  /* — Chart series. One accent first, then hues that exist only to tell one
+       slice from the next. Read by charts.jsx as var(--fg-series-N). — */
+  --fg-series-1: var(--fc-primary);
+  --fg-series-2: #7c6cf0;
+  --fg-series-3: var(--fc-green);
+  --fg-series-4: var(--fc-amber);
+  --fg-series-5: #3b82f6;
+  --fg-series-6: #db2777;
+  --fg-series-7: #0891b2;
+  --fg-series-8: #65a30d;
+}
+
+/* The toast is an INVERTED plate: darker than the page on light, LIGHTER than it
+   on dark (#111 on a near-black ground has no visible edge), so it is the one
+   pair that cannot be theme-blind. */
+:root, :root[data-theme="light"] { --c-toastBg: #111113; --c-toastText: #f5f5f5; }
+:root[data-theme="dark"]         { --c-toastBg: #2e2e2e; --c-toastText: #f5f5f5; }
+
+/* ── 3. Base ─────────────────────────────────────────────────────────────── */
+
+:root, :root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"]         { color-scheme: dark; }
+html, body {
+  background: var(--fc-page);
+  color: var(--fc-text);
+  /* 450, never 400 — regular reads as thin next to the reference. */
+  font-family: var(--fc-font);
+  font-weight: 450;
+}
+body, .fc-app, .fc-pane { transition: background-color .22s ease, color .22s ease; }
+input, button, textarea, select { font-family: var(--fc-font); }
+::selection { background: var(--fc-primary-ring); color: var(--fc-text); }
+::-webkit-scrollbar-track { background: transparent; }
+
+@keyframes fc-pop-in { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+
+/* ── 4. The shell: panels FLOAT on the ground, never touching the edge ────── */
+
+.fc-app {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh / var(--fg-zoom, 1));
+  padding: var(--fc-gutter);
+  gap: var(--fc-gutter);
+  background: var(--fc-page);
+  overflow: hidden;         /* the page never scrolls; the content column does */
+}
+.fc-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: var(--fc-gutter);
+}
+/* Both panes are the same fill and the same radius — one panel language. */
+.fc-pane {
+  background: var(--fc-card);
+  border-radius: var(--fc-r-lg);
+  overflow: hidden;
+  min-height: 0;
+}
+.fc-content { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: auto; }
+/* Phones: a narrower gutter, so the page keeps the width the rail leaves it. */
+@media (max-width: 640px) {
+  :root[data-theme] { --fc-gutter: 8px; }
+}
+.fc-sidebar { flex: none; display: flex; flex-direction: column; }
+
+/* The black bar. Constant chrome in BOTH themes. */
+.fc-header {
+  height: var(--fc-header-h);
+  flex: none;
+  background: #000000;
+  border-radius: var(--fc-r-lg);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--fc-gutter);
+  position: relative;
+  z-index: 100;
+}
+
+/* ── 5. Borderless enforcement + the radius scale ─────────────────────────── */
+
+/* ⚠ A TEXT FIELD'S FOCUS IS ITS CARET, NOT A RING — and putting one on a bare
+   <input> inside a composed search box drew a red rounded rectangle INSIDE the
+   wrapper, offset from it, which is what "a red line appears and the whole
+   thing is out of sync" was. Keyboard focus still needs to be visible on things
+   that have no caret, so buttons and links keep the inset accent line; typing
+   controls do not get one, and the SEARCH WRAPPER shows the state instead,
+   because the wrapper is the control. */
+.fc-ui :focus { outline: none; }
+.fc-ui :focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--fc-primary); }
+.fc-ui input:focus, .fc-ui input:focus-visible,
+.fc-ui textarea:focus, .fc-ui textarea:focus-visible { box-shadow: none !important; }
+.fc-searchfield:focus-within { box-shadow: inset 0 0 0 1.5px var(--fc-primary); }
+
+/* THE RADIUS SCALE, applied to code that hand-typed a number.
+   React serialises `borderRadius: 8` as `border-radius: 8px`, so the inline
+   style attribute is addressable — which is the only way to reach ~1,000
+   hand-typed radii without editing ~250 files. Every hand-typed radius
+   collapses onto the scale, so the tokens above decide the whole app's
+   corners (same rule set as ForgeSocial's theme/bridge.css): up to 12 → the
+   control radius, 13-20 → the card radius, 22-28 → the panel radius, and a
+   former pill (99 / 999) → soft control corners. 50% (avatars, dots) and
+   split-corner values are deliberately untouched. */
+.fc-ui [style*="border-radius: 3px"],
+.fc-ui [style*="border-radius: 4px"],
+.fc-ui [style*="border-radius: 5px"],
+.fc-ui [style*="border-radius: 6px"],
+.fc-ui [style*="border-radius: 7px"],
+.fc-ui [style*="border-radius: 8px"],
+.fc-ui [style*="border-radius: 9px"],
+.fc-ui [style*="border-radius: 10px"],
+.fc-ui [style*="border-radius: 11px"],
+.fc-ui [style*="border-radius: 12px"] { border-radius: var(--fc-r-sm) !important; }
+.fc-ui [style*="border-radius: 13px"],
+.fc-ui [style*="border-radius: 14px"],
+.fc-ui [style*="border-radius: 15px"],
+.fc-ui [style*="border-radius: 16px"],
+.fc-ui [style*="border-radius: 17px"],
+.fc-ui [style*="border-radius: 18px"],
+.fc-ui [style*="border-radius: 19px"],
+.fc-ui [style*="border-radius: 20px"] { border-radius: var(--fc-r-md) !important; }
+.fc-ui [style*="border-radius: 22px"],
+.fc-ui [style*="border-radius: 24px"],
+.fc-ui [style*="border-radius: 26px"],
+.fc-ui [style*="border-radius: 28px"] { border-radius: var(--fc-r-lg) !important; }
+/* Former pills (buttons, chips, badges, segmented controls) get soft corners.
+   ⚠ An on/off SWITCH keeps its pill track and round knob: matched by
+   role="switch", by the knob's own `transition: left`, and by a track that
+   holds such a knob — a switch drawn as a rounded rectangle reads as a button. */
+.fc-ui [style*="border-radius: 99px"]:not([role="switch"]):not([style*="transition: left"]):not(:has(> [style*="transition: left"])),
+.fc-ui [style*="border-radius: 999px"]:not([role="switch"]):not([style*="transition: left"]):not(:has(> [style*="transition: left"])) { border-radius: var(--fc-r-ctl) !important; }
+
+/* Buttons get the CONTROL radius (soft corners — they were pills until
+   2026-10-11). `:has()` is the discriminator: a real button holds text and an
+   icon, while a card rendered AS a button holds block children and takes the
+   card radius instead. Switches and round (50%) icon buttons are left alone.
+
+   ⚠ The class is DOUBLED on purpose. `[style*="border-radius: 10px"]` above is
+   (0,2,0) and would otherwise outrank this and leave every button with an inline
+   radius stuck at the control step — measured on the public form's Submit. */
+.fc-ui.fc-ui button:not(.fc-menu-row):not([role="switch"]):not([style*="border-bottom"]):not([style*="border-radius: 50%"]):not(:has(div)):not(:has(h1, h2, h3, h4, p, table, ul, ol, img)) {
+  border-radius: var(--fc-r-ctl) !important;
+}
+.fc-ui.fc-ui button:not(.fc-menu-row):not([style*="border-bottom"]):has(div),
+.fc-ui.fc-ui button:not(.fc-menu-row):not([style*="border-bottom"]):has(h1, h2, h3, h4, p, table, ul, ol) {
+  border-radius: var(--fc-r-md) !important;
+}
+/* Tab level 1, stated rather than merely left alone: text, a straight accent
+   underline, no box. */
+.fc-ui.fc-ui button[style*="border-bottom"] { border-radius: 0 !important; }
+/* ⚠ A CONTROL THAT USED TO SEPARATE BY ITS OUTLINE NEEDS A FILL, OR IT VANISHES.
+   This is the one thing going borderless genuinely breaks. An input written as
+   `background: C.cardBg` + `border: 1px solid C.border` was visible ONLY because
+   of that border; take the border away and it is a white box on a white card
+   with a caret floating in it. Every text control therefore gets the surface
+   fill, and the secondary buttons below get the next step up.
+
+   The fill is TRANSLUCENT on purpose (rgba, not a hex): it composites over
+   whatever it happens to sit on — pane, card, or a tinted panel — so one rule
+   is correct at every depth and in both themes. */
+.fc-ui input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([style*="background: transparent"]),
+.fc-ui textarea:not([style*="background: transparent"]),
+.fc-ui select {
+  border-radius: var(--fc-r-sm) !important;
+  background-color: var(--fc-surface) !important;
+  color: var(--fc-text);
+}
+/* ⚠ THE EXEMPTION ABOVE IS LOAD-BEARING, not tidiness. A search field in this
+   app is a WRAPPER (icon + fill + radius) with a bare <input> inside that sets
+   `background: transparent` precisely because the wrapper is the control. Fill
+   that input and you draw a second, smaller, offset box inside the first. The
+   inline declaration is the signal, and it is the only one available: CSS
+   cannot ask "does my parent already look like a field?". */
+.fc-ui input[style*="background: transparent"],
+.fc-ui textarea[style*="background: transparent"] {
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+/* The same rescue for a SECONDARY button — the ones written as "white fill plus
+   a hairline". Matched on the inline background they already carry, because
+   that is what distinguishes them from a primary (accent), a ghost
+   (transparent) or a status button (tinted), none of which should move. */
+.fc-ui button[style*="var(--c-cardBg"],
+.fc-ui button[style*="var(--c-surface,"],
+.fc-ui button[style*="background: rgb(255, 255, 255)"] {
+  background: var(--fc-surface-2) !important;
+}
+.fc-ui input[type="checkbox"], .fc-ui input[type="radio"] { accent-color: var(--fc-primary); }
+::placeholder { color: var(--fc-text-muted); opacity: 1; }
+
+/* Tables lost their gridlines with the border tokens, so rows separate by FILL.
+   Without this a dense table becomes an undifferentiated block of text. */
+.fc-ui tbody tr:hover > td { background: var(--fc-surface); }
+.fc-ui thead th { color: var(--fc-text-secondary); }
+
+/* ── 6. Component hooks used by the shared kit and the charts ─────────────── */
+
+.fg-page { padding: 24px 28px 72px; }
+.fg-page-heading { font-size: 20px !important; font-weight: 700 !important; letter-spacing: -.02em; line-height: 1.2; }
+.fg-page-sub   { color: var(--fc-text-secondary) !important; }
+
+.fg-card {
+  /* A card sits ON a pane, so it is --fc-raised. Mapping it to --fc-card would
+     make it exactly the pane's own fill — an invisible card, now that there is
+     no outline left to rescue it. */
+  background: var(--fc-raised) !important;
+  border-radius: var(--fc-r-md) !important;
+  box-shadow: none !important;
+  padding: 18px;
+}
+.fg-card-title { font-size: 16px !important; font-weight: 650 !important; letter-spacing: -.02em; }
+
+/* KPI tile: eyebrow -> the one number the card exists for. */
+.fg-kpi > div:first-child {
+  font-size: 12px !important; font-weight: 650 !important;
+  letter-spacing: .04em; text-transform: uppercase;
+  color: var(--fc-text-secondary) !important;
+}
+.fg-kpi > div:nth-child(2) {
+  font-size: 38px !important; font-weight: 780 !important;
+  letter-spacing: -.03em; font-variant-numeric: tabular-nums;
+}
+
+.fg-btn {
+  border-radius: var(--fc-r-ctl) !important;
+  border: 0 !important;
+  font-weight: 650 !important;
+  padding: 10px 18px !important;
+}
+.fg-btn--primary   { background: var(--fc-primary) !important; color: var(--fc-on-accent) !important; }
+.fg-btn--secondary { background: var(--fc-surface-2) !important; color: var(--fc-text) !important; }
+.fg-btn--ghost     { background: transparent !important; color: var(--fc-text-secondary) !important; }
+.fg-btn--danger    { background: var(--fc-err-bg) !important; color: var(--fc-err-text) !important; }
+
+/* Segmented controls are components/PillStrip.jsx — one sliding accent pill,
+   no per-item CSS. Nothing here styles them, so nothing here can fork them. */
+
+.fg-badge { border-radius: var(--fc-r-ctl) !important; font-weight: 650 !important; }
+.fg-tablewrap { border-radius: var(--fc-r-md) !important; background: var(--fc-raised) !important; }
+.fg-table th { font-size: 12px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+
+/* Charts. The donut track and the meter rail are FILLS, so they follow the
+   surface ramp rather than a border colour that no longer exists. */
+.fg-donut-track { stroke: var(--fc-surface-2) !important; opacity: 1 !important; }
+.fg-donut-seg   { stroke-linecap: round; }
+.fg-donut-value { font-weight: 780 !important; letter-spacing: -.03em; }
+.fg-meter       { background: var(--fc-surface) !important; border-radius: var(--fc-pill) !important; }
+.fg-meter-fill  { border-radius: var(--fc-pill) !important; }
+.fg-bar         { border-radius: var(--fc-r-sm) !important; }
+.fg-line        { stroke-linecap: round; stroke-linejoin: round; }
+.fg-grid        { stroke: var(--fc-surface-2) !important; }
+.fg-legend-swatch { border-radius: 4px !important; }
+
+/* ── 7. Two corrections the first browser pass turned up ──────────────────── */
+
+/* A METRIC IS SET IN THE SANS, not the mono face. This app writes every figure
+   in DM Mono, which is right for an id, a slug or a timestamp and wrong for the
+   one number a KPI card exists for. Matched on SIZE, so a 40px headline figure
+   moves to Plus Jakarta Sans with tabular numerals while a 13px id stays mono —
+   which is exactly the split the design asks for, without touching the ~130
+   call sites that legitimately want a monospaced column. */
+.fc-ui [style*="--fg-mono"][style*="font-size: 40px"],
+.fc-ui [style*="--fg-mono"][style*="font-size: 38px"],
+.fc-ui [style*="--fg-mono"][style*="font-size: 36px"],
+.fc-ui [style*="--fg-mono"][style*="font-size: 34px"],
+.fc-ui [style*="--fg-mono"][style*="font-size: 32px"],
+.fc-ui [style*="--fg-mono"][style*="font-size: 30px"],
+.fc-ui [style*="--fg-mono"][style*="font-size: 28px"],
+.fc-ui [style*="--fg-mono"][style*="font-size: 26px"],
+.fc-ui [style*="--fg-mono"][style*="font-size: 24px"],
+.fc-ui [style*="--fg-mono"][style*="font-size: 22px"] {
+  font-family: var(--fc-font) !important;
+  font-weight: 780 !important;
+  letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ⚠ NO PAGE TITLES. A tab's name is already the highlighted item in the
+   sidebar; repeating it in 38px display type consumed the top of every page
+   and was reported as "huge text in every single tab". The only headings
+   left are ENTITY NAMES on detail views (a customer, a
+   broadcast) and they are compact — the h2 scale, not display type. */
+.fc-ui h1 { font-size: 20px !important; font-weight: 700 !important; letter-spacing: -.02em; line-height: 1.2; }
+
+/* A composed search field: the wrapper IS the control, so it takes the input
+   recipe — surface fill, radius 12 — and the bare input inside it stays
+   transparent (see the exemption above). */
+.fc-searchfield {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--fc-surface) !important;
+  border-radius: var(--fc-r-sm) !important;
+  padding: 8px 12px;
+}
+
+/* A POPOVER ROW IS NOT A PILL — `.fc-menu-row` is excluded from the button rule
+   above, so the row keeps the control radius (12) rather than becoming a
+   lozenge. There is no competing rule for it to lose to. */
+
+/* ── Builder + simulator surface tokens ───────────────────────────────
+   The flow builder (`.fg-flow`) and every WhatsApp simulator card
+   (`.fg-sim`, components/sim/SimKit.jsx) draw from the same four values,
+   so the agent test chat, template and broadcast previews look exactly
+   like the flow builder's simulator. Defined once, here. */
+.fg-flow, .fg-sim { --fs-canvas: var(--fc-page); --fs-node-bg: var(--fc-card); --fs-node-ring: rgba(0,0,0,.08); --fs-node-shadow: 0 2px 4px rgba(0,0,0,.05), 0 10px 24px rgba(0,0,0,.07); --fs-dot: rgba(0,0,0,.18); }
+:root[data-theme="dark"] .fg-flow, :root[data-theme="dark"] .fg-sim { --fs-node-bg: #1e1e1e; --fs-node-ring: rgba(255,255,255,.10); --fs-node-shadow: 0 2px 4px rgba(0,0,0,.5), 0 10px 24px rgba(0,0,0,.45); --fs-dot: rgba(255,255,255,.14); }
+.fg-sim ::-webkit-scrollbar { width: 5px; height: 5px; }
+.fg-sim ::-webkit-scrollbar-track { background: transparent; }
+.fg-sim ::-webkit-scrollbar-thumb { background: var(--fc-border); border-radius: 99px; }

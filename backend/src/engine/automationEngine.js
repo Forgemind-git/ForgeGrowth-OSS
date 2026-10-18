@@ -3,8 +3,10 @@ const { decrypt } = require('../util/crypto');
 const bus = require('../events');
 const { sheetsAppendRow, calendarInsertEvent, gmailSend } = require('../integrations/googleClient');
 const { PROVIDER_DEFAULT_BASE, runChatCompletion, pickDefaultModel } = require('../llm/chatCompletion');
+const { applyCompletionParams } = require('../llm/openaiCompat');
 const { resolveReplyHandle, buildQuickReplyPayload, isQuickReply, handleAliases } = require('../services/replyRouting');
 const { applyLeadField } = require('../services/leadFields');
+const landingLeads = require('../services/landingLeads');
 
 /* ══════════════════════════════════════════════════════════════════════
    Minimal Automation Execution Engine
@@ -30,6 +32,49 @@ function matchesKeyword(messageBody, keyword, matchType, caseSensitive) {
     default:
       return msg === kw;
   }
+}
+
+// Differences a person or a phone keyboard introduces without meaning anything:
+// runs of spaces/newlines and the dash forms (– — ‒ −). An ad's pre-filled text
+// carries an en dash; someone retyping it uses a hyphen.
+function normalizePhrase(text, caseSensitive) {
+  const s = String(text || '').replace(/[\u2012-\u2015\u2212]/g, '-').replace(/\s+/g, ' ').trim();
+  return caseSensitive ? s : s.toLowerCase();
+}
+
+// An extra start word this long is a PHRASE (e.g. a Click-to-WhatsApp ad's
+// pre-filled message) and also matches inside a longer message, because people
+// add to it ("…Sesh 02 event in Coimbatore!!"). Same 20-character bar Message
+// Formats uses for loose matching.
+const EXTRA_PHRASE_MIN_CHARS = 20;
+
+// Which word started a keyword trigger, or null. The main keyword keeps its own
+// match type. A SHORT extra start word (e.g. a test word) must be the WHOLE
+// message — a loose "contains" on "hiii" would start the flow on half the
+// greetings a sales number gets.
+function keywordTriggerHit(triggerNode, messageBody) {
+  const cs = !!triggerNode.caseSensitive;
+  const main = triggerNode.keyword || '';
+  if (matchesKeyword(messageBody, main, triggerNode.matchType || 'exact', cs)) return main;
+  const extra = Array.isArray(triggerNode.extraKeywords) ? triggerNode.extraKeywords : [];
+  return extra.find(w => {
+    const word = String(w || '');
+    const phrase = normalizePhrase(word, cs);
+    if (phrase.length >= EXTRA_PHRASE_MIN_CHARS) return normalizePhrase(messageBody, cs).includes(phrase);
+    return matchesKeyword(messageBody, word, 'exact', cs);
+  }) || (triggerContainsWords(triggerNode).find(w => {
+    // `containsKeywords`: words the author deliberately wants matched ANYWHERE
+    // in the message, however short (e.g. "Live Lab"). A separate list rather
+    // than a flag on extraKeywords, so a test word like "Hiii" can never be
+    // loosened by accident.
+    const phrase = normalizePhrase(w, cs);
+    return !!phrase && normalizePhrase(messageBody, cs).includes(phrase);
+  }) || null);
+}
+
+function triggerContainsWords(triggerNode) {
+  return (Array.isArray(triggerNode.containsKeywords) ? triggerNode.containsKeywords : [])
+    .map(w => String(w || '')).filter(w => w.trim());
 }
 
 // Stringify any value for {{var}} interpolation. Primitives become their plain
@@ -69,6 +114,13 @@ function resolveVariables(text, context) {
     answer: lastMessage,
     last_message: lastMessage,
   };
+  // Answers from the WhatsApp form this walk was resumed by: {{form_<field_key>}}
+  // for one answer, {{form_summary}} for every answered question as lines. They
+  // exist only on the walk the submission started.
+  Object.entries(context.form_answers || {}).forEach(([k, v]) => {
+    lookup[`form_${String(k).toLowerCase()}`] = _stringifyForInterpolation(v);
+  });
+  if (context.form_summary != null) lookup.form_summary = String(context.form_summary);
   // custom_fields here are IN-MEMORY only — values an AI node parsed this run,
   // exposed to downstream {{vars}}. Contact custom fields were removed, so
   // nothing reads or writes them on the contacts row any more.
@@ -330,17 +382,14 @@ async function executeMessageNode(client, executionId, node, context) {
       ? [{ type: 'body', parameters: keys.map(k => ({ type: 'text', text: resolveVariables(String(bindings[k] || ''), context) || ' ' })) }]
       : [];
     // Dynamic URL button → a {{n}} in the button URL needs a button component or
-    // Meta rejects the send (#131008). If it points at a lead form, mint a
-    // per-recipient token so the recipient is auto-identified (silent phone
-    // capture) — same as broadcasts. Otherwise fall back to the sample's tail.
+    // Meta rejects the send (#131008). Filled with the sample's trailing segment.
     {
-      const { mintTokenForButtonUrl } = require('../routes/leadForms');
       const btns = Array.isArray(template?.buttons) ? template.buttons : [];
       for (let bi = 0; bi < btns.length; bi++) {
         const b = btns[bi];
         if (b.type === 'URL' && /\{\{\s*\d+\s*\}\}/.test(b.value || '')) {
-          let text = await mintTokenForButtonUrl(b.value, context.contact_number, { waAccountId: account.id });
-          if (!text) { const s = String(b.urlSample || '').trim(); text = s.split('/').filter(Boolean).pop() || 'x'; }
+          const s = String(b.urlSample || '').trim();
+          const text = s.split('/').filter(Boolean).pop() || 'x';
           components.push({ type: 'button', sub_type: 'url', index: bi, parameters: [{ type: 'text', text }] });
         }
       }
@@ -398,13 +447,14 @@ async function executeMessageNode(client, executionId, node, context) {
       if (carousel) components.push(carousel);
     }
     // Consume any pending delay set by an upstream Delay node (BullMQ holds the job).
-    const tplDelayMs = context.__pendingSendDelayMs || 0;
+    const tplDelayMs = messageSendDelayMs(node, context);
     await enqueueSend({
       kind: 'template',
       accountId: account.id,
       to: String(context.contact_number).replace(/\D/g, ''),
       localMessageId: localId,
       payload: { name: template?.name, languageCode: template?.language || 'en', components },
+      ...nextChainFields(context, executionId, tplDelayMs, messageGapOverrideMs(node)),
     }, { delayMs: tplDelayMs });
     context.__pendingSendDelayMs = 0;
 
@@ -545,7 +595,7 @@ async function executeMessageNode(client, executionId, node, context) {
     }
     // product/catalog removed with the e-commerce feature (migration 101) —
     // they built payloads against a catalog this app no longer tracks.
-    const STORED_TYPE_MAP = { quick_reply: 'interactive', list: 'interactive', cta_url: 'interactive', location_request: 'interactive', contact: 'contacts' };
+    const STORED_TYPE_MAP = { quick_reply: 'interactive', list: 'interactive', cta_url: 'interactive', location_request: 'interactive', flow: 'interactive', contact: 'contacts' };
     const storedMessageType = STORED_TYPE_MAP[directType] || directType;
     const localId = await insertPendingRow({
       account, toNumber: context.contact_number, messageType: storedMessageType, messageBody: resolvedBody,
@@ -578,7 +628,19 @@ async function executeMessageNode(client, executionId, node, context) {
         body: { text: resolvedBody.slice(0, 1024) },
         action: { buttons },
       };
-      if (headerText && headerText.trim()) {
+      if (dd.headerType === 'image' && dd.headerMediaLibraryId) {
+        // An image above the buttons. Resolved per SENDING account, because a
+        // Meta media id only works on the WABA that uploaded it.
+        //
+        // ⚠ A header that cannot be resolved drops the HEADER, never the
+        // message. The buttons are what move the customer on; losing
+        // "Register" because an image expired or was deleted would strand them.
+        try {
+          interactive.header = { type: 'image', image: { id: await metaMediaIdForLibrary(client, dd.headerMediaLibraryId, account.id) } };
+        } catch (err) {
+          console.warn(`[engine] quick_reply image header skipped (media ${dd.headerMediaLibraryId}): ${err.message}`);
+        }
+      } else if (headerText && headerText.trim()) {
         interactive.header = { type: 'text', text: String(headerText).slice(0, 60) };
       }
       payload = { interactive };
@@ -730,6 +792,11 @@ async function executeMessageNode(client, executionId, node, context) {
         interactive.footer = { text: String(ctaFooter).slice(0, 60) };
       }
       payload = { interactive };
+    } else if (directType === 'flow') {
+      // WhatsApp form steps were removed with the Forms feature (2026-10-16).
+      // A flow imported from before then still names this type; say so rather
+      // than sending something else.
+      throw new Error('automation WhatsApp form: WhatsApp forms were removed — replace this step with a message or a question');
     } else if (directType === 'location_request') {
       // Asks the customer to share their location. Their reply arrives as an
       // ordinary type:'location' inbound, so a waiting node resumes on it
@@ -785,6 +852,9 @@ async function executeMessageNode(client, executionId, node, context) {
             mediaId: sync.meta_media_id,
             caption: resolveVariables(dd.caption, context),
             filename: resolveVariables(dd.filename, context),
+            // An OGG/Opus library file is sent as a VOICE NOTE; anything else
+            // (mp3, m4a) stays a plain audio file, which is what it is.
+            ...(directType === 'audio' && /ogg|opus/i.test(media.mime_type || '') ? { voice: true } : {}),
           };
           // Mirror the library file to local disk so the chat bubble can
           // play/preview it via /api/media/:messageId — otherwise outbound
@@ -832,11 +902,12 @@ async function executeMessageNode(client, executionId, node, context) {
       throw new Error(`automation message: "${directType}" is not a message type this app can send.`);
     }
     // Consume any pending delay set by an upstream Delay node (BullMQ holds the job).
-    const directDelayMs = context.__pendingSendDelayMs || 0;
+    const directDelayMs = messageSendDelayMs(node, context);
     await enqueueSend({
       kind, accountId: account.id,
       to: String(context.contact_number).replace(/\D/g, ''),
       localMessageId: localId, payload,
+      ...nextChainFields(context, executionId, directDelayMs, messageGapOverrideMs(node)),
     }, { delayMs: directDelayMs });
     context.__pendingSendDelayMs = 0;
 
@@ -871,22 +942,80 @@ async function executeMessageNode(client, executionId, node, context) {
   // continuing, flip the execution to 'paused' and signal the walker to exit.
   // The resume path (in webhook.js → resumeAutomation) will pick up from the
   // children of this node when the customer's next inbound message arrives.
+  //
   if (node.waitForReply === true) {
-    const hours = Math.max(1, parseInt(node.waitTimeoutHours || 24, 10));
+    // Minutes when set, otherwise the long-standing whole hours. 30 days is the
+    // ceiling either way.
+    const minutes = node.waitTimeoutMinutes != null && node.waitTimeoutMinutes !== ''
+      ? Math.max(1, Math.min(43200, parseInt(node.waitTimeoutMinutes, 10) || 1))
+      : Math.max(1, parseInt(node.waitTimeoutHours || 24, 10)) * 60;
     await client.query(
       `UPDATE coexistence.automation_executions
           SET status='paused',
               awaiting_node_id=$1,
-              awaiting_kind='reply',
+              awaiting_kind=$5,
               paused_at=NOW(),
-              expires_at=NOW() + ($2 || ' hours')::INTERVAL,
+              expires_at=NOW() + ($2 || ' minutes')::INTERVAL,
               wa_number=$3
         WHERE id=$4`,
-      [node.id, String(hours), context.trigger_data?.wa_number || null, executionId]
+      [node.id, String(minutes), context.trigger_data?.wa_number || null, executionId, 'reply']
     );
     step.__pauseExecution = true;
   }
   return step;
+}
+
+// Ordered sends within one walk (see queue/sendChain.js). The key carries a
+// per-walk nonce: a RESUMED walk starts its sequence at 1 again, and sharing the
+// earlier walk's key would let its first message pass as "already accepted".
+// A message step's own "Pause before this message" (seconds), overriding the
+// flow's pause for that one message. null = no override (use the flow's).
+// Capped at 120 s: a chained send waits for its predecessor, and a longer hold
+// belongs in a Delay step.
+function messageGapOverrideMs(node) {
+  const raw = node && node.gapSeconds;
+  if (raw === undefined || raw === null || raw === '') return null;
+  const secs = Number(raw);
+  if (!Number.isFinite(secs) || secs < 0) return null;
+  return Math.min(secs, 120) * 1000;
+}
+
+// The BullMQ delay for a message step. The FIRST send of a walk has no previous
+// message to count a pause from, so its own pause is applied as a delay from now
+// instead — otherwise "pause 4 s before this message" on the opening message
+// would be a control that silently does nothing.
+function messageSendDelayMs(node, context) {
+  let delayMs = (context && context.__pendingSendDelayMs) || 0;
+  const own = messageGapOverrideMs(node);
+  if (own != null && !((context && context.__sendChainSeq) > 0)) delayMs += own;
+  return delayMs;
+}
+
+function nextChainFields(context, executionId, delayMs, gapOverrideMs = null) {
+  if (!executionId || !context) return {};
+  if (!context.__sendChainKey) {
+    context.__sendChainKey = `exec:${executionId}:${require('crypto').randomBytes(4).toString('hex')}`;
+  }
+  context.__sendChainSeq = (context.__sendChainSeq || 0) + 1;
+  const due = Date.now() + (Number(delayMs) || 0);
+  context.__sendChainDue = Math.max(context.__sendChainDue || 0, due);
+  const { CHAIN_GRACE_MS } = require('../queue/sendChain');
+  // The pause between messages (set on the trigger) is applied by the worker,
+  // counted from when the previous message reached Meta. The give-up moment
+  // allows for every pause before this message, or a slow chain would give up
+  // on a predecessor that is merely still pausing.
+  // A message step may set its own pause; otherwise the flow's. The give-up
+  // moment adds up every pause so far (for a flow with one uniform pause this is
+  // exactly the old gap x seq), so one long pause cannot make a later message
+  // give up on a predecessor that is only still pausing.
+  const gapMs = gapOverrideMs != null ? Number(gapOverrideMs) || 0 : (Number(context.__messageGapMs) || 0);
+  context.__sendChainGapSum = (context.__sendChainGapSum || 0) + gapMs;
+  return {
+    chainKey: context.__sendChainKey,
+    chainSeq: context.__sendChainSeq,
+    chainGapMs: gapMs,
+    chainGiveUpAt: context.__sendChainDue + context.__sendChainGapSum + CHAIN_GRACE_MS,
+  };
 }
 
 // NOTE (2026-08-12): the Payment node was removed. executePaymentNode and
@@ -900,6 +1029,10 @@ async function executeConditionNode(client, executionId, node, context) {
   const output = { matched, matchMode: node.matchMode || 'all', rulesEvaluated: (node.rules || []).length };
   return logStep(client, executionId, node, { rules: node.rules || [] }, output, 'success');
 }
+
+// The one word that restarts a conversation. EXACT match only: a message that
+// merely contains it ("please reset my password") is a sentence to a human.
+const RESET_WORD = 'reset';
 
 const DELAY_UNIT_MS = { seconds: 1000, minutes: 60000, hours: 3600000, days: 86400000 };
 const DELAY_MAX_MS = 7 * 86400000; // 7-day cap on a single delay
@@ -1600,16 +1733,14 @@ async function executeAgentNode(client, executionId, node, context) {
     // - response_format:json_object forces strict JSON on OpenAI/compatible APIs
     //   that support it (eliminates prose wrapping + the need for the schema hint).
     // - temperature 0 makes extraction deterministic.
-    const payload = {
+    const payload = applyCompletionParams({
       model: modelRef.modelId,
       messages: [
         { role: 'system', content: fullSys },
         ...priorHistory,
         { role: 'user', content: userMessage },
       ],
-      temperature: 0,
-      max_tokens: 256,
-    };
+    }, modelRef.modelId, { maxTokens: 256, temperature: 0 });
     // response_format is OpenAI-specific. Other providers ignore unknown fields
     // OR reject them — only opt in for OpenAI when JSON output is wanted.
     if (cred.provider === 'openai' && (outputVariables.length || conversational)) {
@@ -1819,6 +1950,142 @@ const NODE_HANDLERS = {
   subflow: executeSubflowNode,
 };
 
+/**
+ * Media Library row → the Meta media id usable from one WhatsApp account.
+ *
+ * Same resolution the direct image/video/document send uses: reuse the cached
+ * per-account upload unless it is missing, failed or past Meta's expiry, in
+ * which case re-upload. Throws when the row is gone or the upload fails, so the
+ * caller decides whether that is fatal.
+ */
+async function metaMediaIdForLibrary(client, mediaLibraryId, accountId) {
+  const { rows: mRows } = await client.query(
+    `SELECT id FROM coexistence.media_library WHERE id = $1 AND deleted_at IS NULL`, [mediaLibraryId]);
+  if (!mRows.length) throw new Error(`media library item ${mediaLibraryId} not found`);
+  const { rows: sRows } = await client.query(
+    `SELECT meta_media_id, status, expires_at FROM coexistence.media_meta_sync WHERE media_id = $1 AND account_id = $2`,
+    [mediaLibraryId, accountId]);
+  const cached = sRows[0];
+  const fresh = cached && cached.status === 'synced' && cached.meta_media_id &&
+    !(cached.expires_at && new Date(cached.expires_at) <= new Date());
+  if (fresh) return cached.meta_media_id;
+  const { syncMediaToAccount } = require('../routes/mediaLibrary');
+  const synced = await syncMediaToAccount(mediaLibraryId, accountId);
+  if (!synced || !synced.metaMediaId) throw new Error('upload to Meta returned no media id');
+  return synced.metaMediaId;
+}
+
+/**
+ * "RESET" — clear this person's conversation and say so. It does NOT start the
+ * flow again: the customer sends the trigger word for that (asked for
+ * explicitly — a restart that sent the first message unprompted read as the bot
+ * ignoring "reset" and answering something else).
+ *
+ * ⚠ WHY THIS IS NOT JUST ANOTHER TRIGGER. A paused run consumes the next
+ * inbound as its ANSWER, so the word never reaches trigger evaluation: typed
+ * mid-conversation it lands in whatever field was being asked for. It has
+ * already been stored as somebody's age. So the webhook checks for it BEFORE
+ * resuming, and calls this.
+ *
+ * Nobody with no automation history gets anything — there is nothing to reset,
+ * and a reply would message people who never started a flow. The runs are
+ * CANCELLED, not left to expire: a paused run would otherwise swallow the next
+ * message, including the trigger word they send to start again.
+ */
+
+// The reply names the words that start the automation they were in, so they
+// know what to send next. Built from the trigger itself — a hand-typed word
+// would go stale the day someone changes the keyword.
+function resetReplyText(automation) {
+  const trig = (automation?.config?.nodes || []).find(n => n.type === 'trigger' && !n.disabled);
+  const words = trig && (trig.triggerKind || 'keyword') === 'keyword'
+    ? [trig.keyword, ...(Array.isArray(trig.extraKeywords) ? trig.extraKeywords : []), ...triggerContainsWords(trig)]
+        .map(w => String(w || '').trim()).filter(Boolean)
+    : [];
+  const unique = [...new Set(words)];
+  if (!unique.length) return 'Your chat has been reset.';
+  const list = unique.map(w => `*${w}*`);
+  const joined = list.length === 1 ? list[0] : `${list.slice(0, -1).join(', ')} or ${list[list.length - 1]}`;
+  return `Your chat has been reset. Send ${joined} to start again.`;
+}
+
+async function resetForContact(record) {
+  const client = await pool.connect();
+  try {
+    // A landing-page flow runs once per visitor (services/landingLeads.js). RESET
+    // forgets that, so the next landing message sends the details, video, voice
+    // note and brochure again — the same "start over" this word means for every
+    // other flow. Done first and unconditionally: someone whose only history on
+    // THIS number is a landing welcome sent from the other number must still be
+    // resettable.
+    const landing = await landingLeads.clearForContact(record.contact_number);
+
+    // ⚠ The words we quote must belong to a flow that can still ANSWER. Naming a
+    // switched-off automation tells the customer to send a keyword nothing
+    // listens for — worse than saying nothing, because they try it and get
+    // silence. So an execution on a still-active flow outranks a more recent one
+    // on a retired flow. COALESCE, not a bare comparison: `c.status = 'active'`
+    // is NULL for a deleted automation and Postgres sorts NULLS FIRST on DESC,
+    // which would put exactly the wrong row on top.
+    const { rows } = await client.query(
+      `SELECT e.id, e.automation_id, e.status,
+              COALESCE(c.status = 'active', false) AS flow_active
+         FROM coexistence.automation_executions e
+         LEFT JOIN coexistence.chatbots c ON c.id = e.automation_id
+        WHERE e.wa_number = $1 AND e.contact_number = $2
+        ORDER BY COALESCE(c.status = 'active', false) DESC,
+                 (e.status = 'paused') DESC, e.started_at DESC
+        LIMIT 1`,
+      [record.wa_number, record.contact_number]
+    );
+    const usable = rows.length && rows[0].flow_active ? rows[0] : null;
+    // Nothing usable to name. On a number a landing flow listens on, answer with
+    // that flow's words rather than fall silent; elsewhere, unchanged.
+    const landingFlowId = (!usable && !landing.cleared)
+      ? await landingLeads.activeLandingFlowOn(record.wa_number) : null;
+    if (!rows.length && !landing.cleared && !landingFlowId) return false;
+    // null => resetReplyText falls back to a plain "Your chat has been reset.",
+    // which is the honest answer when every flow this person touched is off.
+    const automationId = usable
+      ? usable.automation_id
+      : (landing.automationId || landingFlowId || null);
+
+    const { rowCount: cancelled } = await client.query(
+      `UPDATE coexistence.automation_executions
+          SET status = 'cancelled', completed_at = NOW(), error_message = 'Reset by RESET'
+        WHERE wa_number = $1 AND contact_number = $2 AND status = 'paused'`,
+      [record.wa_number, record.contact_number]
+    );
+
+    const { rows: bots } = await client.query(
+      `SELECT id, config FROM coexistence.chatbots WHERE id = $1`, [automationId]);
+    const body = resetReplyText(bots[0]);
+
+    const { resolveAccount, insertPendingRow } = require('../services/messageSender');
+    const { enqueueSend } = require('../queue/sendQueue');
+    const { account, error: accErr } = await resolveAccount({ fromPhoneNumber: record.wa_number });
+    if (accErr || !account) {
+      console.error(`[engine] RESET reply not sent to ${record.contact_number}: ${accErr || 'no account'}`);
+      return true;   // the reset itself happened; do not fall through to triggers
+    }
+    const localId = await insertPendingRow({
+      account, toNumber: record.contact_number, messageType: 'text', messageBody: body, sendOrigin: 'automation',
+    });
+    await enqueueSend({
+      kind: 'text', accountId: account.id,
+      to: String(record.contact_number).replace(/\D/g, ''),
+      localMessageId: localId, payload: { body, previewUrl: false },
+    });
+    console.log(`[engine] RESET cleared ${cancelled} run(s)${landing.cleared ? ` + ${landing.cleared} landing welcome(s)` : ''} for ${record.contact_number} (automation ${automationId})`);
+    return true;
+  } catch (err) {
+    console.error('[engine] resetForContact error:', err.message);
+    return false;
+  } finally {
+    client.release();
+  }
+}
+
 // ─── Graph Walker ────────────────────────────────────────────────────
 
 async function executeAutomation(client, automation, context) {
@@ -1885,6 +2152,14 @@ async function executeAutomation(client, automation, context) {
 // the walker exited without finishing and the caller should NOT mark the
 // execution as success (the pausing handler already flipped it to 'paused').
 async function walkFrom(client, executionId, nodes, edges, startNodeId, context, visited = new Set()) {
+  // "Pause between messages" lives on the trigger. Read here because every walk
+  // — a fresh run, a resumed reply, a form submission, an expired wait — goes
+  // through walkFrom, so no entry point can forget it.
+  if (context && context.__messageGapMs === undefined) {
+    const trig = nodes.find(n => n.type === 'trigger' && !n.disabled);
+    const secs = Number(trig && trig.messageGapSeconds);
+    context.__messageGapMs = Number.isFinite(secs) && secs > 0 ? Math.min(secs, 60) * 1000 : 0;
+  }
   let currentNodeId = startNodeId;
   while (currentNodeId && !visited.has(currentNodeId)) {
     visited.add(currentNodeId);
@@ -2064,6 +2339,27 @@ async function resumeAutomation(client, executionId, record) {
     // branch the customer actually chose, and follow it.
     resolvedHandle = resolveReplyHandle(pausedNode, record);
 
+    // "Only continue when a button is tapped": a typed message is NOT an answer
+    // to a step that offered buttons. Put the run back to waiting instead of
+    // following `nomatch`, so nobody receives the next button's response
+    // without pressing it. The webhook still stores the message in Chats and
+    // starts nothing else. RESET is handled before this is ever reached.
+    if (pausedNode.buttonsOnly === true && !resolvedHandle) {
+      await client.query(
+        `UPDATE coexistence.automation_executions SET status='paused' WHERE id=$1 AND status='running'`,
+        [executionId]
+      );
+      await logStep(
+        client, executionId,
+        { id: pausedNode.id, type: 'reply_routing', title: 'Reply received' },
+        { reply_kind: record.reply_kind || 'text', reply_label: record.reply_label || record.message_body || null },
+        { resolved_handle: null, followed_handle: null, matched: false, kept_waiting: true,
+          note: 'Not a button tap — still waiting for a button' },
+        'skipped'
+      );
+      return execRow;
+    }
+
     // Candidate handles in priority order. `default` stays last on every
     // waiting node so this change is ADDITIVE — an old flow wired only to
     // `default` keeps behaving exactly as it did.
@@ -2168,16 +2464,16 @@ async function resumeAutomation(client, executionId, record) {
  *
  * Returns { resumed, closed }.
  */
-async function resumeExpiredWaits(client, limit = 50) {
+async function resumeExpiredWaits(client, limit = 50, kinds = ['reply']) {
   const { rows: due } = await client.query(
-    `SELECT e.id, e.automation_id, e.awaiting_node_id, e.contact_number, e.wa_number
+    `SELECT e.id, e.automation_id, e.awaiting_node_id, e.contact_number, e.wa_number, e.awaiting_kind
        FROM coexistence.automation_executions e
       WHERE e.status='paused'
         AND e.expires_at < NOW()
-        AND COALESCE(e.awaiting_kind,'reply') = 'reply'
+        AND COALESCE(e.awaiting_kind,'reply') = ANY($2::text[])
       ORDER BY e.paused_at
       LIMIT $1`,
-    [limit]
+    [limit, kinds]
   );
 
   let resumed = 0;
@@ -2341,11 +2637,49 @@ async function evaluateTriggers(messageRecord) {
 
     // Field definitions for {{custom_field_name}} resolution + AI persistence.
 
+    // ── Landing-page pass (opt-in) ──────────────────────────────────────────
+    // A keyword trigger with `landingSource` set fires only for someone whose
+    // details the landing page stored (services/landingLeads.js), and then runs
+    // ALONE for this message: a New Contact flow on the same number must not
+    // also start its own questions. Only flows that opted in are considered, so
+    // every other message goes straight to the loop below exactly as before.
+    const landingCandidates = landingLeads.landingCandidates(automations, messageRecord);
+    for (const [sourceKey, flows] of landingCandidates) {
+      const match = await landingLeads.findLandingRecord(sourceKey, messageRecord);
+      if (!match) continue;
+      const claim = await landingLeads.claimAndApply({ match, record: messageRecord, automationId: flows[0].id });
+      // No claim = this visitor was already welcomed. The message then takes the
+      // ordinary path below (where landing-gated flows never fire).
+      if (!claim) continue;
+      for (const automation of flows) {
+        console.log(`[engine] Landing match (${sourceKey}, ${claim.matchedBy}): automation=${automation.id}`);
+        // The shared context is mutated by a walk; each landing run gets its own.
+        // The details ride on the tokens a WhatsApp Form walk already uses, so
+        // {{form_name}} / {{form_summary}} resolve with no resolver change.
+        const landingContext = {
+          ...context,
+          form_answers: claim.details.answers,
+          form_summary: claim.details.summary,
+          trigger_data: {
+            ...context.trigger_data,
+            landing: { source: sourceKey, landing_lead_id: claim.landingLeadId, matched_by: claim.matchedBy, link_id: claim.linkId },
+          },
+        };
+        const execution = await executeAutomation(client, automation, landingContext);
+        if (execution) executions.push(execution);
+      }
+      return executions;
+    }
+
     for (const automation of automations) {
       const config = automation.config || {};
       const nodes = config.nodes || [];
       const triggerNode = nodes.find(n => n.type === 'trigger');
       if (!triggerNode) continue;
+      // A landing-gated flow fires only through the pass above — without a
+      // stored landing record it must NOT behave as a plain keyword flow (the
+      // Click-to-WhatsApp ad messages contain the same words).
+      if (landingLeads.landingSourceOf(automation)) continue;
 
       // WhatsApp-account filter: if the trigger node names specific accounts,
       // only fire when the inbound record arrived on one of them. Empty/missing
@@ -2373,12 +2707,9 @@ async function evaluateTriggers(messageRecord) {
       }
 
       if (triggerKind === 'keyword') {
-        const keyword = triggerNode.keyword || '';
-        const matchType = triggerNode.matchType || 'exact';
-        const caseSensitive = !!triggerNode.caseSensitive;
-
-        if (matchesKeyword(messageRecord.message_body, keyword, matchType, caseSensitive)) {
-          console.log(`[engine] Keyword match: automation=${automation.id} keyword="${keyword}"`);
+        const hit = keywordTriggerHit(triggerNode, messageRecord.message_body);
+        if (hit) {
+          console.log(`[engine] Keyword match: automation=${automation.id} keyword="${hit}"`);
           const execution = await executeAutomation(client, automation, context);
           if (execution) executions.push(execution);
         }
@@ -2553,7 +2884,15 @@ async function evaluateOutboundTriggers(record) {
 }
 
 module.exports = {
+  keywordTriggerHit,
+  nextChainFields,
+  messageGapOverrideMs,
+  messageSendDelayMs,
   evaluateTriggers,
+  resetForContact,
+  resetReplyText,
+  RESET_WORD,
+  metaMediaIdForLibrary,
   evaluateOutboundTriggers,
   markOutboundHandled,
   executeAutomation,

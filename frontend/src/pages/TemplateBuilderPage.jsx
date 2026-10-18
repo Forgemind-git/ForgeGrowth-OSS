@@ -6,18 +6,23 @@ import {
   Image, Video, FileText, Type, Link, Phone, Reply, KeyRound, Loader2, Send,
   Clock, AlertCircle, CheckCircle2, XCircle, Info, Download, RefreshCw,
   Play, Smile, Paperclip, Mic, History, RotateCcw, User, BarChart3, MousePointerClick,
-  Library, Music, CreditCard, FolderKanban
+  Library, Music, CreditCard, ChevronRight, ChevronLeft, Save, ClipboardCheck, MousePointer2, MessageSquareText, Settings2
 } from 'lucide-react';
 import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx';
 import { useConfirm } from '../components/ConfirmDialog.jsx';
 import { useTableSelection, SelectAllCheckbox, RowCheckbox, BulkDeleteButton, runBulkDelete } from '../components/TableSelection.jsx';
-import { PhoneFrame } from '../components/WhatsAppPreview.jsx';
+import { PhoneFrame, templateButtonView, VideoThumb } from '../components/WhatsAppPreview.jsx';
+import { SimShell, Bubble, ChatDay, ChatEmpty, DocChip, mediaStyle, WA } from '../components/sim/SimKit.jsx';
 import SearchableSelect from '../components/SearchableSelect.jsx';
+import PillStrip from '../components/PillStrip.jsx';
 import SortControl from '../components/SortControl.jsx';
 import { sortList, DEFAULT_SORT } from '../lib/listSort.js';
 import AccountHealthBanner from '../components/AccountHealthBanner.jsx';
+import ViewToggle, { useViewMode } from '../components/ViewToggle.jsx';
+import MessageCardPreview from '../components/MessageCardPreview.jsx';
 import { api } from '../api.js';
 import { C, FONT, maskPhone } from '../constants.js';
+import { useHubEditing } from '../components/AutomationHub.jsx';
 
 // ─── Builder-local Design Tokens (purple accent per plan) ─────────────────────
 // Every entry maps to a themed token. These used to be hardcoded light hex
@@ -272,7 +277,7 @@ function Sec({ n, title, note, children }) {
   return (
     <div style={{ background: B.card, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: '16px 18px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-        <span style={{ width: 22, height: 22, borderRadius: 99, background: B.accent, color: '#fff', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: FONT }}>{n}</span>
+        {n != null && <span style={{ width: 22, height: 22, borderRadius: 99, background: B.accent, color: '#fff', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: FONT }}>{n}</span>}
         <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--c-t6, #888)', fontWeight: 700, fontFamily: FONT }}>{title}</span>
         {note && <span style={{ fontSize: 12, color: '#bbb', fontFamily: FONT, textTransform: 'none', letterSpacing: 0, fontStyle: 'italic' }}>{note}</span>}
       </div>
@@ -284,7 +289,7 @@ function Sec({ n, title, note, children }) {
 function Toggle({ on, onChange, label, desc }) {
   return (
     <div onClick={() => onChange(!on)} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 14px', background: on ? B.greenBg : B.innerBg, border: `1.5px solid ${on ? B.greenBright + '66' : B.innerBorder}`, borderRadius: 10, transition: 'all .15s' }}>
-      <div style={{ width: 36, height: 20, borderRadius: 99, background: on ? B.greenBright : 'var(--c-borderStrong, #D5D5D0)', transition: 'background .2s', position: 'relative', flexShrink: 0 }}>
+      <div style={{ width: 36, height: 20, borderRadius: 99, background: on ? B.greenBright : 'var(--c-fillMuted, #d5d5d0)', transition: 'background .2s', position: 'relative', flexShrink: 0 }}>
         <div style={{ position: 'absolute', top: 2, left: on ? 18 : 2, width: 16, height: 16, borderRadius: 99, background: 'var(--c-cardBg)', transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
       </div>
       <div>
@@ -308,115 +313,58 @@ function StatusBadge({ status }) {
 
 // ─── WhatsApp Preview ─────────────────────────────────────────────────────────
 function WaPreview({ headerType, headerText, bodyText, footerText, buttons, securityRec, codeExpiry, headerMediaLibraryId, templateType, carouselCards, fill = false }) {
-  const hasBubble = bodyText || footerText || (headerType !== 'NONE' && (headerText || ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(headerType)));
+  // Drawn with the shared simulator kit, so this phone is the same one the
+  // flow builder, the agent test chat and the broadcast preview show. The
+  // business message arrives on the LEFT, the way the customer sees it.
+  const isMediaHeader = ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(headerType);
+  const hasBubble = bodyText || footerText || (headerType !== 'NONE' && (headerText || isMediaHeader));
   const hasButtons = buttons.length > 0;
-  const bRadius = hasButtons ? '7.5px 7.5px 0 0' : '7.5px 7.5px 0 7.5px';
+  const src = headerMediaLibraryId ? api.mediaLibrary.downloadUrl(headerMediaLibraryId) : null;
 
-  const bIcon = (type) => {
-    if (type === 'URL') return <Link size={14} color={B.waHeader} />;
-    if (type === 'PHONE_NUMBER') return <Phone size={14} color={B.waHeader} />;
-    if (type === 'OTP') return <KeyRound size={14} color={B.waHeader} />;
-    return <Reply size={14} color={B.waHeader} />;
-  };
-  const bLabel = (btn) => btn.text || (btn.type === 'QUICK_REPLY' ? 'Quick Reply' : btn.type === 'URL' ? 'Visit Website' : btn.type === 'PHONE_NUMBER' ? 'Call Us' : 'Copy Code');
+  const media = headerType === 'IMAGE'
+    ? (src
+        ? <img src={src} alt="" style={{ ...mediaStyle, height: 130, objectFit: 'cover' }} />
+        : <div style={{ height: 120, borderRadius: 6, background: 'linear-gradient(135deg,var(--c-borderStrong, #c9c9c9),#999)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Image size={28} color="rgba(255,255,255,.8)" /></div>)
+    : headerType === 'VIDEO' ? <VideoThumb src={src} />
+    : headerType === 'DOCUMENT' ? <DocChip name={src ? 'Document' : 'document.pdf'} kind="PDF" />
+    : null;
 
   return (
-    <PhoneFrame headerTitle="Your Business" headerSubtitle="online" minHeight={330} height={fill ? '100%' : 580}>
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
-        <span style={{ background: 'var(--c-infoBg, #E1F2FA)', color: 'var(--c-s3c6678, #3C6678)', fontSize: 11, padding: '2px 9px', borderRadius: 99, fontWeight: 600 }}>TODAY</span>
-      </div>
+    <PhoneFrame headerTitle="Your Business" headerSubtitle="online" height={fill ? '100%' : 620}>
+      <ChatDay />
       {!hasBubble && !hasButtons ? (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20, textAlign: 'center' }}>
-          <div style={{ fontSize: 30, marginBottom: 6, opacity: 0.4 }}>💬</div>
-          <div style={{ fontSize: 12, color: 'var(--c-t6, #888)', fontWeight: 500, lineHeight: 1.5, fontFamily: FONT }}>Your message<br />will appear here</div>
-        </div>
+        <ChatEmpty>{'Your message\nwill appear here'}</ChatEmpty>
       ) : (
-        <div style={{ marginLeft: 'auto', maxWidth: '88%', minWidth: '55%' }}>
-          <div style={{ background: 'var(--c-sdcf8c6, #DCF8C6)', borderRadius: bRadius, padding: '6px 7px 5px 9px', boxShadow: '0 1px 0.5px rgba(11,20,26,.13)', position: 'relative', marginRight: hasButtons ? 0 : 8 }}>
-            {!hasButtons && <div style={{ position: 'absolute', bottom: 0, right: -8, width: 0, height: 0, borderStyle: 'solid', borderWidth: '0 0 9px 9px', borderColor: 'transparent transparent #DCF8C6 transparent' }} />}
-            {headerType === 'IMAGE' && (
-              headerMediaLibraryId
-                ? <img src={api.mediaLibrary.downloadUrl(headerMediaLibraryId)} alt="" style={{ margin: '-6px -7px 6px -9px', borderRadius: '7.5px 7.5px 0 0', height: 120, width: 'calc(100% + 16px)', objectFit: 'cover', display: 'block' }} />
-                : <div style={{ margin: '-6px -7px 6px -9px', borderRadius: '7.5px 7.5px 0 0', height: 120, background: 'linear-gradient(135deg,var(--c-borderStrong, #c9c9c9),#999)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Image size={28} color="rgba(255,255,255,.8)" /></div>
-            )}
-            {headerType === 'VIDEO' && (
-              headerMediaLibraryId
-                ? <div style={{ margin: '-6px -7px 6px -9px', borderRadius: '7.5px 7.5px 0 0', height: 120, position: 'relative', overflow: 'hidden' }}>
-                    <video src={api.mediaLibrary.downloadUrl(headerMediaLibraryId)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} preload="metadata" muted />
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)' }}>
-                      <div style={{ width: 38, height: 38, borderRadius: 99, background: 'rgba(255,255,255,.15)', border: '1.5px solid rgba(255,255,255,.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Play size={16} color="white" fill="white" />
-                      </div>
-                    </div>
-                  </div>
-                : <div style={{ margin: '-6px -7px 6px -9px', borderRadius: '7.5px 7.5px 0 0', height: 120, background: '#1A1A1A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ width: 38, height: 38, borderRadius: 99, background: 'rgba(255,255,255,.15)', border: '1.5px solid rgba(255,255,255,.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Play size={16} color="white" fill="white" /></div></div>
-            )}
-            {headerType === 'DOCUMENT' && (
-              headerMediaLibraryId
-                ? <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 8px', background: 'rgba(0,0,0,.06)', borderRadius: 6, marginBottom: 7 }}>
-                    <div style={{ width: 34, height: 38, background: 'var(--c-cardBg)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 1px 3px rgba(0,0,0,.15)', position: 'relative', overflow: 'hidden' }}>
-                      <div style={{ position: 'absolute', top: 0, right: 0, width: 10, height: 10, background: '#e94235', clipPath: 'polygon(100% 0,0 0,100% 100%)' }} />
-                      <FileText size={16} color="#9e9e9e" />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--c-text)', fontFamily: FONT }}>Document</div>
-                      <div style={{ fontSize: 11, color: 'var(--c-textMuted)', marginTop: 1, fontFamily: FONT }}>From Media Library</div>
-                    </div>
-                  </div>
-                : <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 8px', background: 'rgba(0,0,0,.06)', borderRadius: 6, marginBottom: 7 }}><div style={{ width: 34, height: 38, background: 'var(--c-cardBg)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 1px 3px rgba(0,0,0,.15)', position: 'relative', overflow: 'hidden' }}><div style={{ position: 'absolute', top: 0, right: 0, width: 10, height: 10, background: '#e94235', clipPath: 'polygon(100% 0,0 0,100% 100%)' }} /><FileText size={16} color="#9e9e9e" /></div><div><div style={{ fontSize: 13, fontWeight: 600, color: 'var(--c-text)', fontFamily: FONT }}>document.pdf</div><div style={{ fontSize: 11, color: 'var(--c-textMuted)', marginTop: 1, fontFamily: FONT }}>PDF · 1 page</div></div></div>
-            )}
-            {headerType === 'TEXT' && headerText && <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--c-text)', marginBottom: 4, lineHeight: 1.4, fontFamily: FONT }}>{headerText}</div>}
-            {bodyText && <div style={{ fontSize: 15, color: 'var(--c-text)', lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: FONT }}>{bodyText}</div>}
-            {securityRec && <div style={{ fontSize: 13, color: 'var(--c-textSecondary)', marginTop: 4, fontFamily: FONT }}>🔒 For your security, do not share this code.</div>}
-            {codeExpiry && <div style={{ fontSize: 13, color: 'var(--c-textSecondary)', marginTop: 2, fontFamily: FONT }}>⏱ This code expires in {codeExpiry} minute{+codeExpiry !== 1 ? 's' : ''}.</div>}
-            {footerText && <div style={{ fontSize: 13, color: 'var(--c-textSecondary)', marginTop: 4, fontFamily: FONT }}>{footerText}</div>}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 3, marginTop: 2, marginBottom: -1 }}>
-              <span style={{ fontSize: 12, color: 'var(--c-textSecondary)', fontFamily: FONT }}>9:41</span>
-              <svg width="16" height="11" viewBox="0 0 16 11" fill="none"><path d="M1 5.5L5 9.5L11.5 1" stroke="#53BDEB" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /><path d="M5 5.5L9 9.5L15.5 1" stroke="#53BDEB" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            </div>
-          </div>
-          {hasButtons && (
-            <div style={{ background: 'var(--c-cardBg)', borderRadius: '0 0 7.5px 7.5px', overflow: 'hidden', boxShadow: '0 1px 0.5px rgba(11,20,26,.13)' }}>
-              {buttons.map((btn, i) => (
-                <div key={i} style={{ padding: '9px 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, borderTop: '1px solid rgba(0,0,0,.07)' }}>
-                  {bIcon(btn.type)}
-                  <span style={{ fontSize: 15, fontWeight: 500, color: B.waHeader, fontFamily: FONT }}>{bLabel(btn)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <Bubble from="bot" media={media} buttons={buttons.map(templateButtonView)} testId="tpl-preview-bubble">
+          {headerType === 'TEXT' && headerText && <div style={{ fontWeight: 700, marginBottom: 3 }}>{headerText}</div>}
+          {bodyText}
+          {securityRec && <div style={{ fontSize: 12, color: WA.time, marginTop: 4 }}>For your security, do not share this code.</div>}
+          {codeExpiry && <div style={{ fontSize: 12, color: WA.time, marginTop: 2 }}>This code expires in {codeExpiry} minute{+codeExpiry !== 1 ? 's' : ''}.</div>}
+          {footerText && <div style={{ fontSize: 12, color: WA.time, marginTop: 4 }}>{footerText}</div>}
+        </Bubble>
       )}
       {templateType === 'CAROUSEL' && Array.isArray(carouselCards) && carouselCards.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginTop: 8, paddingBottom: 4, marginLeft: 'auto', maxWidth: '94%' }}>
+        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginTop: 4, paddingBottom: 4, maxWidth: '94%', flexShrink: 0 }}>
           {carouselCards.map((card, ci) => (
-            <div key={ci} style={{ flex: '0 0 150px', background: 'var(--c-sdcf8c6, #DCF8C6)', borderRadius: 7.5, overflow: 'hidden', boxShadow: '0 1px 0.5px rgba(11,20,26,.13)' }}>
+            <div key={ci} style={{ flex: '0 0 150px', background: WA.incoming, borderRadius: 8, overflow: 'hidden', boxShadow: WA.shadow }}>
               {card.media_library_id ? (
-                card.header_type === 'VIDEO' ? (
-                  <div style={{ position: 'relative', height: 90 }}>
-                    <video src={api.mediaLibrary.downloadUrl(card.media_library_id)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} preload="metadata" muted />
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.25)' }}><Play size={16} color="#fff" fill="#fff" /></div>
-                  </div>
-                ) : (
-                  <img src={api.mediaLibrary.downloadUrl(card.media_library_id)} alt="" style={{ width: '100%', height: 90, objectFit: 'cover', display: 'block' }} />
-                )
+                card.header_type === 'VIDEO'
+                  ? <VideoThumb src={api.mediaLibrary.downloadUrl(card.media_library_id)} height={90} />
+                  : <img src={api.mediaLibrary.downloadUrl(card.media_library_id)} alt="" style={{ width: '100%', height: 90, objectFit: 'cover', display: 'block' }} />
               ) : (
                 <div style={{ height: 90, background: 'linear-gradient(135deg,var(--c-borderStrong, #c9c9c9),#999)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {card.header_type === 'VIDEO' ? <Video size={20} color="rgba(255,255,255,.85)" /> : <Image size={20} color="rgba(255,255,255,.85)" />}
                 </div>
               )}
-              <div style={{ padding: '6px 8px' }}>
-                <div style={{ fontSize: 13, color: 'var(--c-text)', lineHeight: 1.4, fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{card.body || 'Card text'}</div>
-              </div>
-              {(card.buttons || []).length > 0 && (
-                <div style={{ background: 'var(--c-cardBg)' }}>
-                  {(card.buttons || []).map((b, bi) => (
-                    <div key={bi} style={{ padding: '6px 8px', textAlign: 'center', borderTop: '1px solid rgba(0,0,0,.07)', fontSize: 13, fontWeight: 500, color: B.waHeader, fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-                      {bIcon(b.type)} {b.text || (b.type === 'URL' ? 'Visit' : b.type === 'PHONE_NUMBER' ? 'Call' : 'Reply')}
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div style={{ padding: '6px 8px', fontSize: 12.5, color: WA.text, lineHeight: 1.4, fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{card.body || 'Card text'}</div>
+              {(card.buttons || []).map((b, bi) => {
+                const v = templateButtonView(b);
+                return (
+                  <div key={bi} style={{ padding: '7px 8px', textAlign: 'center', borderTop: WA.divider, fontSize: 12.5, fontWeight: 600, color: WA.button, fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                    {v.icon} {v.label}
+                  </div>
+                );
+              })}
             </div>
           ))}
         </div>
@@ -455,7 +403,7 @@ function ButtonsSection({ buttons, onAdd, onRemove, onUpdate, category, errors }
   const tLabel = { QUICK_REPLY: 'Quick Reply', URL: 'Visit Website', PHONE_NUMBER: 'Call Phone', OTP: 'OTP / Copy Code', COPY_CODE: 'Copy Coupon Code' };
 
   return (
-    <Sec n={6} title="Buttons" note="optional">
+    <Sec title="Buttons" note="optional — tap-able actions under the message">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ fontSize: 14, color: B.t5, fontFamily: FONT }}>
           {isAuth ? 'Auth templates: OTP buttons only.' : `${buttons.length}/3 buttons.`}
@@ -640,7 +588,7 @@ function LibraryBrowseModal({ open, accounts, onClose, onCloned }) {
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 250 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, width: 760, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: FONT, boxShadow: C.shadowLg }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, width: 760, maxHeight: 'calc(85vh / var(--fg-zoom, 1))', display: 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: FONT, boxShadow: C.shadowLg }}>
         <div style={{ padding: '18px 24px', borderBottom: `1px solid ${B.cardBorder}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ fontSize: 18, fontWeight: 700, color: B.t1 }}>Browse Meta Template Library</div>
@@ -685,7 +633,7 @@ function LibraryBrowseModal({ open, accounts, onClose, onCloned }) {
                     <div style={{ fontSize: 13, color: B.t5, lineHeight: 1.4, minHeight: 40, maxHeight: 60, overflow: 'hidden' }}>
                       {(body?.text || '').slice(0, 120)}{(body?.text || '').length > 120 ? '…' : ''}
                     </div>
-                    <button onClick={() => clone(lib)} disabled={isCloning || !accountId} style={{ marginTop: 'auto', padding: '7px 12px', border: 'none', borderRadius: 6, background: isCloning ? 'var(--c-borderStrong, #ccc)' : B.green, color: '#fff', cursor: isCloning ? 'wait' : 'pointer', fontSize: 13, fontWeight: 700, fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                    <button onClick={() => clone(lib)} disabled={isCloning || !accountId} style={{ marginTop: 'auto', padding: '7px 12px', border: 'none', borderRadius: 6, background: isCloning ? 'var(--c-fillMuted, #d5d5d0)' : B.green, color: '#fff', cursor: isCloning ? 'wait' : 'pointer', fontSize: 13, fontWeight: 700, fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
                       {isCloning ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> : '+'} Clone to DRAFT
                     </button>
                   </div>
@@ -705,6 +653,9 @@ function TemplateList({ templates, loading, onAdd, onEdit, onDelete, onView, onB
   const [statusFilter, setStatusFilter] = useState('all');
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [sort, setSort] = useState(DEFAULT_SORT);
+  // Grid shows each template as a card with a WhatsApp preview — easier to
+  // find "the one with the blue button" than by reading names in a table.
+  const [viewMode, setViewMode] = useViewMode('forgegrowth.templates.view', 'grid');
 
   // Apply text/status filters first
   const filteredFlat = useMemo(() => {
@@ -760,18 +711,10 @@ function TemplateList({ templates, loading, onAdd, onEdit, onDelete, onView, onB
     [filtered, sel]
   );
 
-  const chipStyle = (active) => ({
-    padding: '6px 12px', borderRadius: 99, fontSize: 14, fontWeight: 600, fontFamily: FONT,
-    border: `1px solid ${active ? C.primary : 'var(--c-borderStrong, #D5D5D0)'}`,
-    background: active ? C.primary : 'var(--c-cardBg)',
-    color: active ? '#fff' : B.t3, cursor: 'pointer',
-  });
-
   return (
     <div style={{ padding: 24, fontFamily: FONT }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: B.t1, margin: 0, letterSpacing: '-.02em' }}>Message Templates</h1>
           <p style={{ fontSize: 14, color: B.t5, margin: '4px 0 0' }}>Create and manage WhatsApp Business API message templates.</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -800,9 +743,9 @@ function TemplateList({ templates, loading, onAdd, onEdit, onDelete, onView, onB
         </div>
       </div>
 
-      {/* Status filter chips */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-        {[
+      {/* Status filter — one sliding pill strip, counts as badges */}
+      <div style={{ marginBottom: 14 }}>
+        <PillStrip value={statusFilter} onChange={setStatusFilter} items={[
           { k: 'all', label: 'All' },
           { k: 'DRAFT', label: 'Draft' },
           { k: 'SUBMITTED', label: 'Pending' },
@@ -810,11 +753,7 @@ function TemplateList({ templates, loading, onAdd, onEdit, onDelete, onView, onB
           { k: 'REJECTED', label: 'Rejected' },
           { k: 'PAUSED', label: 'Paused' },
           { k: 'DISABLED', label: 'Disabled' },
-        ].map(c => (
-          <button key={c.k} onClick={() => setStatusFilter(c.k)} style={chipStyle(statusFilter === c.k)}>
-            {c.label} <span style={{ opacity: 0.7, marginLeft: 4 }}>{counts[c.k]}</span>
-          </button>
-        ))}
+        ].map(c => ({ id: c.k, label: c.label, badge: counts[c.k] }))} />
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -828,6 +767,12 @@ function TemplateList({ templates, loading, onAdd, onEdit, onDelete, onView, onB
           />
         </div>
         <SortControl value={sort} onChange={setSort} />
+        <ViewToggle value={viewMode} onChange={setViewMode} />
+        {viewMode === 'grid' && filtered.length > 0 && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: B.t4, fontFamily: FONT, cursor: 'pointer' }}>
+            <SelectAllCheckbox sel={sel} /> Select all
+          </label>
+        )}
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: B.t4, fontFamily: FONT, cursor: 'pointer' }}>
           <input type="checkbox" checked={groupByTranslation} onChange={e => onToggleGroup(e.target.checked)} />
           Group translations
@@ -866,13 +811,51 @@ function TemplateList({ templates, loading, onAdd, onEdit, onDelete, onView, onB
             <Plus size={16} /> Add Template
           </button>
         </div>
+      ) : viewMode === 'grid' ? (
+        <div data-testid="template-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+          {filtered.map(t => {
+            const cat = CATEGORIES.find(c => c.id === t.category);
+            const canEdit = ['DRAFT', 'REJECTED', 'APPROVED', 'PAUSED'].includes(t.status);
+            const iconBtn = { width: 30, height: 30, borderRadius: 8, border: 'none', background: B.innerBg, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: B.t4 };
+            return (
+              <div key={t.id} data-template-card={t.id} onClick={() => onView(t)}
+                style={{ background: B.card, border: `1.5px solid ${sel.isSelected(t.id) ? B.accent : B.cardBorder}`, borderRadius: 14, overflow: 'hidden', cursor: 'pointer', display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
+                <div style={{ position: 'relative' }}>
+                  <MessageCardPreview template={t} topInset={30} height={230} />
+                  <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: 8, left: 8, background: 'var(--c-cardBg)', borderRadius: 6, padding: '2px 3px', lineHeight: 0 }}>
+                    <RowCheckbox sel={sel} id={t.id} label={t.name} />
+                  </div>
+                  <div style={{ position: 'absolute', top: 8, right: 8 }}><StatusBadge status={t.status} /></div>
+                </div>
+                <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+                  <div title={t.name} style={{ fontSize: 15, fontWeight: 700, color: B.t1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 12.5, color: B.t5 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 4, background: cat?.bg || B.innerBg, color: cat?.color || B.t4, fontWeight: 700 }}>
+                      {cat && <cat.icon size={11} />} {cat?.label || t.category}
+                    </span>
+                    <span style={{ textTransform: 'uppercase', fontFamily: 'DM Mono, monospace' }}>{t._siblings && t._siblings.length > 1 ? t._siblings.map(x => x.language).join(' · ') : t.language}</span>
+                    <span>· {t.whatsappAccountName || 'Unassigned'}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 'auto', paddingTop: 4 }}>
+                    <span style={{ flex: 1, fontSize: 12.5, color: B.t6 }}>{t.sendCount || 0} sent · {new Date(t.created_at).toLocaleDateString()}</span>
+                    <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: 5 }}>
+                      {canEdit && <button onClick={() => onEdit(t)} title="Edit" style={iconBtn}><Pencil size={13} /></button>}
+                      <button onClick={() => onDuplicate(t)} title="Duplicate" style={iconBtn}><Copy size={13} /></button>
+                      <button onClick={() => setDeleteModal({ open: true, template: t })} title="Delete" style={{ ...iconBtn, color: B.red }}><Trash2 size={13} /></button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       ) : (
         <div style={{ background: B.card, border: `1px solid ${B.cardBorder}`, borderRadius: 12, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT }}>
             <thead>
               <tr style={{ background: B.innerBg, borderBottom: `1px solid ${B.cardBorder}` }}>
                 <th style={{ padding: '10px 14px', width: 36 }}><SelectAllCheckbox sel={sel} /></th>
-                {['Name', 'Account', 'Project', 'Category', 'Language', 'Status', 'Sent', 'Created', 'Actions'].map(h => (
+                {['Name', 'Account', 'Category', 'Language', 'Status', 'Sent', 'Created', 'Actions'].map(h => (
                   <th key={h} style={{ padding: '10px 14px', fontSize: 13, fontWeight: 700, color: B.t4, textAlign: 'left', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -894,16 +877,6 @@ function TemplateList({ templates, loading, onAdd, onEdit, onDelete, onView, onB
                       ) : (
                         <span style={{ fontSize: 13, padding: '3px 8px', borderRadius: 99, background: 'var(--c-orangeBg, #FFF3E0)', color: 'var(--c-orangeText, #E65100)', fontWeight: 600, fontFamily: FONT }}>Unassigned</span>
                       )}
-                    </td>
-                    {/* Which campaign this template belongs to. Read-only here —
-                        filing happens on the Projects page, which can move all
-                        three kinds at once. */}
-                    <td style={{ padding: '12px 14px', fontSize: 14, fontFamily: FONT }}>
-                      {t.projectName
-                        ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 99, background: 'var(--c-surfaceMuted, #F1F1EC)', color: B.t3, fontWeight: 600 }}>
-                            <FolderKanban size={11} /> {t.projectName}
-                          </span>
-                        : <span style={{ color: B.t7 }}>—</span>}
                     </td>
                     <td style={{ padding: '12px 14px' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 4, background: cat?.bg || B.innerBg, color: cat?.color || B.t4, fontSize: 13, fontWeight: 700, fontFamily: FONT }}>
@@ -1010,7 +983,7 @@ function CarouselCardsEditor({ cards, onChange, readOnly, accountId, errors = {}
 
   const pickCardMedia = async (cardIdx, mediaLibraryId) => {
     if (!mediaLibraryId) { updateCard(cardIdx, { media_library_id: null, header_handle: '' }); return; }
-    if (!accountId) { notify('Pick a WhatsApp Account first (Section 1).'); return; }
+    if (!accountId) { notify('Pick a WhatsApp Account first (step 1 · Basics).'); return; }
     const idNum = Number(mediaLibraryId);
     updateCard(cardIdx, { media_library_id: idNum });
     setUploading(u => ({ ...u, [cardIdx]: true }));
@@ -1226,7 +1199,7 @@ function AnalyticsDrawer({ templateId, templateName, onClose }) {
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 250, display: 'flex', justifyContent: 'flex-end' }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: 600, maxWidth: '94vw', height: '100%', background: 'var(--c-cardBg)', boxShadow: C.shadowLg, display: 'flex', flexDirection: 'column', fontFamily: FONT, overflow: 'hidden' }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: 600, maxWidth: 'calc(94vw / var(--fg-zoom, 1))', height: '100%', background: 'var(--c-cardBg)', boxShadow: C.shadowLg, display: 'flex', flexDirection: 'column', fontFamily: FONT, overflow: 'hidden' }}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--c-borderSubtle, #EEEDE8)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--c-text)' }}>Template Analytics</div>
@@ -1452,7 +1425,7 @@ function RevisionHistoryDrawer({ templateId, templateName, currentStatus, onClos
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 250, display: 'flex', justifyContent: 'flex-end' }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: 540, maxWidth: '92vw', height: '100%', background: 'var(--c-cardBg)', boxShadow: C.shadowLg, display: 'flex', flexDirection: 'column', fontFamily: FONT, overflow: 'hidden' }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: 540, maxWidth: 'calc(92vw / var(--fg-zoom, 1))', height: '100%', background: 'var(--c-cardBg)', boxShadow: C.shadowLg, display: 'flex', flexDirection: 'column', fontFamily: FONT, overflow: 'hidden' }}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--c-borderSubtle, #EEEDE8)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--c-text)' }}>Revision History</div>
@@ -1543,6 +1516,26 @@ function RevisionHistoryDrawer({ templateId, templateName, currentStatus, onClos
 }
 
 // ─── Builder View ─────────────────────────────────────────────────────────────
+// The builder was one column three screens tall: Basics, Category, Header,
+// Body, Footer, Buttons and the Submit card all stacked, with the preview
+// beside it. It is four steps now — each one fits a screen — and the step a
+// validation error belongs to is derived from its key, so the strip can point
+// at the step that needs fixing instead of making someone hunt for it.
+const TEMPLATE_STEPS = [
+  { id: 'basics',  label: 'Basics',  Icon: Settings2,         hint: 'Number, name, language and type of message' },
+  { id: 'message', label: 'Message', Icon: MessageSquareText, hint: 'The text of the message and example values' },
+  { id: 'extras',  label: 'Header & footer', Icon: Type,       hint: 'Optional title, picture or file on top, and a small footer' },
+  { id: 'buttons', label: 'Buttons', Icon: MousePointer2,     hint: 'Optional actions under the message' },
+  { id: 'review',  label: 'Review & submit', Icon: ClipboardCheck, hint: 'Check everything, then send it to Meta' },
+];
+const EXTRAS_ERRORS = new Set(['headerVars', 'headerTextLen', 'headerSamples', 'mediaHandle', 'footer', 'footerLen']);
+function stepOfError(key) {
+  if (key === 'name') return 'basics';
+  if (EXTRAS_ERRORS.has(key)) return 'extras';
+  if (key.startsWith('btn') || key.startsWith('card') || key.startsWith('carousel')) return 'buttons';
+  return 'message';
+}
+
 function BuilderView({ template, initialDraft, onBack, onSave, readOnly, accounts }) {
   const isEdit = !!template;
   const defaultAccountId = accounts?.find(a => a.isDefault)?.id || accounts?.[0]?.id || null;
@@ -1583,6 +1576,13 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
   // Collapsed by default: the checklist used to make the preview column taller
   // than the scrollport, which is precisely what stopped `sticky` holding.
   const [checklistOpen, setChecklistOpen] = useState(false);
+  // Which step of the builder is on screen. Local, not routed — the builder
+  // itself is not routed either (a refresh returns to the list).
+  const [tStep, setTStep] = useState('basics');
+  const formScrollRef = useRef(null);
+  const goStep = (id) => { setTStep(id); if (formScrollRef.current) formScrollRef.current.scrollTop = 0; };
+  // Meta's upload handle is plumbing: picking from the library fills it.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -1601,6 +1601,9 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
   const errors = useMemo(() => runValidation({ name, body, headerType, headerText, mediaHandle, footer, buttons, samples, category, codeExpiry, templateType, carouselCards }), [name, body, headerType, headerText, mediaHandle, footer, buttons, samples, category, codeExpiry, templateType, carouselCards]);
   const errCount = Object.keys(errors).length;
   const canSubmit = errCount === 0;
+  // A carousel has no top header and no footer, so that step would be empty.
+  const visibleSteps = templateType === 'CAROUSEL' ? TEMPLATE_STEPS.filter(st => st.id !== 'extras') : TEMPLATE_STEPS;
+  const stepErrors = Object.keys(errors).reduce((acc, k) => { const st = stepOfError(k); acc[st] = (acc[st] || 0) + 1; return acc; }, {});
   // Approved-edit mode: template exists on Meta + status is APPROVED/PAUSED.
   // We can change content but Meta locks name/language and re-reviews after every edit.
   const isApprovedEdit = isEdit && ['APPROVED', 'PAUSED'].includes(status);
@@ -1776,9 +1779,7 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
   const taErrStyle = { ...taStyle, borderColor: B.red };
   const btnPriStyle = { padding: '10px 22px', background: B.accent, color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' };
   const btnGhostStyle = { padding: '7px 14px', background: 'var(--c-cardBg)', border: '1.5px solid var(--c-borderStrong, #D5D5D0)', borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, color: 'var(--c-t3, #444)', transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 5 };
-  const hdrTabStyle = { padding: '7px 14px', borderRadius: 99, fontSize: 14, fontWeight: 600, cursor: 'pointer', border: '1.5px solid var(--c-borderStrong, #D5D5D0)', background: 'var(--c-cardBg)', color: 'var(--c-t3, #444)', transition: 'all .15s', display: 'flex', alignItems: 'center', gap: 5, fontFamily: FONT };
-  const hdrTabOnStyle = { ...hdrTabStyle, background: 'var(--c-text)', color: 'var(--c-cardBg)', borderColor: 'var(--c-text)' };
-  const catCardStyle = { border: '2px solid var(--c-border)', borderRadius: 12, padding: '14px 16px', cursor: 'pointer', background: 'var(--c-cardBg)', transition: 'all .18s', textAlign: 'left', width: '100%', fontFamily: FONT };
+  const catCardStyle = { border: '2px solid var(--c-border)', borderRadius: 12, padding: '10px 14px', cursor: 'pointer', background: 'var(--c-cardBg)', transition: 'all .18s', textAlign: 'left', width: '100%', fontFamily: FONT };
   const catCardOnStyle = { ...catCardStyle, borderColor: B.accent, background: B.accentBg };
 
   // Full-height flex column: one compact header bar that never scrolls, then a
@@ -1798,32 +1799,17 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
             {/* The Standard/Carousel choice was two full-width cards eating
                 ~90px of vertical space above the fold. It is one segmented
                 control now — same two options, same handler. */}
-            {!isAuth && (
-              <div style={{ display: 'inline-flex', border: `1px solid ${B.cardBorder}`, borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
-                {[
-                  { key: 'STANDARD', label: 'Standard', title: 'Header + body + buttons' },
-                  { key: 'CAROUSEL', label: 'Carousel', title: '2–10 product cards with horizontal scroll' },
-                ].map(opt => {
-                  const on = templateType === opt.key;
-                  const locked = readOnly || (isEdit && status !== 'DRAFT' && status !== 'REJECTED');
-                  return (
-                    <button
-                      key={opt.key}
-                      title={opt.title}
-                      onClick={() => { if (!locked) { setTemplateType(opt.key); if (opt.key === 'CAROUSEL') { setHeaderType('NONE'); setFooter(''); setButtons([]); } } }}
-                      disabled={locked}
-                      style={{
-                        padding: '6px 14px', border: 'none', cursor: locked ? 'not-allowed' : 'pointer',
-                        background: on ? C.primary : 'var(--c-cardBg)',
-                        color: on ? '#fff' : B.t4,
-                        fontSize: 14, fontWeight: on ? 700 : 600, fontFamily: FONT,
-                        opacity: locked ? 0.6 : 1,
-                      }}
-                    >{opt.label}</button>
-                  );
-                })}
-              </div>
-            )}
+            {!isAuth && (() => {
+              const locked = readOnly || (isEdit && status !== 'DRAFT' && status !== 'REJECTED');
+              return (
+                <PillStrip size="sm" style={{ flexShrink: 0 }} value={templateType} disabled={locked}
+                  onChange={key => { setTemplateType(key); if (key === 'CAROUSEL') { setHeaderType('NONE'); setFooter(''); setButtons([]); if (tStep === 'extras') setTStep('message'); } }}
+                  items={[
+                    { id: 'STANDARD', label: 'Standard', title: 'Header + body + buttons' },
+                    { id: 'CAROUSEL', label: 'Carousel', title: '2–10 product cards with horizontal scroll' },
+                  ]} />
+              );
+            })()}
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <button onClick={onBack} style={{ ...btnGhostStyle }}><ArrowLeft size={14} /> Back</button>
@@ -1832,7 +1818,7 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
             {showErrors && errCount > 0 && <span style={{ fontSize: 13, color: B.red, fontWeight: 600, fontFamily: FONT }}>⚠ {errCount} issue{errCount > 1 ? 's' : ''}</span>}
             {!readOnly && (
               <button
-                style={{ ...btnPriStyle, background: (canSubmit && !editQuotaExhausted) ? B.green : 'var(--c-borderStrong, #ccc)' }}
+                style={{ ...btnPriStyle, background: (canSubmit && !editQuotaExhausted) ? B.green : 'var(--c-fillMuted, #d5d5d0)' }}
                 onClick={isApprovedEdit ? () => handleSave('DRAFT') : handleSubmit}
                 disabled={saving || editQuotaExhausted}
                 title={
@@ -1904,7 +1890,7 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
               )}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                 <button onClick={() => setTranslationOpen(false)} style={{ ...btnGhostStyle }}>Cancel</button>
-                <button onClick={handleAddTranslation} disabled={translationSaving} style={{ ...btnPriStyle, background: translationSaving ? 'var(--c-borderStrong, #ccc)' : B.green }}>
+                <button onClick={handleAddTranslation} disabled={translationSaving} style={{ ...btnPriStyle, background: translationSaving ? 'var(--c-fillMuted, #d5d5d0)' : B.green }}>
                   {translationSaving ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Plus size={13} />} Create
                 </button>
               </div>
@@ -1945,7 +1931,7 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
               )}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                 <button onClick={() => setTestOpen(false)} style={{ ...btnGhostStyle }}>Close</button>
-                <button onClick={handleTestSend} disabled={testSending || !testTo.trim()} style={{ ...btnPriStyle, background: testSending || !testTo.trim() ? 'var(--c-borderStrong, #ccc)' : B.green }}>
+                <button onClick={handleTestSend} disabled={testSending || !testTo.trim()} style={{ ...btnPriStyle, background: testSending || !testTo.trim() ? 'var(--c-fillMuted, #d5d5d0)' : B.green }}>
                   {testSending ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={13} />} Send Test
                 </button>
               </div>
@@ -1957,8 +1943,21 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
         {/* Two panes. Only the left one scrolls; the right is pinned. */}
         <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 0 }}>
 
-          {/* LEFT — the only scrolling column */}
-          <div style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: 'auto', padding: '14px 16px 40px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* LEFT — step strip, then the step's form (the only scrolling
+              region), then Back / Next. The strip and the nav never scroll. */}
+          <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flexShrink: 0, padding: '12px 16px 0' }}>
+            <PillStrip grow size="sm" value={tStep} onChange={goStep}
+              items={visibleSteps.map((st, i) => ({
+                id: st.id,
+                label: `${i + 1} · ${st.id === 'buttons' && templateType === 'CAROUSEL' ? 'Cards' : st.label}`,
+                title: st.hint,
+                // Issue counts appear once someone has tried to submit — before
+                // that, an empty form shouting "3 issues" at you is noise.
+                badge: showErrors && st.id !== 'review' ? (stepErrors[st.id] || null) : null,
+              }))} />
+          </div>
+          <div ref={formScrollRef} data-testid="template-form" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '12px 16px 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {/* Approved-edit warning — appears when editing a live template */}
         {isApprovedEdit && !readOnly && (
           <div style={{ background: editQuotaExhausted ? 'var(--c-primaryLight)' : 'var(--c-warnBgSoft, #FFF8E1)', border: `1px solid ${editQuotaExhausted ? 'var(--c-se48a8a, #E48A8A)' : 'var(--c-sffd54f, #FFD54F)'}`, borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 14, color: editQuotaExhausted ? 'var(--c-dangerText, #A32D2D)' : 'var(--c-s7a5500, #7A5500)', fontFamily: FONT, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -2054,6 +2053,7 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
           </div>
         )}
 
+            {tStep === 'basics' && (<>
             {/* 1 — Basic Info */}
             <Sec n={1} title="Basic Information">
               <div style={{ marginBottom: 12 }}>
@@ -2081,7 +2081,7 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
                 <div>
                   <Lbl required>Template Name</Lbl>
                   <input style={showErrors && errors.name ? inpErrStyle : inpStyle} placeholder="e.g. order_confirmation" value={name} onChange={e => setName(e.target.value.toLowerCase().replace(/\s+/g, '_'))} maxLength={512} readOnly={readOnly || isApprovedEdit} title={isApprovedEdit ? 'Name cannot be changed on an approved template' : ''} />
-                  {showErrors && errors.name ? <Hint error>{errors.name}</Hint> : <Hint>Lowercase, underscores only · Max 512 chars</Hint>}
+                  {showErrors && errors.name ? <Hint error>{errors.name}</Hint> : <Hint>Only you see this · spaces become _</Hint>}
                 </div>
                 <div>
                   <Lbl required>Language</Lbl>
@@ -2104,7 +2104,7 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
                   const on = category === cat.id;
                   return (
                     <button key={cat.id} style={on ? catCardOnStyle : catCardStyle} onClick={() => !readOnly && handleCategoryChange(cat.id)} disabled={readOnly}>
-                      <div style={{ marginBottom: 7 }}><Icon size={22} color={on ? cat.color : B.t4} /></div>
+                      <div style={{ marginBottom: 4 }}><Icon size={18} color={on ? cat.color : B.t4} /></div>
                       <div style={{ fontSize: 15, fontWeight: 700, color: on ? B.accentDark : B.t1, marginBottom: 3, fontFamily: FONT }}>{cat.label}</div>
                       <div style={{ fontSize: 13, color: on ? 'var(--c-s6055cc, #6055CC)' : B.t6, lineHeight: 1.45, fontFamily: FONT }}>{cat.desc}</div>
                     </button>
@@ -2116,20 +2116,78 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
                 <Toggle on={allowCatChange} onChange={setAllowCatChange} label="Allow Meta to auto-correct category" desc="Prevents rejection if Meta disagrees — they'll fix it instead" />
               </div>
             </Sec>
+            </>)}
 
-            {/* 3 — Header (hidden for carousel — media lives in the cards) */}
+            {tStep === 'message' && (<>
+
+            {/* 4 — Body */}
+            <Sec title="Message text">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div style={{ display: 'flex', gap: 5 }}>
+                  {[['*', 'B', { fontWeight: 700 }], ['_', 'I', { fontStyle: 'italic' }], ['~', 'S', { textDecoration: 'line-through' }]].map(([w, l, s]) => (
+                    <button key={w} style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid var(--c-borderStrong, #D5D5D0)', borderRadius: 8, background: 'var(--c-cardBg)', cursor: 'pointer', fontSize: 14, fontWeight: 700, color: 'var(--c-t3, #444)', fontFamily: FONT, transition: 'all .15s', ...s }} onClick={() => !readOnly && wrapFmt(w)} disabled={readOnly}>{l}</button>
+                  ))}
+                </div>
+                {!readOnly && (
+                  <button style={{ ...btnGhostStyle, background: B.accentBg, borderColor: B.accentDark + '44', color: B.accentDark }} onClick={insertVar}>
+                    <Braces size={14} /> Add a blank (variable)
+                  </button>
+                )}
+              </div>
+              <textarea ref={bodyRef} style={showErrors && errors.body ? taErrStyle : taStyle} rows={5}
+                placeholder={isAuth ? '{{1}} is your verification code.' : 'Hello {{1}}, your order {{2}} has been confirmed!\n\nYour delivery is expected by {{3}}. 🎉'}
+                value={body} onChange={e => setBody(e.target.value)} maxLength={1024} readOnly={readOnly} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
+                {showErrors && errors.body ? <Hint error>{errors.body}</Hint> : <Hint>*bold* · _italic_ · ~strikethrough~ · a blank like {'{{1}}'} is filled per person (e.g. their name)</Hint>}
+                <span style={{ fontSize: 13, color: B.t7, fontFamily: "'DM Mono', monospace", flexShrink: 0, marginLeft: 8 }}>{body.length}/1024</span>
+              </div>
+
+              {/* Auth add-ons */}
+              {isAuth && (
+                <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <Toggle on={securityRec} onChange={setSecurityRec} label="Add security recommendation" desc='"For your security, do not share this code." — appended automatically' />
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1 }}>
+                      <Toggle on={!!codeExpiry} onChange={v => setCodeExpiry(v ? '10' : '')} label="Add code expiry" desc="Shows 'This code expires in X minutes'" />
+                    </div>
+                    {codeExpiry !== '' && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                        <input style={showErrors && errors.codeExpiry ? { ...inpStyle, width: 70, textAlign: 'center', fontFamily: "'DM Mono', monospace" } : { ...inpStyle, width: 70, textAlign: 'center', fontFamily: "'DM Mono', monospace" }} type="number" min="1" max="90" value={codeExpiry} onChange={e => setCodeExpiry(e.target.value)} readOnly={readOnly} />
+                        <span style={{ fontSize: 14, color: B.t5, whiteSpace: 'nowrap', fontFamily: FONT }}>mins (1–90)</span>
+                      </div>
+                    )}
+                    {showErrors && errors.codeExpiry && <Hint error>{errors.codeExpiry}</Hint>}
+                  </div>
+                </div>
+              )}
+
+              {/* Samples */}
+              {bodyVars.length > 0 && (
+                <div style={{ marginTop: 14, padding: '12px 14px', background: B.sectionBg, border: `1px solid ${showErrors && errors.bodySamples ? B.red + '55' : B.sectionBorder}`, borderRadius: 10 }}>
+                  <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--c-t6, #888)', fontWeight: 700, marginBottom: 6, fontFamily: FONT }}>Example values</div>
+                  <div style={{ fontSize: 13, color: B.t6, marginBottom: 10, fontFamily: FONT }}>Meta reviews your template with these. Write a realistic example for each blank, e.g. a customer name or an order number — the real value is filled in for each person when you send.</div>
+                  {showErrors && errors.bodySamples && <Hint error style={{ marginBottom: 8 }}>{errors.bodySamples}</Hint>}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    {bodyVars.map(v => (
+                      <div key={v}>
+                        <Lbl required><span style={{ fontFamily: "'DM Mono', monospace", background: B.accentBg, padding: '1px 6px', borderRadius: 4, fontSize: 13, color: B.accentDark }}>{`{{${v}}}`}</span></Lbl>
+                        <input style={showErrors && !samples[v]?.trim() ? inpErrStyle : { ...inpStyle, fontSize: 14, padding: '7px 12px' }} placeholder={`Sample for {{${v}}}`} value={samples[v] || ''} onChange={e => setSamples({ ...samples, [v]: e.target.value })} readOnly={readOnly} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Sec>
+
+            </>)}
+
+            {tStep === 'extras' && (<>
+            {/* Header (hidden for carousel — media lives in the cards) */}
             {templateType !== 'CAROUSEL' && (
-            <Sec n={3} title="Header" note="optional">
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
-                {HEADER_TYPES.filter(t => !isAuth || ['NONE', 'TEXT'].includes(t.id)).map(t => {
-                  const Icon = t.icon;
-                  const on = headerType === t.id;
-                  return (
-                    <button key={t.id} style={on ? hdrTabOnStyle : hdrTabStyle} onClick={() => !readOnly && setHeaderType(t.id)} disabled={readOnly}>
-                      <Icon size={14} /> {t.label}
-                    </button>
-                  );
-                })}
+            <Sec n={1} title="Header" note="optional — a title, picture, video or file on top">
+              <div style={{ marginBottom: 14 }}>
+                <PillStrip size="sm" value={headerType} disabled={readOnly} onChange={setHeaderType}
+                  items={HEADER_TYPES.filter(t => !isAuth || ['NONE', 'TEXT'].includes(t.id)).map(t => ({ id: t.id, label: t.label, Icon: t.icon }))} />
               </div>
               {headerType === 'TEXT' && (
                 <div>
@@ -2163,7 +2221,7 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
                           setLibSourceName('');
                           return;
                         }
-                        if (!whatsappAccountId) { notify('Pick a WhatsApp Account first (Section 1).'); return; }
+                        if (!whatsappAccountId) { notify('Pick a WhatsApp Account first (step 1 · Basics).'); return; }
                         const media = headerMediaItems.find(m => String(m.id) === String(val));
                         setHeaderMediaLibraryId(Number(val));
                         setHeaderMediaUploading(true);
@@ -2233,7 +2291,15 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
                     </div>
                   )}
 
-                  <div>
+                  {libSourceName && !advancedOpen && (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 12, background: B.accentBg, color: B.accentDark, fontSize: 13, fontWeight: 600, fontFamily: FONT, alignSelf: 'flex-start' }}>
+                      <Library size={11} /> Uploaded to Meta: {libSourceName}
+                    </div>
+                  )}
+                  <button type="button" onClick={() => setAdvancedOpen(o => !o)} style={{ alignSelf: 'flex-start', border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: B.t5, fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <ChevronDown size={13} style={{ transform: advancedOpen ? 'rotate(180deg)' : 'none' }} /> Advanced: Meta file handle
+                  </button>
+                  {advancedOpen && <div>
                     <Lbl>Meta File Handle</Lbl>
                     <input style={inpStyle} placeholder="Auto-filled when you select from library above" value={mediaHandle} onChange={e => { setMediaHandle(e.target.value); setLibSourceName(''); setHeaderMediaLibraryId(null); }} readOnly={readOnly} />
                     {libSourceName && (
@@ -2242,75 +2308,16 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
                       </div>
                     )}
                     <Hint>Auto-uploaded via Meta's Resumable Upload API when you select from the library</Hint>
-                  </div>
+                  </div>}
                 </div>
               )}
               {headerType === 'NONE' && <div style={{ fontSize: 14, color: B.t6, fontFamily: FONT }}>No header will be shown in the message.</div>}
             </Sec>
             )}
 
-            {/* 4 — Body */}
-            <Sec n={4} title="Body (Message Content)">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <div style={{ display: 'flex', gap: 5 }}>
-                  {[['*', 'B', { fontWeight: 700 }], ['_', 'I', { fontStyle: 'italic' }], ['~', 'S', { textDecoration: 'line-through' }]].map(([w, l, s]) => (
-                    <button key={w} style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid var(--c-borderStrong, #D5D5D0)', borderRadius: 8, background: 'var(--c-cardBg)', cursor: 'pointer', fontSize: 14, fontWeight: 700, color: 'var(--c-t3, #444)', fontFamily: FONT, transition: 'all .15s', ...s }} onClick={() => !readOnly && wrapFmt(w)} disabled={readOnly}>{l}</button>
-                  ))}
-                </div>
-                {!readOnly && (
-                  <button style={{ ...btnGhostStyle, background: B.accentBg, borderColor: B.accentDark + '44', color: B.accentDark }} onClick={insertVar}>
-                    <Braces size={14} /> Add Variable
-                  </button>
-                )}
-              </div>
-              <textarea ref={bodyRef} style={showErrors && errors.body ? taErrStyle : taStyle} rows={5}
-                placeholder={isAuth ? '{{1}} is your verification code.' : 'Hello {{1}}, your order {{2}} has been confirmed!\n\nYour delivery is expected by {{3}}. 🎉'}
-                value={body} onChange={e => setBody(e.target.value)} maxLength={1024} readOnly={readOnly} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
-                {showErrors && errors.body ? <Hint error>{errors.body}</Hint> : <Hint>*bold* · _italic_ · ~strikethrough~ · {'{{1}}'} variables</Hint>}
-                <span style={{ fontSize: 13, color: B.t7, fontFamily: "'DM Mono', monospace", flexShrink: 0, marginLeft: 8 }}>{body.length}/1024</span>
-              </div>
-
-              {/* Auth add-ons */}
-              {isAuth && (
-                <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <Toggle on={securityRec} onChange={setSecurityRec} label="Add security recommendation" desc='"For your security, do not share this code." — appended automatically' />
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <div style={{ flex: 1 }}>
-                      <Toggle on={!!codeExpiry} onChange={v => setCodeExpiry(v ? '10' : '')} label="Add code expiry" desc="Shows 'This code expires in X minutes'" />
-                    </div>
-                    {codeExpiry !== '' && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                        <input style={showErrors && errors.codeExpiry ? { ...inpStyle, width: 70, textAlign: 'center', fontFamily: "'DM Mono', monospace" } : { ...inpStyle, width: 70, textAlign: 'center', fontFamily: "'DM Mono', monospace" }} type="number" min="1" max="90" value={codeExpiry} onChange={e => setCodeExpiry(e.target.value)} readOnly={readOnly} />
-                        <span style={{ fontSize: 14, color: B.t5, whiteSpace: 'nowrap', fontFamily: FONT }}>mins (1–90)</span>
-                      </div>
-                    )}
-                    {showErrors && errors.codeExpiry && <Hint error>{errors.codeExpiry}</Hint>}
-                  </div>
-                </div>
-              )}
-
-              {/* Samples */}
-              {bodyVars.length > 0 && (
-                <div style={{ marginTop: 14, padding: '12px 14px', background: B.sectionBg, border: `1px solid ${showErrors && errors.bodySamples ? B.red + '55' : B.sectionBorder}`, borderRadius: 10 }}>
-                  <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--c-t6, #888)', fontWeight: 700, marginBottom: 6, fontFamily: FONT }}>Sample Values for Variables</div>
-                  <div style={{ fontSize: 13, color: B.t6, marginBottom: 10, fontFamily: FONT }}>Required by Meta — realistic examples for each placeholder.</div>
-                  {showErrors && errors.bodySamples && <Hint error style={{ marginBottom: 8 }}>{errors.bodySamples}</Hint>}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                    {bodyVars.map(v => (
-                      <div key={v}>
-                        <Lbl required><span style={{ fontFamily: "'DM Mono', monospace", background: B.accentBg, padding: '1px 6px', borderRadius: 4, fontSize: 13, color: B.accentDark }}>{`{{${v}}}`}</span></Lbl>
-                        <input style={showErrors && !samples[v]?.trim() ? inpErrStyle : { ...inpStyle, fontSize: 14, padding: '7px 12px' }} placeholder={`Sample for {{${v}}}`} value={samples[v] || ''} onChange={e => setSamples({ ...samples, [v]: e.target.value })} readOnly={readOnly} />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </Sec>
-
             {/* 5 — Footer (hidden for carousel — parent has no footer) */}
             {!isAuth && templateType !== 'CAROUSEL' && (
-              <Sec n={5} title="Footer" note="optional">
+              <Sec n={2} title="Footer" note="optional — small grey line at the bottom">
                 <Lbl>Footer Text</Lbl>
                 <input style={showErrors && (errors.footer || errors.footerLen) ? inpErrStyle : inpStyle} placeholder="e.g. Reply STOP to unsubscribe" value={footer} onChange={e => setFooter(e.target.value)} maxLength={60} readOnly={readOnly} />
                 {showErrors && errors.footer && <Hint error>{errors.footer}</Hint>}
@@ -2322,7 +2329,17 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
               </Sec>
             )}
 
-            {/* 6 — Buttons */}
+            </>)}
+
+            {tStep === 'buttons' && (<>
+            {/* Buttons */}
+            {readOnly && templateType !== 'CAROUSEL' && (
+              <Sec title="Buttons">
+                <div style={{ fontSize: 14, color: B.t5, fontFamily: FONT }}>
+                  {buttons.length ? buttons.map(b => b.text || b.type).join(' · ') : 'This template has no buttons.'}
+                </div>
+              </Sec>
+            )}
             {!readOnly && templateType !== 'CAROUSEL' && (
               <ButtonsSection buttons={buttons} category={category} errors={showErrors ? errors : {}}
                 onAdd={(type) => setButtons([...buttons, makeButton(type)])}
@@ -2342,7 +2359,31 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
               />
             )}
 
-            {/* 7 — Submit / Save */}
+            </>)}
+
+            {tStep === 'review' && (<>
+            {/* Every check, each linking to the step that fixes it. */}
+            <Sec title="Before you submit">
+              {checklist.map(([key, label, ok]) => {
+                const target = key === 'name' ? 'basics' : key === 'btnValid' ? 'buttons' : ['media', 'hdrVar', 'footer'].includes(key) ? 'extras' : 'message';
+                return (
+                  <div key={key} data-check={key} data-ok={ok ? '1' : '0'} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: `1px solid ${B.rowSep}` }}>
+                    <div style={{ width: 20, height: 20, borderRadius: 99, background: ok ? B.greenBg : B.redBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {ok ? <Check size={12} color={B.green} strokeWidth={3} /> : <span style={{ fontSize: 12, color: B.red, fontWeight: 700 }}>!</span>}
+                    </div>
+                    <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: ok ? B.t3 : B.red, fontFamily: FONT }}>{label}</span>
+                    {!ok && (
+                      <button onClick={() => { setShowErrors(true); goStep(target); }} style={{ ...btnGhostStyle, padding: '4px 10px', fontSize: 13 }}>
+                        Fix <ChevronRight size={12} />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              {checklist.length === 0 && <div style={{ fontSize: 14, color: B.t5, fontFamily: FONT }}>Nothing to check yet.</div>}
+            </Sec>
+
+            {/* Submit / Save */}
             {!readOnly && (
               <div style={{ background: B.card, border: `1px solid ${B.cardBorder}`, borderRadius: 12, padding: '16px 18px' }}>
                 <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--c-t6, #888)', fontWeight: 700, marginBottom: 14, fontFamily: FONT }}>Submit for Meta Approval</div>
@@ -2380,11 +2421,11 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
             </div>
 
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button style={{ ...btnPriStyle, background: canSubmit ? B.green : 'var(--c-borderStrong, #ccc)', flex: 1, justifyContent: 'center', fontSize: 15, padding: 12 }} onClick={handleSubmit} disabled={saving}>
+                  <button style={{ ...btnPriStyle, background: canSubmit ? B.green : 'var(--c-fillMuted, #d5d5d0)', flex: 1, justifyContent: 'center', fontSize: 15, padding: 12 }} onClick={handleSubmit} disabled={saving}>
                     {saving ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={16} />} Submit for Approval
                   </button>
-                  <button style={{ ...btnGhostStyle }} onClick={() => { setShowPayload(p => !p); setShowErrors(true); }}>
-                    {showPayload ? 'Hide' : 'View'} API Payload
+                  <button style={{ ...btnGhostStyle }} title="For developers: the exact request sent to Meta" onClick={() => { setShowPayload(p => !p); setShowErrors(true); }}>
+                    {showPayload ? 'Hide' : 'Show'} technical details
                   </button>
                 </div>
                 {!canSubmit && <div style={{ marginTop: 8, fontSize: 13, color: B.t6, textAlign: 'center', fontFamily: FONT }}>Fix the issues above to enable submission</div>}
@@ -2408,6 +2449,29 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
                 </div>
               </div>
             )}
+            </>)}
+          </div>
+
+          {/* Back / Next — the step strip says where you are; this says where
+              to go next without reaching back up to it. */}
+          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderTop: `1px solid ${B.cardBorder}` }}>
+            {(() => {
+              const i = visibleSteps.findIndex(st => st.id === tStep);
+              const prev = visibleSteps[i - 1];
+              const next = visibleSteps[i + 1];
+              const label = (st) => st.id === 'buttons' && templateType === 'CAROUSEL' ? 'Cards' : st.label;
+              return (<>
+                {prev && <button data-testid="tpl-back" onClick={() => goStep(prev.id)} style={{ ...btnGhostStyle }}><ChevronLeft size={14} /> {label(prev)}</button>}
+                <span style={{ flex: 1 }} />
+                {!readOnly && !isApprovedEdit && (status === 'DRAFT' || status === 'REJECTED') && (
+                  <button data-testid="tpl-save-draft" onClick={() => handleSave('DRAFT')} disabled={saving} title="Keep your work and finish later — nothing is sent to Meta" style={{ ...btnGhostStyle }}>
+                    {saving ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={13} />} Save draft
+                  </button>
+                )}
+                {next && <button data-testid="tpl-next" onClick={() => goStep(next.id)} style={{ ...btnPriStyle, padding: '8px 16px' }}>Next: {label(next)} <ChevronRight size={14} /></button>}
+              </>);
+            })()}
+          </div>
           </div>
 
           {/* RIGHT — pinned pane, full height, never scrolls. The phone takes
@@ -2419,12 +2483,18 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
             display: 'flex', flexDirection: 'column', gap: 10,
             padding: '14px 16px 16px', boxSizing: 'border-box', overflow: 'hidden',
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-              <span style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--c-t6, #888)', fontWeight: 700, fontFamily: FONT }}>Live Preview</span>
-              <span style={{ fontSize: 13, color: B.t7, fontStyle: 'italic', fontFamily: FONT }}>Updates as you type</span>
-            </div>
             <div style={{ flex: 1, minHeight: 0, display: 'flex', justifyContent: 'center' }}>
-              <WaPreview headerType={headerType} headerText={previewHeader} bodyText={previewBody} footerText={footer} buttons={buttons} securityRec={securityRec} codeExpiry={codeExpiry} headerMediaLibraryId={headerMediaLibraryId} templateType={templateType} carouselCards={carouselCards} fill />
+              <SimShell
+                title="Preview"
+                testId="template-preview"
+                fill
+                width="100%"
+                status="Updates as you type"
+                meta={templateType === 'CAROUSEL' ? `Carousel · ${carouselCards?.length || 0} cards` : (category ? String(category).charAt(0) + String(category).slice(1).toLowerCase() : null)}
+                hint="How the customer sees it. Variables show their sample values."
+              >
+                <WaPreview headerType={headerType} headerText={previewHeader} bodyText={previewBody} footerText={footer} buttons={buttons} securityRec={securityRec} codeExpiry={codeExpiry} headerMediaLibraryId={headerMediaLibraryId} templateType={templateType} carouselCards={carouselCards} fill />
+              </SimShell>
             </div>
 
             {/* Checklist — collapsed to its verdict by default so the phone
@@ -2515,7 +2585,7 @@ function TemplateLibraryPickerModal({ headerType, accountId, onClose, onPicked }
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          background: 'var(--c-cardBg)', borderRadius: 14, width: 720, maxHeight: '85vh',
+          background: 'var(--c-cardBg)', borderRadius: 14, width: 720, maxHeight: 'calc(85vh / var(--fg-zoom, 1))',
           display: 'flex', flexDirection: 'column',
           boxShadow: '0 20px 60px rgba(0,0,0,.15)',
         }}
@@ -2643,6 +2713,7 @@ function TemplateLibraryPickerModal({ headerType, accountId, onClose, onPicked }
 // ─── Main Page Component ──────────────────────────────────────────────────────
 export default function TemplateBuilderPage({ subParts = [], navigate }) {
   const [view, setView] = useState('list'); // 'list' | 'builder' | 'view'
+  useHubEditing(view !== 'list'); // the template builder owns the whole pane
   const [templates, setTemplates] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);

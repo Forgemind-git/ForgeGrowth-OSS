@@ -1,11 +1,10 @@
 // Shared date sorting for the entity list pages (Automations, AI Agents,
-// Projects, Follow-ups, Templates, Forms).
+// Follow-ups, Templates).
 //
 // Why the caller passes ACCESSORS instead of a field name: these six endpoints
-// do not agree on key casing. `agents`, `projects` and
-// `lead-forms` return camelCase (`createdAt`), while `chatbots` and `templates`
+// do not agree on key casing. `agents` returns camelCase (`createdAt`), while `chatbots` and `templates`
 // return raw Postgres rows (`created_at`). A helper that guessed one casing
-// would sort exactly nothing on the other three — silently, since a comparator
+// would sort exactly nothing on the others — silently, since a comparator
 // over `undefined` never reorders anything and the page still renders. So each
 // page states its own field names and a wrong one is a visible bug, not a
 // no-op. (Forge anti-pattern #35.)

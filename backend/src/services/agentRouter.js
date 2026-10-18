@@ -195,7 +195,7 @@ async function routeIfActive(record) {
   }
 
   // A voice note only runs when the agent has transcription enabled (the worker
-  // turns it into text via Whisper). Otherwise the agent stays text-only.
+  // turns it into text via OpenRouter MAI-Transcribe 2). Otherwise the agent stays text-only.
   if (isAudio && !hasText && !agent.transcribe_audio) return null;
 
   // A caption-less image only runs when the agent accepts images (the worker

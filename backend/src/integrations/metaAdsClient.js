@@ -131,7 +131,7 @@ async function fetchAccountCampaigns(token, accountId, accountName) {
 //
 // ⚠ The `width`/`height` Meta reports on a thumbnail are the SOURCE video's
 // dimensions, NOT the size of the image the URI serves. Verified on video
-// 2239534770128518: all nine thumbnails claim 1440x2560, while the URIs
+// One real creative: all nine thumbnails claim 1440x2560, while the URIs
 // actually deliver 640x1136, 640x1136, 640x1136 and 1080x1920. So sorting by
 // the reported area is a no-op that leaves the winner down to array order, and
 // `is_preferred` is no better — on that video it points at a 640px frame while

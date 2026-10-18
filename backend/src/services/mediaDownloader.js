@@ -119,7 +119,7 @@ async function downloadOne(messageId) {
     let finalPath = path.join(dir, filename);
     let finalMime = mime;
     let finalSize = bin.contentLength;
-    fs.writeFileSync(finalPath, bin.buffer);
+    writeAtomic(finalPath, bin.buffer);   // never mutate a possibly-linked inode
 
     // Transcode Ogg/Opus or AMR voice notes to MP3 for Safari compatibility
     if (TRANSCODE_AUDIO && (row.message_type === 'audio' || row.message_type === 'voice')
@@ -180,6 +180,55 @@ async function backfillRecent({ days = 30, limit = 500 } = {}) {
   return { attempted: rows.length, ok, fail };
 }
 
+// ── Outbound media: one copy per distinct file ────────────────────────────
+// The same Media Library video/brochure goes out to hundreds of people, and
+// writing a full copy per message filled the volume (200+ identical 15 MB
+// course videos). So the bytes are stored ONCE under _store/, keyed by their
+// SHA-256, and each message's own path is a HARD LINK to that copy.
+//
+// Hard links, not one shared path, on purpose: every reader keeps using the
+// row's own media_storage_path unchanged, and deleting one message's file
+// (retention, a manual rm) removes only that link — never another chat's media.
+//
+// ⚠ Nothing may WRITE IN PLACE to a path that could be linked — that would
+// change every chat sharing the inode. Writes go to a temp file + rename,
+// which replaces the link instead of mutating the shared file.
+const STORE_DIR = path.join(MEDIA_DIR, '_store');
+
+function writeAtomic(absPath, buffer) {
+  const tmp = `${absPath}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(tmp, buffer);
+  fs.renameSync(tmp, absPath);
+}
+
+function storePathFor(sha, ext) {
+  return path.join(STORE_DIR, sha.slice(0, 2), `${sha}.${safeBase(ext) || 'bin'}`);
+}
+
+// Ensure the content-addressed copy exists; returns its path.
+function ensureStored(buffer, ext) {
+  const sha = require('crypto').createHash('sha256').update(buffer).digest('hex');
+  const storePath = storePathFor(sha, ext);
+  if (!fs.existsSync(storePath)) {
+    ensureDir(path.dirname(storePath));
+    writeAtomic(storePath, buffer);
+  }
+  return { sha, storePath };
+}
+
+// Point `absPath` at the stored copy (atomic). Falls back to a real copy when
+// the filesystem refuses a hard link, so a send never fails over disk layout.
+function linkInto(storePath, absPath, buffer) {
+  const tmp = `${absPath}.lnk-${process.pid}-${Date.now()}`;
+  try {
+    fs.linkSync(storePath, tmp);
+    fs.renameSync(tmp, absPath);
+  } catch (err) {
+    try { fs.unlinkSync(tmp); } catch {}
+    writeAtomic(absPath, buffer);
+  }
+}
+
 // Mirror an outbound media buffer to MEDIA_DIR so the chat bubble can render it
 // via /api/media/:messageId. Path layout matches inbound: <wa>/<yyyymm>/<msgid>.<ext>.
 function persistOutboundBuffer({ accountPhoneDigits, messageId, buffer, ext }) {
@@ -187,10 +236,15 @@ function persistOutboundBuffer({ accountPhoneDigits, messageId, buffer, ext }) {
   const ym = `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
   const dir = path.join(MEDIA_DIR, accountPhoneDigits || 'unknown', ym);
   ensureDir(dir);
-  const filename = `${String(messageId).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 200)}.${ext || 'bin'}`;
+  const filename = `${safeBase(messageId)}.${ext || 'bin'}`;
   const absPath = path.join(dir, filename);
-  fs.writeFileSync(absPath, buffer);
+  let stored = null;
+  try { stored = ensureStored(buffer, ext); } catch (err) {
+    console.error('[media] content store failed, writing a plain copy:', err.message);
+  }
+  if (stored) linkInto(stored.storePath, absPath, buffer);
+  else writeAtomic(absPath, buffer);
   return { absPath, size: buffer.length };
 }
 
-module.exports = { downloadOne, markPending, backfillRecent, persistOutboundBuffer, MEDIA_DIR, MEDIA_TYPES };
+module.exports = { downloadOne, markPending, backfillRecent, persistOutboundBuffer, MEDIA_DIR, MEDIA_TYPES, STORE_DIR, storePathFor };

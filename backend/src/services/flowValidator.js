@@ -72,6 +72,8 @@ function expectedHandles(n) {
   if (n.type === 'handoff') return [];
 
   if (n.type === 'message') {
+    // A WhatsApp form always waits, and only its submission continues it.
+    if (n.messageMode === 'direct' && n.directType === 'flow') return ['submitted', 'timeout'];
     const out = [];
     const dd = n.directData || {};
     const waiting = n.waitForReply === true;
@@ -92,7 +94,10 @@ function expectedHandles(n) {
     if (waiting) {
       // No choices offered means no wrong answer: the branch is `replied`.
       const hasChoices = out.some(h => h.startsWith('btn:') || h.startsWith('row:'));
-      out.push(hasChoices ? 'nomatch' : 'replied', 'timeout');
+      // A buttons-only step keeps waiting on typed text, so it has no `nomatch`.
+      if (hasChoices) { if (n.buttonsOnly !== true) out.push('nomatch'); }
+      else out.push('replied');
+      out.push('timeout');
       return out;
     }
     out.push('default');
@@ -181,7 +186,9 @@ function validateFlow(config, ctx = {}) {
           'Turn on "Wait for the customer\'s reply".'));
       }
 
-      if (n.waitForReply === true) {
+      // A form step has its own completion check below — "reply" findings
+      // would describe a branch it does not have.
+      if (n.waitForReply === true && n.directType !== 'flow') {
         const answerHandle = handles.includes('replied') ? 'replied' : 'nomatch';
         if (!isWired(n.id, answerHandle)) {
           warnings.push(F(n.id, 'NO_FALLBACK',
@@ -299,6 +306,12 @@ function validateFlow(config, ctx = {}) {
           }
         }
 
+        if (dt === 'flow') {
+          // WhatsApp form steps were removed with Forms (2026-10-16); the engine
+          // refuses to send one, so a flow holding it must not go live.
+          blocking.push(F(n.id, 'FLOW_REMOVED', 'WhatsApp form steps were removed.', 'Replace this step with a message or a question.'));
+        }
+
         if (dt === 'location_request' && !body) {
           blocking.push(F(n.id, 'META_BODY_REQUIRED', 'Meta requires body text when asking for a location.', 'Write what you are asking for.'));
         }
@@ -368,6 +381,45 @@ function validateFlow(config, ctx = {}) {
     });
   }
 
+  // ── A choice that silently goes nowhere ───────────────────────────────
+  // UNWIRED_BRANCH only asks whether a button is connected to SOMETHING. The
+  // Applied AI funnel had "Both, honestly" wired to a save-a-field action whose
+  // own output was never connected, while the other two buttons' identical
+  // actions led on to the brochure — so a third of the customers answered the
+  // question and heard nothing, and every such run still logged "success".
+  // Warn when one reply branch of a step reaches no further message while a
+  // sibling branch does. Scoped to that contrast on purpose: a flow may
+  // legitimately END on an action (e.g. tagging after a human handoff).
+  const SENDING_TYPES = new Set(['message', 'handoff', 'ai', 'ai_agent', 'api', 'subflow', 'payment']);
+  const nodeById = new Map(nodes.map(n => [n.id, n]));
+  const reachesSend = (startId) => {
+    const seen = new Set();
+    const stack = [startId];
+    while (stack.length) {
+      const id = stack.pop();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      const n = nodeById.get(id);
+      if (!n) continue;
+      if (SENDING_TYPES.has(n.type)) return true;
+      edges.filter(e => e.from === id && e.to).forEach(e => stack.push(e.to));
+    }
+    return false;
+  };
+  nodes.forEach(n => {
+    const branches = expectedHandles(n)
+      .filter(h => h.startsWith('btn:') || h.startsWith('row:'))
+      .map(h => ({ h, edge: edges.find(e => e.from === n.id && (e.fromHandle || 'default') === h && e.to) }))
+      .filter(b => b.edge)
+      .map(b => ({ ...b, sends: reachesSend(b.edge.to) }));
+    if (branches.length < 2 || !branches.some(b => b.sends)) return;
+    branches.filter(b => !b.sends).forEach(b => {
+      warnings.push(F(n.id, 'BRANCH_DEAD_END',
+        `When the customer picks "${labelForHandle(n, b.h)}", the flow stops without sending anything — the other choices carry on.`,
+        'Connect the last step of that branch to what should come next.', b.h));
+    });
+  });
+
   return { ok: blocking.length === 0, blocking, warnings };
 }
 
@@ -378,6 +430,7 @@ function labelForHandle(n, h) {
   if (h === 'paid') return 'Paid';
   if (h === 'unpaid') return 'Not paid';
   if (h === 'shared') return 'Location shared';
+  if (h === 'submitted') return 'Form submitted';
   if (h === 'nomatch') return 'Any other reply';
   if (h === 'timeout') return 'No reply';
   if (h === 'default') return 'Next step';

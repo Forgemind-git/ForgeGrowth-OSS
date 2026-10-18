@@ -3,8 +3,7 @@
 //
 // Uses node:test (built into Node 20). Nothing here touches the database or
 // the network: the field registry is primed via its test-only injector, and
-// only the synchronous branches of stepTokenError are exercised (the form.*
-// branch queries lead_forms and is covered by the integration flow instead).
+// stepTokenError is exercised directly (it no longer touches the database).
 
 const { test, describe, beforeEach } = require('node:test');
 const assert = require('node:assert');
@@ -136,18 +135,6 @@ describe('{{sale.*}} namespace', () => {
   });
 });
 
-describe('{{form.<slug>.<key>}} namespace', () => {
-  test('resolves from the loaded latest submission; loaded-but-empty gives blank', () => {
-    const ctx = { lead: LEAD, formAnswers: { webinar: { field_1: 'Yes', field_2: ['A', 'B'] }, other: {} } };
-    assert.equal(resolveTokens('{{form.webinar.field_1}} / {{form.webinar.field_2}}', ctx), 'Yes / A, B');
-    assert.equal(resolveTokens('[{{form.other.field_9}}]', ctx), '[]');
-  });
-  test('an unloaded form slug stays raw', () => {
-    assert.equal(resolveTokens('{{form.unknown.f}}', { lead: LEAD, formAnswers: { webinar: {} } }), '{{form.unknown.f}}');
-    assert.equal(resolveTokens('{{form.webinar.f}}', { lead: LEAD }), '{{form.webinar.f}}');
-  });
-});
-
 describe('token grammar boundaries', () => {
   test('{{1}}-style positional template variables are never matched', () => {
     assert.equal(resolveTokens('Body {{1}} and {{2}}', { lead: LEAD }), 'Body {{1}} and {{2}}');
@@ -159,9 +146,8 @@ describe('token grammar boundaries', () => {
       ['form.x.y', 'name', 'sale.total_paid']);
   });
   test('neededContext flags only what the texts reference', () => {
-    assert.deepEqual(neededContext(['hi {{name}}']), { sale: false, formSlugs: [] });
-    assert.deepEqual(neededContext(['{{sale.total_paid}}', '{{form.a.k}} {{form.b.k}}']),
-      { sale: true, formSlugs: ['a', 'b'] });
+    assert.deepEqual(neededContext(['hi {{name}}']), { sale: false });
+    assert.deepEqual(neededContext(['{{sale.total_paid}}']), { sale: true });
     // lead.total_paid loads sale data so it reads the live union.
     assert.equal(neededContext(['{{lead.total_paid}}']).sale, true);
   });
@@ -183,9 +169,13 @@ describe('stepTokenError — save-time validation (non-DB branches)', () => {
     const err = await stepTokenError(['{{sale.nope}}']);
     assert.match(err, /sale\.nope/);
   });
-  test('an incomplete form token is rejected', async () => {
-    const err = await stepTokenError(['{{form.only_slug}}']);
-    assert.match(err, /incomplete/);
+  // Forms were removed 2026-10-16: a {{form.…}} token is now just unknown.
+  test('a form token is rejected as unknown', async () => {
+    const err = await stepTokenError(['{{form.webinar.field_1}}']);
+    assert.match(err, /Unknown variable \{\{form\.webinar\.field_1\}\}/);
+  });
+  test('a form token is left as-is at send time', () => {
+    assert.equal(resolveTokens('{{form.webinar.f}}', { lead: LEAD }), '{{form.webinar.f}}');
   });
 });
 

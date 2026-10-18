@@ -53,6 +53,34 @@ variables come from the sheet's own columns.
 A broadcast appears in the Bulk Message page with real delivery stats, so after sending
 you can report what actually landed rather than what was queued.
 
+## Later, and repeating
+
+Neither has its own tool — both go through `forgechat_request` on the **Broadcasts**
+category.
+
+**Send once, later:** `POST /broadcasts` with `scheduled_at` set to an absolute ISO
+instant. A time in the past is refused rather than fired immediately.
+
+**Repeating** (`/broadcast-series`) is a genuinely different thing and the difference
+matters when you explain it:
+
+- Its audience is a **rule re-resolved on every run**, not a frozen list. "Everyone who
+  arrived in the last 7 days" means someone different each week. A frozen list re-sent
+  weekly is just spamming the same people.
+- Its date windows are **relative** (`arrivedWithinDays`, `notRepliedForDays`) for the
+  same reason — an absolute range would match identical people forever.
+- It **never sends anything itself**. Each run creates an ordinary broadcast and hands
+  it to the same sender, so every guard and every delivery stat behaves identically.
+- It is **always created paused**, an end condition is **required**, and a payment
+  template is **refused outright** — nobody is present when it fires.
+
+`POST /broadcast-series/preview` shows who the rule matches right now without sending.
+Show that before creating one.
+
+This is also the answer to "message my leads every Monday": there is no time-based
+automation trigger (see **forge-growth-automations**), and this is the feature that
+actually does it.
+
 ## Reading before writing
 
 `list_conversations` (recent threads, unread counts, window status) and `read_messages`

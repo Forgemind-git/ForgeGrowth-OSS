@@ -193,10 +193,8 @@ router.get('/templates', async (req, res) => {
             t.quality_score, t.rejection_reason, t.previous_category, t.last_synced_at,
             t.template_type, t.template_group_key,
             t.created_at, t.updated_at,
-            t.project_id AS "projectId",
-            p.name AS "projectName",
             t.whatsapp_account_id AS "whatsappAccountId",
-            wa.display_name AS "whatsappAccountName",
+            COALESCE(NULLIF(btrim(wa.label), ''), wa.display_name) AS "whatsappAccountName",
             wa.display_phone_number AS "whatsappAccountPhone",
             (SELECT COUNT(*) FROM coexistence.broadcasts WHERE template_id = t.id)::int AS "broadcastCount",
             (SELECT COUNT(*) FROM coexistence.broadcast_logs bl
@@ -204,7 +202,6 @@ router.get('/templates', async (req, res) => {
              WHERE b.template_id = t.id AND bl.action = 'BROADCAST')::int AS "sendCount"
      FROM coexistence.message_templates t
      LEFT JOIN coexistence.whatsapp_accounts wa ON wa.id = t.whatsapp_account_id
-     LEFT JOIN coexistence.projects p ON p.id = t.project_id
      ${whereSql}
      ORDER BY t.updated_at DESC`,
     params
@@ -253,10 +250,8 @@ router.get('/templates/:id', async (req, res) => {
             t.quality_score, t.rejection_reason, t.previous_category, t.last_synced_at,
             t.template_type, t.template_group_key, t.carousel_cards,
             t.created_at, t.updated_at,
-            t.project_id AS "projectId",
-            p.name AS "projectName",
             t.whatsapp_account_id AS "whatsappAccountId",
-            wa.display_name AS "whatsappAccountName",
+            COALESCE(NULLIF(btrim(wa.label), ''), wa.display_name) AS "whatsappAccountName",
             wa.display_phone_number AS "whatsappAccountPhone",
             (SELECT COUNT(*) FROM coexistence.broadcasts WHERE template_id = t.id)::int AS "broadcastCount",
             (SELECT COUNT(*) FROM coexistence.broadcast_logs bl
@@ -264,7 +259,6 @@ router.get('/templates/:id', async (req, res) => {
              WHERE b.template_id = t.id AND bl.action = 'BROADCAST')::int AS "sendCount"
      FROM coexistence.message_templates t
      LEFT JOIN coexistence.whatsapp_accounts wa ON wa.id = t.whatsapp_account_id
-     LEFT JOIN coexistence.projects p ON p.id = t.project_id
      WHERE t.id = $1`,
     [req.params.id]
   );
@@ -281,9 +275,8 @@ router.get('/templates/:id', async (req, res) => {
 /**
  * Validate + insert one DRAFT template row.
  *
- * Extracted from POST /templates so the Forms feature (routes/leadForms.js,
- * which creates a Utility/Marketing template carrying a form's link) runs the
- * SAME validation, the same duplicate check and the same INSERT. Two copies of
+ * Extracted from POST /templates so any other path that creates a template
+ * (scripts, MCP) runs the SAME validation, the same duplicate check and the same INSERT. Two copies of
  * this would drift, and the half that drifted would fail at Meta rather than
  * here — where the error is still explainable.
  *
@@ -737,9 +730,9 @@ const { markAccountHealth } = require('../services/accountHealth');
 /**
  * Send one template to Meta for approval and record the outcome.
  *
- * Extracted alongside insertTemplateRow so routes/leadForms.js can submit the
- * template it built for a form without re-implementing the Meta call, the
- * account-health classification or the status mapping.
+ * Extracted alongside insertTemplateRow so other callers can submit a template
+ * without re-implementing the Meta call, the account-health classification or
+ * the status mapping.
  *
  * Throws an Error carrying `.status` and the Meta error fields; never writes
  * to `res`.
@@ -1136,19 +1129,13 @@ router.post('/templates/:id/test-send', async (req, res) => {
       ? [{ type: 'body', parameters: keys.map(k => ({ type: 'text', text: String(sampleValues[k] || ' ') })) }]
       : [];
     // A dynamic URL button (a {{n}} variable in its URL) needs a button
-    // component or Meta rejects the whole send (#131008). If the button points
-    // at a lead form, mint a REAL single-use token for `to` so even a Test
-    // Send auto-identifies the recipient (no phone asked on the form). For a
-    // non-lead-form dynamic URL, fall back to the sample's trailing segment.
-    const { mintTokenForButtonUrl } = require('./leadForms');
+    // component or Meta rejects the whole send (#131008). A test send fills it
+    // with the sample's trailing segment.
     for (let idx = 0; idx < (Array.isArray(tpl.buttons) ? tpl.buttons.length : 0); idx++) {
       const b = tpl.buttons[idx];
       if (b.type === 'URL' && /\{\{\s*\d+\s*\}\}/.test(b.value || '')) {
-        let text = await mintTokenForButtonUrl(b.value, to, { waAccountId: account.id });
-        if (!text) {
-          const sample = String(b.urlSample || '').trim();
-          text = sample.split('/').filter(Boolean).pop() || 'test';
-        }
+        const sample = String(b.urlSample || '').trim();
+        const text = sample.split('/').filter(Boolean).pop() || 'test';
         components.push({ type: 'button', sub_type: 'url', index: idx, parameters: [{ type: 'text', text }] });
       }
     }

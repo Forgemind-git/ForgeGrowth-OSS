@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import { ThemeProvider } from './theme.jsx';
 import './index.css';
+import './styles/forge.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

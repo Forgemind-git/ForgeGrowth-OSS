@@ -9,6 +9,7 @@ const pool = require('../db');
 const minio = require('../util/minioClient');
 const { uploadMedia: metaUploadMedia } = require('../integrations/metaSend');
 const { getAccountWithToken } = require('./whatsappAccounts');
+const { contentDisposition } = require('../util/contentDisposition');
 
 const router = Router();
 
@@ -136,6 +137,119 @@ router.post('/media-library', upload.single('file'), async (req, res) => {
   }
 });
 
+const TYPE_LABEL = { image: 'an image', video: 'a video', audio: 'an audio file', document: 'a document' };
+
+// POST /api/media-library/:id/replace  (multipart, field "file")
+//
+// Swap the FILE behind an existing item, keeping its id, name and notes, so
+// every automation step, form, template header and broadcast that points at
+// this id sends the new file without being edited. Uploading a new item and
+// deleting the old one cannot do that: each reference would be left pointing
+// at a deleted row.
+//
+// ⚠ Clearing the per-number Meta ids is the load-bearing half. Every send path
+// reuses a `synced` media_meta_sync row for up to 28 days, so swapping only the
+// bytes keeps WhatsApp delivering the OLD file with no error anywhere. The rows
+// are reset in the same transaction as the swap; anything that sends before the
+// re-sync below finishes finds a non-synced row and uploads the new file itself.
+router.post('/media-library/:id/replace', upload.single('file'), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(404).json({ error: 'Media not found' });
+  if (!req.file) return res.status(400).json({ error: 'Choose a file to replace this one with.' });
+
+  let newKey = null;
+  try {
+    const { originalname, mimetype, size, buffer } = req.file;
+    const mediaType = inferMediaType(mimetype);
+
+    const { rows: cur } = await pool.query(
+      `SELECT media_type FROM coexistence.media_library WHERE id = $1 AND deleted_at IS NULL`, [id]);
+    if (!cur.length) return res.status(404).json({ error: 'Media not found' });
+    // ⚠ Same KIND only. An image header or image step handed a video is refused
+    // by Meta at send time — later, on a live flow, as an opaque failure.
+    if (cur[0].media_type !== mediaType) {
+      return res.status(400).json({
+        error: `This item is ${TYPE_LABEL[cur[0].media_type]}, so it can only be replaced with ${TYPE_LABEL[cur[0].media_type]}. Upload ${TYPE_LABEL[mediaType]} as a new item instead.`,
+      });
+    }
+
+    const sha = crypto.createHash('sha256').update(buffer).digest('hex');
+    const ext = path.extname(originalname).toLowerCase();
+    const stored = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}${ext}`;
+    newKey = `library/${stored}`;
+    await minio.ensureBucket();
+    await minio.putObject(newKey, buffer, mimetype);
+
+    const client = await pool.connect();
+    let row, oldKey, resyncIds;
+    try {
+      await client.query('BEGIN');
+      const { rows: locked } = await client.query(
+        `SELECT minio_object_key FROM coexistence.media_library
+          WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, [id]);
+      if (!locked.length) {
+        await client.query('ROLLBACK');
+        await minio.removeObject(newKey).catch(() => {});
+        return res.status(404).json({ error: 'Media not found' });
+      }
+      oldKey = locked[0].minio_object_key;
+      const { rows: upd } = await client.query(`
+        UPDATE coexistence.media_library
+           SET filename = $1, original_name = $2, mime_type = $3, size_bytes = $4,
+               sha256 = $5, minio_object_key = $6, uploaded_at = NOW()
+         WHERE id = $7
+         RETURNING *
+      `, [stored, originalname, mimetype, size, sha, newKey, id]);
+      row = upd[0];
+      // Re-sync only the numbers that had actually been synced. A number that
+      // never was uploads on first use anyway, and pushing to it now would
+      // start a 28-day expiry clock nobody asked for.
+      const { rows: prev } = await client.query(`
+        WITH prev AS (
+          SELECT account_id, meta_media_id FROM coexistence.media_meta_sync
+           WHERE media_id = $1 FOR UPDATE
+        )
+        UPDATE coexistence.media_meta_sync s
+           SET status = 'pending', meta_media_id = NULL, synced_at = NULL,
+               expires_at = NULL, last_error = NULL, attempts = 0, updated_at = NOW()
+          FROM prev
+         WHERE s.media_id = $1 AND s.account_id = prev.account_id
+        RETURNING prev.account_id, prev.meta_media_id
+      `, [id]);
+      resyncIds = prev.filter(p => p.meta_media_id).map(p => p.account_id);
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+    newKey = null; // committed — the new object is now the item's file
+
+    if (oldKey && oldKey !== row.minio_object_key) {
+      minio.removeObject(oldKey).catch(e =>
+        console.warn(`[media-library] replace: could not remove old object ${oldKey}:`, e.message));
+    }
+
+    const resync = [];
+    for (const accountId of resyncIds) {
+      try {
+        const s = await syncMediaToAccount(id, accountId);
+        resync.push({ accountId, ok: true, metaMediaId: s.metaMediaId });
+      } catch (err) {
+        // Not fatal: the row is left non-synced, so the next send re-uploads.
+        resync.push({ accountId, ok: false, error: String(err.message || err).slice(0, 300) });
+      }
+    }
+
+    res.json({ media: rowToMedia(row), resync });
+  } catch (err) {
+    if (newKey) await minio.removeObject(newKey).catch(() => {});
+    console.error('[media-library] replace error:', err);
+    res.status(500).json({ error: 'Could not replace the file. Please try again.' });
+  }
+});
+
 // Ingest a file into the Media Library from an in-memory Buffer (no multipart).
 // Shared by the multipart route above and the MCP `upload_media` path (base64 /
 // URL), so a poster can be added to the library programmatically. Returns the
@@ -225,8 +339,10 @@ router.get('/media-library/:id/download', async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: 'Not found' });
     const buf = await minio.getObjectBuffer(rows[0].minio_object_key);
     res.setHeader('Content-Type', rows[0].mime_type);
-    const displayName = rows[0].name || rows[0].original_name;
-    res.setHeader('Content-Disposition', `inline; filename="${displayName}"`);
+    res.setHeader('Content-Disposition', contentDisposition(rows[0].name || rows[0].original_name));
+    // The URL stays the same when the file behind it is replaced, so the
+    // browser must revalidate rather than keep showing the old picture.
+    res.setHeader('Cache-Control', 'private, no-cache');
     res.send(buf);
   } catch (err) {
     console.error('[media-library] download error:', err);
@@ -235,7 +351,7 @@ router.get('/media-library/:id/download', async (req, res) => {
 });
 
 // POST /api/media-library/:id/sync/:accountId — push to Meta for one WABA
-async function syncMediaToAccount(mediaId, accountId) {
+async function syncMediaToAccount(mediaId, accountId, _retried = false) {
   const { rows: mRows } = await pool.query(
     `SELECT * FROM coexistence.media_library WHERE id = $1 AND deleted_at IS NULL`,
     [mediaId]
@@ -270,8 +386,17 @@ async function syncMediaToAccount(mediaId, accountId) {
              expires_at = NOW() + INTERVAL '28 days',
              last_error=NULL, updated_at=NOW()
        WHERE media_id=$2 AND account_id=$3
+         -- ⚠ Only if the file is still the one we uploaded. A replace that
+         -- lands mid-upload resets this row; without this check the slower
+         -- upload would mark the OLD file as current for 28 days.
+         AND EXISTS (SELECT 1 FROM coexistence.media_library
+                      WHERE id = $2 AND minio_object_key = $4)
        RETURNING *
-    `, [metaId, mediaId, accountId]);
+    `, [metaId, mediaId, accountId, media.minio_object_key]);
+    if (!rows.length) {
+      if (_retried) throw new Error('The file was replaced while it was syncing. Sync again.');
+      return syncMediaToAccount(mediaId, accountId, true);
+    }
     return rowToSync(rows[0]);
   } catch (err) {
     await pool.query(`

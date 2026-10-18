@@ -2,6 +2,11 @@
   box-sizing: border-box;
 }
 
+/* Default size of the whole app: 110%. See lib/uiZoom.js for what this means
+   for positions and viewport units. Set --fg-zoom: 1 to go back to 100%. */
+:root { --fg-zoom: 1.1; }
+html { zoom: var(--fg-zoom); }
+
 html, body, #root {
   margin: 0;
   padding: 0;
@@ -26,6 +31,12 @@ input, button, textarea, select {
    Tokens consumed via the `C` object in constants.js (each maps to var(--c-*)).
    data-theme is set on <html> by theme.jsx (and an inline script in index.html
    to avoid a flash). Light is the default. */
+:root {
+  /* Default typeface. A section wrapper (.nui-scope) overrides these; every
+     inline fontFamily reads them through FONT/MONO in constants.js. */
+  --fg-font: 'DM Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --fg-mono: 'DM Mono', monospace;
+}
 :root, :root[data-theme="light"] {
   --c-pageBg: #F7F7F3;
   --c-sidebarBg: #FAF9F5;

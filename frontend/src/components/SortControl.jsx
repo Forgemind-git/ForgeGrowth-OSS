@@ -5,7 +5,7 @@ import { LIST_SORT_OPTIONS } from '../lib/listSort.js';
 
 /**
  * The Sort dropdown used by every entity list page (Automations, AI Agents,
- * Projects, Follow-ups, Templates, Forms), so the control looks and reads the
+ * Follow-ups, Templates), so the control looks and reads the
  * same everywhere.
  *
  * Built on SearchableSelect rather than a native <select> — project convention

@@ -87,6 +87,7 @@ async function ensureEntityFieldTables() {
       ('lead', 'assigned_to',      'BDA',           'text',     '[]', TRUE, 'assigned_user_id',  TRUE,  FALSE, 11),
       ('lead', 'paid_course',      'Product',       'text',     '[]', TRUE, 'paid_course',       FALSE, TRUE,  12),
       ('lead', 'total_paid',       'Total Paid',    'number',   '[]', TRUE, 'total_paid',        FALSE, TRUE,  13),
+      ('lead', 'payment_status',   'Payment Status','dropdown', '[]', TRUE, 'payment_status',    FALSE, TRUE,  13),
       ('lead', 'payment_date',     'Payment Date',  'date',     '[]', TRUE, 'payment_date',      FALSE, FALSE, 14),
       ('lead', 'created_at',       'Arrived',       'date',     '[]', TRUE, 'created_at',        TRUE,  FALSE, 15),
       ('lead', 'last_activity_at', 'Last Activity', 'date',     '[]', TRUE, 'last_activity_at',  TRUE,  FALSE, 16)

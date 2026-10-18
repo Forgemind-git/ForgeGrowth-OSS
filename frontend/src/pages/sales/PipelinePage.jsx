@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
-import { Plus, Flame, RefreshCw, X } from 'lucide-react';
+import { Plus, Flame, RefreshCw } from 'lucide-react';
 import { api } from '../../api.js';
 import { C, FONT, MONO } from '../../constants.js';
 import { useServerEvents } from '../../hooks/useServerEvents.js';
@@ -7,12 +7,12 @@ import { showError } from '../../lib/feedback.js';
 import { useConfirm } from '../../components/ConfirmDialog.jsx';
 import SearchableSelect from '../../components/SearchableSelect.jsx';
 import { useFunnelConfig } from '../../hooks/useFunnelConfig.js';
-import { useFieldRegistry, formatFieldValue } from '../../hooks/useFieldRegistry.js';
 import {
   PageShell, Button, StageBadge, STAGE_META, STAGE_ORDER,
   Field, inputStyle, Modal, Segmented, LeadsViewToggle, daysSince,
 } from '../academy/shared.jsx';
 import { Shimmer } from '../../components/charts.jsx';
+import ContactProfileModal from './ContactProfileModal.jsx';
 
 const FUNNEL = ['new', 'contacted', 'engaged', 'hot', 'enrolled'];
 
@@ -69,7 +69,6 @@ export default function PipelinePage({ user, navigate, tabs, view = 'board', onC
 
   return (
     <PageShell
-      title="Leads"
       subtitle="Every active lead by stage. Drag a card to move it — Cold / Lost branches off any stage."
       actions={
         <>
@@ -119,7 +118,7 @@ export default function PipelinePage({ user, navigate, tabs, view = 'board', onC
         </div>
       )}
 
-      {detail && <LeadDrawer lead={detail} onClose={() => setDetail(null)} navigate={navigate} onOpenLeads={() => onChangeView && onChangeView('list')} onChanged={() => load(true)} isAdmin={user?.role === 'admin'} />}
+      {detail && <ContactProfileModal lead={detail} user={user} navigate={navigate} onClose={() => setDetail(null)} onChanged={() => load(true)} />}
       {showAdd && <AddLeadModal onClose={() => setShowAdd(false)} onCreated={() => { setShowAdd(false); load(true); }} />}
       {confirmEl}
     </PageShell>
@@ -197,71 +196,6 @@ function Avatar({ name }) {
       {initials}
     </span>
   );
-}
-
-function LeadDrawer({ lead, onClose, navigate, onOpenLeads, onChanged, isAdmin }) {
-  const { leadCustom } = useFieldRegistry();
-  const [timeline, setTimeline] = useState(null);
-  useEffect(() => { api.leads.timeline(lead.id).then(setTimeline).catch(() => setTimeline({ events: [], activity: [] })); }, [lead.id]);
-  const row = (k, v) => (
-    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: `1px solid ${C.border}`, fontSize: 15 }}>
-      <span style={{ color: C.textMuted }}>{k}</span>
-      <span style={{ color: C.text, fontWeight: 500, textAlign: 'right' }}>{v || '—'}</span>
-    </div>
-  );
-  return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 200, display: 'flex', justifyContent: 'flex-end', fontFamily: FONT }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: 420, maxWidth: '100%', background: C.cardBg, height: '100%', overflowY: 'auto', boxShadow: C.shadowLg }}>
-        <div style={{ padding: '18px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>{lead.name || lead.whatsappNumber}</div>
-            <div style={{ marginTop: 5 }}><StageBadge stage={lead.stage} /></div>
-          </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textMuted }}><X size={20} /></button>
-        </div>
-        <div style={{ padding: 22 }}>
-          {row('WhatsApp', lead.whatsappNumber)}
-          {row('Source', lead.source)}
-          {row('City', lead.city)}
-          {row('Role', lead.role)}
-          {row('Goal', lead.goal)}
-          {row('Assigned BDA', lead.assignedUserName || lead.assignedBda)}
-          {row('Follow-ups', lead.followUpCount)}
-          {/* Custom Leads fields (Admin Settings → Fields), read-only here. */}
-          {leadCustom.map(f => (
-            <Fragment key={f.fieldKey}>{row(f.label, formatFieldValue(lead.customFields?.[f.fieldKey]))}</Fragment>
-          ))}
-          <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
-            <Button variant="secondary" onClick={() => (onOpenLeads ? onOpenLeads() : navigate && navigate('leads', 'list'))}>Open in the table</Button>
-            {lead.hasWhatsappThread && <Button variant="secondary" onClick={() => navigate && navigate('chats')}>Open chat</Button>}
-          </div>
-          <div style={{ marginTop: 22, fontSize: 14, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.textMuted, marginBottom: 8 }}>Activity timeline</div>
-          {!timeline ? <Shimmer height={80} /> : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[...(timeline.events || [])].slice(0, 20).map((e, i) => (
-                <div key={i} style={{ display: 'flex', gap: 9, fontSize: 14 }}>
-                  <span style={{ width: 7, height: 7, borderRadius: 99, background: C.primary, marginTop: 5, flexShrink: 0 }} />
-                  <div>
-                    <span style={{ color: C.text }}>{labelEvent(e)}</span>
-                    <span style={{ color: C.textMuted, marginLeft: 6, fontFamily: MONO, fontSize: 13 }}>{new Date(e.ts).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
-                  </div>
-                </div>
-              ))}
-              {(!timeline.events || !timeline.events.length) && <div style={{ color: C.textMuted, fontSize: 14 }}>No events yet.</div>}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function labelEvent(e) {
-  if (e.eventType === 'stage_changed') return `Stage → ${STAGE_META[e.toValue]?.label || e.toValue}`;
-  if (e.eventType === 'message_sent') return 'Message sent';
-  if (e.eventType === 'resource_opened') return 'Resource opened';
-  if (e.eventType === 'trigger_fired') return 'Trigger fired';
-  return e.eventType;
 }
 
 function AddLeadModal({ onClose, onCreated }) {

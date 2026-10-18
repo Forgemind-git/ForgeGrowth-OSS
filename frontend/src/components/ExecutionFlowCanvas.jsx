@@ -1,3 +1,4 @@
+import { UNZOOM_STYLE } from '../lib/uiZoom.js';
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { ZoomIn, ZoomOut, Maximize, Move } from 'lucide-react';
 import { FONT, MONO } from '../constants.js';
@@ -341,6 +342,8 @@ export default function ExecutionFlowCanvas({ nodes, edges, steps, onNodeClick, 
         onWheel={onWheel}
         onMouseDown={onMouseDown}
         style={{
+          // 1:1 inside the 110%-zoomed app so pan/zoom maths stays in one space (lib/uiZoom.js).
+          ...UNZOOM_STYLE,
           flex: 1, position: 'relative', overflow: 'hidden',
           background: C.pageBg, cursor: panning ? 'grabbing' : 'grab',
           touchAction: 'none', userSelect: 'none',

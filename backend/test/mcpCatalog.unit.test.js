@@ -19,10 +19,19 @@ const catalog = require('../src/services/mcpCatalog');
 const PKG = path.join(__dirname, '..');          // the backend package
 const REPO = path.join(PKG, '..');               // the repo, when there is one
 
+const { ROUTE_TOOL_NAMES } = require('../src/services/mcpRouteTools');
+
+// Hand-registered tools (registerTool('name') in the source) PLUS the tools
+// declared as data in services/mcpRouteTools.js, which a transport registers in
+// a loop. A transport is credited with the shared list only if its source
+// actually loads that file — so deleting the loop from one transport still
+// fails the parity test below.
 function registeredTools(absPath) {
   if (!fs.existsSync(absPath)) return null;
   const src = fs.readFileSync(absPath, 'utf8');
-  return [...src.matchAll(/registerTool\(\s*'([a-z_]+)'/g)].map(m => m[1]).sort();
+  const hand = [...src.matchAll(/registerTool\(\s*'([a-z_]+)'/g)].map(m => m[1]);
+  const loadsShared = /mcpRouteTools(\.js)?['"]/.test(src) && /ROUTE_TOOLS/.test(src);
+  return [...hand, ...(loadsShared ? ROUTE_TOOL_NAMES : [])].sort();
 }
 
 // Resolved relative to THIS package, never via a repo-root guess — the backend
@@ -193,7 +202,7 @@ describe('seedCategories never widens access', () => {
       delete: false, area_bda: true, discovery: true, area_admin: false,
       area_leads: true, area_courses: true, area_scoring: true, create_agent: true,
       manage_tools: true, update_agent: true, area_contacts: true, area_insights: true,
-      area_payments: true, read_messages: true, send_messages: true, area_leadforms: true,
+      area_payments: true, read_messages: true, send_messages: true,
       area_marketing: true, area_messaging: false, area_resources: false,
       area_broadcasts: true, area_automations: true,
     };
@@ -212,15 +221,99 @@ describe('seedCategories never widens access', () => {
       assert.strictEqual(catalog.isToolAllowed('delete_tool', seeded), false);
     });
 
-    test('only the two deliberately-denied tools are unavailable', () => {
-      const denied = catalog.TOOL_NAMES.filter(n => !catalog.isToolAllowed(n, seeded)).sort();
-      assert.deepStrictEqual(denied, ['delete_agent', 'delete_tool'],
-        'the deploy must not change what this connector can do beyond what was already denied');
+    // ⚠ A POSITIVE allowlist, deliberately — not "the denied set equals [...]".
+    //
+    // A frozen DENIED list has to be edited every time a category is added,
+    // because a new category correctly seeds OFF; edit it often enough and it
+    // stops meaning anything. And a list derived from the CURRENT catalog is
+    // worse than useless: it judges "was this reachable before?" using the
+    // definition that just changed, so adding a cap to an existing category
+    // makes its tools vanish from the check instead of failing it. (Verified —
+    // a derived version passed while silently dropping a whole category.)
+    //
+    // This snapshot is what the live connector could actually reach when the
+    // Chat Analyzer shipped. New tools never disturb it; a tool losing access
+    // always fails it. (The Forms + Projects tools were removed on purpose on
+    // 2026-10-16 and came out of this list with them.)
+    const REACHABLE_ON_DEPLOY_DAY = [
+      'add_google_sheets_tool', 'add_http_tool', 'add_tool',
+      'create_agent', 'create_automation', 'create_template',
+      'create_wa_link', 'forgechat_request', 'get_agent', 'get_automation_runs',
+      'get_campaign_performance', 'get_product_revenue', 'get_template', 'list_agents',
+      'list_automations', 'list_conversations', 'list_endpoints',
+      'list_leads', 'list_media', 'list_models', 'list_payments',
+      'list_products', 'list_sheet_tabs', 'list_templates',
+      'list_wa_accounts', 'list_webinars', 'move_lead_stage',
+      'read_messages', 'read_sheet_values', 'search_spreadsheets', 'send_bulk_message',
+      'send_interactive', 'send_media', 'send_message', 'send_template',
+      'submit_template', 'sync_template', 'update_agent', 'update_automation',
+      'update_tool', 'upload_media', 'validate_automation',
+    ];
+
+    test('the deploy takes nothing away that worked before', () => {
+      const lost = REACHABLE_ON_DEPLOY_DAY
+        .filter(n => catalog.TOOL_NAMES.includes(n))   // a renamed tool is a separate concern
+        .filter(n => !catalog.isToolAllowed(n, seeded));
+      assert.deepStrictEqual(lost, [],
+        'these tools work on the live instance today and this deploy would switch them off');
+    });
+
+    test('a NEW category seeds off, so nothing gains access on deploy', () => {
+      // The other half of the same rule. Chat Analyzer bills the AI provider per
+      // call, so it must arrive switched off and wait for an admin.
+      assert.strictEqual(seeded.chat_analysis, false);
+      for (const t of ['analyze_chat', 'list_analysed_chats', 'get_chat_analysis']) {
+        assert.strictEqual(catalog.isToolAllowed(t, seeded), false,
+          `${t} is new and must not be reachable until an admin enables it`);
+      }
     });
 
     test('a stale capability key does not create a phantom category', () => {
       assert.ok(!('area_scoring' in seeded), 'area_scoring belongs to a removed feature');
     });
+  });
+});
+
+describe('areas and kinds', () => {
+  test('every category belongs to an area that exists', () => {
+    const areas = new Set(catalog.AREAS.map(a => a.key));
+    const bad = catalog.CATEGORIES.filter(c => !areas.has(c.area)).map(c => c.key);
+    assert.deepStrictEqual(bad, [], `categories with no valid area: ${bad.join(', ')}`);
+  });
+
+  test('every tool has a kind the Settings screen can label', () => {
+    const bad = catalog.TOOL_NAMES.filter(n => !catalog.KINDS[catalog.toolKind(n)]);
+    assert.deepStrictEqual(bad, []);
+  });
+
+  test('a send or delete tool is never labelled as a harmless read', () => {
+    for (const n of catalog.TOOL_NAMES) {
+      if (/^(send_|social_send|social_reply|social_create_post|delete_|social_delete)/.test(n)) {
+        assert.notStrictEqual(catalog.toolKind(n), 'read', `${n} must not be labelled "Reads"`);
+      }
+    }
+  });
+
+  test('every Social tool lives in the Social area, except deletes', () => {
+    for (const n of catalog.TOOL_NAMES.filter(x => x.startsWith('social_'))) {
+      const cat = catalog.CATEGORIES.find(c => c.key === catalog.toolCategory(n));
+      if (n.startsWith('social_delete')) assert.strictEqual(cat.key, 'delete');
+      else assert.strictEqual(cat.area, 'social', `${n} is in ${cat.area}`);
+    }
+  });
+
+  test('the UI catalog groups every category under exactly one area', () => {
+    const ui = catalog.catalogForUi({});
+    const listed = ui.areas.flatMap(a => a.categories).sort();
+    assert.deepStrictEqual(listed, [...catalog.CATEGORY_KEYS].sort());
+    assert.ok(ui.apiAreas.length > 5 && ui.kinds.read);
+  });
+
+  test('new Social categories seed OFF on deploy', () => {
+    const seeded = catalog.seedCategories({ discovery: true, area_marketing: true, area_admin: true });
+    for (const k of ['social_insights', 'social_inbox', 'social_publish', 'social_automations', 'social_agents']) {
+      assert.strictEqual(seeded[k], false, `${k} must arrive switched off`);
+    }
   });
 });
 

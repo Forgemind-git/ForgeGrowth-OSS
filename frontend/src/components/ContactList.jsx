@@ -93,11 +93,7 @@ export default function ContactList({ waNumber, width = 380, selectedContact, on
 
       {/* Search + tag filter */}
       <div style={{ padding: '8px 12px', background: 'var(--c-cardBg)', borderBottom: `1px solid ${C.borderDark}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          background: 'var(--c-chatPanel)', borderRadius: 8,
-          padding: '6px 12px',
-        }}>
+        <div className="fc-searchfield">
           <Search size={16} color={C.textMuted} />
           <input
             value={search}
@@ -138,15 +134,17 @@ export default function ContactList({ waNumber, width = 380, selectedContact, on
               key={c.contact_number}
               onClick={() => onSelectContact(c.contact_number)}
               style={{
-                width: '100%',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 12,
-                padding: '13px 16px',
+                padding: '12px',
+                margin: '0 8px 4px',
+                width: 'calc(100% - 16px)',
+                boxSizing: 'border-box',
                 border: 'none',
-                borderBottom: `1px solid ${C.border}`,
+                borderRadius: 14,
                 cursor: 'pointer',
-                background: isActive ? 'var(--c-rowActive)' : 'var(--c-cardBg)',
+                background: isActive ? 'var(--c-rowActive)' : 'transparent',
                 fontFamily: FONT,
                 textAlign: 'left',
                 transition: 'background .1s',
@@ -156,16 +154,8 @@ export default function ContactList({ waNumber, width = 380, selectedContact, on
               // reset to '#ffffff', so in dark mode a row went permanently
               // white the first time it was hovered.
               onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--c-rowHover)'; }}
-              onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'var(--c-cardBg)'; }}
+              onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
             >
-              {/* Active indicator */}
-              {isActive && (
-                <div style={{
-                  position: 'absolute', left: 0, top: 0, bottom: 0,
-                  width: 4, background: C.primary,
-                }} />
-              )}
-
               {/* Avatar */}
               <div style={{
                 width: 48, height: 48, borderRadius: '50%',

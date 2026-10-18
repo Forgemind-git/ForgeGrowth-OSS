@@ -40,15 +40,8 @@ async function buildToolsForAgent(agent, sendCtx = null) {
 
   const tools = [];
   const executors = {};
-  // Collected in the loop, built in one pass afterwards: each one needs a DB read
-  // for its form, and building them together keeps that out of this loop body.
-  const formToolRows = [];
 
   for (const row of rows) {
-    if (row.tool_type === 'lead_form') {
-      formToolRows.push(row);
-    }
-
     if (row.tool_type === 'google_sheets') {
       const cfg = row.config || {};
       const ops = Array.isArray(cfg.ops) ? cfg.ops : [];
@@ -234,27 +227,9 @@ async function buildToolsForAgent(agent, sendCtx = null) {
     };
   }
 
-  // Fill-a-form tools. Built in test mode too — the operator needs to rehearse
-  // the questions in the Live test chat — but each executor refuses to WRITE
-  // unless the run is live, so a rehearsal never creates a lead or a submission.
-  if (formToolRows.length > 0) {
-    const { buildFormTools } = require('../services/agentFormTools');
-    const forms = await buildFormTools({
-      toolRows: formToolRows,
-      contactNumber: sendCtx && sendCtx.contactNumber,
-      live: !!(sendCtx && sendCtx.live),
-      // Stamped onto every row the agent files, which is what makes "you may
-      // correct a row YOU added" enforceable rather than advisory.
-      agentId: agent.id,
-    });
-    tools.push(...forms.tools);
-    Object.assign(executors, forms.executors);
-  }
-
   // Removed from this list on purpose: the CRM write-back tools, the payment
-  // tools and escalate_to_human. An agent here collects data into a form's
-  // table; it does not edit the contact, take money, or reassign a human's
-  // conversation. The Chats-side takeover (contacts.agent_paused) is
+  // tools and escalate_to_human. An agent here does not edit the contact, take
+  // money, or reassign a human's conversation. The Chats-side takeover (contacts.agent_paused) is
   // untouched — a person can still silence the bot from the inbox, and the
   // usage-limit pause still uses it.
 
@@ -523,22 +498,33 @@ async function buildMessageHistory({ waAccountId, contactNumber, limit, currentI
 
   const { rows } = waNumber
     ? await pool.query(
-        `SELECT direction, message_body, timestamp
+        `SELECT message_id, message_type, direction, message_body, timestamp
            FROM coexistence.chat_history
           WHERE wa_number = $1 AND contact_number = $2
             AND message_type NOT IN ('status','reaction')
-            AND message_body IS NOT NULL AND message_body <> ''
+            AND ((message_body IS NOT NULL AND message_body <> '')
+                 OR message_type IN ('image','video','audio','voice','document'))
           ORDER BY timestamp DESC
           LIMIT $3`,
         [waNumber, contactNumber, Math.max(1, Math.min(100, limit || 20))],
       )
     : { rows: [] };
 
+  // Files we sent from the Media Library (brochure, course video, voice note)
+  // appear as their Media Library name + description, so the agent knows what
+  // the customer has already been given instead of seeing a bare filename.
+  const { libraryMatches, libraryLabel } = require('../services/libraryMedia');
+  const library = await libraryMatches('chat', rows).catch(() => new Map());
+
   // DB returned newest-first for the LIMIT; reverse to chronological.
-  const history = rows.reverse().map(r => ({
-    role: r.direction === 'incoming' ? 'user' : 'assistant',
-    content: r.message_body,
-  }));
+  const history = rows.reverse().map(r => {
+    const lib = library.get(r.message_id);
+    const body = (r.message_body || '').trim();
+    const content = lib
+      ? (body && body !== lib.name && !/\.(pdf|mp4|ogg|mp3|jpe?g|png|webp|docx?)$/i.test(body) ? `${libraryLabel(lib, r.message_type)} ${body}` : libraryLabel(lib, r.message_type))
+      : body;
+    return { role: r.direction === 'incoming' ? 'user' : 'assistant', content };
+  }).filter(m => m.content);
 
   // The current inbound message may not yet be persisted (timing race vs.
   // webhook commit). Append it as the last user message if it isn't there.
@@ -561,31 +547,15 @@ function pickApiKey(agent) {
   return '';
 }
 
-// Resolve an OpenAI key for Whisper transcription: the agent's own key if it's
-// an OpenAI agent, otherwise any OpenAI credential connected in the AI Models
-// registry (falling back to the env key). Lets an Anthropic agent still
-// transcribe voice notes using the workspace's OpenAI key.
-async function resolveOpenAiKey(agent, agentApiKey) {
-  if (agent.ai_provider === 'openai' && agentApiKey) return agentApiKey;
-  try {
-    const { rows } = await pool.query(
-      `SELECT api_key_encrypted FROM coexistence.ai_models
-        WHERE provider = 'openai' AND api_key_encrypted IS NOT NULL
-        ORDER BY created_at DESC LIMIT 1`,
-    );
-    if (rows[0]) {
-      const k = decrypt(rows[0].api_key_encrypted);
-      if (k) return k;
-    }
-  } catch (e) {
-    console.error('[agentEngine] resolveOpenAiKey failed:', e.message);
-  }
-  return process.env.OPENAI_API_KEY || '';
-}
-
-// If the inbound message is a voice note, download + transcribe it (OpenAI
-// Whisper). Writes the transcript back into chat_history so it shows in the
-// conversation + future context.
+// If the inbound message is a voice note, transcribe it with OpenRouter
+// (microsoft/mai-transcribe-2 — services/transcription.js). Writes the
+// transcript back into chat_history so it shows in the conversation + future
+// context.
+//
+// ⚠ SHARES THE CHAT ANALYZER'S PER-MESSAGE CACHE (chat_message_artifacts, kind
+// 'transcript'). A voice note already transcribed — by the analyser, the MCP, or
+// an earlier agent run on the same message — is reused and costs nothing; a
+// fresh transcript is stored there, so the analyser never pays for it again.
 //
 // Returns { text, tooLong }:
 //   text    — the transcript, or the plain body for a non-audio message ('' if
@@ -593,19 +563,19 @@ async function resolveOpenAiKey(agent, agentApiKey) {
 //   tooLong — { seconds, cap } when the note was longer than the agent's
 //             `max_voice_seconds` and was therefore NOT transcribed.
 //
-// ⚠ The length check happens AFTER the download but BEFORE Whisper, which is the
-// only place it can save anything: Whisper bills per minute of audio, so a cap
-// applied to the transcript would have already paid for the ten-minute note it
-// was meant to refuse. Meta's webhook carries no duration, so the file itself is
-// the only source (services/mediaDuration.js).
+// ⚠ The length check happens AFTER the download but BEFORE transcription, which
+// is the only place it can save anything: speech-to-text bills per second of
+// audio, so a cap applied to the transcript would have already paid for the
+// ten-minute note it was meant to refuse. Meta's webhook carries no duration,
+// so the file itself is the only source (services/mediaDuration.js).
 //
 // Note: audio/voice inbounds are stored with a placeholder body ("Audio
 // message" / "Voice message") by the webhook — never a real caption — so for
 // audio we ignore the stored body and always transcribe the actual file.
-async function transcribeInboundIfAudio({ agent, inboundMessageId, agentApiKey }) {
+async function transcribeInboundIfAudio({ agent, inboundMessageId }) {
   try {
     const { rows } = await pool.query(
-      `SELECT message_id, message_type, message_body
+      `SELECT message_id, message_type, message_body, contact_number, media_mime_type, media_storage_path
          FROM coexistence.chat_history WHERE message_id = $1`,
       [inboundMessageId],
     );
@@ -617,47 +587,89 @@ async function transcribeInboundIfAudio({ agent, inboundMessageId, agentApiKey }
       return { text: (msg.message_body && msg.message_body.trim()) ? msg.message_body.trim() : '', tooLong: null };
     }
 
-    const openaiKey = await resolveOpenAiKey(agent, agentApiKey);
-    if (!openaiKey) {
-      console.warn('[agentEngine] voice note received but no OpenAI key connected for transcription.');
+    const extract = require('../services/mediaExtract');
+    const writeBack = async (text) => {
+      // Surface the transcript in the chat (and future agent context), replacing
+      // the placeholder body the webhook stored for the voice note.
+      await pool.query(
+        `UPDATE coexistence.chat_history SET message_body = $1
+          WHERE message_id = $2
+            AND (message_body IS NULL OR message_body = ''
+                 OR message_body IN ('Audio message', 'Voice message'))`,
+        [text, inboundMessageId],
+      );
+    };
+
+    const cached = await extract.cachedTranscript('chat', inboundMessageId).catch(() => null);
+    if (cached) {
+      await writeBack(cached);
+      return { text: cached, tooLong: null };
+    }
+
+    const { transcribeAudio, openRouterKey } = require('../services/transcription');
+    const orKey = await openRouterKey();
+    if (!orKey) {
+      console.warn('[agentEngine] voice note received but no OpenRouter key is connected, so it cannot be transcribed.');
       return { text: '', tooLong: null };
     }
-    const { downloadOne } = require('../services/mediaDownloader');
-    const { transcribeAudioFile } = require('../services/transcription');
-    const dl = await downloadOne(inboundMessageId);
-    if (!dl || !dl.ok || !dl.path) {
-      console.warn('[agentEngine] could not fetch audio for transcription:', dl && dl.error);
-      return { text: '', tooLong: null };
+    const fs = require('fs');
+    let filePath = (msg.media_storage_path && fs.existsSync(msg.media_storage_path)) ? msg.media_storage_path : null;
+    if (!filePath) {
+      const { downloadOne } = require('../services/mediaDownloader');
+      const dl = await downloadOne(inboundMessageId);
+      if (!dl || !dl.ok || !dl.path) {
+        console.warn('[agentEngine] could not fetch audio for transcription:', dl && dl.error);
+        return { text: '', tooLong: null };
+      }
+      filePath = dl.path;
     }
 
     // Length cap. An UNKNOWN duration (no ffprobe, unreadable container) is
     // treated as acceptable and transcribed — failing open loses a cost guard,
     // failing closed loses the customer's message.
+    const secs = await probeDurationSeconds(filePath);
     const voiceCap = asLimit(agent.max_voice_seconds);
-    if (voiceCap) {
-      const secs = await probeDurationSeconds(dl.path);
-      if (secs != null && secs > voiceCap) {
-        console.warn(`[agentEngine] agent ${agent.id}: voice note ${inboundMessageId} is ${formatDuration(secs)}, over the ${formatDuration(voiceCap)} cap — not transcribed.`);
-        return { text: '', tooLong: { seconds: Math.round(secs), cap: voiceCap } };
-      }
+    if (voiceCap && secs != null && secs > voiceCap) {
+      console.warn(`[agentEngine] agent ${agent.id}: voice note ${inboundMessageId} is ${formatDuration(secs)}, over the ${formatDuration(voiceCap)} cap — not transcribed.`);
+      return { text: '', tooLong: { seconds: Math.round(secs), cap: voiceCap } };
     }
 
-    const text = await transcribeAudioFile({ filePath: dl.path, apiKey: openaiKey });
+    let r;
+    try {
+      r = await transcribeAudio({ filePath, mime: msg.media_mime_type, apiKey: orKey });
+    } catch (err) {
+      console.error('[agentEngine] transcription failed:', err.message);
+      return { text: '', tooLong: null };
+    }
+    const text = (r.text || '').trim();
+    await extract.storeTranscript({
+      source: 'chat', messageKey: inboundMessageId,
+      conversationKey: extract.chatConversationKey(msg.contact_number),
+      result: r, measuredSeconds: secs,
+      bytes: (() => { try { return fs.statSync(filePath).size; } catch { return null; } })(),
+    }).catch(err => console.warn('[agentEngine] could not cache transcript:', err.message));
     if (!text) return { text: '', tooLong: null };
-    // Surface the transcript in the chat (and future agent context), replacing
-    // the placeholder body the webhook stored for the voice note.
-    await pool.query(
-      `UPDATE coexistence.chat_history SET message_body = $1
-        WHERE message_id = $2
-          AND (message_body IS NULL OR message_body = ''
-               OR message_body IN ('Audio message', 'Voice message'))`,
-      [text, inboundMessageId],
-    );
+    await writeBack(text);
     return { text, tooLong: null };
   } catch (e) {
     console.error('[agentEngine] transcription failed:', e.message);
     return { text: '', tooLong: null };
   }
+}
+
+/**
+ * Transcribe a voice note recorded in the agent TEST chat (POST
+ * /agents/:id/test/transcribe). Nothing is cached — a test recording is not a
+ * WhatsApp message. Browser recordings arrive as webm, which the transcription
+ * service converts to mp3 itself. Throws with a readable reason so the route
+ * can show it.
+ */
+async function transcribeForAgent({ agentId, filePath }) {
+  const { transcribeAudio } = require('../services/transcription');
+  const { rows } = await pool.query(`SELECT id FROM coexistence.agents WHERE id = $1`, [agentId]);
+  if (!rows[0]) throw new Error('Agent not found');
+  const r = await transcribeAudio({ filePath });
+  return r.text;
 }
 
 /**
@@ -772,13 +784,13 @@ async function runAgent({ agentId, contactNumber, inboundMessageId, inboundText,
   }
 
   // Voice notes: when the agent has transcription on and the inbound is audio
-  // (no text body), turn it into text via Whisper before opening the run /
+  // (no text body), turn it into text (OpenRouter, MAI-Transcribe 2) before opening the run /
   // running the LLM loop. If we can't get a transcript, skip silently rather
   // than reply to a placeholder.
   let messageText = inboundText;
   if (!messageText && inboundMessageId && agent.transcribe_audio) {
     // May be empty (no transcript) — don't bail yet; it could still be an image.
-    const heard = await transcribeInboundIfAudio({ agent, inboundMessageId, agentApiKey: apiKey });
+    const heard = await transcribeInboundIfAudio({ agent, inboundMessageId });
     messageText = heard.text;
     // A note over the length cap is NOT silence. The customer has just spoken
     // for several minutes; going quiet reads exactly like being ignored, and
@@ -1169,4 +1181,4 @@ async function loadTemplatesForPreview(ids) {
   }
 }
 
-module.exports = { runAgent, runAgentTest, buildToolsForAgent, buildMessageHistory };
+module.exports = { runAgent, runAgentTest, buildToolsForAgent, buildMessageHistory, transcribeForAgent, transcribeInboundIfAudio };

@@ -87,7 +87,6 @@ export default function SalesLogPage({ user, navigate }) {
 
   return (
     <PageShell
-      title="Sales Log"
       subtitle="Every paid / converted lead, logged. Feeds the summary numbers above."
       actions={
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

@@ -1,15 +1,21 @@
+import { toLayout } from '../lib/uiZoom.js';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Home, Zap, LayoutTemplate, MessageCircle,
-  Megaphone, Image as ImageIcon, Link, Kanban, Bot,
-  ChevronLeft, ChevronRight,
+  Megaphone, Image as ImageIcon, Link, Link2, Kanban, Bot,
+  ChevronLeft, ChevronRight, ScanSearch,
   LayoutDashboard,
-  KanbanSquare, Package,
-  Receipt, FormInput, MousePointerClick, Radio, Target, CreditCard,
-  FolderKanban,
+  KanbanSquare, Package, Contact,
+  Receipt, MousePointerClick, Radio, Target, CreditCard,
+  Users2,
   IndianRupee,
+  NotebookPen,
+  ListChecks,
+  CalendarClock,
 } from 'lucide-react';
 import { C, FONT } from '../constants.js';
+import { SOCIAL_NAV, SOCIAL_PAGE_ALIASES } from '../social/nav.js';
+import { HUBS, allowedTabs } from './AutomationHub.jsx';
 
 // Home is pinned above the groups — it is the one destination that belongs to
 // no category, and burying it would cost a click on every session.
@@ -25,54 +31,32 @@ const HOME_ITEM = { id: 'home', label: 'Home', Icon: Home };
 // stored per-user permission override that granted it.
 const SALES_GROUPS = [
   {
+    // In the order a sale actually happens: the lead arrives, you talk to them,
+    // you chase them, it lands in the Sales Log (2026-10-16). Each item that
+    // has related pages opens a tabbed hub (components/AutomationHub.jsx HUBS)
+    // instead of listing them all here.
     id: 'sales', label: 'Sales', Icon: KanbanSquare,
     items: [
-      // One destination for the whole leads model — Funnel and All Leads (which
-      // itself switches between list and board) are internal views of
-      // LeadsHubPage, not separate nav entries.
-      { id: 'leads', label: 'Leads', Icon: KanbanSquare },
-      { id: 'onboarding', label: 'Sales Log', Icon: Receipt },
-      { id: 'payments', label: 'Payments', Icon: CreditCard },
-    ],
-  },
-  {
-    id: 'inbox', label: 'Inbox', Icon: MessageCircle,
-    items: [
+      // Contacts (route key `leads`): Funnel and All Contacts (table / board) are
+      // internal views of LeadsHubPage.
+      { id: 'leads', label: 'Contacts', Icon: Contact },
+      // Hub: Chats · Chat Analyzer.
       { id: 'chats', label: 'Chats', Icon: MessageCircle },
+      // Pinned lead chats + the follow-up calendar. Shown to anyone who can see
+      // Leads (see PAGE_ALIASES) so no role needs editing.
+      { id: 'follow-ups', label: 'Follow-up', Icon: CalendarClock },
+      // Hub: Sales Log · Payments.
+      { id: 'onboarding', label: 'Sales Log', Icon: Receipt },
     ],
   },
   {
-    id: 'automation', label: 'Automation', Icon: Zap,
+    // Everything that builds or sends automated messaging is ONE destination:
+    // the Automations hub with tabs for Flows, AI Agents, Broadcasts, Templates,
+    // Media and Message Costs. Kept at the bottom — it is set up once, not
+    // worked through every day.
+    id: 'build', label: 'Build', Icon: Zap,
     items: [
       { id: 'chatbot-builder', label: 'Automations', Icon: Zap },
-      { id: 'ai-agent-builder', label: 'AI Agents', Icon: Bot },
-    ],
-  },
-  {
-    id: 'content', label: 'Content', Icon: LayoutTemplate,
-    items: [
-      { id: 'template-builder', label: 'Template Builder', Icon: LayoutTemplate },
-      { id: 'lead-forms', label: 'Forms', Icon: FormInput },
-      // Route key stays `wa-links`; only the label changed.
-      { id: 'wa-links', label: 'Message Formats', Icon: Link },
-      { id: 'media-library', label: 'Media', Icon: ImageIcon },
-    ],
-  },
-  {
-    id: 'outreach', label: 'Outreach', Icon: Megaphone,
-    items: [
-      { id: 'bulk-message', label: 'Bulk Message', Icon: Megaphone },
-      // What the messaging above actually costs — a dashboard people read,
-      // not a setting they configure, so it sits here and not in Admin.
-      { id: 'message-costs', label: 'Message Costs', Icon: IndianRupee },
-    ],
-  },
-  {
-    id: 'workspace', label: 'Workspace', Icon: FolderKanban,
-    items: [
-      // Projects group templates + automations + agents + forms for one
-      // campaign.
-      { id: 'projects', label: 'Projects', Icon: FolderKanban },
     ],
   },
 ];
@@ -82,11 +66,18 @@ const SALES_GROUPS = [
 // drift that makes a nav item render but resolve to nothing.
 const NAV_ITEMS = [HOME_ITEM, ...SALES_GROUPS.flatMap(g => g.items)];
 
+
 const MARKETING_NAV = [
+  // In the order the work happens (2026-10-16): run the ads, see where leads
+  // came from, then send the results back to Meta. Each item after Overview
+  // opens a tabbed hub (components/AutomationHub.jsx HUBS). Route keys unchanged.
   { id: 'mkt-overview', label: 'Overview', Icon: LayoutDashboard },
+  // Hub: Campaigns · Click-to-WhatsApp · Campaign ROI.
   { id: 'campaigns', label: 'Campaigns', Icon: Megaphone },
-  { id: 'ctwa-ads', label: 'Click-to-WhatsApp', Icon: MousePointerClick },
-  { id: 'conversion-api', label: 'Conversion API', Icon: Radio },
+  // Hub: Message Formats — click-to-chat formats, where leads come from.
+  { id: 'wa-links', label: 'Lead Sources', Icon: Link2 },
+  // Hub: Conversion API · Lead Optimisation — the signals sent back to Meta.
+  { id: 'conversion-api', label: 'Conversions', Icon: Radio },
 ];
 
 // Per-section nav — the header tab (Marketing / Sales) picks which list the
@@ -94,9 +85,10 @@ const MARKETING_NAV = [
 const SECTION_NAV = {
   marketing: MARKETING_NAV,
   sales: NAV_ITEMS,
+  social: SOCIAL_NAV,
 };
 
-const SECTION_EMPTY_ICON = { marketing: Megaphone, sales: Kanban };
+const SECTION_EMPTY_ICON = { marketing: Megaphone, sales: Kanban, social: Megaphone };
 
 // One group in the 68px rail: an icon that flies its items out to the side.
 // The rail therefore stays 6 icons tall whatever the nav contains, which is
@@ -110,13 +102,15 @@ function RailGroup({ group, activePage, onPageChange }) {
 
   const show = () => {
     clearTimeout(closeTimer.current);
-    const r = btnRef.current?.getBoundingClientRect();
-    if (!r) return;
+    const b = btnRef.current?.getBoundingClientRect();
+    if (!b) return;
+    // Screen px → layout px: the app is CSS-zoomed (lib/uiZoom.js).
+    const r = { right: toLayout(b.right), top: toLayout(b.top) };
     // position:fixed — an absolutely-positioned panel would be clipped by the
     // rail's own overflow, which is the whole reason this bug existed.
     // Clamp upward so a group near the bottom still shows all of its items.
     const height = 12 + group.items.length * 36;
-    setPos({ left: r.right + 6, top: Math.max(8, Math.min(r.top, window.innerHeight - height - 8)) });
+    setPos({ left: r.right + 6, top: Math.max(8, Math.min(r.top, toLayout(window.innerHeight) - height - 8)) });
     setOpen(true);
   };
   const hide = () => { closeTimer.current = setTimeout(() => setOpen(false), 140); };
@@ -132,13 +126,13 @@ function RailGroup({ group, activePage, onPageChange }) {
         title={group.label}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '11px 0', borderRadius: 10, cursor: 'pointer', marginBottom: 2,
+          padding: '11px 0', borderRadius: 999, cursor: 'pointer', marginBottom: 2,
           background: holdsActive ? C.primary : 'transparent',
-          color: holdsActive ? '#fff' : C.t2,
+          color: holdsActive ? '#fff' : C.textSecondary,
           transition: 'all .15s', userSelect: 'none',
         }}
       >
-        <group.Icon size={20} strokeWidth={2} />
+        <group.Icon size={18} strokeWidth={holdsActive ? 2.4 : 2} />
       </div>
       {open && pos && (
         <div
@@ -146,12 +140,12 @@ function RailGroup({ group, activePage, onPageChange }) {
           onMouseLeave={hide}
           style={{
             position: 'fixed', left: pos.left, top: pos.top, zIndex: 300,
-            minWidth: 186, padding: '6px', borderRadius: 12,
-            background: C.cardBg, border: `1px solid ${C.border}`, boxShadow: C.shadowLg,
+            minWidth: 186, padding: 6, borderRadius: 'var(--fc-r-md)',
+            background: 'var(--fc-raised)', boxShadow: 'var(--fc-shadow-lg)',
             fontFamily: FONT,
           }}
         >
-          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.t6, padding: '6px 10px 4px' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.textSecondary, padding: '6px 10px 6px' }}>
             {group.label}
           </div>
           {group.items.map(item => {
@@ -162,15 +156,15 @@ function RailGroup({ group, activePage, onPageChange }) {
                 onClick={() => { onPageChange(item.id); setOpen(false); }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '11px 12px', borderRadius: 8, cursor: 'pointer',
+                  padding: '11px 14px', borderRadius: 999, cursor: 'pointer',
                   background: active ? C.primary : 'transparent',
-                  color: active ? '#fff' : C.t2,
-                  fontSize: 15, fontWeight: active ? 700 : 600, whiteSpace: 'nowrap',
+                  color: active ? '#fff' : C.textSecondary,
+                  fontSize: 15, fontWeight: active ? 780 : 550, whiteSpace: 'nowrap',
                 }}
                 onMouseEnter={e => { if (!active) e.currentTarget.style.background = C.hover; }}
                 onMouseLeave={e => { e.currentTarget.style.background = active ? C.primary : 'transparent'; }}
               >
-                <item.Icon size={19} strokeWidth={2} style={{ flexShrink: 0 }} />
+                <item.Icon size={17} strokeWidth={active ? 2.4 : 2} style={{ flexShrink: 0 }} />
                 {item.label}
               </div>
             );
@@ -191,11 +185,11 @@ function NavRow({ item, active, collapsed, indented, onClick }) {
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: collapsed ? 0 : 11,
-        padding: collapsed ? '13px 0' : (indented ? '11px 14px 11px 26px' : '12px 14px'),
-        borderRadius: 10,
+        gap: collapsed ? 0 : 12,
+        padding: collapsed ? '13px 0' : (indented ? '12px 14px 12px 26px' : '12px 14px'),
+        borderRadius: 999,
         cursor: 'pointer',
-        transition: 'all .15s',
+        transition: 'background .15s, color .15s',
         marginBottom: 2,
         background: active ? C.primary : 'transparent',
         // ⚠ NOT C.t4 (#666). A nav label is a PRIMARY destination, not
@@ -203,11 +197,11 @@ function NavRow({ item, active, collapsed, indented, onClick }) {
         // contributor to "everything is too thin and invisible" — it measured
         // 13px/500/#666 against the reference's 15px/600/near-black. C.t2 is
         // #222 in light and a bright #E4E4E4 in dark.
-        color: active ? '#fff' : C.t2,
+        color: active ? '#fff' : C.textSecondary,
         justifyContent: collapsed ? 'center' : 'flex-start',
         fontFamily: FONT,
-        fontSize: 15,
-        fontWeight: active ? 700 : 600,
+        fontSize: 16,
+        fontWeight: active ? 780 : 550,
         whiteSpace: 'nowrap',
         overflow: 'hidden',
         userSelect: 'none',
@@ -223,17 +217,31 @@ function NavRow({ item, active, collapsed, indented, onClick }) {
       onMouseLeave={e => { e.currentTarget.style.background = active ? C.primary : 'transparent'; }}
     >
       <span style={{
-        width: 22,
+        width: 20,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         flexShrink: 0,
       }}>
-        <item.Icon size={19} strokeWidth={2} />
+        <item.Icon size={17} strokeWidth={active ? 2.4 : 2} />
       </span>
       {!collapsed && <span style={{ letterSpacing: '-.01em' }}>{item.label}</span>}
     </div>
   );
+}
+
+// A page reachable through ANY of these permission keys. Follow-up is a view of
+// the person's own leads, so Leads (or the retired My leads today) grants it.
+export const PAGE_ALIASES = {
+  'follow-ups': ['follow-ups', 'leads', 'my-worklist'],
+  // A hub item (Automations, Chats, Sales Log) is shown to anyone who may open
+  // ANY of its tabs.
+  ...Object.fromEntries(HUBS.map(h => [h.id, h.tabs.map(t => t.perm || t.key)])),
+  // Every Social sidebar item is reached through the one 'social' page key.
+  ...SOCIAL_PAGE_ALIASES,
+};
+function pageAllowed(allowed, id) {
+  return (PAGE_ALIASES[id] || [id]).some(k => allowed.has(k));
 }
 
 export default function Sidebar({ activePage, onPageChange, collapsed, setCollapsed, user, section = 'sales' }) {
@@ -243,14 +251,19 @@ export default function Sidebar({ activePage, onPageChange, collapsed, setCollap
     ? null
     : new Set(user.pages);
   const visibleItems = allowed
-    ? sectionItems.filter(item => item.id === 'home' || allowed.has(item.id))
+    ? sectionItems.filter(item => item.id === 'home' || pageAllowed(allowed, item.id))
     : sectionItems;
   const EmptyIcon = SECTION_EMPTY_ICON[section] || Megaphone;
+  // A hub item lands on the first of its tabs this user may open.
+  const goTo = (id) => {
+    const hub = HUBS.find(h => h.id === id);
+    onPageChange(hub ? (allowedTabs(user, hub.tabs)[0]?.key || id) : id);
+  };
 
   // Groups, permission-filtered. A group whose every item is hidden must not
   // render at all — a heading over nothing reads as a broken menu.
   const groups = useMemo(() => SALES_GROUPS
-    .map(g => ({ ...g, items: allowed ? g.items.filter(i => allowed.has(i.id)) : g.items }))
+    .map(g => ({ ...g, items: allowed ? g.items.filter(i => pageAllowed(allowed, i.id)) : g.items }))
     .filter(g => g.items.length > 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [user?.role, user?.pages && user.pages.join(',')]);
@@ -263,24 +276,20 @@ export default function Sidebar({ activePage, onPageChange, collapsed, setCollap
   // collapse the sidebar and never get it back.
   const useRail = isGrouped && collapsed;
   return (
-    <div style={{
+    // The sidebar is one of the two floating panes: `.fc-pane` gives it the
+    // card fill and the 24px page-panel radius, so the only thing left to say
+    // here is how wide it is. It carries no outline and no right-hand rule —
+    // the gutter between the panes is what separates them.
+    <div className="fc-pane fc-sidebar" style={{
       width: collapsed ? 68 : 248,
-      height: '100%',
-      minHeight: 0,
-      background: C.sidebarBg,
-      borderRight: `1px solid ${C.sidebarBorder}`,
-      display: 'flex',
-      flexDirection: 'column',
-      flexShrink: 0,
       transition: 'width .25s ease',
-      overflow: 'hidden',
       position: 'relative',
     }}>
       {/* Nav items. This is the ONLY part that may scroll — the collapse
           control below is flexShrink:0, so however many items exist and
           however short the window is, the toggle stays on screen. It used to
           be pushed out and then CLIPPED by the root's overflow:hidden. */}
-      <div style={{ padding: collapsed ? '10px 8px' : '14px 10px', flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
+      <div style={{ padding: 12, flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
         {visibleItems.length === 0 && !collapsed && (
           <div style={{
             display: 'flex',
@@ -326,13 +335,11 @@ export default function Sidebar({ activePage, onPageChange, collapsed, setCollap
                 expanded list needs. */}
             {groups.map((g, gi) => (
               <div key={g.id} style={{
-                paddingTop: gi === 0 ? 0 : 8,
-                marginTop: gi === 0 ? 0 : 8,
-                borderTop: gi === 0 ? 'none' : `1px solid ${C.divider}`,
+                marginTop: gi === 0 ? 0 : 14,
               }}>
                 {g.items.map(item => (
                   <NavRow key={item.id} item={item} active={activePage === item.id}
-                    collapsed={false} onClick={() => onPageChange(item.id)} />
+                    collapsed={false} onClick={() => goTo(item.id)} />
                 ))}
               </div>
             ))}
@@ -346,20 +353,20 @@ export default function Sidebar({ activePage, onPageChange, collapsed, setCollap
               collapsed onClick={() => onPageChange(HOME_ITEM.id)} />
             <div style={{ height: 6 }} />
             {groups.map(g => (
-              <RailGroup key={g.id} group={g} activePage={activePage} onPageChange={onPageChange} />
+              <RailGroup key={g.id} group={g} activePage={activePage} onPageChange={goTo} />
             ))}
           </>
         ) : (
           visibleItems.map(item => (
             <NavRow key={item.id} item={item} active={activePage === item.id}
-              collapsed={collapsed} onClick={() => onPageChange(item.id)} />
+              collapsed={collapsed} onClick={() => goTo(item.id)} />
           ))
         )}
       </div>
 
       {/* Collapse button + watermark — flexShrink:0 so it is never the thing
           that gets pushed out when the nav is long or the window is short. */}
-      <div style={{ borderTop: `1px solid ${C.divider}`, flexShrink: 0 }}>
+      <div style={{ flexShrink: 0, padding: '0 12px 4px' }}>
         <div
           onClick={() => setCollapsed(p => !p)}
           style={{
@@ -367,6 +374,7 @@ export default function Sidebar({ activePage, onPageChange, collapsed, setCollap
             alignItems: 'center',
             gap: 8,
             padding: collapsed ? '12px 0' : '11px 14px',
+            borderRadius: 999,
             cursor: 'pointer',
             justifyContent: collapsed ? 'center' : 'flex-start',
             transition: 'background .15s',
@@ -375,17 +383,17 @@ export default function Sidebar({ activePage, onPageChange, collapsed, setCollap
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          <span style={{ display: 'flex', alignItems: 'center', color: C.t6, lineHeight: 1 }}>
-            {collapsed ? <ChevronRight size={22} strokeWidth={2.5} /> : <ChevronLeft size={22} strokeWidth={2.5} />}
+          <span style={{ display: 'flex', alignItems: 'center', color: C.textMuted, lineHeight: 1 }}>
+            {collapsed ? <ChevronRight size={18} strokeWidth={2.2} /> : <ChevronLeft size={18} strokeWidth={2.2} />}
           </span>
           {!collapsed && (
-            <span style={{ fontSize: 16, fontWeight: 600, color: C.t6, fontFamily: FONT, lineHeight: 1 }}>
+            <span style={{ fontSize: 15, fontWeight: 550, color: C.textSecondary, fontFamily: FONT, lineHeight: 1 }}>
               Collapse
             </span>
           )}
         </div>
         {!collapsed && (
-          <div style={{ padding: '0 14px 10px' }}>
+          <div style={{ padding: '6px 14px 10px' }}>
             <span style={{
               fontSize: 11,
               fontWeight: 600,
