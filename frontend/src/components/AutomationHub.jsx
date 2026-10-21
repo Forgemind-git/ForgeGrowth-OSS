@@ -1,5 +1,5 @@
-// Sales → Automations (and, by the same pattern, Chats and the Social
-// groups): ONE sidebar destination for everything that builds or
+// Sales → Automations (and, by the same pattern, Chats): ONE sidebar
+// destination for everything that builds or
 // sends automated messaging — flows, AI agents, broadcasts, the templates and
 // media they send, and what that messaging costs. Modelled on Social's
 // Automations page (one nav item, tabs along the top).
@@ -15,7 +15,6 @@
 import { useEffect, useState } from 'react';
 import {
   Zap, Bot, Megaphone, LayoutTemplate, Image as ImageIcon, IndianRupee, MessageCircle, Users2, ScanSearch,
-  MessagesSquare,
 } from 'lucide-react';
 import { C, FONT } from '../constants.js';
 
@@ -37,18 +36,10 @@ export const CHAT_TABS = [
   { key: 'chat-analyzer', label: 'Chat Analyzer', Icon: ScanSearch },
 ];
 
-// Social (2026-10-16). A Social tab's key is its ROUTE ('social/<view>') and
-// one permission — 'social' — covers every one of them (`perm`).
-export const SOCIAL_INBOX_TABS = [
-  { key: 'social/inbox', label: 'Inbox', Icon: MessageCircle, perm: 'social' },
-  { key: 'social/comment-analyzer', label: 'Comment Analyzer', Icon: MessagesSquare, perm: 'social' },
-];
-
 // Every hub, keyed by the sidebar item that opens it (= its first tab).
 export const HUBS = [
   { id: 'chatbot-builder', label: 'Automations', tabs: HUB_TABS },
   { id: 'chats', label: 'Chats', tabs: CHAT_TABS },
-  { id: 'social/inbox', label: 'Inbox', tabs: SOCIAL_INBOX_TABS },
 ];
 export const hubOf = (page) => HUBS.find(h => h.tabs.some(t => t.key === page)) || null;
 

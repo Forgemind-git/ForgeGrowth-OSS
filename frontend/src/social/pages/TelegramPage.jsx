@@ -9,8 +9,7 @@ import { useConfirm } from "../ConfirmDialog.jsx";
 
 // Settings → Integrations → Telegram. One bot: its token (replaceable), who may
 // talk to it, and every chat it has had — approve/block a chat and read or
-// reply to it. Approved chats are the ones Comment Analyzer → Telegram alerts
-// can send to.
+// reply to it.
 
 const STATUS = {
   approved: { label: "Approved", bg: C.greenSoft, fg: C.green, Icon: Check },
@@ -58,7 +57,7 @@ export default function TelegramPage() {
     <div style={{ fontFamily: FONT }}>
       {ConfirmDialog}
       <a href="#/social/integrations" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: C.textSecondary, fontSize: 13.5, fontWeight: 600, textDecoration: "none", marginBottom: 10 }}><ArrowLeft size={14} /> Integrations</a>
-      <PageHeader cycle="Telegram bot" sub="Send instant alerts — like negative comments — to the people and groups you choose." />
+      <PageHeader cycle="Telegram bot" sub="Connect a Telegram bot and choose which people and groups it talks to." />
       {!st ? <div style={{ padding: 40, textAlign: "center" }}><Loader2 size={16} color={C.textMuted} style={spin} /></div> : <>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(380px, 100%), 1fr))", gap: 14, marginBottom: 18 }}>
           <ConnectionCard st={st} onChange={(s) => { setSt(s); loadChats(); }} confirm={confirm} />
@@ -162,7 +161,7 @@ function AccessCard({ st, onChange }) {
         <div style={{ fontSize: 13, color: C.textSecondary, lineHeight: 1.55 }}>
           {mode === "approved"
             ? "A new person or group shows up below as “Waiting for approval”. The bot tells them to wait and does nothing else until you approve them. Blocked chats are never answered."
-            : "Anyone who opens the bot is approved straight away and can use its commands. They still only receive alerts if you tick them in Comment Analyzer → Telegram alerts."}
+            : "Anyone who opens the bot is approved straight away and can use its commands."}
         </div>
         {mode === "approved" && <>
           <label style={{ fontSize: 12, fontWeight: 650, color: C.textSecondary, textTransform: "uppercase", letterSpacing: ".04em" }}>Reply to a chat waiting for approval</label>

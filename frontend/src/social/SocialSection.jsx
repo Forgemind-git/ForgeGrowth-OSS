@@ -5,7 +5,7 @@
 // ForgeGrowth's own, prefixed:
 //
 //   #/social                          Overview
-//   #/social/<inbox|contacts|automations|comment-analyzer>
+//   #/social/<inbox|contacts|automations>
 //   #/social/<library|media>          the Content Library hub's two tabs
 //   #/social/settings[/<tab>]         Social settings
 //   #/social/integrations[/<platform>] Settings → Integrations (connect accounts)
@@ -26,7 +26,6 @@ import InboxPage from './pages/InboxPage.jsx';
 import ContactsPage from './pages/ContactsPage.jsx';
 import AutomationsPage from './pages/AutomationsPage.jsx';
 import LibraryHub from './pages/LibraryHub.jsx';
-import CommentAnalyzerPage from './pages/CommentAnalyzerPage.jsx';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage.jsx';
 import PublicReportPage from './pages/PublicReportPage.jsx';
 
@@ -63,7 +62,6 @@ export default function SocialSection({ subParts, navigate, user }) {
   else if (route.view === 'contacts') page = <ContactsPage user={socialUser} />;
   else if (route.view === 'library') page = <LibraryHub tab={route.libraryTab} onTab={go} user={socialUser} />;
   else if (route.view === 'automations') page = <AutomationsPage user={socialUser} />;
-  else if (route.view === 'comment-analyzer') page = <CommentAnalyzerPage user={socialUser} />;
   else page = <OverviewPage period={period} setPeriod={setPeriod} />;
 
   return (

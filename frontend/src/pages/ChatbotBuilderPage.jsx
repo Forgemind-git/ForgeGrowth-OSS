@@ -4,7 +4,6 @@ import { Plus, Pencil, Trash2, Loader2, Search, Bot, X, Copy, Upload } from 'luc
 import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx';
 import AutomationBuilderView from '../components/AutomationBuilderView.jsx';
 import AutomationExecutions from '../components/AutomationExecutions.jsx';
-import TemplatesModal from '../components/automationTemplates/TemplatesModal.jsx';
 import { useTableSelection, SelectAllCheckbox, RowCheckbox, BulkDeleteButton, runBulkDelete } from '../components/TableSelection.jsx';
 import SortControl from '../components/SortControl.jsx';
 import { sortList, DEFAULT_SORT } from '../lib/listSort.js';
@@ -267,7 +266,7 @@ function AutomationsBrowser({
             {q ? 'No matches' : 'No automations yet'}
           </div>
           <div style={{ fontSize: 14, color: B.t6, marginBottom: 16, fontFamily: FONT }}>
-            {q ? 'Try a different search term.' : 'Create your first automation, or pick one from the templates.'}
+            {q ? 'Try a different search term.' : 'Create your first automation.'}
           </div>
           {!q && (
             <button onClick={() => onAdd()} style={{ ...primaryBtnStyle, display: 'inline-flex' }}>
@@ -297,7 +296,6 @@ export default function ChatbotBuilderPage({ subParts = [], navigate }) {
   const [loading, setLoading] = useState(true);
   const [editingChatbot, setEditingChatbot] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  const [showTemplates, setShowTemplates] = useState(false);
   const [builderTab, setBuilderTab] = useState('editor'); // 'editor' | 'executions'
 
   // Routing: #/chatbot-builder            → list
@@ -348,7 +346,7 @@ export default function ChatbotBuilderPage({ subParts = [], navigate }) {
     }
   }, [routeId, view, chatbots]);
 
-  const handleAdd = () => setShowTemplates(true);
+  const handleAdd = () => setShowModal(true);
 
   const handleModalCreate = (newAutomation) => {
     setShowModal(false);
@@ -476,12 +474,6 @@ export default function ChatbotBuilderPage({ subParts = [], navigate }) {
         open={showModal}
         onClose={() => setShowModal(false)}
         onCreate={handleModalCreate}
-      />
-      <TemplatesModal
-        open={showTemplates}
-        onClose={() => setShowTemplates(false)}
-        onBlank={() => { setShowTemplates(false); setShowModal(true); }}
-        onCreated={(data) => { setShowTemplates(false); handleModalCreate(data); }}
       />
     </>
   );

@@ -1,10 +1,8 @@
 // /api/social/telegram — the Telegram bot (admin only: it holds the bot token
-// and decides who may receive alerts). /api/social/comment-analyzer/alerts —
-// the negative-comment alert rules + recipients (admin only).
+// and decides who may contact it).
 const express = require('express');
 const { adminOnly } = require('./auth');
 const bot = require('./services/telegramBot');
-const alerts = require('./services/commentAlerts');
 
 const wrap = fn => async (req, res) => {
   try { res.json(await fn(req, res)); }
@@ -33,12 +31,4 @@ telegramRouter.post('/chats/:chatId/messages', wrap(req => bot.sendManual(chatId
 telegramRouter.put('/chats/:chatId', wrap(async req => ({ chat: await bot.setChatStatus(chatId(req), req.body?.status, req.user.id, req.body?.note) })));
 telegramRouter.delete('/chats/:chatId', wrap(req => bot.deleteChat(chatId(req))));
 
-const alertsRouter = express.Router();
-alertsRouter.use(adminOnly);
-alertsRouter.get('/', wrap(async () => ({ settings: await alerts.getSettings() })));
-alertsRouter.put('/', wrap(async req => ({ settings: await alerts.saveSettings(req.body || {}) })));
-alertsRouter.post('/test', wrap(req => alerts.sendTest(req.body?.chatIds)));
-alertsRouter.post('/dispatch', wrap(() => alerts.dispatch()));
-alertsRouter.get('/log', wrap(async req => ({ alerts: await alerts.log(req.query) })));
-
-module.exports = { telegramRouter, alertsRouter };
+module.exports = { telegramRouter };

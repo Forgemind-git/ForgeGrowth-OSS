@@ -14,13 +14,13 @@ export const SOCIAL_NAV = [
   // Settings lives in the one app Settings (gear beside the bell).
   { id: 'social', label: 'Overview', Icon: LayoutDashboard },
   { id: 'social/library', label: 'Content Library', Icon: BookOpen },
-  { id: 'social/inbox', label: 'Inbox', Icon: MessageCircle },          // + Comment Analyzer
+  { id: 'social/inbox', label: 'Inbox', Icon: MessageCircle },
   { id: 'social/contacts', label: 'Contacts', Icon: Users },
   { id: 'social/automations', label: 'Automations', Icon: Zap },
 ];
 export const SOCIAL_PAGE_ALIASES = Object.fromEntries(SOCIAL_NAV.map(i => [i.id, ['social']]));
 
-const VIEWS = new Set(['inbox', 'contacts', 'automations', 'comment-analyzer']);
+const VIEWS = new Set(['inbox', 'contacts', 'automations']);
 // 'publish' is the retired Publish tab: old links land on Posts.
 const LIBRARY_TABS = new Set(['library', 'publish', 'media']);
 const SETTINGS_TABS = new Set(['general', 'privacy', 'tags', 'fields', 'category', 'openrouter', 'mcp', 'activity']);

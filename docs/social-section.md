@@ -2,7 +2,7 @@
 
 The **Social** header tab manages your Instagram accounts from inside Forge Growth: Overview,
 Insights, Inbox, Contacts, Content Library (synced posts + media), Instagram
-Automations (Activity), Comment Analyzer and Settings (Integrations, OpenRouter, tags,
+Automations (Activity) and Settings (Integrations, OpenRouter, tags,
 fields, MCP access, activity log, privacy policy).
 
 ## How it is wired

@@ -1,5 +1,5 @@
 // OpenRouter — one admin-managed key (Settings → OpenRouter) shared by the
-// features that call OpenRouter models (today: the Comment Analyzer's Jev calls).
+// features that call OpenRouter models (Instagram AI agents, the flow AI step).
 //   - Key stored AES-GCM encrypted in app_settings (never in env / source).
 //   - Every call is logged in ai_usage_log (feature, model, tokens, USD cost
 //     reported by OpenRouter) so spend can be shown per feature in rupees.

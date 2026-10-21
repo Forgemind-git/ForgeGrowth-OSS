@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, createContext, useContext } from "react";
-import { Camera, Film, Mic, Link2, Paperclip, Play, Search, X, MessageSquare, CornerDownRight, ExternalLink, Send, Trash2, ChevronDown, ChevronUp, Clock, Pencil, Reply as ReplyIcon, Smile, CheckCheck } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Camera, Film, Mic, Link2, Paperclip, Play, Search, X, MessageSquare, CornerDownRight, ExternalLink, Send, Trash2, ChevronDown, ChevronUp, Clock, Pencil, Reply as ReplyIcon, CheckCheck } from "lucide-react";
 import { api } from '../api.js';
 import { useApi } from '../hooks/useApi.js';
 import { relativeTime, C, FONT, T, BTN } from '../constants.js';
@@ -265,7 +265,7 @@ const UnreadPill = ({ n }) => n > 0 ? (
   </span>
 ) : null;
 
-function ConversationList({ conversations, activeKey, onSelect, accounts, showAccount, labels = {} }) {
+function ConversationList({ conversations, activeKey, onSelect, accounts, showAccount }) {
   if (conversations.length === 0) {
     return <div style={{ padding: "40px 16px", textAlign: "center", color: C.textMuted, fontSize: 14 }}>No conversations yet.</div>;
   }
@@ -291,9 +291,6 @@ function ConversationList({ conversations, activeKey, onSelect, accounts, showAc
             </span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
               {showAccount && <AccountTag id={c.accountId} accounts={accounts} />}
-              {SENTIMENTS[labels[c.key]?.[0]] && labels[c.key][0] !== "neutral" && (
-                <span title={`${SENTIMENTS[labels[c.key][0]].label} (Comment Analyzer)`} style={{ fontSize: 11, fontWeight: 650, padding: "1px 7px", borderRadius: 999, background: SENTIMENTS[labels[c.key][0]].bg, color: SENTIMENTS[labels[c.key][0]].fg }}>{SENTIMENTS[labels[c.key][0]].label}</span>
-              )}
               <UnreadPill n={unread} />
             </span>
           </div>
@@ -540,8 +537,6 @@ function InstagramInbox({ isAdmin, deepLink }) {
   const [query, setQuery] = useState("");
   const [accountQuery, setAccountQuery] = useState("");
   const [unreadOnly, setUnreadOnly] = useState(false);   // chat-list filter (Messages tab)
-  const [dmSentiment, setDmSentiment] = useState("");    // chat-list sentiment filter (Comment Analyzer labels)
-  const dmLabels = useDmLabels();
   const [editingContact, setEditingContact] = useState(null); // chat-header Edit opens the shared ContactModal
   const [deepCommentMedia, setDeepCommentMedia] = useState(null); // post to auto-expand in Comments
   // Pending sessionStorage handoff from Contacts page "Go to chat" — applied
@@ -660,9 +655,6 @@ function InstagramInbox({ isAdmin, deepLink }) {
         [peerLabel(c), c.peerUsername, c.peerId, c.last?.text].filter(Boolean).join(" ").toLowerCase().includes(q))
     : conversations;
   if (unreadOnly) visibleConversations = visibleConversations.filter(c => (c.unread || 0) > 0);
-  const dmCounts = { positive: 0, neutral: 0, negative: 0 };
-  for (const c of visibleConversations) { const l = dmLabels[c.key]; if (l && dmCounts[l[0]] != null) dmCounts[l[0]]++; }
-  if (dmSentiment) visibleConversations = visibleConversations.filter(c => dmLabels[c.key]?.[0] === dmSentiment);
   const totalUnread = conversations.reduce((s, c) => s + (c.unread || 0), 0);
 
   const activeConv = conversations.find(c => c.key === activeKey) || null;
@@ -711,7 +703,6 @@ function InstagramInbox({ isAdmin, deepLink }) {
             account={account}
             query={query} setQuery={setQuery}
             unreadOnly={unreadOnly} setUnreadOnly={setUnreadOnly}
-            sentiment={dmSentiment} setSentiment={setDmSentiment} sentCounts={dmCounts} labels={dmLabels}
             totalUnread={totalUnread}
             loading={loading && !data}
             chatCount={conversations.length}
@@ -824,8 +815,7 @@ function AccountPane({ accounts, selectedAccount, onSelect, unreadByAccount, que
 // ── ChatListPane (middle column) ─────────────────────────────────────────
 // 2-row header: "CHATS" label + count chip on top; search box + Unread filter
 // pill on the second row. Below the header is the scrolling chat list.
-function ChatListPane({ conversations, activeKey, onSelect, accounts, account, query, setQuery, unreadOnly, setUnreadOnly, totalUnread, loading, chatCount, sentiment, setSentiment, sentCounts, labels }) {
-  const analysedAny = sentCounts && (sentCounts.positive + sentCounts.neutral + sentCounts.negative > 0 || !!sentiment);
+function ChatListPane({ conversations, activeKey, onSelect, accounts, account, query, setQuery, unreadOnly, setUnreadOnly, totalUnread, loading, chatCount }) {
   const q = (query || "").trim();
   return (
     <div style={{ width: 340, minWidth: 280, display: "flex", flexDirection: "column" }}>
@@ -841,30 +831,16 @@ function ChatListPane({ conversations, activeKey, onSelect, accounts, account, q
           </button>
         </div>
       </div>
-      {setSentiment && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 14px 8px", flexWrap: "wrap", flexShrink: 0 }}
-            title={analysedAny ? "Sentiment from the Comment Analyzer" : "No analysed chats yet. Turn on “Analyse Instagram DMs” in Comment Analyzer → Settings."}>
-            <Smile size={14} color={C.textMuted} />
-            {Object.entries(SENTIMENTS).map(([k, s]) => (
-              <button key={k} disabled={!analysedAny} onClick={() => setSentiment(v => v === k ? "" : k)}
-                style={{ ...CHIP(sentiment === k), padding: "5px 10px", fontSize: 12, opacity: analysedAny ? 1 : .45, cursor: analysedAny ? "pointer" : "not-allowed" }}>
-                {s.label}{sentCounts?.[k] ? ` · ${sentCounts[k]}` : ""}
-              </button>
-            ))}
-          </div>
-        )}
       <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4, padding: "0 4px 8px" }}>
         {loading
           ? <div style={{ padding: 20, color: C.textMuted, fontSize: 14 }}>Loading…</div>
           : conversations.length === 0 && q
             ? <div style={{ padding: "40px 16px", textAlign: "center", color: C.textMuted, fontSize: 14 }}>No chats match “{query}”.</div>
-            : conversations.length === 0 && sentiment
-              ? <div style={{ padding: "40px 16px", textAlign: "center", color: C.textMuted, fontSize: 14 }}>No {sentiment} chats here. <button onClick={() => setSentiment("")} style={{ background: "none", border: "none", padding: 0, color: C.primary, fontWeight: 700, fontFamily: FONT, fontSize: 14, cursor: "pointer", textDecoration: "underline" }}>Show all</button></div>
             : conversations.length === 0 && unreadOnly
               ? <div style={{ padding: "40px 16px", textAlign: "center", color: C.textMuted, fontSize: 14 }}>No unread chats. <button onClick={() => setUnreadOnly(false)} style={{ background: "none", border: "none", padding: 0, color: C.primary, fontWeight: 700, fontFamily: FONT, fontSize: 14, cursor: "pointer", textDecoration: "underline" }}>Show all</button></div>
               : conversations.length === 0
                 ? <div style={{ padding: "40px 16px", textAlign: "center", color: C.textMuted, fontSize: 14 }}>No conversations yet{account ? " for this account" : ""}.</div>
-                : <ConversationList conversations={conversations} activeKey={activeKey} onSelect={onSelect} accounts={accounts} showAccount={!account} labels={labels} />}
+                : <ConversationList conversations={conversations} activeKey={activeKey} onSelect={onSelect} accounts={accounts} showAccount={!account} />}
       </div>
     </div>
   );
@@ -943,7 +919,7 @@ function EmptyState({ title, sub }) {
 
 // One comment line (top-level or reply). Top-level rows get a Reply toggle;
 // admins get a Delete action on every row.
-function PlatformCommentRow({ comment: c, onReplyClick, onDelete, isReply, hideLabels, badges }) {
+function PlatformCommentRow({ comment: c, onReplyClick, onDelete, isReply, badges }) {
   const [deleting, setDeleting] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -966,7 +942,6 @@ function PlatformCommentRow({ comment: c, onReplyClick, onDelete, isReply, hideL
           {badges}
           {c.ours && <Badge label="Your reply" bg={C.primarySoft} color={C.primary} />}
           {isReply && !c.ours && <Badge label="Reply" bg={C.amberSoft} color={C.amber} />}
-          {!c.ours && !hideLabels && <LabelTags commentId={c.commentId} />}
           {/* Read-only count: Instagram has no API to like a comment */}
           {c.likes > 0 && <span style={{ fontSize: 12.5, color: C.textMuted }}>{c.likes} {c.likes === 1 ? "like" : "likes"}</span>}
         </div>
@@ -992,70 +967,15 @@ function PlatformCommentRow({ comment: c, onReplyClick, onDelete, isReply, hideL
 // Text-only action inside a comment row (Reply / Delete): no fill, weight carries it.
 const ACTION_LINK = { display: "inline-flex", alignItems: "center", gap: 5, border: "none", background: "transparent", fontSize: 12.5, fontWeight: 700, fontFamily: FONT, cursor: "pointer", padding: 0 };
 
-const LabelsCtx = createContext({});
-const SENTIMENTS = {
-  positive: { label: "Positive", bg: "var(--fc-green-soft)", fg: "var(--fc-green)" },
-  neutral:  { label: "Neutral",  bg: "var(--fc-surface-2)",  fg: "var(--fc-text-secondary)" },
-  negative: { label: "Negative", bg: "var(--fc-err-bg)",     fg: "var(--fc-err-text)" },
-};
-function useCommentLabels(platform) {
-  const [labels, setLabels] = useState({});
-  useEffect(() => {
-    let alive = true;
-    const load = () => api.commentAnalyzer.labels(platform).then(d => alive && setLabels(d.labels || {})).catch(() => {});
-    load();
-    const t = setInterval(load, 120000);
-    return () => { alive = false; clearInterval(t); };
-  }, [platform]);
-  return labels;
-}
-function useDmLabels() {
-  const [labels, setLabels] = useState({});
-  useEffect(() => {
-    let alive = true;
-    const load = () => api.commentAnalyzer.dmLabels().then(d => alive && setLabels(d.labels || {})).catch(() => {});
-    load();
-    const t = setInterval(load, 120000);
-    return () => { alive = false; clearInterval(t); };
-  }, []);
-  return labels;
-}
-// Sentiment + kind chips from the Comment Analyzer (nothing when the comment isn't analysed).
-function LabelTags({ commentId }) {
-  const l = useContext(LabelsCtx)[commentId];
-  if (!l) return null;
-  const s = SENTIMENTS[l[0]];
-  const k = CATEGORIES[l[1]];
-  const chip = (bg, fg) => ({ fontSize: 11.5, fontWeight: 650, padding: "2px 8px", borderRadius: 999, background: bg, color: fg });
-  return <>
-    {k && <span title="Kind of comment (Comment Analyzer)" style={chip(k.bg, k.fg)}>{k.label}</span>}
-    {s && l[0] !== "neutral" && <span title="Sentiment (Comment Analyzer)" style={chip(s.bg, s.fg)}>{s.label}</span>}
-    {(l[4] ?? 0) >= 0.7 && <span title="Abusive (Comment Analyzer)" style={chip("var(--fc-err-bg)", "var(--fc-err-text)")}>Abusive</span>}
-  </>;
-}
-
 // ── CommentsByPost: the comments workspace ──────────────────────────────
 // Used by InstagramInbox's Comments tab.
-//   1. A summary strip — how many comments, how many still need a reply, and
-//      what kind they are (questions, leads, complaints, negative). Every tile
-//      is also a one-click filter.
+//   1. A summary strip — how many comments and how many still need a reply.
+//      Every tile is also a one-click filter.
 //   2. Posts on the left ("All posts" first), each with its count and how many
 //      are waiting — so you can work post by post or across everything.
 //   3. The comments themselves on the right, one card each, with the reply box
 //      already open underneath — no expanding a post to find them.
 // "Needs reply" = a top-level comment by someone else with no reply from us.
-// Kind and sentiment come from the Comment Analyzer (labels = [sentiment,
-// category, insightful, needsReply, toxic]); unanalysed comments simply have none.
-const CATEGORIES = {
-  question:  { label: "Question",  bg: "var(--fc-blue-soft)",   fg: "var(--fc-blue)" },
-  lead:      { label: "Lead",      bg: "var(--fc-green-soft)",  fg: "var(--fc-green)" },
-  complaint: { label: "Complaint", bg: "var(--fc-err-bg)",      fg: "var(--fc-err-text)" },
-  request:   { label: "Wants link / DM", bg: "var(--fc-purple-soft)", fg: "var(--fc-purple)" },
-  feedback:  { label: "Feedback",  bg: "var(--fc-amber-soft)",  fg: "var(--fc-amber)" },
-  praise:    { label: "Praise",    bg: "var(--fc-pink-soft)",   fg: "var(--fc-pink)" },
-  spam:      { label: "Spam",      bg: "var(--fc-surface-2)",   fg: "var(--fc-text-muted)" },
-  other:     { label: "Other",     bg: "var(--fc-surface-2)",   fg: "var(--fc-text-secondary)" },
-};
 const STATUS_TABS = [
   { k: "needs", l: "Needs reply" },
   { k: "all", l: "All" },
@@ -1074,11 +994,9 @@ function CommentsByPost({
   emptyTitle = "No comments yet",
   emptySub   = "Comments on your posts will appear here.",
 }) {
-  const labels = useCommentLabels(platform);
   const [query, setQuery]       = useState("");
   const [range, setRange]       = useState("all");
   const [status, setStatus]     = useState("needs");
-  const [kind, setKind]         = useState("");        // category key, or "negative"
   const [postId, setPostId]     = useState(null);      // null = all posts
   const [sort, setSort]         = useState("newest");
   const [limit, setLimit]       = useState(PAGE);
@@ -1088,9 +1006,9 @@ function CommentsByPost({
   // Deep-link from a notification: open that post with every filter cleared.
   useEffect(() => {
     if (!initialOpenId) return;
-    setPostId(initialOpenId); setStatus("all"); setKind(""); setQuery(""); setRange("all");
+    setPostId(initialOpenId); setStatus("all"); setQuery(""); setRange("all");
   }, [initialOpenId]);
-  useEffect(() => { setLimit(PAGE); listRef.current?.scrollTo?.({ top: 0 }); }, [postId, status, kind, query, range, sort]);
+  useEffect(() => { setLimit(PAGE); listRef.current?.scrollTo?.({ top: 0 }); }, [postId, status, query, range, sort]);
 
   const all = raw.map(norm);
 
@@ -1115,11 +1033,9 @@ function CommentsByPost({
   const items = [];
   for (const g of groups.values()) for (const c of g.top) {
     const replies = [...(g.replies.get(c.commentId) || [])].sort((a, b) => new Date(a.ts) - new Date(b.ts));
-    const l = !c.ours ? labels[c.commentId] : null;
     items.push({
       c, g, replies,
       needs: !c.ours && !replies.some(r => r.ours),
-      sentiment: l?.[0] || null, category: l?.[1] || null, toxic: (l?.[4] ?? 0) >= 0.7,
       ts: +new Date(c.ts || 0),
     });
   }
@@ -1132,11 +1048,7 @@ function CommentsByPost({
     total: people.length,
     needs: count(i => i.needs),
     replied: count(i => !i.needs),
-    negative: count(i => i.sentiment === "negative" || i.toxic),
-    analysed: count(i => i.sentiment || i.category),
   };
-  const catCounts = {};
-  for (const i of people) if (i.category) catCounts[i.category] = (catCounts[i.category] || 0) + 1;
 
   // Posts rail: per-post totals honour the time range only (not the other filters), so it reads as an index.
   const posts = [...groups.values()].map(g => {
@@ -1154,35 +1066,25 @@ function CommentsByPost({
     if (postId && i.g.id !== postId) return false;
     if (status === "needs" && !i.needs) return false;
     if (status === "replied" && (i.needs || i.c.ours)) return false;
-    if (kind === "negative" && !(i.sentiment === "negative" || i.toxic)) return false;
-    if (kind && kind !== "negative" && i.category !== kind) return false;
     if (q && !((i.c.text || "").toLowerCase().includes(q) || (i.c.name || "").toLowerCase().includes(q) || i.replies.some(r => (r.text || "").toLowerCase().includes(q)))) return false;
     return true;
   });
   feed.sort((a, b) => sort === "oldest" ? a.ts - b.ts : b.ts - a.ts);
   const selected = postId ? groups.get(postId) : null;
 
-  const resetFilters = () => { setStatus("all"); setKind(""); setQuery(""); setRange("all"); };
-  const pickKind = (k) => setKind(v => v === k ? "" : k);
+  const resetFilters = () => { setStatus("all"); setQuery(""); setRange("all"); };
 
   if (groups.size === 0) return <EmptyState title={emptyTitle} sub={emptySub} />;
 
   return (
-    <LabelsCtx.Provider value={labels}>
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 12 }}>
       {/* 1 · Summary */}
       <div style={{ flexShrink: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
         <SumTile label="Comments" value={sum.total} sub={range === "all" ? "all time" : RANGES.find(r => r.value === range)?.label.toLowerCase()}
-          active={status === "all" && !kind} onClick={() => { setStatus("all"); setKind(""); }} />
+          active={status === "all"} onClick={() => setStatus("all")} />
         <SumTile label="Need a reply" value={sum.needs} tone="primary" sub={sum.total ? `${Math.round(sum.needs * 100 / sum.total)}% of comments` : ""}
-          active={status === "needs" && !kind} onClick={() => { setStatus("needs"); setKind(""); }} />
-        <SumTile label="Replied" value={sum.replied} tone="green" sub={sum.total ? `${Math.round(sum.replied * 100 / sum.total)}% of comments` : ""} active={status === "replied" && !kind} onClick={() => { setStatus("replied"); setKind(""); }} />
-        <SumTile label="Negative" value={sum.negative} tone="err" disabled={!sum.analysed} sub={sum.analysed ? "incl. abusive" : "not analysed"}
-          active={kind === "negative"} onClick={() => { setKind(v => v === "negative" ? "" : "negative"); setStatus("all"); }} />
-        <SumTile label="Questions" value={catCounts.question || 0} tone="blue" disabled={!sum.analysed} sub="asking about the course"
-          active={kind === "question"} onClick={() => { pickKind("question"); setStatus("all"); }} />
-        <SumTile label="Leads" value={catCounts.lead || 0} tone="green" disabled={!sum.analysed} sub="want to buy / price"
-          active={kind === "lead"} onClick={() => { pickKind("lead"); setStatus("all"); }} />
+          active={status === "needs"} onClick={() => setStatus("needs")} />
+        <SumTile label="Replied" value={sum.replied} tone="green" sub={sum.total ? `${Math.round(sum.replied * 100 / sum.total)}% of comments` : ""} active={status === "replied"} onClick={() => setStatus("replied")} />
       </div>
 
       {/* 2 · Toolbar */}
@@ -1206,18 +1108,6 @@ function CommentsByPost({
         <SearchableSelect value={range} onChange={setRange} options={RANGES} minWidth={150} />
         <SearchableSelect value={sort} onChange={setSort} minWidth={150} options={[{ value: "newest", label: "Newest first" }, { value: "oldest", label: "Oldest first" }]} />
       </div>
-      {sum.analysed > 0 && (
-        <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: -2 }}>
-          <span style={{ fontSize: 12.5, color: C.textMuted, fontWeight: 600, marginRight: 2 }}>Type</span>
-          <button onClick={() => setKind("")} style={CHIP(!kind)}>Any</button>
-          {Object.entries(CATEGORIES).filter(([k]) => catCounts[k]).map(([k, m]) => (
-            <button key={k} onClick={() => pickKind(k)} style={{ ...CHIP(kind === k), ...(kind === k ? {} : { background: m.bg, color: m.fg }) }}>{m.label} · {catCounts[k]}</button>
-          ))}
-          <button onClick={() => pickKind("negative")} style={{ ...CHIP(kind === "negative"), ...(kind === "negative" ? {} : { background: SENTIMENTS.negative.bg, color: SENTIMENTS.negative.fg }) }}>Negative · {sum.negative}</button>
-          {sum.analysed < sum.total && <span style={{ fontSize: 12, color: C.textMuted, marginLeft: 4 }}>{sum.total - sum.analysed} not analysed yet</span>}
-        </div>
-      )}
-
       {/* 3 · Posts | Comments */}
       <div style={{ flex: 1, minHeight: 0, display: "flex", gap: 12 }}>
         <div style={{ width: 300, flexShrink: 0, background: C.raised, borderRadius: 16, display: "flex", flexDirection: "column", minHeight: 0 }}>
@@ -1242,15 +1132,14 @@ function CommentsByPost({
             <div style={{ fontSize: 13, color: C.textMuted, padding: "2px 2px 0" }}>
               {feed.length.toLocaleString("en-IN")} comment{feed.length === 1 ? "" : "s"}
               {status === "needs" ? " waiting for a reply" : status === "replied" ? " you've replied to" : ""}
-              {kind ? ` · ${kind === "negative" ? "negative" : CATEGORIES[kind]?.label.toLowerCase()}` : ""}
               {selected ? " on this post" : ""}
             </div>
             {feed.length === 0 ? (
               <Card style={{ padding: "36px 20px" }}>
                 <UIEmptyState Icon={status === "needs" ? CheckCheck : MessageSquare}
-                  title={status === "needs" && !kind && !q ? "All caught up" : "No comments match"}
-                  body={status === "needs" && !kind && !q ? "Every comment here has a reply. New ones will show up at the top." : "Try a different filter or a wider time range."}
-                  action={(kind || q || status !== "all" || range !== "all") && <button onClick={resetFilters} style={BTN.secondary}>Show all comments</button>}
+                  title={status === "needs" && !q ? "All caught up" : "No comments match"}
+                  body={status === "needs" && !q ? "Every comment here has a reply. New ones will show up at the top." : "Try a different filter or a wider time range."}
+                  action={(q || status !== "all" || range !== "all") && <button onClick={resetFilters} style={BTN.secondary}>Show all comments</button>}
                   style={{ padding: 0 }} />
               </Card>
             ) : feed.slice(0, limit).map(i => (
@@ -1262,22 +1151,20 @@ function CommentsByPost({
         </div>
       </div>
     </div>
-    </LabelsCtx.Provider>
   );
 }
 
 const TONES = {
   primary: ["var(--fc-primary-soft)", "var(--fc-primary)"], green: ["var(--fc-green-soft)", "var(--fc-green)"],
-  err: ["var(--fc-err-bg)", "var(--fc-err-text)"], blue: ["var(--fc-blue-soft)", "var(--fc-blue)"],
 };
-function SumTile({ label, value, sub, tone, active, onClick, disabled }) {
+function SumTile({ label, value, sub, tone, active, onClick }) {
   const [, fg] = TONES[tone] || [C.surface2, C.text];
   return (
-    <button onClick={disabled ? undefined : onClick} disabled={disabled} title={disabled ? "Turn on the Comment Analyzer to see this" : `Show: ${label}`}
-      style={{ textAlign: "left", border: "none", fontFamily: FONT, cursor: disabled ? "default" : "pointer", borderRadius: 16, padding: "12px 14px", minHeight: 88,
-        background: active ? C.primaryFaint : C.raised, boxShadow: active ? `inset 0 0 0 1.5px ${C.primary}` : "none", opacity: disabled ? .55 : 1 }}>
+    <button onClick={onClick} title={`Show: ${label}`}
+      style={{ textAlign: "left", border: "none", fontFamily: FONT, cursor: "pointer", borderRadius: 16, padding: "12px 14px", minHeight: 88,
+        background: active ? C.primaryFaint : C.raised, boxShadow: active ? `inset 0 0 0 1.5px ${C.primary}` : "none" }}>
       <div style={{ ...T.label, color: C.textSecondary }}>{label}</div>
-      <div style={{ ...T.metricSm, color: disabled ? C.textMuted : (tone ? fg : C.text), marginTop: 4 }}>{disabled ? "—" : value.toLocaleString("en-IN")}</div>
+      <div style={{ ...T.metricSm, color: tone ? fg : C.text, marginTop: 4 }}>{value.toLocaleString("en-IN")}</div>
       <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minHeight: 16 }}>{sub || "\u00a0"}</div>
     </button>
   );
@@ -1351,8 +1238,8 @@ function CommentCard({ item: i, showPost, meta, onReply, onDelete, onOpenPost })
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>On: {postTitle(i.g)}</span>
         </button>
       )}
-      <PlatformCommentRow comment={c} onDelete={onDelete} hideLabels
-        badges={<>{statusChip}<LabelTags commentId={c.commentId} /></>} />
+      <PlatformCommentRow comment={c} onDelete={onDelete}
+        badges={statusChip} />
       {i.replies.length > 0 && (
         <div style={{ margin: "0 14px 6px 62px", borderLeft: `2px solid ${C.surface2}` }}>
           {i.replies.map(r => <div key={r.commentId || r.id} style={{ paddingLeft: 10 }}><PlatformCommentRow comment={r} onDelete={onDelete} isReply /></div>)}

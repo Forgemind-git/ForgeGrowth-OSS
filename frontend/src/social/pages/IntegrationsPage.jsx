@@ -628,7 +628,7 @@ function IntegrationsOverview({ isAdmin }) {
   );
 }
 
-// Messaging: the Telegram bot that sends alerts (negative comments etc.). Admin only.
+// Messaging: the Telegram bot. Admin only.
 function TelegramCard() {
   const [st, setSt] = useState(null);
   useEffect(() => { api.telegram.status().then(setSt).catch(() => setSt({ configured: false })); }, []);

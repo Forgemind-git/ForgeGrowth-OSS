@@ -287,13 +287,10 @@ app.use('/api/social/ig-automations', require('./commentAutomationRoutes'));
 app.use('/api/social/crm', require('./contactsCrm'));
 // Per-user "My accounts" preset used as every page's default platform/account filter (userScope.js)
 app.use('/api/social/me/scope', require('./userScope'));
-// Comment Analyzer (TypeSafe Jev via OpenRouter) + OpenRouter key / spend (commentAnalyzerRoutes.js)
-// Negative-comment alerts → Telegram (must sit above the analyzer router, which owns the prefix)
-app.use('/api/social/comment-analyzer/alerts', require('./telegramRoutes').alertsRouter);
-app.use('/api/social/comment-analyzer', require('./commentAnalyzerRoutes').analyzerRouter);
 // Telegram bot: token, who may contact it, chat viewer (telegramRoutes.js)
 app.use('/api/social/telegram', require('./telegramRoutes').telegramRouter);
-app.use('/api/social/openrouter', require('./commentAnalyzerRoutes').openRouterRouter);
+// OpenRouter key / ₹ rate / spend for the Social AI features (openRouterRoutes.js)
+app.use('/api/social/openrouter', require('./openRouterRoutes').openRouterRouter);
 // App credentials (Meta app / Instagram keys) entered
 // in Settings → Integrations instead of the server's env file. Admin only;
 // secrets never come back — only whether they are set and their last 4.
@@ -2605,16 +2602,10 @@ async function start() {
     // started). Created up front so the import and the pages find them even
     // while background jobs are off.
     await require('./services/commentAutomation').ensureSchema().catch(err => console.error('[social] automations schema:', err.message));
-    await require('./services/commentAnalyzer').ensureSchema().catch(err => console.error('[social] analyzer schema:', err.message));
     await require('./contactsCrm').ensureSchema().catch(err => console.error('[social] crm schema:', err.message));
-    // Telegram bot poller + negative-comment alerts. Started even with background
-    // jobs OFF: the bot has nothing to do with the Meta apps, and an admin must be
-    // able to connect it and approve chats first (both idle until configured).
-    // Comment Analyzer: classify new comments every 10 min — only when its own
-    // 'Analyse automatically' switch is on (services/commentAnalyzer.js). It used to
-    // sit behind SOCIAL_JOBS_ENABLED, which made that switch do nothing.
-    require('./services/commentAnalyzer').start();
-    require('./services/commentAlerts').start();
+    // Telegram bot poller. Started even with background jobs OFF: the bot has
+    // nothing to do with the Meta apps, and an admin must be able to connect it
+    // and approve chats first (idle until configured).
     require('./services/telegramBot').start();
     if (socialEnv.JOBS_ENABLED !== '1') {
       console.log('[social] background jobs OFF (set SOCIAL_JOBS_ENABLED=1 to enable)');

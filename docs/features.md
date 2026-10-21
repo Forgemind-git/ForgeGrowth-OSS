@@ -219,7 +219,7 @@ Check these first when a connector will not finish authorising:
 ## Social
 
 A third header section for Instagram: analytics and insights, one inbox for DMs and comments,
-comment-to-DM automations, a comment analyser and a content library of synced posts and media. Off until `SOCIAL_ENCRYPTION_KEY` is set; setup in
+comment-to-DM automations and a content library of synced posts and media. Off until `SOCIAL_ENCRYPTION_KEY` is set; setup in
 [`social-section.md`](./social-section.md).
 
 ---
