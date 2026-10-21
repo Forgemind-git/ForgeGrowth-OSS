@@ -27,8 +27,8 @@ export default function AiAgentBuilderPage({ user, navigate }) {
   const [error, setError] = useState('');
   const [editingId, setEditingId] = useState(null); // null = list view, <number> = edit (new agents start from a preset in QuickAgentEditor)
   // "New agent" opens the template picker (like Social's Quick Automations);
-  // picking one opens the one-page Quick AI Agent editor, "Start from scratch"
-  // the full five-tab editor.
+  // picking one opens the one-page Quick AI Agent editor. The full five-tab
+  // editor is for agents that already exist.
   const [picker, setPicker] = useState(false);
   const [quick, setQuick] = useState(null); // a QUICK_AGENTS template while the quick editor is open
   const editing = editingId !== null || quick !== null;

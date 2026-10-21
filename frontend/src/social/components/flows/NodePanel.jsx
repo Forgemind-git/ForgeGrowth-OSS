@@ -447,7 +447,7 @@ function GotoEditor({ d, set, ctx }) {
       {target && !target.active && <div style={{ fontSize: 12.5, color: C.amber, marginTop: 8, lineHeight: 1.4 }}>“{target.name}” is off. Set it live, or this step does nothing.</div>}
       {target && !isCalledOnly(target) && <Hint>“{target.name}” also starts on its own trigger. For steps that should only run from here, use an automation whose trigger is “Started by another automation”.</Hint>}
       <Hint>The person continues at the first step of that automation, in the same conversation, with their fields and tags. Only live automations on this account can be started. A chain that keeps starting itself stops after 5 jumps.</Hint>
-      {!flows.length && <Hint>No other automations on this account yet. Create one with Start From Scratch → “Started by another automation”.</Hint>}
+      {!flows.length && <Hint>No other automations on this account yet.</Hint>}
     </>
   );
 }
