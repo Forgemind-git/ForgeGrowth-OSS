@@ -75,15 +75,6 @@ function skipNoDb(t) {
 async function cleanup() {
   if (!up) return;
   const q = (sql, params = []) => pool.query(sql, params).catch(() => {});
-  await q(`DELETE FROM coexistence.wa_link_hits    WHERE wa_link_id IN (
-             SELECT id FROM coexistence.wa_links WHERE name LIKE $1)`, [`%${SEED}%`]);
-  await q(`DELETE FROM coexistence.wa_link_clicks  WHERE target_id IN (
-             SELECT t.id FROM coexistence.wa_link_targets t
-               JOIN coexistence.wa_links l ON l.id = t.wa_link_id WHERE l.name LIKE $1)`, [`%${SEED}%`]);
-  await q(`DELETE FROM coexistence.wa_link_targets WHERE wa_link_id IN (
-             SELECT id FROM coexistence.wa_links WHERE name LIKE $1)`, [`%${SEED}%`]);
-  await q(`DELETE FROM coexistence.wa_links        WHERE name LIKE $1`, [`%${SEED}%`]);
-
   // Forms: submissions first — they carry the FK. Missing this leaked 105 rows
   // across one afternoon of runs, because a form that is never deleted is not
   // an error anywhere; it just quietly accumulates.

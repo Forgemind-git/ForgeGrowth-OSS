@@ -46,21 +46,13 @@ Always `get_template` and show the user the real body, header, buttons and sampl
 before using a template id you did not just create. Names are not unique enough to
 identify one confidently.
 
-## Payment templates
-
-A template whose URL button points at a payment link uses a base URL
-**owned by Forge Growth** (`/pay/{{1}}`), never the gateway's own
-short link. Meta bakes the button's base into the template **at approval**, so pointing
-it at an external domain would mean the template dies whenever that domain's link
-format changes, and re-approval takes days.
-
-Those templates are created from the Payments screen so the button is
-attached correctly. If a user asks you to hand-build one, point them there instead.
+## Dynamic URLs and automated senders
 
 **A dynamic-URL template cannot be used by an automated sender** — anything that fills
 a template automatically only builds BODY variables, so a `{{n}}` living in a URL button,
 a text header, or a copy-code button is never filled. Meta then rejects the send while
-the log still says it went. Those templates are for the screen that owns them.
+the log still says it went. Use such templates only from a screen where a person fills
+every variable.
 
 ## When Meta rejects
 

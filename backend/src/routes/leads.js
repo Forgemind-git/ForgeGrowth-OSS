@@ -31,10 +31,51 @@ const funnelTags = require('../services/funnelTags');
 const productTags = require('../services/productTags');
 const registry = require('../services/fieldRegistry');
 const paymentStatus = require('../services/paymentStatus');
-const { parseDateRange, isWindowed, timestampClause, dateClause } = require('../util/dateRange');
 
 const multer = require('multer');
 const router = Router();
+
+// The manual sales store (mirror of migrations 064/132): sales_log holds a
+// sale's transactions, sale_refunds its refunds. courses must exist first
+// (ensureCourseTables) for the FK.
+async function ensureSalesLogTables() {
+  // Refunds against a sale (migration 132). Created first so every lead query
+  // that sums refunds can rely on the table existing.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS coexistence.sale_refunds (
+      id            BIGSERIAL PRIMARY KEY,
+      lead_id       BIGINT NOT NULL REFERENCES coexistence.leads(id) ON DELETE CASCADE,
+      amount_paise  BIGINT NOT NULL CHECK (amount_paise > 0),
+      refunded_on   DATE NOT NULL,
+      method        TEXT,
+      note          TEXT,
+      created_by    TEXT,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_sale_refunds_lead ON coexistence.sale_refunds (lead_id)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS coexistence.sales_log (
+      id            BIGSERIAL PRIMARY KEY,
+      lead_id       BIGINT REFERENCES coexistence.leads(id)   ON DELETE SET NULL,
+      student_name  TEXT NOT NULL,
+      course_id     BIGINT REFERENCES coexistence.courses(id) ON DELETE SET NULL,
+      product_label TEXT,
+      amount_paise  BIGINT NOT NULL DEFAULT 0,
+      payment_date  DATE NOT NULL,
+      funnel_source TEXT,
+      notes         TEXT,
+      created_by    TEXT,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  // Payment method on a manual transaction (migration 065): how the customer
+  // paid (Cash / UPI / …).
+  await pool.query(`ALTER TABLE coexistence.sales_log ADD COLUMN IF NOT EXISTS method TEXT;`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_sales_log_date   ON coexistence.sales_log(payment_date);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_sales_log_course ON coexistence.sales_log(course_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_sales_log_lead   ON coexistence.sales_log(lead_id);`);
+}
 
 // Memory storage: a sheet is parsed and discarded, never written to disk.
 const leadSheetUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -292,30 +333,9 @@ router.get('/leads/board', async (req, res) => {
   }
 });
 
-// ── onboarding (after-sale checklist) ─────────────────────────────────────────
-router.get('/leads/onboarding', async (req, res) => {
-  try {
-    const scope = leadScopeClause(req, 1);
-    const params = isAdmin(req) ? [] : [meId(req)];
-    params.push(SALE_STAGE_KEYS());
-    const { rows } = await pool.query(
-      `${SELECT_LEAD} WHERE l.stage = ANY($${params.length}) ${scope}
-        ORDER BY l.payment_date DESC NULLS LAST, l.id DESC`,
-      params
-    );
-    const leads = rows.map(leadRow);
-    const pendingForms = leads.filter(l => l.formStatus !== 'complete');
-    res.json({ leads, pendingForms });
-  } catch (err) {
-    console.error('[leads] onboarding error:', err.message);
-    res.status(500).json({ error: 'Failed to load onboarding' });
-  }
-});
-
 // ── Students (paid / enrolled leads) + installments ───────────────────────────
 // A "student" is a lead at a won stage (SALE_STAGE_KEYS). Installments are that
-// student's payments toward their course: Razorpay captured payments matched to
-// the lead (razorpay_events.matched_lead_id) + any manually-added sales_log rows.
+// student's payments toward their course: the manually-added sales_log rows.
 // Amounts convert paise↔₹ at this boundary.
 const paise2r = (p) => Math.round(Number(p || 0)) / 100;
 
@@ -326,21 +346,9 @@ const paise2r = (p) => Math.round(Number(p || 0)) / 100;
 // 'enrolled' key so a misconfigured funnel can never empty the Sales Log.
 const SALE_STAGE_KEYS = () => { const won = cfg.wonStageKeys(); return won.length ? won : ['enrolled']; };
 
-// Razorpay writes multiple 'captured' event rows per payment (payment.captured +
-// order.paid), so we DEDUPE by payment_id (preferring the payment.captured row)
-// before summing — otherwise totals/installments double-count.
-const RZP_CAPTURED = (leadPred) => `
-  SELECT DISTINCT ON (COALESCE(payment_id, 'evt'||id::text))
-         id, matched_lead_id AS lead_id, amount_paise, created_at, method, payment_id
-    FROM coexistence.razorpay_events
-   WHERE status='captured' AND ${leadPred}
-   ORDER BY COALESCE(payment_id, 'evt'||id::text), (event_type='payment.captured') DESC, id`;
-
-// UNION of a student's payments (gateway + manual), keyed by lead_id.
+// A student's payments, keyed by lead_id.
 const PAYMENTS_CTE = `
   payments AS (
-    SELECT lead_id, amount_paise, (created_at AT TIME ZONE 'Asia/Kolkata')::date AS pay_date FROM ( ${RZP_CAPTURED('matched_lead_id IS NOT NULL')} ) rz
-    UNION ALL
     SELECT lead_id, amount_paise, payment_date AS pay_date
       FROM coexistence.sales_log WHERE lead_id IS NOT NULL
   )`;
@@ -348,9 +356,7 @@ const PAYMENTS_CTE = `
 async function refreshPaidTotal(leadId) {
   await pool.query(
     `UPDATE coexistence.leads l SET paid_amount_paise = (
-       SELECT COALESCE(SUM(amount_paise),0) FROM (
-         SELECT amount_paise FROM ( ${RZP_CAPTURED('matched_lead_id = l.id')} ) rz
-         UNION ALL SELECT amount_paise FROM coexistence.sales_log WHERE lead_id=l.id) s),
+       SELECT COALESCE(SUM(amount_paise),0) FROM coexistence.sales_log WHERE lead_id=l.id),
        updated_at=NOW() WHERE l.id=$1`, [leadId]);
 }
 
@@ -474,25 +480,13 @@ router.get('/students/export', async (req, res) => {
   }
 });
 
-// Every payment attached to one lead: the gateway's captured rows UNION the
-// manual sales_log rows, both keyed on lead_id.
-//
-// ⚠ Razorpay writes SEVERAL rows with status='captured' for ONE payment
-// (payment.captured + order.paid, and a third for a payment link), so this goes
-// through RZP_CAPTURED, which dedupes by payment_id. A private copy of this
-// query double-counts, and the only place that shows up is the money.
+// Every payment attached to one lead: its sales_log rows.
 async function installmentsFor(leadId) {
   const { rows } = await pool.query(
-    `SELECT kind, id, amount_paise, pay_date, method, ref, notes, custom_fields, product_label FROM (
-       SELECT 'razorpay' AS kind, id, amount_paise, created_at::date AS pay_date,
-              COALESCE(NULLIF(method,''),'Razorpay') AS method, payment_id AS ref, NULL::text AS notes,
-              NULL::jsonb AS custom_fields, NULL::text AS product_label
-         FROM ( ${RZP_CAPTURED('matched_lead_id = $1')} ) rz
-       UNION ALL
-       SELECT 'manual' AS kind, id, amount_paise, payment_date AS pay_date,
-              COALESCE(NULLIF(method,''),'Manual') AS method, NULL AS ref, notes, custom_fields, product_label
-         FROM coexistence.sales_log WHERE lead_id=$1
-     ) t ORDER BY pay_date ASC NULLS LAST, id ASC`,
+    `SELECT 'manual' AS kind, id, amount_paise, payment_date AS pay_date,
+            COALESCE(NULLIF(method,''),'Manual') AS method, NULL AS ref, notes, custom_fields, product_label
+       FROM coexistence.sales_log WHERE lead_id=$1
+      ORDER BY pay_date ASC NULLS LAST, id ASC`,
     [leadId]
   );
   return rows.map(r => ({
@@ -504,13 +498,11 @@ async function installmentsFor(leadId) {
 }
 
 // A single lead's row with the LIVE paid total attached, so the payment status
-// in a one-lead response is derived from the deduped payment union rather than
+// in a one-lead response is derived from the payments themselves rather than
 // the stamped leads.paid_amount_paise, which can lag a reconcile.
 async function withLivePaidTotal(row) {
   const { rows } = await pool.query(
-    `SELECT COALESCE(SUM(amount_paise),0)::bigint AS total FROM (
-       SELECT amount_paise FROM ( ${RZP_CAPTURED('matched_lead_id = $1')} ) rz
-       UNION ALL SELECT amount_paise FROM coexistence.sales_log WHERE lead_id = $1) s`,
+    `SELECT COALESCE(SUM(amount_paise),0)::bigint AS total FROM coexistence.sales_log WHERE lead_id = $1`,
     [row.id]);
   return { ...row, total_paid_paise: rows[0]?.total ?? 0 };
 }
@@ -682,7 +674,7 @@ router.post('/students', async (req, res) => {
     if (phone.length < 7) return res.status(400).json({ error: 'A valid WhatsApp number is required' });
     const name = String(b.studentName).trim();
     const last10 = phone.slice(-10);
-    // Razorpay-page profile fields (also collected in the Add Sale form). Manually
+    // Profile fields collected in the Add Sale form. Manually
     // entered values win over any existing blank (COALESCE(new, existing)).
     const email = b.email ? String(b.email).trim() : null;
     const ageVal = Number.isFinite(Number(b.age)) && String(b.age).trim() !== '' ? parseInt(b.age, 10) : null;
@@ -760,8 +752,7 @@ router.post('/students', async (req, res) => {
   }
 });
 
-// Delete a sale = delete the underlying lead + its manual transactions, and
-// DETACH (not delete) the gateway payments so the razorpay audit trail survives.
+// Delete a sale = delete the underlying lead + its manual transactions.
 // Admin-only — this removes the customer from the funnel everywhere, not just here.
 router.delete('/students/:id', async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Only an admin can delete a sale' });
@@ -774,9 +765,6 @@ router.delete('/students/:id', async (req, res) => {
     if (!lr.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Sale not found' }); }
     // Manual transactions (sales_log FK is ON DELETE SET NULL — remove them outright).
     await client.query(`DELETE FROM coexistence.sales_log WHERE lead_id = $1`, [id]);
-    // Gateway payments have no FK on matched_lead_id — detach so they don't dangle.
-    await client.query(
-      `UPDATE coexistence.razorpay_events SET matched_lead_id = NULL, matched_lead_name = NULL WHERE matched_lead_id = $1`, [id]);
     // Deleting the lead cascades lead_events / webinar_registrations; other refs SET NULL.
     await client.query(`DELETE FROM coexistence.leads WHERE id = $1`, [id]);
     await client.query('COMMIT');
@@ -788,65 +776,6 @@ router.delete('/students/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to delete sale' });
   } finally {
     client.release();
-  }
-});
-
-// ── lead sources (ranked channel quality) ─────────────────────────────────────
-// Optional ?days=N or ?from=&to= (IST, inclusive) — counts leads that ARRIVED in
-// the range. No range = all time, unchanged.
-router.get('/lead-sources', async (req, res) => {
-  try {
-    const range = parseDateRange(req.query);
-    if (range.error) return res.status(400).json({ error: range.error });
-    const scope = leadScopeClause(req, 1);
-    const params = isAdmin(req) ? [] : [meId(req)];
-    const created = timestampClause(range, 'l.created_at', (v) => { params.push(v); return `$${params.length}`; });
-    const { rows } = await pool.query(
-      `SELECT
-          COALESCE(l.source, 'Unknown') AS source,
-          COUNT(*)::int AS leads,
-          COUNT(*) FILTER (WHERE l.stage IN ('hot','enrolled'))::int AS hot_count,
-          COUNT(*) FILTER (WHERE l.stage = 'enrolled')::int AS enrolled_count
-         FROM coexistence.leads l
-        WHERE 1=1 ${scope} ${created ? `AND ${created}` : ''}
-        GROUP BY COALESCE(l.source, 'Unknown')
-        ORDER BY leads DESC`,
-      params
-    );
-    // Cost/lead joins campaigns spend by platform≈source (best-effort; manual now).
-    // A windowed range reads per-day Meta spend — the stored campaign totals are
-    // lifetime and would overstate cost for any shorter range.
-    const campParams = [];
-    const dayClause = isWindowed(range)
-      ? dateClause(range, 'd.stat_date', (v) => { campParams.push(v); return `$${campParams.length}`; })
-      : '';
-    const { rows: campRows } = await pool.query(
-      dayClause
-        ? `SELECT COALESCE(c.platform,'') AS platform, SUM(d.spend)::numeric AS spend, SUM(d.leads)::int AS gen
-             FROM coexistence.ad_daily_stats d
-             JOIN coexistence.campaigns c ON c.external_id = d.campaign_external_id
-            WHERE ${dayClause}
-            GROUP BY COALESCE(c.platform,'')`
-        : `SELECT COALESCE(platform,'') AS platform, SUM(spend)::numeric AS spend, SUM(leads_generated)::int AS gen
-             FROM coexistence.campaigns GROUP BY COALESCE(platform,'')`,
-      campParams
-    );
-    const costByPlatform = {};
-    for (const c of campRows) {
-      if (c.gen > 0) costByPlatform[c.platform.toLowerCase()] = Number(c.spend) / c.gen;
-    }
-    const sources = rows.map(r => ({
-      source: r.source,
-      leads: r.leads,
-      hotPct: r.leads ? Math.round((r.hot_count / r.leads) * 100) : 0,
-      enrolledPct: r.leads ? Math.round((r.enrolled_count / r.leads) * 100) : 0,
-      costPerLead: costByPlatform[String(r.source).toLowerCase()] || null,
-      entryStage: 'new',
-    }));
-    res.json({ sources });
-  } catch (err) {
-    console.error('[leads] lead-sources error:', err.message);
-    res.status(500).json({ error: 'Failed to load lead sources' });
   }
 });
 
@@ -1402,7 +1331,4 @@ async function chatLinkFor(number) {
   };
 }
 
-// RZP_CAPTURED is exported so any other module aggregating razorpay_events uses
-// the SAME payment_id dedupe (Razorpay writes several 'captured' rows per
-// payment — summing them raw double-counts). See routes/ctwa.js.
-module.exports = { router, recordOutbound, recordInbound, ensureLeadForContact, deriveLeadSource, RZP_CAPTURED, SALE_STAGE_KEYS };
+module.exports = { router, ensureSalesLogTables, recordOutbound, recordInbound, ensureLeadForContact, deriveLeadSource, SALE_STAGE_KEYS };

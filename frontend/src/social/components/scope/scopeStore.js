@@ -2,8 +2,8 @@ import { useState, useEffect } from "react";
 import { api } from "../../api.js";
 
 // "My accounts" — the per-user preset of platforms + Instagram accounts that every
-// page opens with. Tokens: 'instagram|<id>' for Instagram, the bare platform key
-// for single-account platforms ('facebook', 'youtube', 'threads', 'linkedin').
+// page opens with. Tokens: 'instagram|<id>' per Instagram account, or the bare
+// 'instagram' for all of them.
 // Empty = no preset (everything). One module cache shared by all pages.
 let state = { loaded: false, tokens: [], accounts: [] };
 const subs = new Set();

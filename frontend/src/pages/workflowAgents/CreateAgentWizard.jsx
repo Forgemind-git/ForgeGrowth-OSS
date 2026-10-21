@@ -21,9 +21,8 @@ const GOALS = {
   payment_chaser: { title: 'Chase balances still due', blurb: 'Lists customers who still owe money, each with a polite reminder to approve.' },
   response_time_watcher: { title: 'Catch slow replies', blurb: 'During working hours, flags hot leads nobody has answered and tells the team lead.' },
   reason_finder: { title: 'Learn why leads don’t buy', blurb: 'A weekly report of the reasons, with counts and real quotes.' },
-  ad_to_chat_quality: { title: 'See which ads bring good conversations', blurb: 'A weekly look at each ad’s chats next to what it costs.' },
 };
-const GOAL_ORDER = ['lead_signal', 'follow_up_drafter', 'payment_chaser', 'response_time_watcher', 'reason_finder', 'ad_to_chat_quality'];
+const GOAL_ORDER = ['lead_signal', 'follow_up_drafter', 'payment_chaser', 'response_time_watcher', 'reason_finder'];
 
 const DAY_SETS = [
   { value: 'daily', label: 'Every day', days: [0, 1, 2, 3, 4, 5, 6] },
@@ -35,7 +34,6 @@ const sameDays = (a, b) => a.length === b.length && a.every(d => b.includes(d));
 const pad = (n) => String(n).padStart(2, '0');
 const BLANK = /\[[^\]\n]{1,60}\]/;
 
-const BLANK_TRIGGERS = [{ type: 'schedule', cron: '0 9 * * 1-6', timezone: 'Asia/Kolkata', enabled: false }, { type: 'manual', enabled: true }];
 
 function Steps({ step }) {
   const labels = ['What it should do', 'Set it up', 'Review'];
@@ -133,14 +131,13 @@ export default function CreateAgentWizard({ navigate }) {
   const narrow = useNarrow(700);
   const [step, setStep] = useState(1);
   const [presets, setPresets] = useState(null);
-  const [goal, setGoal] = useState(null); // preset key, or 'blank'
+  const [goal, setGoal] = useState(null); // preset key — creation is preset-only
   const [preset, setPreset] = useState(null);
-  const [lookups, setLookups] = useState({ team: null, settings: null, templates: null, products: [], catalog: null });
+  const [lookups, setLookups] = useState({ team: null, settings: null, templates: null, products: [] });
   const [busy, setBusy] = useState(false);
 
   // answers
   const [name, setName] = useState('');
-  const [purpose, setPurpose] = useState('');
   const [triggers, setTriggers] = useState([]);
   const [leadsMode, setLeadsMode] = useState('all');
   const [numbers, setNumbers] = useState(['all']);
@@ -153,12 +150,12 @@ export default function CreateAgentWizard({ navigate }) {
 
   useEffect(() => {
     api.workflowAgents.presets().then(setPresets).catch(e => { showError(e.message); setPresets([]); });
-    Promise.allSettled([api.workflowAgents.team(), api.workflowAgents.settings(), api.templates.list({ status: 'APPROVED' }), api.products.list(), api.workflowAgents.catalog()])
-      .then(([t, s, tp, p, c]) => {
+    Promise.allSettled([api.workflowAgents.team(), api.workflowAgents.settings(), api.templates.list({ status: 'APPROVED' }), api.products.list()])
+      .then(([t, s, tp, p]) => {
         const tplList = Array.isArray(tp.value) ? tp.value : tp.value?.templates || [];
         const seen = new Set();
         setLookups({
-          team: t.value || null, settings: s.value || null, catalog: c.value || null,
+          team: t.value || null, settings: s.value || null,
           templates: tplList.filter(x => String(x.status).toUpperCase() === 'APPROVED' && !seen.has(x.name) && seen.add(x.name)),
           products: (p.value?.products || []).filter(x => x.active !== false),
         });
@@ -167,13 +164,6 @@ export default function CreateAgentWizard({ navigate }) {
 
   const choose = async (key) => {
     setGoal(key);
-    if (key === 'blank') {
-      setPreset({ preset_key: null, name: 'New agent', triggers: BLANK_TRIGGERS, destinations: [{ type: 'results_inbox' }], data_scope: {}, memory: [] });
-      setName(''); setTriggers(BLANK_TRIGGERS); setMemory([]); setBudget(null); setLookback(14);
-      setWorklist(false); setWhatsapp({ on: false, template: '', send_at: '' });
-      setStep(2);
-      return;
-    }
     try {
       const p = await api.workflowAgents.preset(key);
       setPreset(p);
@@ -198,11 +188,10 @@ export default function CreateAgentWizard({ navigate }) {
   const problems = useMemo(() => {
     const p = [];
     if (!name.trim()) p.push('Give the agent a name.');
-    if (goal === 'blank' && purpose.trim().length < 15) p.push('Describe what the agent should do (a sentence or two).');
     if (whatsapp.on && !templateOk) p.push('Pick an approved WhatsApp template, or switch the WhatsApp summary off.');
     if (leadsMode === 'some' && (!numbers.length || numbers.includes('all'))) p.push('Pick at least one business number, or choose all leads.');
     return p;
-  }, [name, goal, purpose, whatsapp, templateOk, leadsMode, numbers]);
+  }, [name, whatsapp, templateOk, leadsMode, numbers]);
 
   const destinations = () => {
     const out = [{ type: 'results_inbox' }];
@@ -224,17 +213,13 @@ export default function CreateAgentWizard({ navigate }) {
       monthly_budget_inr: budget || null,
     };
     if (memory.length) setup.memory = memory;
-    if (goal === 'blank') {
-      setup.instructions = `# Goal\n${purpose.trim()}\n\n# How to work\n1. Call get_workspace_context and read_memory.\n2. Use the read tools to find the leads, conversations, sales or ads this goal needs. Quote messages exactly.\n3. If something cannot be checked, say so in data_gaps.\n\n# Output rules\n- Write the answer in summary, in plain language.\n- Put anything you could not check in data_gaps.`;
-      setup.enable_tools = (lookups.catalog?.tools || []).filter(t => t.kind === 'read').map(t => t.key);
-    }
     return setup;
   };
 
   const create = async () => {
     setBusy(true);
     try {
-      const out = await api.workflowAgents.create({ preset_key: goal === 'blank' ? null : goal, name: name.trim(), setup: buildSetup() });
+      const out = await api.workflowAgents.create({ preset_key: goal, name: name.trim(), setup: buildSetup() });
       navigate('workflow-agents', out.agent.id, 'setup');
     } catch (e) {
       const list = e.body?.errors;
@@ -300,7 +285,7 @@ export default function CreateAgentWizard({ navigate }) {
   // ── step 1 ────────────────────────────────────────────────────────────────
   if (step === 1) {
     const byKey = new Map((presets || []).map(p => [p.preset_key, p]));
-    const cards = [...GOAL_ORDER.filter(k => byKey.has(k)).map(k => ({ key: k, ...GOALS[k], preset: byKey.get(k) })), { key: 'blank', title: 'Something else', blurb: 'Describe in your own words what it should look at and report.', preset: null }];
+    const cards = [...GOAL_ORDER.filter(k => byKey.has(k)).map(k => ({ key: k, ...GOALS[k], preset: byKey.get(k) }))];
     return shell(
       !presets ? <div style={{ fontSize: T.body, color: C.textMuted }}>Loading…</div> : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))', gap: 12 }}>
@@ -332,17 +317,11 @@ export default function CreateAgentWizard({ navigate }) {
     return shell(
       <>
         <Question title="Name">
-          <input value={name} maxLength={120} placeholder={goal === 'blank' ? 'e.g. EMI questions this week' : ''} onChange={e => setName(e.target.value)} style={inputStyle} />
+          <input value={name} maxLength={120} onChange={e => setName(e.target.value)} style={inputStyle} />
         </Question>
 
-        {goal === 'blank' && (
-          <Question title="What should it do?" hint="Write it the way you would brief a colleague. It can read leads, chats, voice-note transcripts, sales and ads; it cannot change anything.">
-            <textarea rows={5} value={purpose} onChange={e => setPurpose(e.target.value)} placeholder="e.g. Every morning, list the leads who asked about EMI or instalments in the last 7 days, with their stage and the message where they asked." style={textareaStyle} />
-          </Question>
-        )}
-
         <Question title="When should it run?" hint="Times are Indian Standard Time. You can also run it yourself at any time.">
-          {scheduleIdx.map(i => <ScheduleAnswer key={i} trigger={triggers[i]} onChange={(n) => setTrigger(i, n)} label={goal === 'blank' ? 'Also run automatically at' : undefined} />)}
+          {scheduleIdx.map(i => <ScheduleAnswer key={i} trigger={triggers[i]} onChange={(n) => setTrigger(i, n)} />)}
           {eventIdx.map(i => <EventAnswer key={i} trigger={triggers[i]} onChange={(n) => setTrigger(i, n)} />)}
         </Question>
 
@@ -444,7 +423,7 @@ export default function CreateAgentWizard({ navigate }) {
           <span style={{ width: 40, height: 40, borderRadius: 11, background: C.primaryLight, color: C.primary, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon size={20} /></span>
           <div>
             <div style={{ fontSize: T.h3, fontWeight: W.bold, color: C.text }}>{name}</div>
-            <div style={{ fontSize: T.body, color: C.textSecondary }}>{goal === 'blank' ? purpose.trim() : GOALS[goal]?.blurb}</div>
+            <div style={{ fontSize: T.body, color: C.textSecondary }}>{GOALS[goal]?.blurb}</div>
           </div>
         </div>
         <Summary label="Runs" lines={whenLines()} />

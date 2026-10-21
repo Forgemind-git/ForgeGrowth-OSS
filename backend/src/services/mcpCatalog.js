@@ -72,13 +72,12 @@ const TIERS = {
 
 /* ------------------------------ areas ----------------------------------- */
 
-// The five parts of the app, in the order the Settings screen shows them. Every
+// The four parts of the app, in the order the Settings screen shows them. Every
 // category belongs to exactly one area, so a non-technical admin can find "what
 // can Claude do in Social?" without knowing any tool names.
 const AREAS = [
-  { key: 'social', label: 'Social', description: 'Instagram, Facebook, Threads, YouTube and LinkedIn — numbers, inbox, posting, Instagram automations and Social AI agents.' },
-  { key: 'marketing', label: 'Marketing', description: 'Meta ad campaigns, Click-to-WhatsApp results, campaign ROI and the Conversions API (read-only).' },
-  { key: 'sales', label: 'Sales', description: 'Leads and the funnel, the follow-up calendar, the Sales Log, products, payments and the Chat Analyzer.' },
+  { key: 'social', label: 'Social', description: 'Instagram — numbers, inbox, Instagram automations and Social AI agents.' },
+  { key: 'sales', label: 'Sales', description: 'Leads and the funnel, the follow-up calendar, sales, products and the Chat Analyzer.' },
   { key: 'chats', label: 'Chats & Automations', description: 'WhatsApp conversations, sending, broadcasts, templates, media, automation flows and WhatsApp AI agents.' },
   { key: 'admin', label: 'Admin', description: 'Connected numbers and models, Google, deleting things, and the unrestricted API escape hatch.' },
 ];
@@ -108,17 +107,16 @@ const READ_PREFIX = /^(list_|get_|read_|search_|validate_)/;
 const API_AREAS = [
   { key: 'area_contacts', label: 'Contacts & tags', description: 'Contacts, saved contacts, tags and categories.' },
   { key: 'area_messaging', label: 'Messages', description: 'Chat messages, reactions, WhatsApp group archive and pausing a bot on one chat.' },
-  { key: 'area_broadcasts', label: 'Broadcasts & content', description: 'Broadcasts (incl. repeating), templates, media library and click-to-chat links.' },
+  { key: 'area_broadcasts', label: 'Broadcasts & content', description: 'Broadcasts (incl. repeating), templates and media library.' },
   { key: 'area_automations', label: 'Automations', description: 'Automation flows and their runs.' },
-  { key: 'area_admin', label: 'Admin (users, accounts, payments)', description: 'SENSITIVE — users, WhatsApp accounts, AI models, integrations, the Razorpay gateway, conversion sending, live payment links and Social credentials.', sensitive: true },
+  { key: 'area_admin', label: 'Admin (users, accounts)', description: 'SENSITIVE — users, WhatsApp accounts, AI models, integrations and Social credentials.', sensitive: true },
   { key: 'area_insights', label: 'Dashboard & logs', description: 'Dashboard analytics, webhook history and message costs.' },
   { key: 'area_leads', label: 'Leads & funnel', description: 'Leads, funnel config, the field registry and follow-ups.' },
-  { key: 'area_marketing', label: 'Marketing', description: 'Campaigns, Click-to-WhatsApp, campaign ROI and webinars.' },
   { key: 'area_resources', label: 'Resources', description: 'Live links and the trigger library.' },
-  { key: 'area_courses', label: 'Products', description: 'Product catalogue and payment-link price registry.' },
-  { key: 'area_payments', label: 'Payments', description: 'Razorpay ledger, sales log and students. The gateway secret stays under Admin.' },
+  { key: 'area_courses', label: 'Products', description: 'Product catalogue.' },
+  { key: 'area_payments', label: 'Sales', description: 'Sales (students), their payments and refunds.' },
   { key: 'area_chat_analysis', label: 'Chat Analyzer', description: 'Conversation analyses and what they cost.' },
-  { key: 'area_social', label: 'Social', description: 'The Social workspace: analytics, inbox, posting, Instagram automations, flows and Social AI agents. Its credentials and settings stay under Admin.' },
+  { key: 'area_social', label: 'Social', description: 'The Social workspace: analytics, inbox, Instagram automations, flows and Social AI agents. Its credentials and settings stay under Admin.' },
 ];
 
 /* ---------------------------- categories -------------------------------- */
@@ -242,33 +240,11 @@ const CATEGORIES = [
     legacyCaps: ['area_broadcasts'],
   },
   {
-    key: 'message_formats',
-    area: 'chats',
-    label: 'Message Formats',
-    description:
-      'Generate trackable click-to-chat links with a pre-filled opening message, so you can tell which campaign a lead arrived from.',
-    // Kept apart from Broadcasts even though it is one tool: Message Formats is
-    // its own feature, and minting a link nobody has clicked yet is nothing
-    // like blasting a list. Bundling them only because each was small would put
-    // a harmless action behind a switch labelled as spending money.
-    tier: 'build',
-    legacyCaps: ['area_broadcasts'],
-  },
-  {
-    key: 'marketing',
-    area: 'marketing',
-    label: 'Marketing Analytics',
-    description:
-      'Read Meta campaign performance down to ad sets and ads, Click-to-WhatsApp results, campaign ROI (spend vs leads vs revenue), the Conversions API set-up and its history, and webinars. Read-only — it cannot change ads or send conversions.',
-    tier: 'read',
-    legacyCaps: ['area_marketing'],
-  },
-  {
     key: 'sales',
     area: 'sales',
-    label: 'Products & Payments',
+    label: 'Products & Sales',
     description:
-      'Read the Sales Log (who bought, what they paid, what they still owe), the product catalogue, per-product revenue, the payment ledger and the Payments dashboard trend. Read-only — it cannot mint a payment link or charge anyone.',
+      'Read sales (who bought, what they paid, what they still owe), the product catalogue and per-product revenue. Read-only — it cannot charge anyone.',
     tier: 'read',
     legacyCaps: ['area_courses', 'area_payments'],
   },
@@ -285,7 +261,7 @@ const CATEGORIES = [
     key: 'social_inbox',
     area: 'social',
     label: 'Social inbox & contacts',
-    description: 'Read Instagram DMs, comments on your posts, the Social contacts list and the posting queue. Read-only — it cannot reply.',
+    description: 'Read Instagram DMs, comments on your posts and the Social contacts list. Read-only — it cannot reply.',
     tier: 'read',
     // area_social is new, so no existing instance holds it: these seed OFF.
     legacyCaps: ['area_social'],
@@ -293,8 +269,8 @@ const CATEGORIES = [
   {
     key: 'social_publish',
     area: 'social',
-    label: 'Social replies & posting',
-    description: 'Reply publicly to comments, send Instagram DMs, and publish or schedule posts. Every one of these is seen by real people on the real platform.',
+    label: 'Social replies',
+    description: 'Reply publicly to comments and send Instagram DMs. Every one of these is seen by real people on the real platform.',
     tier: 'send',
     // area_social is new, so no existing instance holds it: these seed OFF.
     legacyCaps: ['area_social'],
@@ -312,7 +288,7 @@ const CATEGORIES = [
     key: 'social_agents',
     area: 'social',
     label: 'Social AI agents',
-    description: 'Create and edit the AI agents that answer Instagram/Facebook DMs and comments, attach tools, and read what they replied. Switching one live makes it answer real people. Deleting is a separate switch.',
+    description: 'Create and edit the AI agents that answer Instagram DMs and comments, attach tools, and read what they replied. Switching one live makes it answer real people. Deleting is a separate switch.',
     tier: 'build',
     // area_social is new, so no existing instance holds it: these seed OFF.
     legacyCaps: ['area_social'],
@@ -337,7 +313,7 @@ const CATEGORIES = [
     // proxy was previously usable.
     legacyCaps: [
       'area_contacts', 'area_messaging', 'area_broadcasts', 'area_automations',
-      'area_admin', 'area_insights', 'area_leads', 'area_marketing',
+      'area_admin', 'area_insights', 'area_leads',
       'area_resources', 'area_courses', 'area_payments',
     ],
     legacyAny: true,
@@ -416,18 +392,9 @@ const HAND_TOOLS = {
   /* --- Broadcasts --- */
   send_bulk_message:       { category: 'broadcasts', summary: 'Message an uploaded list of recipients in one broadcast.' },
 
-  /* --- Message Formats --- */
-  create_wa_link:          { category: 'message_formats', summary: 'Generate a trackable click-to-chat link.' },
-
-  /* --- Marketing Analytics --- */
-  get_campaign_performance: { category: 'marketing', summary: 'Read campaign spend, leads and results.' },
-  get_ad_conversions:      { category: 'marketing', summary: 'Read which Meta ads produced chats, paying students and revenue.' },
-  list_webinars:           { category: 'marketing', summary: 'List webinars and their registrations.' },
-
-  /* --- Products & Payments --- */
+  /* --- Products & Sales --- */
   list_products:           { category: 'sales', summary: 'List the product catalogue and prices.' },
   get_product_revenue:     { category: 'sales', summary: 'Read revenue collected per product.' },
-  list_payments:           { category: 'sales', summary: 'Read the payment ledger — who paid, failed or refunded.' },
 
   /* --- Google Workspace --- */
   search_spreadsheets:     { category: 'google', summary: 'Search connected Google Drive spreadsheets.' },

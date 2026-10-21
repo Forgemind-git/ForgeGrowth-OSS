@@ -13,8 +13,8 @@ Meta WhatsApp Cloud API
         │
         ▼ webhook
    Backend (Express + pg)  ──►  PostgreSQL  (schema `coexistence`)
-        │                       chats · leads · funnel · campaigns
-        │                       templates · automations · agents · payments
+        │                       chats · leads · funnel · sales
+        │                       templates · automations · agents
         │
         ├──►  BullMQ on Redis  ──►  outbound sends (60/sec) · media downloads · agent runs
         ├──►  MinIO                 media library objects
@@ -37,7 +37,7 @@ Meta WhatsApp Cloud API
 | Auth | JWT in httpOnly cookies |
 | Encryption | AES-256-GCM for every stored third-party credential |
 | LLM providers | Anthropic, OpenAI |
-| Integrations | Meta Marketing API, Razorpay, Google OAuth (Sheets / Calendar / Gmail) |
+| Integrations | Meta WhatsApp Cloud API, Instagram, Google OAuth (Sheets / Calendar / Gmail) |
 | Object storage | MinIO |
 | MCP | `@modelcontextprotocol/sdk`, Streamable HTTP with OAuth 2.1 (PKCE S256) |
 
@@ -61,7 +61,7 @@ Two deployments sharing one Redis server must use different database indexes
 
 ### Stage changes are observed, not hooked
 
-Eight code paths write `leads.stage`, several in raw SQL. Downstream consumers — the funnel-stage tag
+Many code paths write `leads.stage`, several in raw SQL. Downstream consumers — the funnel-stage tag
 mirror today — walk the append-only `lead_events` log with a saved cursor instead, so a new write path
 is covered automatically.
 
@@ -132,7 +132,7 @@ frontend/
   src/
     api.js                one fetch wrapper for every endpoint
     components/           chat UI, automation builder, agent editor
-    pages/                marketing/ · sales/ · admin · chats
+    pages/                sales/ · admin · chats
 mcp-server/               stdio MCP server (development only — the hosted transport is the real one)
 supabase/migrations/      numbered SQL, applied in order; baked into the backend image
 scripts/                  install.sh · up.sh · down.sh · uninstall.sh · migrate.sh

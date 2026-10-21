@@ -2,11 +2,10 @@ import { toLayout } from '../lib/uiZoom.js';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Home, Zap, LayoutTemplate, MessageCircle,
-  Megaphone, Image as ImageIcon, Link, Link2, Kanban, Bot,
+  Megaphone, Image as ImageIcon, Link, Kanban, Bot,
   ChevronLeft, ChevronRight, ScanSearch,
-  LayoutDashboard,
   KanbanSquare, Package, Contact,
-  Receipt, MousePointerClick, Radio, Target, CreditCard,
+  MousePointerClick, Target, CreditCard,
   Users2,
   IndianRupee,
   NotebookPen,
@@ -32,7 +31,7 @@ const HOME_ITEM = { id: 'home', label: 'Home', Icon: Home };
 const SALES_GROUPS = [
   {
     // In the order a sale actually happens: the lead arrives, you talk to them,
-    // you chase them, it lands in the Sales Log (2026-10-16). Each item that
+    // you chase them (2026-10-16). Each item that
     // has related pages opens a tabbed hub (components/AutomationHub.jsx HUBS)
     // instead of listing them all here.
     id: 'sales', label: 'Sales', Icon: KanbanSquare,
@@ -45,8 +44,6 @@ const SALES_GROUPS = [
       // Pinned lead chats + the follow-up calendar. Shown to anyone who can see
       // Leads (see PAGE_ALIASES) so no role needs editing.
       { id: 'follow-ups', label: 'Follow-up', Icon: CalendarClock },
-      // Hub: Sales Log · Payments.
-      { id: 'onboarding', label: 'Sales Log', Icon: Receipt },
     ],
   },
   {
@@ -67,28 +64,14 @@ const SALES_GROUPS = [
 const NAV_ITEMS = [HOME_ITEM, ...SALES_GROUPS.flatMap(g => g.items)];
 
 
-const MARKETING_NAV = [
-  // In the order the work happens (2026-10-16): run the ads, see where leads
-  // came from, then send the results back to Meta. Each item after Overview
-  // opens a tabbed hub (components/AutomationHub.jsx HUBS). Route keys unchanged.
-  { id: 'mkt-overview', label: 'Overview', Icon: LayoutDashboard },
-  // Hub: Campaigns · Click-to-WhatsApp · Campaign ROI.
-  { id: 'campaigns', label: 'Campaigns', Icon: Megaphone },
-  // Hub: Message Formats — click-to-chat formats, where leads come from.
-  { id: 'wa-links', label: 'Lead Sources', Icon: Link2 },
-  // Hub: Conversion API · Lead Optimisation — the signals sent back to Meta.
-  { id: 'conversion-api', label: 'Conversions', Icon: Radio },
-];
-
-// Per-section nav — the header tab (Marketing / Sales) picks which list the
-// sidebar shows. Sales is the grouped one; Marketing is short enough to stay flat.
+// Per-section nav — the header tab (Social / Sales) picks which list the
+// sidebar shows. Sales is the grouped one; Social is short enough to stay flat.
 const SECTION_NAV = {
-  marketing: MARKETING_NAV,
   sales: NAV_ITEMS,
   social: SOCIAL_NAV,
 };
 
-const SECTION_EMPTY_ICON = { marketing: Megaphone, sales: Kanban, social: Megaphone };
+const SECTION_EMPTY_ICON = { sales: Kanban, social: Megaphone };
 
 // One group in the 68px rail: an icon that flies its items out to the side.
 // The rail therefore stays 6 icons tall whatever the nav contains, which is
@@ -234,7 +217,7 @@ function NavRow({ item, active, collapsed, indented, onClick }) {
 // the person's own leads, so Leads (or the retired My leads today) grants it.
 export const PAGE_ALIASES = {
   'follow-ups': ['follow-ups', 'leads', 'my-worklist'],
-  // A hub item (Automations, Chats, Sales Log) is shown to anyone who may open
+  // A hub item (Automations, Chats) is shown to anyone who may open
   // ANY of its tabs.
   ...Object.fromEntries(HUBS.map(h => [h.id, h.tabs.map(t => t.perm || t.key)])),
   // Every Social sidebar item is reached through the one 'social' page key.

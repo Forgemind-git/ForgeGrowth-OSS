@@ -497,7 +497,7 @@ async function sendClosingMessage({ agent, waNumber, contactNumber }) {
     // insertPendingRow + enqueueSend. The 24h window is definitionally open
     // here (we are reacting to an inbound), but it is checked anyway so a
     // doomed send is reported rather than silently dropped.
-    const { sendOnThread } = require('./paymentFlow');
+    const { sendOnThread } = require('./threadSender');
     const res = await sendOnThread({ waNumber, contactNumber, body });
     if (!res.sent) {
       console.warn(`[agentLimits] agent ${agent.id}: closing message not sent (${res.reason})`);

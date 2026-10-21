@@ -1,5 +1,5 @@
 // Entity-field registry loader — the frontend source of truth for the
-// configurable Leads / Sales Log / Transaction fields (migration 097). Same
+// configurable Leads / Transaction fields (migration 097). Same
 // module-cache + subscription pattern as useFunnelConfig: one fetch shared by
 // every consumer, primed at login in App.jsx, with a hardcoded fallback that
 // mirrors the seeded system rows so the tables render identically to the

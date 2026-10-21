@@ -206,11 +206,7 @@ router.get('/templates', async (req, res) => {
      ORDER BY t.updated_at DESC`,
     params
   );
-  // Whether the template carries a payment-link button is DERIVED from its
-  // stored buttons by the one function that owns that rule — never restated on
-  // a column, which would drift the moment someone edited the button.
-  const { templateHasPaymentButton } = require('../services/paymentFlow');
-  res.json(rows.map(r => ({ ...r, hasPaymentButton: templateHasPaymentButton(r) })));
+  res.json(rows);
 });
 
 // Self-imposed cap: max 2 edits in any rolling 24h window for APPROVED templates.

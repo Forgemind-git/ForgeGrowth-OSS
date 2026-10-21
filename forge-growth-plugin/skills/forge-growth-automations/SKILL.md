@@ -97,8 +97,6 @@ message. "Every Monday at 9am" is not an automation — it is a repeating broadc
 
 Do not offer these; they were removed from the builder:
 
-- **Payment step** — a flow can no longer raise a Razorpay link unattended. Payment
-  links are raised from Sales → Payments (**forge-growth-revenue**).
 - **AI Agent / AI step inside a flow** — agents are built in their own section
   (**forge-growth-agents**).
 - **External API call**, **sub-flow**, **human handoff**, **follow-up sequences**.

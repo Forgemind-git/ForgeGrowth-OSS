@@ -1,10 +1,10 @@
 // ============================================================
 // notificationService.js — the in-app alert spine.
 //
-// emit(type, payload) is called from the existing event sites (publish worker,
-// IG webhook, token/insight checks) — never from new polling. Reads are pure DB.
+// emit(type, payload) is called from the existing event sites (IG webhook,
+// token/insight checks) — never from new polling. Reads are pure DB.
 // Fail-soft: emit never throws into its caller (a notification must not break a
-// publish or a webhook ingest).
+// webhook ingest).
 //
 // read_by is a JSONB array of user ids who've read the item → "unread for me" =
 // my id is not in read_by. dedupe_key (UNIQUE) stops the same event or the same
@@ -48,7 +48,7 @@ setInterval(() => {
 }, 20000);
 
 const DEFAULT_PREFS = {
-  dm: true, comment: true, publish_failed: true, publish_published: true,
+  dm: true, comment: true,
   token: true, anomaly: true, handoff: true, email_digest: false,
 };
 

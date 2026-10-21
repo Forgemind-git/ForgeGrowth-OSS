@@ -9,10 +9,7 @@ const pool = require('./db');
 const { router: authRouter, authMiddleware, ensureTables } = require('./auth');
 const { router: messagesRouter } = require('./routes/messages');
 const { router: webhookRouter } = require('./routes/webhook');
-const { publicRouter: razorpayPublicRouter, router: razorpayRouter, ensureRazorpayTables } = require('./routes/razorpay');
 const { router: coursesRouter, ensureCourseTables } = require('./routes/courses');
-const { router: paymentRequestsRouter, ensurePaymentRequestTables } = require('./routes/paymentRequests');
-const { ensurePaymentLedgerTables, syncRazorpayPayments } = require('./services/razorpayLedger');
 const { router: categoriesRouter } = require('./routes/categories');
 const { router: uploadsRouter, UPLOAD_DIR } = require('./routes/uploads');
 const { router: templatesRouter, syncAllAccountTemplates } = require('./routes/templates');
@@ -31,28 +28,18 @@ const { router: usersRouter } = require('./routes/users');
 const roleConfig = require('./services/roleConfig');
 const { router: eventsRouter } = require('./routes/events');
 const { router: webhookHistoryRouter } = require('./routes/webhookHistory');
-const { router: waLinksRouter, publicRouter: waLinksPublicRouter } = require('./routes/waLinks');
-// Public /pay/<token> redirect — the destination of a payment template's URL
-// button. Mounted at the ROOT (not /api) so the customer-facing link is short.
-const { publicRouter: payLinkPublicRouter } = require('./routes/payLink');
-const messageFormats = require('./services/messageFormats');
 const { router: dashboardRouter } = require('./routes/dashboard');
 const { router: pipelinesRouter } = require('./routes/pipelines');
-const { router: leadsRouter } = require('./routes/leads');
+const { router: leadsRouter, ensureSalesLogTables } = require('./routes/leads');
 const { router: funnelRouter, ensureFunnelTables } = require('./routes/funnel');
 const funnelTags = require('./services/funnelTags');
 const productTags = require('./services/productTags');
-const { router: salesLogRouter, ensureSalesLogTables } = require('./routes/salesLog');
 const { router: entityFieldsRouter, ensureEntityFieldTables } = require('./routes/entityFields');
-const { router: marketingRouter, syncMetaAds, ensureAdSetTables } = require('./routes/marketing');
 const { router: resourcesRouter } = require('./routes/resources');
 const { router: chatAnalyserRouter } = require('./routes/chatAnalyser');
 const { router: leadFollowUpsRouter } = require('./routes/leadFollowUps');
-const { router: paymentFilterPresetsRouter, ensurePresetTables: ensurePaymentFilterPresetTables } = require('./routes/paymentFilterPresets');
 const { ensureFollowUpTables } = require('./services/followUps');
 const { ensureChatAnalyserTables } = require('./services/chatAnalyser');
-const { router: ctwaRouter, ensureCtwaTables, sweepStageEvents } = require('./routes/ctwa');
-const { router: cloRouter, ensureCloTables } = require('./routes/clo');
 // Per-template message costs — what we owe Meta for every message sent.
 const { router: messageCostsRouter, ensureCostTables } = require('./routes/messageCosts');
 const { router: integrationsRouter, publicRouter: integrationsPublicRouter } = require('./routes/integrations');
@@ -176,11 +163,6 @@ app.use(['/api/mcp/http', '/api/mcp/v1', '/api/mcp'], express.json({ limit: proc
 // BEFORE the JSON parser so a form POST is not silently received as an empty
 // body — which would look like a malformed client rather than a parser gap.
 app.use('/api/mcp/oauth', express.urlencoded({ extended: false }));
-// Razorpay signs the RAW request bytes, so we must verify HMAC over the exact
-// body Razorpay sent — a JSON re-stringify would change whitespace/key order and
-// break the signature. Capture the raw Buffer here BEFORE express.json (which
-// then no-ops on this path since req._body is set).
-app.use('/api/webhook/razorpay', express.raw({ type: '*/*', limit: '1mb' }));
 app.use(express.json({ limit: '1mb' }));
 
 // Serve uploaded files statically
@@ -232,12 +214,8 @@ if (process.env.MCP_REQUEST_LOG === '1') {
 // Health check
 app.get('/health', (req, res) => res.json({ ok: true }));
 
-// Public routes (webhook from n8n / wa link redirects — no auth)
+// Public routes (webhook from n8n — no auth)
 app.use('/api', webhookRouter);
-app.use('/api', razorpayPublicRouter);
-app.use('/', waLinksPublicRouter);
-// Before authMiddleware: the customer opens this from WhatsApp with no session.
-app.use('/', payLinkPublicRouter);
 // Google OAuth callback is public — Google posts back without our cookie
 app.use('/api', integrationsPublicRouter);
 
@@ -273,23 +251,15 @@ app.use('/api', authMiddleware, aiModelsRouter);
 app.use('/api', authMiddleware, usersRouter);
 app.use('/api', authMiddleware, eventsRouter);
 app.use('/api', authMiddleware, webhookHistoryRouter);
-app.use('/api', authMiddleware, razorpayRouter);
-app.use('/api', authMiddleware, paymentRequestsRouter);
 app.use('/api', authMiddleware, coursesRouter);
-app.use('/api', authMiddleware, waLinksRouter);
 app.use('/api', authMiddleware, dashboardRouter);
 app.use('/api', authMiddleware, pipelinesRouter);
 // AI Academy Dashboard (leads funnel + marketing + BDA)
 app.use('/api', authMiddleware, leadsRouter);
 app.use('/api', authMiddleware, chatAnalyserRouter);
 app.use('/api', authMiddleware, leadFollowUpsRouter);
-app.use('/api', authMiddleware, paymentFilterPresetsRouter);
 app.use('/api', authMiddleware, funnelRouter);
-app.use('/api', authMiddleware, salesLogRouter);
 app.use('/api', authMiddleware, entityFieldsRouter);
-app.use('/api', authMiddleware, marketingRouter);
-app.use('/api', authMiddleware, ctwaRouter);
-app.use('/api', authMiddleware, cloRouter);
 app.use('/api', authMiddleware, messageCostsRouter);
 app.use('/api', authMiddleware, resourcesRouter);
 app.use('/api', authMiddleware, integrationsRouter);
@@ -317,10 +287,6 @@ async function start() {
   await ensureMcpOAuthTables().catch(err =>
     console.error('[mcp-oauth] table ensure failed (apply migration 088):', err.message)
   );
-  await ensureRazorpayTables().catch(err =>
-    console.error('[razorpay] table ensure failed (apply migration 061):', err.message)
-  );
-  // Course tables ALTER razorpay_events, so must run AFTER ensureRazorpayTables.
   await ensureCourseTables().catch(err =>
     console.error('[courses] table ensure failed (apply migration 062):', err.message)
   );
@@ -337,31 +303,15 @@ async function start() {
   await funnelTags.syncFunnelTagCatalog().catch(err =>
     console.error('[funnel-tags] catalog sync failed:', err.message)
   );
-  // Payment requests reference BOTH leads(id) and courses(id), and ALTER
-  // razorpay_events — so this must run after ensureRazorpayTables +
-  // ensureCourseTables, and after the funnel cache (a new lead needs its first
-  // stage key).
-  await ensurePaymentRequestTables().catch(err =>
-    console.error('[payment-requests] table ensure failed (apply migration 085):', err.message)
-  );
-  // Chat payments: ALTERs payment_requests + automation_executions + agents and
-  // ALTERs payment_requests + automation_executions + agents, so it runs AFTER
-  // ensurePaymentRequestTables (whose
-  // table it references) and after ensureTables (which owns agents).
-  await require('./services/paymentFlow').ensurePaymentFlowTables().catch(err =>
-    console.error('[payment-flow] table ensure failed (apply migration 091):', err.message)
-  );
-  // The pulled payment ledger. ALTERs razorpay_config, so it runs after
-  // ensureRazorpayTables.
-  await ensurePaymentLedgerTables().catch(err =>
-    console.error('[razorpay-ledger] table ensure failed (apply migration 087):', err.message)
+  // automation_executions.awaiting_kind — what a paused automation run waits for.
+  await require('./services/threadSender').ensureThreadSenderColumns().catch(err =>
+    console.error('[thread-sender] column ensure failed (apply migration 091):', err.message)
   );
   // Repeating broadcasts. References message_templates + media_library +
   // broadcasts, all of which ensureTables owns, so it runs after it.
   await broadcastSeries.ensureSeriesTables().catch(err =>
     console.error('[series] table ensure failed (apply migration 105):', err.message)
   );
-  // Sales Log references courses(id) — run AFTER ensureCourseTables.
   // Roles must exist before anything resolves a user's pages. Also drops the
   // old CHECK on forgecrm_users.role, so adding a role never needs DDL again.
   await roleConfig.ensureRoleTables().catch(err =>
@@ -370,10 +320,11 @@ async function start() {
   // ensureCourseTables. Same shape as the funnel-stage mirror.
   await productTags.ensureProductTagTables().catch(err =>
     console.error('[product-tags] ensure failed (apply migration 107):', err.message));
+  // The manual sales store references courses(id) — run AFTER ensureCourseTables.
   await ensureSalesLogTables().catch(err =>
-    console.error('[salesLog] table ensure failed (apply migration 064):', err.message)
+    console.error('[sales] table ensure failed (apply migration 064):', err.message)
   );
-  // Entity-field registry (Leads / Sales Log / Transaction fields). ALTERs
+  // Entity-field registry (Leads / Transaction fields). ALTERs
   // sales_log (custom_fields) so it runs AFTER ensureSalesLogTables, and it
   // loads the fieldRegistry cache the leads routes + variable resolver read.
   await ensureEntityFieldTables().catch(err =>
@@ -386,25 +337,6 @@ async function start() {
   // it adds chat_analysis.next_follow_up.
   await ensureFollowUpTables().catch(err =>
     console.error('[follow-ups] table ensure failed (apply migration 128):', err.message)
-  );
-  await ensurePaymentFilterPresetTables().catch(err =>
-    console.error('[payment-filter-presets] table ensure failed (apply migration 129):', err.message)
-  );
-  await ensureAdSetTables().catch(err =>
-    console.error('[marketing] ad set table ensure failed (apply migration 074):', err.message)
-  );
-  // Message-format cache. The inbound webhook reads it SYNCHRONOUSLY to
-  // attribute a conversation to the link that produced it, so it must be warm
-  // before the first message lands. A failure here only costs attribution —
-  // refreshMessageFormats swallows its own errors.
-  await messageFormats.refreshMessageFormats();
-  // Chat Analyser references leads(id) + ai_models(id) — run AFTER those exist.
-  await ensureCtwaTables().catch(err =>
-    console.error('[ctwa] table ensure failed (apply migration 073):', err.message)
-  );
-  // CLO references leads(id) — run after the leads table exists.
-  await ensureCloTables().catch(err =>
-    console.error('[clo] table ensure failed (apply migration 077):', err.message)
   );
   // Landing-page visitor links (migration 122). References leads(id). The
   // table stays empty unless LANDING_SOURCES connects a landing page.
@@ -569,40 +501,6 @@ async function start() {
   setTimeout(runSeriesScheduler, 35 * 1000).unref();
   setInterval(runSeriesScheduler, BROADCAST_TICK_MS).unref();
 
-  // Meta Ads sync: refresh real campaign spend/results from the Marketing API on
-  // a schedule (only does anything while a token is connected). Override with
-  // META_ADS_SYNC_INTERVAL_MS; default 6h.
-  const META_ADS_SYNC_MS = parseInt(process.env.META_ADS_SYNC_INTERVAL_MS || '', 10) || 6 * 60 * 60 * 1000;
-  const runMetaAdsSync = async () => {
-    try {
-      const { rows } = await pool.query(`SELECT status FROM coexistence.meta_ads_config WHERE id = 1`);
-      if (rows[0]?.status !== 'connected') return; // idle unless connected
-      const r = await syncMetaAds();
-      console.log(`[meta-ads-sync] synced ${r.campaigns} campaign(s) + ${r.adsets} ad set(s) + ${r.ads} ad(s) across ${r.accounts} account(s)`);
-    } catch (err) {
-      console.error('[meta-ads-sync] error:', err.message);
-    }
-  };
-  setTimeout(runMetaAdsSync, 90 * 1000).unref();         // initial sync ~1.5 min after startup
-  setInterval(runMetaAdsSync, META_ADS_SYNC_MS).unref(); // every 6h (gated by connection status)
-
-  // Razorpay payment ledger: pulls what the gateway actually holds, so the
-  // dashboard does not depend on a webhook having been delivered. Runs hourly
-  // rather than 6-hourly like the ads sync — a missed payment is worse than a
-  // stale spend figure, and each tick only re-reads a 48h window. Idles with
-  // zero API calls until API keys are stored.
-  const RZP_LEDGER_MS = parseInt(process.env.RAZORPAY_LEDGER_SYNC_INTERVAL_MS || '', 10) || 60 * 60 * 1000;
-  const runRazorpayLedgerSync = async () => {
-    try {
-      const r = await syncRazorpayPayments({ full: false });
-      if (r.skipped) return;                 // no keys yet — silent, not an error
-      console.log(`[razorpay-ledger] read ${r.fetched} payment(s); ledger now holds ${r.total}`);
-    } catch (err) {
-      console.error('[razorpay-ledger] error:', err.message);
-    }
-  };
-  setTimeout(runRazorpayLedgerSync, 2 * 60 * 1000).unref();
-  setInterval(runRazorpayLedgerSync, RZP_LEDGER_MS).unref();
 
 
   // Message costs: pulls Meta's own pricing_analytics, which is the ONLY source
@@ -613,7 +511,7 @@ async function start() {
   const runPricingSync = async () => {
     try {
       const r = await require('./services/messageCosts').syncAllPricing({ days: 30 });
-      if (r.skipped) return;                 // Meta not connected — silent
+      if (r.skipped) return;                 // no WhatsApp account token — silent
       const ok = (r.results || []).filter(x => x.status === 'ok').length;
       console.log(`[message-costs] pricing synced for ${ok}/${(r.results || []).length} WABA(s)`);
     } catch (err) {
@@ -623,16 +521,7 @@ async function start() {
   setTimeout(runPricingSync, 4 * 60 * 1000).unref();
   setInterval(runPricingSync, PRICING_SYNC_MS).unref();
 
-  // Conversions API sweeper: walks new 'stage_changed' rows in lead_events and
-  // sends the mapped conversion back to Meta with the lead's CTWA click id. The
-  // bus already kicks a sweep seconds after any lead change — this interval is
-  // the safety net for anything that changed a stage without emitting. Idle
-  // unless the master switch is on. Override with CAPI_SWEEP_INTERVAL_MS.
-  const CAPI_SWEEP_MS = parseInt(process.env.CAPI_SWEEP_INTERVAL_MS || '', 10) || 5 * 60 * 1000;
-  setTimeout(sweepStageEvents, 60 * 1000).unref();
-  setInterval(sweepStageEvents, CAPI_SWEEP_MS).unref();  // every 5 min (gated by capi_config.enabled)
-
-  // Funnel-stage tags: same cursor-over-lead_events shape as CAPI above. The
+  // Funnel-stage tags: a cursor over lead_events. The
   // bus kick inside funnelTags.js does the real-time work; this is the safety
   // net for a stage change that never emitted. Override with
   // FUNNEL_TAG_SWEEP_INTERVAL_MS.
@@ -641,33 +530,6 @@ async function start() {
     .catch(err => console.error('[funnel-tags] sweep failed:', err.message));
   setTimeout(sweepFunnelTags, 45 * 1000).unref();
   setInterval(sweepFunnelTags, TAG_SWEEP_MS).unref();
-
-  // Conversion Leads Optimisation: sweep new stage changes into clo_events, then
-  // ship the pending ones to Meta's CRM dataset. Meta asks for at least one
-  // upload per day; 15 minutes gives a wide margin and keeps the optimiser fed
-  // with fresh signal. Idle unless clo_settings.enabled. CLO_FLUSH_INTERVAL_MS.
-  const CLO_FLUSH_MS = parseInt(process.env.CLO_FLUSH_INTERVAL_MS || '', 10) || 15 * 60 * 1000;
-  const runCloCycle = async () => {
-    try {
-      const d = require('./services/cloDispatcher');
-      const swept = await d.sweepStageChanges();
-      if (swept.reason === 'disabled') return;
-      const flushed = await d.flush();
-      if (flushed.sent || flushed.failed) {
-        console.log(`[clo] flushed ${flushed.sent} sent, ${flushed.failed} failed`);
-      }
-    } catch (err) {
-      console.error('[clo] cycle error:', err.message);
-    }
-  };
-  setTimeout(runCloCycle, 2 * 60 * 1000).unref();
-  setInterval(runCloCycle, CLO_FLUSH_MS).unref();
-
-  // NOTE: the payment-watch sweeper was retired with the automation Payment
-  // node (2026-08-12). Its only two callers were that node and the agent
-  // payment tools (removed with migration 104), so it had nothing left to
-  // watch. Raising and tracking a payment LINK from Sales → Payments is
-  // untouched — that path runs off the Razorpay webhook, not a watch.
 
   const server = app.listen(PORT, () => {
     console.log(`[ForgeChat] Backend running on port ${PORT}`);

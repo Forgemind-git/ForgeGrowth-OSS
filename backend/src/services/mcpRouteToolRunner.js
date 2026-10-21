@@ -34,11 +34,8 @@ const SERVICES = {
   'social.listMessages': (a) => social().listMessages(clean(a), null),
   'social.listComments': (a) => social().listComments(clean(a), null),
   'social.listContacts': (a) => social().listContacts(clean(a), null),
-  'social.listPublishJobs': (a) => social().listPublishJobs(clean(a), null),
   'social.replyToComment': (a) => social().replyToComment(clean(a), null),
   'social.sendInstagramDm': (a) => social().sendInstagramDm(clean(a), null),
-  'social.createPost': (a) => social().createPost(clean(a), null),
-  'social.cancelPublishJob': (a) => social().cancelPublishJob(a.id, null),
 };
 
 // Drop null/undefined so a service sees "not given" rather than an explicit null.

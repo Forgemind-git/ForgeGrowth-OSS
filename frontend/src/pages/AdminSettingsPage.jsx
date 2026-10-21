@@ -20,7 +20,6 @@ import RenameNumberModal from '../components/RenameNumberModal.jsx';
 import SearchableSelect from '../components/SearchableSelect.jsx';
 import PillStrip from '../components/PillStrip.jsx';
 import { useTableSelection, SelectAllCheckbox, RowCheckbox, BulkDeleteButton, runBulkDelete } from '../components/TableSelection.jsx';
-import { MetaAdsPanel } from '../components/MarketingConnections.jsx';
 import { FunnelSettingsContent } from './sales/FunnelSettingsPage.jsx';
 import EntityFieldsManager from '../components/EntityFieldsManager.jsx';
 import SocialSettingsPart from '../social/SocialSettingsPart.jsx';
@@ -202,16 +201,14 @@ function FieldsTab() {
   // record you manage — it is the row a WhatsApp thread hangs off — and the
   // lead is the source of truth for everything about a person.
   //
-  // Leads and Sales Log read the same `entity='lead'` registry rows but own one
-  // visibility flag each, so each gets its own section with its own switch
-  // rather than one section with two switch columns per row.
+  // The Sales Log section (its own `show_in_sales` switch over the same
+  // `entity='lead'` rows) was removed 2026-10-21 with the Sales Log page.
   // The Transactions section was removed 2026-08-12: an installment's columns
   // are fixed by what a payment IS, so there was nothing useful to configure.
   // The `entity='transaction'` registry rows still exist and still drive the
   // transactions table — they are simply no longer editable here.
   const FIELD_SECTIONS = [
     { key: 'lead', surface: 'leads', label: 'Leads' },
-    { key: 'lead', surface: 'sales', label: 'Sales Log' },
   ];
   const sectionId = (s) => (s.surface ? `${s.key}:${s.surface}` : s.key);
   const activeSection = FIELD_SECTIONS.find(s => sectionId(s) === section) || FIELD_SECTIONS[0];
@@ -1366,7 +1363,7 @@ function FunnelSettingsTab({ navigate }) {
       <div style={{ marginBottom: 18 }}>
         <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: C.text }}>Funnel</h2>
         <div style={{ fontSize: 15, color: C.textSecondary, marginTop: 4 }}>
-          Configure your funnel stages, lead sources, and products. These drive the Sales → Funnel chart and the Sales Log.
+          Configure your funnel stages, lead sources, and products. These drive the Sales → Funnel chart and sales entry.
         </div>
       </div>
       <FunnelSettingsContent navigate={navigate} />
@@ -2859,21 +2856,7 @@ const INTEGRATION_APPS = [
   },
 ];
 
-// Meta logo (single-colour infinity mark) — inline SVG so we don't add an asset.
-const MetaLogo = (size = 28) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <path fill="var(--c-x0866ff, #0866FF)" d="M6.915 4.03c-1.968 0-3.683 1.28-4.871 3.113C.704 9.208 0 11.883 0 14.449c0 .706.07 1.369.21 1.973a6.624 6.624 0 0 0 .265.86 5.297 5.297 0 0 0 .371.761c.696 1.159 1.818 1.927 3.593 1.927 1.497 0 2.633-.671 3.965-2.444.76-1.012 1.144-1.626 2.663-4.32l.756-1.339.186-.325c.061.1.121.196.183.3l2.152 3.595c.724 1.21 1.665 2.556 2.47 3.314 1.046.987 1.992 1.22 3.06 1.22 1.075 0 1.876-.355 2.455-.843a3.743 3.743 0 0 0 .81-.973c.542-.939.861-2.127.861-3.745 0-2.72-.681-5.357-2.084-7.45-1.282-1.912-2.957-2.93-4.716-2.93-1.047 0-2.088.467-3.053 1.308-.652.57-1.257 1.3-1.82 2.05-.69-.875-1.335-1.547-1.958-2.056-1.182-.966-2.315-1.303-3.454-1.303zm10.16 2.053c1.147 0 2.188.758 2.992 1.999 1.132 1.748 1.647 4.195 1.647 6.4 0 1.548-.368 2.9-1.839 2.9-.58 0-1.027-.23-1.664-1.004-.496-.601-1.343-1.878-2.832-4.358l-.617-1.028a44.908 44.908 0 0 0-1.255-1.98c.07-.109.141-.224.211-.327 1.12-1.667 2.118-2.602 3.518-2.602zm-10.201.088c1.055 0 2.006.535 2.844 1.377.784.788 1.463 1.783 2.288 3.13l-.916 1.409c-.83 1.279-1.395 2.099-1.89 2.7-.895 1.09-1.585 1.39-2.288 1.39-.646 0-1.032-.278-1.264-.699-.155-.279-.267-.633-.34-1.043a6.354 6.354 0 0 1-.11-1.184c0-1.831.578-3.786 1.28-4.86.542-.827 1.19-1.22 1.626-1.22.09 0 .18.008.27.024z"/>
-  </svg>
-);
-
-// Connection-status pill for the Meta Ads / ForgeSocial app cards.
-function connBadge(st) {
-  if (st?.connected) return <span style={{ fontSize: 13, padding: '2px 8px', background: 'var(--c-sdcfce7, #dcfce7)', color: 'var(--c-s15803d, #15803d)', borderRadius: 6, fontWeight: 600 }}>Connected</span>;
-  if (st?.status === 'error') return <span style={{ fontSize: 13, padding: '2px 8px', background: 'var(--c-dangerBg, #fee2e2)', color: 'var(--c-primaryHover, #b91c1c)', borderRadius: 6, fontWeight: 600 }}>Connection error</span>;
-  return <span style={{ fontSize: 13, padding: '2px 8px', background: C.sidebarBg, color: C.textMuted, borderRadius: 6, fontWeight: 600 }}>Not connected</span>;
-}
-
-// Shared app-card used for every Integrations tile (Google, Meta Ads, ForgeSocial)
+// Shared app-card used for every Integrations tile (Google, …)
 // so they stay pixel-identical. `logo` is a rendered node; `badge` is a pill node.
 function AppCard({ color, logo, label, blurb, badge, onClick }) {
   return (
@@ -3898,19 +3881,6 @@ function IntegrationsTab() {
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
 
-  // Meta Ads connection status — drives the app-card badge. Fetched
-  // independently so a failure here never blocks the Google integration UI.
-  const [mkt, setMkt] = useState({ meta: null });
-  const loadMkt = async () => {
-    // Each status is fetched independently and swallows its own failure, so one
-    // unreachable third party never blanks the whole Integrations screen.
-    const [meta] = await Promise.all([
-      api.marketing.metaAds.status().catch(() => null),
-    ]);
-    setMkt({ meta });
-  };
-  useEffect(() => { loadMkt(); /* eslint-disable-next-line */ }, []);
-
   // Receive postMessage from the OAuth callback popup so we can refresh the
   // list the moment Google sends the user back. Same-origin only — the popup
   // posts to window.opener within the same origin.
@@ -4058,14 +4028,6 @@ function IntegrationsTab() {
           ) : (
             <span style={{ fontSize: 13, padding: '2px 8px', background: C.sidebarBg, color: C.textMuted, borderRadius: 6, fontWeight: 600 }}>Not configured</span>
           )}
-        />
-        <AppCard
-          color="var(--c-x0866ff, #0866FF)"
-          logo={MetaLogo(28)}
-          label="Meta Ads Manager"
-          blurb="Pull live campaign spend & results from your ad accounts."
-          badge={connBadge(mkt.meta)}
-          onClick={() => setView('meta_ads')}
         />
       </div>
 
@@ -4283,25 +4245,6 @@ function IntegrationsTab() {
 
       {view === 'apps' && renderAppsView()}
       {view === 'google' && renderGoogleView()}
-      {view === 'meta_ads' && (
-        <div>
-          <button onClick={() => { setView('apps'); loadMkt(); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'transparent', border: 0, cursor: 'pointer', color: C.textSecondary, fontSize: 15, fontFamily: FONT, padding: '4px 0', marginBottom: 16 }}>
-            <ChevronLeft size={14} /> <span>Apps</span>
-          </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
-            <div style={{ width: 48, height: 48, borderRadius: 12, background: 'var(--c-surface, #fff)', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              {MetaLogo(28)}
-            </div>
-            <div>
-              <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0 }}>Meta Ads Manager</h2>
-              <div style={{ fontSize: 15, color: C.textSecondary, marginTop: 2 }}>
-                Pull live campaign spend &amp; results from your ad accounts.
-              </div>
-            </div>
-          </div>
-          <MetaAdsPanel onSynced={loadMkt} />
-        </div>
-      )}
       {view.startsWith('service:') && (
         <ServiceBrowser
           provider={view.slice('service:'.length)}
@@ -4735,14 +4678,13 @@ function igBtnDanger() {
   };
 }
 
-// The Webhooks tab lists one CARD per webhook provider (WhatsApp + Razorpay).
+// The Webhooks tab lists one CARD per webhook provider (WhatsApp).
 // Clicking a card opens that provider's DETAIL view: config fields on top, a
 // 10-per-page event-history table below. Each provider is a self-contained panel
 // rendered in mode="card" (just the tile) or mode="detail" (the full page).
 function WebhooksTab() {
-  const [open, setOpen] = useState(null);   // null | 'whatsapp' | 'razorpay'
+  const [open, setOpen] = useState(null);   // null | 'whatsapp'
   if (open === 'whatsapp') return <WhatsAppWebhookPanel mode="detail" onBack={() => setOpen(null)} />;
-  if (open === 'razorpay') return <RazorpayWebhookPanel mode="detail" onBack={() => setOpen(null)} />;
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 28, overflow: 'auto', fontFamily: FONT }}>
       <div style={{ marginBottom: 18 }}>
@@ -4752,7 +4694,6 @@ function WebhooksTab() {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 14 }}>
         <WhatsAppWebhookPanel mode="card" onOpen={() => setOpen('whatsapp')} />
-        <RazorpayWebhookPanel mode="card" onOpen={() => setOpen('razorpay')} />
       </div>
     </div>
   );
@@ -5086,472 +5027,6 @@ function WhatsAppWebhookPanel({ mode, onOpen, onBack }) {
       {testOpen && (
         <TestWebhookModal onClose={() => setTestOpen(false)} onSent={() => { setTestOpen(false); load(); loadSummary(); }} />
       )}
-    </div>
-  );
-}
-
-// ── Razorpay webhook panel ───────────────────────────────────────────────────
-// Config = the callback URL to paste into Razorpay + an editable webhook secret
-// (write-only; used to verify each event's HMAC-SHA256 signature) + optional Key
-// ID. History = received payment/refund events, each linked to the matching CRM
-// lead/contact. See the step-by-step setup guide handed over after deploy.
-const RZP_ACCENT = '#3395FF';                 // Razorpay blue
-const RZP_STATUS_COLORS = {
-  captured:   { bg: 'var(--c-successBgSoft, #E4F3EE)', color: 'var(--c-successText, #0F6E56)' },
-  authorized: { bg: 'var(--c-infoBg, #E3F2FD)', color: 'var(--c-infoText, #1565C0)' },
-  created:    { bg: 'var(--c-surfaceSubtle, #EEEDE8)', color: 'var(--c-t4, #666)' },
-  failed:     { bg: 'var(--c-dangerBg, #FCEBEB)', color: 'var(--c-dangerText, #A32D2D)' },
-  refunded:   { bg: 'var(--c-orangeBg, #FFF3E0)', color: 'var(--c-orangeText, #E65100)' },
-  processed:  { bg: 'var(--c-orangeBg, #FFF3E0)', color: 'var(--c-orangeText, #E65100)' },
-};
-function rzpAmount(paise, currency) {
-  if (paise == null) return '—';
-  const v = Number(paise) / 100;
-  const sym = currency === 'INR' || !currency ? '₹' : `${currency} `;
-  return sym + v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function RazorpayWebhookPanel({ mode, onOpen, onBack }) {
-  const [view] = useState(mode);
-  const [cfg, setCfg] = useState({ status: 'disconnected', hasSecret: false, keyId: '', lastEventAt: null, lastError: null, totalEvents: 0, matchedEvents: 0 });
-
-  // Secret is write-only (never returned) — blank input means "unchanged".
-  const [secret, setSecret] = useState('');
-  const [secretDirty, setSecretDirty] = useState(false);
-  const [showSecret, setShowSecret] = useState(false);
-  const [keyId, setKeyId] = useState('');
-  const [saving, setSaving] = useState(false);
-  // API credentials — the OUTBOUND half. Kept in their own state (and their own
-  // status) because a verified webhook says nothing about API access: for months
-  // this panel showed "Connected" while key_id was empty and no API call was
-  // possible. Sales → Payments needs these to mint links.
-  const [keySecret, setKeySecret] = useState('');
-  const [keySecretDirty, setKeySecretDirty] = useState(false);
-  const [showKeySecret, setShowKeySecret] = useState(false);
-  const [testingApi, setTestingApi] = useState(false);
-
-  const [events, setEvents] = useState([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [q, setQ] = useState('');
-  const [page, setPage] = useState(0);
-  const [drawerId, setDrawerId] = useState(null);
-  const [copied, setCopied] = useState(false);
-  const PAGE_SIZE = 10;
-
-  const webhookUrl = `${window.location.origin}/api/webhook/razorpay`;
-  const copyUrl = async () => {
-    try { await navigator.clipboard.writeText(webhookUrl); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* blocked */ }
-  };
-
-  const loadCfg = async () => {
-    try {
-      const s = await api.razorpay.status();
-      setCfg(s);
-      setKeyId(s.keyId || '');
-    } catch { /* ignore — history still works */ }
-  };
-
-  const load = async () => {
-    try {
-      setLoading(true); setError(null);
-      const res = await api.razorpay.events({ limit: PAGE_SIZE, offset: page * PAGE_SIZE, q });
-      setEvents(res.events || []);
-      setTotal(res.total || 0);
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { loadCfg(); }, []);
-  useEffect(() => { if (view === 'detail') load(); /* eslint-disable-next-line */ }, [view, page]);
-  useEffect(() => {
-    if (view !== 'detail') return;
-    const id = setTimeout(() => { setPage(0); load(); }, 350);
-    return () => clearTimeout(id);
-    // eslint-disable-next-line
-  }, [q]);
-
-  const dirty = secretDirty || keySecretDirty || (keyId || '') !== (cfg.keyId || '');
-  const save = async () => {
-    setSaving(true);
-    try {
-      const body = { keyId };
-      // Each secret is only sent when it was actually typed — the field shows
-      // blank for an already-stored value, and an unsent field is left alone
-      // server-side rather than being cleared.
-      if (secretDirty) body.webhookSecret = secret.trim();
-      if (keySecretDirty) body.keySecret = keySecret.trim();
-      await api.razorpay.saveConfig(body);
-      setSecret(''); setSecretDirty(false);
-      setKeySecret(''); setKeySecretDirty(false);
-      notify('Razorpay configuration saved.');
-      await loadCfg();
-    } catch (err) { notify(err.message || 'Failed to save Razorpay config'); }
-    finally { setSaving(false); }
-  };
-
-  // A real authenticated call to Razorpay — not a credential-shape check. The
-  // only honest way to report whether link creation will actually work.
-  const testApi = async () => {
-    setTestingApi(true);
-    try {
-      const r = await api.razorpay.testApi();
-      notify({ variant: 'success', title: 'API access works',
-        message: `Connected to Razorpay in ${r.mode === 'live' ? 'LIVE' : 'Test'} mode with key ${r.keyId}.` });
-      await loadCfg();
-    } catch (err) { notify(err.message || 'Could not reach the Razorpay API'); await loadCfg(); }
-    finally { setTestingApi(false); }
-  };
-
-  const apiPill = cfg.apiStatus === 'connected'
-    ? { bg: 'var(--c-successBgSoft, #E4F3EE)', color: 'var(--c-successText, #0F6E56)', label: `API ready · ${cfg.keyMode === 'live' ? 'LIVE' : 'Test'}`, icon: <CheckCircle2 size={12} /> }
-    : cfg.apiStatus === 'error'
-      ? { bg: 'var(--c-dangerBg, #FCEBEB)', color: 'var(--c-dangerText, #A32D2D)', label: 'API error', icon: <AlertCircle size={12} /> }
-      : { bg: 'var(--c-surfaceSubtle, #EEEDE8)', color: 'var(--c-t4, #666)', label: 'API not set up', icon: <AlertCircle size={12} /> };
-
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const statusPill = cfg.status === 'connected'
-    ? { bg: 'var(--c-successBgSoft, #E4F3EE)', color: 'var(--c-successText, #0F6E56)', label: 'Connected', icon: <CheckCircle2 size={12} /> }
-    : cfg.status === 'error'
-      ? { bg: 'var(--c-dangerBg, #FCEBEB)', color: 'var(--c-dangerText, #A32D2D)', label: 'Attention', icon: <AlertCircle size={12} /> }
-      : { bg: 'var(--c-surfaceSubtle, #EEEDE8)', color: 'var(--c-t4, #666)', label: 'Not configured', icon: <AlertCircle size={12} /> };
-
-  const labelStyle = { display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--c-t4, #666)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6, fontFamily: FONT };
-  const roStyle = { ...inputStyle, background: 'var(--c-hover)', color: 'var(--c-s555555, #555)', fontFamily: 'DM Mono, monospace' };
-
-  // ── Card ─────────────────────────────────────────────────────────────────────
-  if (view === 'card') {
-    return (
-      <button
-        onClick={onOpen}
-        style={{ textAlign: 'left', background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18, cursor: 'pointer', fontFamily: FONT, display: 'flex', flexDirection: 'column', gap: 14 }}
-        onMouseEnter={e => { e.currentTarget.style.borderColor = RZP_ACCENT; e.currentTarget.style.boxShadow = C.shadowMd; }}
-        onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = 'none'; }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 42, height: 42, borderRadius: 10, background: 'rgba(51,149,255,.12)', color: RZP_ACCENT, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <CreditCard size={20} />
-          </div>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Razorpay Payments</div>
-            <div style={{ fontSize: 13, color: C.textMuted, fontFamily: 'DM Mono, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{webhookUrl}</div>
-          </div>
-          <ChevronRight size={18} style={{ color: 'var(--c-t7, #999)', flexShrink: 0 }} />
-        </div>
-
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 99, fontSize: 13, fontWeight: 700, background: statusPill.bg, color: statusPill.color }}>
-            {statusPill.icon} {statusPill.label}
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 99, fontSize: 13, fontWeight: 700, background: 'var(--c-hover)', color: 'var(--c-s555555, #555)' }}>
-            <LinkIcon size={11} /> {cfg.matchedEvents || 0} linked
-          </span>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--c-t6, #888)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Total events</div>
-            <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 22, fontWeight: 700, color: C.text, marginTop: 2 }}>{(cfg.totalEvents || 0).toLocaleString()}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--c-t6, #888)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Last received</div>
-            <div style={{ fontSize: 15, fontWeight: 600, color: C.text, marginTop: 4 }}>
-              {cfg.lastEventAt ? new Date(cfg.lastEventAt).toLocaleString('en-IN', { hour12: false }) : <span style={{ color: C.textMuted, fontWeight: 400 }}>No events yet</span>}
-            </div>
-          </div>
-        </div>
-      </button>
-    );
-  }
-
-  // ── Detail ───────────────────────────────────────────────────────────────────
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 28, overflow: 'auto', fontFamily: FONT }}>
-      <button onClick={onBack} style={{ ...btnSecondary, alignSelf: 'flex-start', marginBottom: 14 }}>
-        <ArrowLeft size={13} /> Webhooks
-      </button>
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: 0, letterSpacing: '-.02em' }}>Razorpay Payments</h2>
-          <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 4 }}>
-            Verify course payments and link them to leads/contacts. Paste the callback URL + secret into Razorpay → Settings → Webhooks.
-          </div>
-        </div>
-        <button onClick={() => { loadCfg(); load(); }} style={btnSecondary}><RefreshCw size={12} /> Refresh</button>
-      </div>
-
-      {/* Configuration */}
-      <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18, marginBottom: 18 }}>
-        <h3 style={{ fontSize: 15, fontWeight: 700, color: C.text, margin: '0 0 14px' }}>Configuration</h3>
-
-        <div style={{ marginBottom: 16 }}>
-          <label style={labelStyle}>Webhook (Callback) URL</label>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input value={webhookUrl} readOnly style={roStyle} />
-            <button type="button" onClick={copyUrl} title={copied ? 'Copied!' : 'Copy URL'} style={{ flexShrink: 0, width: 42, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--c-cardBg)', border: `1px solid ${C.border}`, borderRadius: 6, cursor: 'pointer', color: copied ? C.green : C.textSecondary }}>
-              {copied ? <Check size={15} /> : <Copy size={15} />}
-            </button>
-          </div>
-          <div style={{ fontSize: 13, color: C.textMuted, marginTop: 5 }}>Paste this into Razorpay Dashboard → Settings → Webhooks → Add New Webhook.</div>
-        </div>
-
-        <div style={{ marginBottom: 16 }}>
-          <label style={labelStyle}>Webhook secret</label>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ position: 'relative', flex: 1 }}>
-              <input
-                type={showSecret ? 'text' : 'password'}
-                value={secret}
-                onChange={e => { setSecret(e.target.value); setSecretDirty(true); }}
-                placeholder={cfg.hasSecret ? '•••••••• saved — type to replace' : 'Paste the secret you set in Razorpay'}
-                style={{ ...inputStyle, paddingRight: 34, fontFamily: 'DM Mono, monospace' }}
-              />
-              <button type="button" onClick={() => setShowSecret(s => !s)} style={{ position: 'absolute', right: 6, top: 6, background: 'transparent', border: 'none', cursor: 'pointer', color: C.textSecondary, padding: 2 }}>
-                {showSecret ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
-            </div>
-          </div>
-          <div style={{ fontSize: 13, color: C.textMuted, marginTop: 5 }}>Must EXACTLY match the secret entered in Razorpay — it's the key used to verify each event's signature.</div>
-        </div>
-
-        {/* ── API access (outbound) ───────────────────────────────────────
-            Everything above receives FROM Razorpay. These two send TO it, and
-            they are what Sales → Payments needs in order to create links. They
-            are reported separately because a working webhook has never implied
-            working API access. */}
-        <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 20, paddingTop: 18 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: C.text, margin: 0 }}>API access</h3>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 99, fontSize: 13, fontWeight: 700, background: apiPill.bg, color: apiPill.color }}>
-              {apiPill.icon} {apiPill.label}
-            </span>
-          </div>
-          <div style={{ fontSize: 13, color: C.textSecondary, marginBottom: 14, lineHeight: 1.5 }}>
-            Needed to <strong>create</strong> payment links from Sales → Payments. Razorpay Dashboard → Account &amp; Settings → API Keys.
-            Razorpay keys are account-wide, so this grants ForgeGrowth write access to the gateway — start with a <strong>test</strong> key.
-          </div>
-
-          {cfg.keyMode === 'live' && cfg.hasApiKeys && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: 'var(--c-warnBgSoft, #FFF8E1)', color: 'var(--c-s7a5500, #7A5500)', border: '1px solid #F0E0B0', borderRadius: 8, padding: '9px 12px', marginBottom: 14, fontSize: 13 }}>
-              <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
-              <span>These are <strong>live</strong> keys. Links created in Sales → Payments will take real money.</span>
-            </div>
-          )}
-
-          <div style={{ marginBottom: 14 }}>
-            <label style={labelStyle}>Key ID</label>
-            <input value={keyId} onChange={e => setKeyId(e.target.value)} placeholder="rzp_test_… or rzp_live_…" style={{ ...inputStyle, fontFamily: 'DM Mono, monospace' }} />
-            <div style={{ fontSize: 13, color: C.textMuted, marginTop: 5 }}>
-              Test or live mode is read from this id — there is no separate switch to get out of step with it.
-            </div>
-          </div>
-
-          <div style={{ marginBottom: 14 }}>
-            <label style={labelStyle}>Key Secret</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type={showKeySecret ? 'text' : 'password'}
-                value={keySecret}
-                onChange={e => { setKeySecret(e.target.value); setKeySecretDirty(true); }}
-                placeholder={cfg.hasApiKeys ? '•••••••• saved — type to replace' : 'Shown once by Razorpay when you generate the key'}
-                style={{ ...inputStyle, paddingRight: 34, fontFamily: 'DM Mono, monospace' }}
-              />
-              <button type="button" onClick={() => setShowKeySecret(s => !s)} style={{ position: 'absolute', right: 6, top: 6, background: 'transparent', border: 'none', cursor: 'pointer', color: C.textSecondary, padding: 2 }}>
-                {showKeySecret ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
-            </div>
-            <div style={{ fontSize: 13, color: C.textMuted, marginTop: 5 }}>Stored encrypted and never shown again. Different from the webhook secret above.</div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              onClick={testApi}
-              disabled={testingApi || !cfg.hasApiKeys || dirty}
-              title={dirty ? 'Save the configuration first' : !cfg.hasApiKeys ? 'Add a Key ID and Key Secret first' : 'Make a real call to Razorpay'}
-              style={{ ...btnSecondary, opacity: (testingApi || !cfg.hasApiKeys || dirty) ? 0.5 : 1, cursor: (testingApi || !cfg.hasApiKeys || dirty) ? 'default' : 'pointer', fontWeight: 700 }}
-            >
-              {testingApi ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={12} />} Test API access
-            </button>
-            {cfg.apiLastError && <span style={{ fontSize: 13, color: 'var(--c-dangerText, #A32D2D)', flex: 1, minWidth: 180 }}>{cfg.apiLastError}</span>}
-            {cfg.apiCheckedAt && !cfg.apiLastError && (
-              <span style={{ fontSize: 13, color: C.textMuted }}>Last checked {new Date(cfg.apiCheckedAt).toLocaleString('en-IN', { hour12: false })}</span>
-            )}
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={save}
-            disabled={!dirty || saving}
-            style={{ ...btnSecondary, opacity: (!dirty || saving) ? 0.5 : 1, cursor: (!dirty || saving) ? 'default' : 'pointer', fontWeight: 700 }}
-          >
-            {saving ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={12} />} Save configuration
-          </button>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 99, fontSize: 13, fontWeight: 700, background: statusPill.bg, color: statusPill.color }}>
-            {statusPill.icon} {statusPill.label}
-          </span>
-          {cfg.lastError && <span style={{ fontSize: 13, color: 'var(--c-dangerText, #A32D2D)' }}>{cfg.lastError}</span>}
-        </div>
-      </div>
-
-      {/* Recent events */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 10 }}>
-        <h3 style={{ fontSize: 15, fontWeight: 700, color: C.text, margin: 0 }}>Recent payment events</h3>
-        <div style={{ position: 'relative', width: 260, maxWidth: '100%' }}>
-          <Search size={12} style={{ position: 'absolute', left: 8, top: 9, color: 'var(--c-textMuted)' }} />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search id, email, phone, lead…" style={{ ...inputStyle, paddingLeft: 26 }} />
-        </div>
-      </div>
-
-      {error && <div style={{ background: 'var(--c-primaryLight)', color: 'var(--c-dangerText, #A32D2D)', padding: '10px 12px', borderRadius: 8, fontSize: 14, marginBottom: 14 }}>{error}</div>}
-
-      <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, minWidth: 760 }}>
-          <thead>
-            <tr style={{ background: 'var(--c-hover)', textAlign: 'left', borderBottom: `1px solid ${C.border}` }}>
-              <th style={th}>Received</th>
-              <th style={th}>Event</th>
-              <th style={th}>Amount</th>
-              <th style={th}>Status</th>
-              <th style={th}>Payer</th>
-              <th style={th}>Linked to</th>
-              <th style={th}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr><td colSpan={7} style={{ padding: 40, textAlign: 'center', color: 'var(--c-t6, #888)' }}><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /></td></tr>
-            )}
-            {!loading && events.length === 0 && (
-              <tr><td colSpan={7} style={{ padding: 40, textAlign: 'center', color: 'var(--c-t6, #888)' }}>No Razorpay events yet.</td></tr>
-            )}
-            {!loading && events.map(e => {
-              const sc = RZP_STATUS_COLORS[e.status] || RZP_STATUS_COLORS.created;
-              const linked = e.matched_lead_name || e.matched_contact_name;
-              return (
-                <tr key={e.id} onClick={() => setDrawerId(e.id)} style={{ borderBottom: `1px solid ${C.border}`, cursor: 'pointer' }}
-                    onMouseEnter={ev => ev.currentTarget.style.background = 'var(--c-xf4f8ff, #F4F8FF)'}
-                    onMouseLeave={ev => ev.currentTarget.style.background = 'transparent'}>
-                  <td style={td}>{new Date(e.received_at).toLocaleString('en-IN', { hour12: false })}</td>
-                  <td style={td}>
-                    <span style={{ ...pillStyle, background: 'var(--c-cardBg)', border: '1px solid var(--c-borderStrong, #D5D5D0)', color: 'var(--c-s333333, #333)' }}>{e.event_type || '—'}</span>
-                    {!e.signature_valid && <span title="Signature not verified" style={{ marginLeft: 6, color: 'var(--c-dangerText, #A32D2D)' }}><AlertCircle size={12} style={{ verticalAlign: 'middle' }} /></span>}
-                  </td>
-                  <td style={{ ...td, fontFamily: 'DM Mono, monospace', fontWeight: 700, color: C.text }}>{rzpAmount(e.amount_paise, e.currency)}</td>
-                  <td style={td}>{e.status ? <span style={{ ...pillStyle, background: sc.bg, color: sc.color }}>{e.status}</span> : <span style={{ color: 'var(--c-textMuted)' }}>—</span>}</td>
-                  <td style={{ ...td, color: 'var(--c-s555555, #555)' }}>
-                    {e.payer_email
-                      ? <span title={e.payer_email} style={{ display: 'inline-block', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>{e.payer_email}</span>
-                      : (e.payer_contact ? <MaskedNumber number={String(e.payer_contact).replace(/\D/g, '')} /> : <span style={{ color: 'var(--c-textMuted)' }}>—</span>)}
-                  </td>
-                  <td style={td}>
-                    {linked
-                      ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--c-successText, #0F6E56)', fontWeight: 600 }}><LinkIcon size={12} /> {linked}</span>
-                      : <span style={{ color: 'var(--c-textMuted)' }}>Unmatched</span>}
-                  </td>
-                  <td style={td}><Eye size={14} style={{ color: 'var(--c-t4, #666)' }} /></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {total > PAGE_SIZE && (
-        <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, fontSize: 14, color: 'var(--c-t4, #666)' }}>
-          <span>Page {page + 1} of {totalPages} ({total.toLocaleString()} total)</span>
-          <button disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))} style={{ ...btnSecondary, opacity: page === 0 ? 0.5 : 1 }}><ChevronLeft size={12} /> Prev</button>
-          <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} style={{ ...btnSecondary, opacity: page >= totalPages - 1 ? 0.5 : 1 }}>Next <ChevronRight size={12} /></button>
-        </div>
-      )}
-
-      {drawerId && <RazorpayEventDrawer id={drawerId} onClose={() => setDrawerId(null)} />}
-    </div>
-  );
-}
-
-// Read-only drawer for a single Razorpay event: verification, money, payer, the
-// linked lead/contact, and the raw payload.
-function RazorpayEventDrawer({ id, onClose }) {
-  const [ev, setEv] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    setLoading(true);
-    api.razorpay.event(id).then(e => { setEv(e); setLoading(false); }).catch(err => { notify(err.message); setLoading(false); });
-  }, [id]);
-
-  const copyJson = async () => {
-    try { await navigator.clipboard.writeText(JSON.stringify(ev?.payload, null, 2)); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* blocked */ }
-  };
-
-  const Field = ({ label, children }) => (
-    <div><div style={{ color: 'var(--c-t6, #888)', textTransform: 'uppercase', fontSize: 12, letterSpacing: '.05em', marginBottom: 2 }}>{label}</div>
-      <div style={{ fontSize: 15, color: 'var(--c-text)', fontFamily: 'DM Mono, monospace', wordBreak: 'break-all' }}>{children}</div></div>
-  );
-
-  return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 250, display: 'flex', justifyContent: 'flex-end' }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: 640, maxWidth: 'calc(94vw / var(--fg-zoom, 1))', height: '100%', background: 'var(--c-cardBg)', boxShadow: C.shadowLg, display: 'flex', flexDirection: 'column', fontFamily: FONT, overflow: 'hidden' }}>
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--c-borderSubtle, #EEEDE8)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--c-text)' }}>Razorpay Event #{id}</div>
-            {ev && <div style={{ fontSize: 13, color: 'var(--c-t6, #888)', marginTop: 2 }}>{new Date(ev.received_at).toLocaleString('en-IN')} · {ev.event_type}</div>}
-          </div>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--c-t4, #666)' }}><X size={20} /></button>
-        </div>
-
-        {loading && <div style={{ padding: 40, textAlign: 'center', color: 'var(--c-t6, #888)' }}><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /></div>}
-
-        {!loading && ev && (
-          <div style={{ flex: 1, overflowY: 'auto' }}>
-            <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--c-borderSubtle, #EEEDE8)', background: 'var(--c-hover)', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-              <div><div style={{ color: 'var(--c-t6, #888)', textTransform: 'uppercase', fontSize: 12, letterSpacing: '.05em', marginBottom: 2 }}>Signature</div>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 99, fontSize: 13, fontWeight: 700, ...(ev.signature_valid ? { background: 'var(--c-successBgSoft, #E4F3EE)', color: 'var(--c-successText, #0F6E56)' } : { background: 'var(--c-dangerBg, #FCEBEB)', color: 'var(--c-dangerText, #A32D2D)' }) }}>
-                  {ev.signature_valid ? <CheckCircle2 size={11} /> : <AlertCircle size={11} />} {ev.signature_valid ? 'Verified' : 'Not verified'}
-                </span>
-              </div>
-              <div><div style={{ color: 'var(--c-t6, #888)', textTransform: 'uppercase', fontSize: 12, letterSpacing: '.05em', marginBottom: 2 }}>Amount</div>
-                <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 18, fontWeight: 700, color: 'var(--c-text)' }}>{rzpAmount(ev.amount_paise, ev.currency)} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--c-t6, #888)' }}>{ev.status || ''}</span></div>
-              </div>
-            </div>
-
-            <div style={{ padding: '14px 20px', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14, borderBottom: '1px solid var(--c-borderSubtle, #EEEDE8)' }}>
-              <Field label="Payment ID">{ev.payment_id || '—'}</Field>
-              <Field label="Order ID">{ev.order_id || '—'}</Field>
-              <Field label="Method">{ev.method || '—'}</Field>
-              <Field label="Refund ID">{ev.refund_id || '—'}</Field>
-              <Field label="Payer email">{ev.payer_email || '—'}</Field>
-              <Field label="Payer phone">{ev.payer_contact ? <MaskedNumber number={String(ev.payer_contact).replace(/\D/g, '')} /> : '—'}</Field>
-            </div>
-
-            {/* Linkage */}
-            <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--c-borderSubtle, #EEEDE8)' }}>
-              <div style={{ color: 'var(--c-t6, #888)', textTransform: 'uppercase', fontSize: 12, letterSpacing: '.05em', marginBottom: 8 }}>Linked CRM records</div>
-              {(ev.matched_lead_name || ev.matched_contact_name) ? (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {ev.matched_lead_name && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, background: 'var(--c-successBgSoft, #E4F3EE)', color: 'var(--c-successText, #0F6E56)', fontSize: 14, fontWeight: 700 }}><LinkIcon size={13} /> Lead: {ev.matched_lead_name}</span>}
-                  {ev.matched_contact_name && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, background: 'var(--c-infoBg, #E3F2FD)', color: 'var(--c-infoText, #1565C0)', fontSize: 14, fontWeight: 700 }}><User size={13} /> Contact: {ev.matched_contact_name}</span>}
-                  {ev.match_method && <span style={{ display: 'inline-flex', alignItems: 'center', padding: '5px 10px', borderRadius: 8, background: 'var(--c-hover)', color: 'var(--c-s555555, #555)', fontSize: 13, fontWeight: 600 }}>matched by {ev.match_method}</span>}
-                </div>
-              ) : (
-                <div style={{ fontSize: 14, color: 'var(--c-t6, #888)' }}>No matching lead or contact found for this payer (phone/email didn't match any CRM record).</div>
-              )}
-            </div>
-
-            <div style={{ padding: '10px 20px', display: 'flex', gap: 8 }}>
-              <button onClick={copyJson} style={btnSecondary}>{copied ? <Check size={12} /> : <Copy size={12} />} {copied ? 'Copied' : 'Copy payload'}</button>
-            </div>
-            <pre style={{ margin: '0 20px 20px', padding: 14, background: 'var(--c-hover)', borderRadius: 8, fontSize: 13, fontFamily: 'DM Mono, monospace', overflowX: 'auto', color: 'var(--c-text)' }}
-                 dangerouslySetInnerHTML={{ __html: syntaxHighlight(ev.payload || {}) }} />
-          </div>
-        )}
-      </div>
     </div>
   );
 }

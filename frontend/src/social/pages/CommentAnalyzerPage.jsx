@@ -13,12 +13,11 @@ import TelegramAlertsPanel from "../components/TelegramAlertsPanel.jsx";
 // abusive. Short, keyword (comment-automation) and repeated comments are filtered
 // before any call to save tokens; the Settings tab shows exactly what gets sent.
 
-const PLATFORMS = [["instagram", "Instagram"], ["facebook", "Facebook"], ["youtube", "YouTube"], ["threads", "Threads"]];
+const PLATFORMS = [["instagram", "Instagram"]];
 const PLAT_NAME = Object.fromEntries(PLATFORMS);
 // Why a commenter has no name: the platform API withheld it (not something we dropped).
 const HIDDEN_AUTHOR = {
   instagram: "Instagram doesn't share this commenter's username with the app. It needs Advanced Access for instagram_business_manage_comments (Meta App Review). Live webhook comments and comments you've replied to with @username do show the name.",
-  facebook: "Facebook withholds commenter names without the pages_read_user_content permission (Meta App Review).",
 };
 const SENT = {
   positive: { label: "Positive", bg: C.greenSoft, fg: C.green },
@@ -278,12 +277,9 @@ function Bars({ rows, total, onPick, active, muted }) {
 function Pill({ bg, fg, children, title }) {
   return <span title={title} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 650, padding: "3px 9px", borderRadius: 999, background: bg, color: fg, whiteSpace: "nowrap" }}>{children}</span>;
 }
-// Reply through the same endpoints as the Inbox (YouTube replies go under the top-level comment).
+// Reply through the same endpoint as the Inbox.
 function sendReply(r, text) {
-  if (r.platform === "instagram") return api.replyInstagramComment(r.commentId, { accountId: r.accountId, message: text });
-  if (r.platform === "facebook") return api.replyFacebookComment(r.commentId, text);
-  if (r.platform === "youtube") return api.replyYouTubeComment(r.parentId || r.commentId, text);
-  return api.replyThreadsComment(r.commentId, text);
+  return api.replyInstagramComment(r.commentId, { accountId: r.accountId, message: text });
 }
 
 function CommentRow({ r }) {
@@ -308,7 +304,7 @@ function CommentRow({ r }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", fontSize: 12.5, color: C.textMuted }}>
           {r.author
-            ? <b style={{ color: C.text, fontSize: 13.5 }}>{r.platform === "instagram" || r.platform === "threads" ? "@" + r.author : r.author}</b>
+            ? <b style={{ color: C.text, fontSize: 13.5 }}>{r.platform === "instagram" ? "@" + r.author : r.author}</b>
             : <b style={{ color: C.textSecondary, fontSize: 13.5 }} title={HIDDEN_AUTHOR[r.platform] || ""}>{(PLAT_NAME[r.platform] || "Social") + " user"}</b>}
           <span>·</span><span>{r.ts ? relativeTime(r.ts) : ""}</span>
           {r.parentId && <><span>·</span><span>reply</span></>}
@@ -333,7 +329,7 @@ function CommentRow({ r }) {
         ))}
         {open && (
           <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "flex-end" }}>
-            <textarea autoFocus value={text} onChange={e => setText(e.target.value)} rows={2} placeholder={`Reply to ${r.author ? (r.platform === "instagram" || r.platform === "threads" ? "@" + r.author : r.author) : "this comment"}…`}
+            <textarea autoFocus value={text} onChange={e => setText(e.target.value)} rows={2} placeholder={`Reply to ${r.author ? (r.platform === "instagram" ? "@" + r.author : r.author) : "this comment"}…`}
               onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } if (e.key === "Escape") setOpen(false); }}
               style={{ ...INPUT, flex: 1, resize: "vertical", lineHeight: 1.4, fontSize: 13.5 }} />
             <button onClick={submit} disabled={!text.trim() || busy} style={{ ...BTN.primary, padding: "9px 14px" }}>{busy ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Send size={14} />} Send</button>

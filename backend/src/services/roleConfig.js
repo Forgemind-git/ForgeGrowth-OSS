@@ -37,12 +37,11 @@ const SEED = [
   },
   {
     key: 'sales', label: 'Sales', isSystem: false, sort: 1,
-    description: 'Works the funnel: their own leads, sales log and payments.',
+    description: 'Works the funnel: their own leads and sales.',
     pages: [
       'home', 'chats', 'pipelines',
-      'sales-pipeline', 'leads', 'onboarding',
-      'sales-funnel', 'sales-log',
-      'payments',
+      'sales-pipeline', 'leads',
+      'sales-funnel',
       'follow-ups',
       'admin-settings:general',
     ],

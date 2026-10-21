@@ -1,9 +1,9 @@
 // Everything the CRM knows about whoever is on the other end of a chat.
 //
 // Opened from the contact's name/avatar in the chat header, the way WhatsApp's
-// own profile pane is. It is NOT a second copy of the Leads or Sales Log pages:
+// own profile pane is. It is NOT a second copy of the Leads page:
 // it reads the same lead record, the same registry-driven fields and the same
-// deduped payment union, and it writes through the same endpoints — so a change
+// payments, and it writes through the same endpoints — so a change
 // made here and a change made there cannot land differently.
 //
 // ⚠ TWO WRITE PATHS, DELIBERATELY.
@@ -353,13 +353,6 @@ export default function ChatProfilePanel({ contactNumber, contactName, avatarUrl
                           {shortDate(t.date)} · {t.method}{t.productLabel ? ` · ${t.productLabel}` : ''}
                         </div>
                       </div>
-                      {/* A gateway payment is Razorpay's record, not ours — it is
-                          shown, never edited here. */}
-                      <span style={{
-                        fontSize: 11, fontWeight: W.medium, padding: '2px 8px', borderRadius: 999,
-                        background: t.kind === 'razorpay' ? 'var(--c-infoBg)' : 'var(--fc-surface-2)',
-                        color: t.kind === 'razorpay' ? C.infoText : C.textSecondary, flexShrink: 0,
-                      }}>{t.kind === 'razorpay' ? 'Gateway' : 'Manual'}</span>
                     </div>
                   ))}
                 </div>

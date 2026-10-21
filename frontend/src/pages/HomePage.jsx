@@ -221,7 +221,7 @@ function arcPath(cx, cy, R, r, a0, a1) {
   const [x2, y2] = polar(cx, cy, r, a1), [x3, y3] = polar(cx, cy, r, a0);
   return `M${x0},${y0} A${R},${R} 0 ${large} 1 ${x1},${y1} L${x2},${y2} A${r},${r} 0 ${large} 0 ${x3},${y3} Z`;
 }
-// The latest sales, straight from the Sales Log's own numbers.
+// The latest sales, from the same sales store the Products page reads.
 //
 // Amount comes as PAISE — the storage unit everywhere in this codebase — and is
 // converted here at the render boundary, never stored or compared as rupees.
@@ -426,9 +426,7 @@ export default function HomePage({ user, onPageChange }) {
           {(data.sales?.recent || []).length > 0 && (
             <div style={{ marginBottom: 16 }}>
               <Card>
-                <SectionTitle icon={Receipt} right={
-                  <button onClick={() => go('onboarding')} style={{ border: 'none', background: 'none', color: C.primary, cursor: 'pointer', fontSize: 14, fontWeight: 600, fontFamily: FONT }}>Sales Log →</button>
-                }>
+                <SectionTitle icon={Receipt}>
                   Latest sales
                 </SectionTitle>
                 <RecentSales rows={data.sales.recent} />

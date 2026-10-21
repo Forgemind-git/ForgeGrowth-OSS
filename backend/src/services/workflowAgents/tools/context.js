@@ -66,7 +66,6 @@ const getWorkspaceContext = {
       'Closed-by rep, GST and payment type are not recorded on sales; revenue cannot be attributed to a rep yet.',
       'Most outgoing messages do not record which human sent them; sender_type is inferred and sometimes "unattributed".',
       'Voice notes are transcribed on demand only; untranscribed notes return transcript: null.',
-      'Revenue per ad is not attributable. Ad spend is pre-GST; use spend_incl_gst for cost.',
     ];
     if (own.leads && own.with_owner === 0) dataGaps.unshift(`None of the ${own.leads} in-scope leads has an owner rep yet; group them under "unassigned".`);
 

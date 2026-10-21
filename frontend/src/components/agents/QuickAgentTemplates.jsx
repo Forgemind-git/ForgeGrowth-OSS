@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
-import { X, Search, Zap, Settings2 } from 'lucide-react';
+import { X, Search, Zap } from 'lucide-react';
 import { C, FONT, T, W, LH } from '../../constants.js';
 import { QUICK_AGENTS, QUICK_GOALS } from './quickAgents.js';
 
 /**
  * "New agent" → this picker, the WhatsApp twin of Social's Templates modal:
- * ready-made Quick AI Agents filterable by goal, plus "Start from scratch" for
- * the full five-tab editor. Same layout so the two sections feel like one app.
+ * ready-made Quick AI Agents filterable by goal. Creation is preset-only — there
+ * is no blank start into the full editor, which is for editing an agent once it
+ * exists. Same layout so the two sections feel like one app.
  */
-export default function QuickAgentTemplates({ onClose, onQuick, onScratch }) {
+export default function QuickAgentTemplates({ onClose, onQuick }) {
   const [filter, setFilter] = useState('all');
   const [q, setQ] = useState('');
   useEffect(() => {
@@ -45,10 +46,6 @@ export default function QuickAgentTemplates({ onClose, onQuick, onScratch }) {
             <div style={{ fontSize: T.h3, fontWeight: W.heavy, color: C.text }}>New AI agent</div>
             <div style={{ fontSize: T.meta, color: C.textMuted, marginTop: 2 }}>Pick a ready-made agent, answer a few questions about your business, and it is ready to test.</div>
           </div>
-          <button type="button" data-testid="agent-scratch" onClick={onScratch}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 10, border: 'none', background: C.surfaceMuted, color: C.text, cursor: 'pointer', fontFamily: FONT, fontSize: T.body, fontWeight: W.bold }}>
-            <Settings2 size={15} /> Start from scratch
-          </button>
           <button type="button" onClick={onClose} aria-label="Close"
             style={{ width: 36, height: 36, borderRadius: 10, border: 'none', background: C.surfaceMuted, color: C.textSecondary, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
             <X size={16} />
@@ -71,7 +68,7 @@ export default function QuickAgentTemplates({ onClose, onQuick, onScratch }) {
             <Heading>{recommended.length ? 'More templates' : `${shown.length} template${shown.length === 1 ? '' : 's'}`}</Heading>
             {rest.length
               ? <Grid items={rest} onPick={onQuick} />
-              : <div style={{ color: C.textMuted, fontSize: T.body, padding: 20 }}>No templates match. Try Start from scratch.</div>}
+              : <div style={{ color: C.textMuted, fontSize: T.body, padding: 20 }}>No templates match.</div>}
           </div>
         </div>
       </div>

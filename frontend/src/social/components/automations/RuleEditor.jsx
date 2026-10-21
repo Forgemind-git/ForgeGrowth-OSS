@@ -337,7 +337,7 @@ export default function RuleEditor({ rule, seed, accounts, defaultAccount, meta,
                   <input value={f.sheet_tab} disabled={ro} onChange={e => set({ sheet_tab: e.target.value })} style={INPUT} placeholder="Sheet tab name" />
                 </div>
                 {(f.sheet_id || f.sheet_tab) && (
-                  <Hint>{meta?.sheetsConfigured ? <>Share the sheet with <b>{meta.sheetsEmail}</b> as Editor.</> : "Google Sheets isn't set up on the server yet, so leads only go to the Leads tab."}</Hint>
+                  <Hint>{meta?.sheetsConfigured ? <>Share the sheet with <b>{meta.sheetsEmail}</b> as Editor.</> : "Google Sheets isn't set up on the server yet, so leads are only kept on the automation's own page."}</Hint>
                 )}
                 <Hint>Answers are checked and saved under Leads. Typing STOP ends it.</Hint>
               </div>

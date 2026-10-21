@@ -55,7 +55,6 @@ export const api = {
   getIntegrationAccounts: (platform) => req('/integrations/' + platform + '/accounts'),
   syncPlatformAll:        (platform) => req('/integrations/' + platform + '/sync', { method: 'POST' }),
   removeIntegrationAccount: (platform, id) => req('/integrations/' + platform + '/accounts/' + encodeURIComponent(id), { method: 'DELETE' }),
-  disconnectManagedAccount: (platform) => req('/integrations/' + platform + '/managed/disconnect', { method: 'POST' }),
   setPrimaryAccount:        (platform, id) => req('/integrations/' + platform + '/accounts/' + encodeURIComponent(id) + '/primary', { method: 'POST' }),
   getPosts:        () => req('/posts'),
 
@@ -66,7 +65,6 @@ export const api = {
   getPostMetricsTrend: (id, platform, days) => req(`/posts/${id}/metrics-trend` + qs({ platform, days })),
   getDailyMetrics:    (key, account, days) => req(`/platforms/${key}/daily-metrics` + qs({ account, days })),
   getContentLibrary:  (filters = {}) => req('/content-library' + qs(filters)),
-  deletePost:         (id) => req('/posts/' + id, { method: 'DELETE' }),
   getInsights:        (period) => req('/insights' + qs({ period })),
   getInsightThemes:   (period, platform) => req('/insights/themes' + qs({ period, platform })),
   getInsightAnomalies:(period) => req('/insights/anomalies' + qs({ period })),
@@ -106,47 +104,6 @@ export const api = {
   saveInstagramCredentials: (body) => req('/instagram/credentials', { method: 'POST', body: JSON.stringify(body) }),
   refreshInstagramToken:    () => req('/instagram/refresh-token', { method: 'POST' }),
 
-  // YouTube
-  getYouTubeStatus:        (force) => req('/youtube/status' + (force ? '?force=1' : '')),
-  getYouTubeOAuthUrl:      (mode) => req('/youtube/oauth/init' + (mode === 'add' ? '?mode=add' : '')),
-  saveYouTubeCredentials:  (body) => req('/youtube/credentials', { method: 'POST', body: JSON.stringify(body) }),
-  getYouTubeComments:      (limit) => req('/youtube/comments' + qs({ limit })),
-  syncYouTubeComments:     () => req('/youtube/comments/sync', { method: 'POST' }),
-  // id = the TOP-LEVEL comment id to reply under
-  replyYouTubeComment:     (id, text) => req('/youtube/comments/' + id + '/reply', { method: 'POST', body: JSON.stringify({ text }) }),
-  deleteYouTubeComment:    (id) => req('/youtube/comments/' + id, { method: 'DELETE' }),
-
-  // Facebook
-  getMessengerInbox:   (opts = {}) => req('/messenger/inbox' + qs({ page: opts.page, sync: opts.sync })),
-  getMessengerThread:  (pageId, peerId) => req('/messenger/thread' + qs({ pageId, peerId })),
-  syncMessenger:       () => req('/messenger/sync', { method: 'POST' }),
-  markMessengerRead:   (body) => req('/messenger/read', { method: 'POST', body: JSON.stringify(body) }),
-  replyMessenger:      (body) => req('/messenger/reply', { method: 'POST', body: JSON.stringify(body) }),
-  getFacebookStatus:   (force) => req('/facebook/status' + (force ? '?force=1' : '')),
-  getFacebookOAuthUrl: (mode) => req('/facebook/oauth/init' + (mode === 'add' ? '?mode=add' : '')),
-  saveFacebookToken:   (token) => req('/facebook/credentials', { method: 'POST', body: JSON.stringify({ token }) }),
-  getFacebookComments: (limit) => req('/facebook/comments' + qs({ limit })),
-  syncFacebookComments: () => req('/facebook/comments/sync', { method: 'POST' }),
-  replyFacebookComment: (id, message) => req('/facebook/comments/' + id + '/reply', { method: 'POST', body: JSON.stringify({ message }) }),
-  deleteFacebookComment: (id) => req('/facebook/comments/' + id, { method: 'DELETE' }),
-  likeFacebookComment: (id, like) => req('/facebook/comments/' + id + '/like', { method: 'POST', body: JSON.stringify({ like }) }),
-
-  // Threads
-  getThreadsStatus:       (force) => req('/threads/status' + (force ? '?force=1' : '')),
-  getThreadsOAuthUrl:     (mode)  => req('/threads/oauth/init' + (mode === 'add' ? '?mode=add' : '')),
-  saveThreadsCredentials: (body)  => req('/threads/credentials', { method: 'POST', body: JSON.stringify(body) }),
-  refreshThreadsToken:    ()      => req('/threads/refresh-token', { method: 'POST' }),
-  getThreadsComments:     (limit) => req('/threads/comments' + qs({ limit })),
-  syncThreadsComments:    ()      => req('/threads/comments/sync', { method: 'POST' }),
-  replyThreadsComment:    (id, text) => req('/threads/comments/' + id + '/reply', { method: 'POST', body: JSON.stringify({ text }) }),
-  deleteThreadsComment:   (id)    => req('/threads/comments/' + id, { method: 'DELETE' }),
-
-  // LinkedIn
-  getLinkedInStatus:       (force) => req('/linkedin/status' + (force ? '?force=1' : '')),
-  getLinkedInOAuthUrl:     (mode)  => req('/linkedin/oauth/init' + (mode === 'add' ? '?mode=add' : '')),
-  saveLinkedInCredentials: (body)  => req('/linkedin/credentials', { method: 'POST', body: JSON.stringify(body) }),
-  refreshLinkedInToken:    ()      => req('/linkedin/refresh-token', { method: 'POST' }),
-
   // Contacts (CRM-style list auto-built from IG DMs)
   getContacts:    (filters = {}) => req('/contacts' + qs(filters)),
   getContact:     (id) => req('/contacts/' + id),
@@ -175,19 +132,11 @@ export const api = {
   syncPlatform: (key, opts = {}) => req(`/sync/${key}`, { method: 'POST', body: JSON.stringify({ fullSync: opts.fullSync }) }),
   getSyncStatus: () => req('/sync/status'),
 
-  // Publish (composer + scheduler + log; backend publish step is stubbed/simulated)
+  // Connected accounts (also feeds the "My accounts" scope picker)
   getPublishAccounts: () => req('/publish/accounts'),
   // "My accounts" preset (per user) — backend userScope.js
   getScope:  () => req('/me/scope'),
   saveScope: (tokens) => req('/me/scope', { method: 'PUT', body: JSON.stringify({ tokens }) }),
-  getPublishJobs:     (filters = {}) => req('/publish/jobs' + qs(filters)),
-  createPublishJob:   (body) => req('/publish/jobs', { method: 'POST', body: JSON.stringify(body) }),
-  cancelPublishJob:   (id) => req('/publish/jobs/' + id + '/cancel', { method: 'POST' }),
-  deletePublishJob:   (id) => req('/publish/jobs/' + id, { method: 'DELETE' }),
-  promotePublishJob:  (id, scheduledAt) => req('/publish/jobs/' + id + '/promote', { method: 'POST', body: JSON.stringify({ scheduledAt: scheduledAt || null }) }),
-  approvePublishJob:  (id) => req('/publish/jobs/' + id + '/approve', { method: 'POST' }),
-  rejectPublishJob:   (id, reason) => req('/publish/jobs/' + id + '/reject', { method: 'POST', body: JSON.stringify({ reason }) }),
-  updatePublishJob:   (id, patch) => req('/publish/jobs/' + id, { method: 'PUT', body: JSON.stringify(patch || {}) }),
   getActivity:        (limit) => req('/activity' + qs({ limit })),
 
   // Goals / KPI targets + shareable reports (P5)
@@ -275,15 +224,6 @@ export const api = {
     saveKey:   (key) => req('/openrouter/key', { method: 'POST', body: JSON.stringify({ key }) }),
     removeKey: () => req('/openrouter/key', { method: 'DELETE' }),
     setRate:   (rate) => req('/openrouter/rate', { method: 'PUT', body: JSON.stringify({ rate }) }),
-  },
-  // "Receive Instagram DMs" card — backend metaPageLinkRoutes.js
-  metaLink: {
-    status:     () => req('/meta-link'),
-    saveToken:  (token) => req('/meta-link/token', { method: 'POST', body: JSON.stringify({ token }) }),
-    removeToken:() => req('/meta-link/token', { method: 'DELETE' }),
-    saveSecret: (secret) => req('/meta-link/secret', { method: 'POST', body: JSON.stringify({ secret }) }),
-    link:       (pageId) => req('/meta-link/pages/' + pageId + '/link', { method: 'POST' }),
-    unlink:     (pageId) => req('/meta-link/pages/' + pageId + '/unlink', { method: 'POST' }),
   },
   // Automations tab (ManyChat-style IG rules) — backend commentAutomationRoutes.js
   // Instagram AI agents (backend services/agentService.js). Quick agents run on

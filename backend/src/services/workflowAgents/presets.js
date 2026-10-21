@@ -4,7 +4,7 @@
 
 const pool = require('../../db');
 
-const READ_TOOLS = ['get_workspace_context', 'list_leads', 'get_lead_profile', 'get_conversation', 'search_messages', 'get_active_conversations', 'get_engagement_metrics', 'get_funnel_summary', 'get_stage_history', 'get_sales', 'get_outstanding_balances', 'get_ad_performance', 'get_flow_runs', 'get_broadcast_results', 'get_rep_directory', 'get_previous_outputs', 'get_feedback', 'read_memory'];
+const READ_TOOLS = ['get_workspace_context', 'list_leads', 'get_lead_profile', 'get_conversation', 'search_messages', 'get_active_conversations', 'get_engagement_metrics', 'get_funnel_summary', 'get_stage_history', 'get_sales', 'get_outstanding_balances', 'get_flow_runs', 'get_broadcast_results', 'get_rep_directory', 'get_previous_outputs', 'get_feedback', 'read_memory'];
 const DRAFT_TOOLS = ['draft_whatsapp_reply', 'propose_memory'];
 const WRITE_TOOLS = ['tag_contact', 'set_funnel_stage', 'assign_owner', 'add_internal_note', 'create_follow_up_task', 'send_whatsapp_message', 'trigger_automation', 'notify_rep'];
 const ALL_TOOLS = [...READ_TOOLS, ...DRAFT_TOOLS, ...WRITE_TOOLS];
@@ -153,7 +153,7 @@ const LEAD_SIGNAL = {
     ]),
     data_scope: {
       business_numbers: ['all'], teams: ['all'], rep_user_ids: ['all'], funnel_stages: ['all'], sources: ['all'],
-      chat_types: ['lead_bot', 'lead_rep', 'voice_note', 'broadcast', 'ad_referral', 'internal_note'],
+      chat_types: ['lead_bot', 'lead_rep', 'voice_note', 'broadcast', 'internal_note'],
       lookback_days: 14, mask_pii: true, exclude_opted_out: true, exclude_tags: ['do_not_contact', 'test'],
       won_stages: 'exclude_unless_outstanding',
     },
@@ -227,7 +227,7 @@ Explain why leads did not buy in the last 7 days, so sales material and ad creat
       },
     },
     tool_config: toolConfig(['get_workspace_context', 'read_memory', 'get_previous_outputs', 'search_messages', 'list_leads', 'get_conversation', 'get_lead_profile', 'get_stage_history', 'get_funnel_summary', 'propose_memory']),
-    data_scope: { chat_types: ['lead_bot', 'lead_rep', 'voice_note', 'ad_referral'], lookback_days: 14, mask_pii: true, exclude_opted_out: true, exclude_tags: ['test'], won_stages: 'exclude' },
+    data_scope: { chat_types: ['lead_bot', 'lead_rep', 'voice_note'], lookback_days: 14, mask_pii: true, exclude_opted_out: true, exclude_tags: ['test'], won_stages: 'exclude' },
     triggers: [{ type: 'schedule', cron: '0 9 * * 1', timezone: 'Asia/Kolkata', enabled: true }, { type: 'manual', enabled: true }],
     destinations: [{ type: 'results_inbox' }, { type: 'telegram', chat_id: '', format: 'summary', enabled: false }],
     approval_rules: { approvers: ['admin'], expire_hours: 24 },
@@ -311,47 +311,12 @@ Find customer messages that are still waiting for a reply, and tell each rep's t
   },
 };
 
-const AD_TO_CHAT_QUALITY = {
-  preset_key: 'ad_to_chat_quality',
-  name: 'Ad-to-Chat Quality',
-  description: 'Weekly, per ad: the quality of conversations it starts — intent share, wrong-lead share, common questions — beside its spend including GST.',
-  icon: 'megaphone',
-  sort_order: 5,
-  config: {
-    agent: { model: 'claude-opus-5', effort: 'high', temperature: 0.2, max_tool_calls: 80, max_tokens_per_run: 1000000, max_output_tokens: 16000, monthly_budget_inr: null, auto_accept_memory: false },
-    instructions: `# Goal
-For each ad that started conversations in the last 7 days, judge the quality of those conversations, beside what the ad cost.
-
-# How to work
-1. Call get_ad_performance for the last 7 days.
-2. For each ad with attributed leads, read up to 10 of those leads' conversations (get_conversation; the lead profile shows which ad brought them).
-3. Per ad: share of leads showing buying intent, share of wrong leads, the 3 most common questions (with quotes), and cost per attributed lead including GST.
-4. Never state revenue per ad: it is not attributable here.`,
-    output_schema: {
-      type: 'object',
-      required: ['week_ending', 'ads', 'data_gaps'],
-      properties: {
-        week_ending: { type: 'string' },
-        ads: { type: 'array', items: { type: 'object', required: ['ad_id', 'leads_read', 'intent_share_pct', 'wrong_lead_share_pct'], properties: { ad_id: { type: 'string' }, ad_name: { type: ['string', 'null'] }, spend_incl_gst: { type: ['number', 'null'] }, leads_attributed: { type: 'integer' }, leads_read: { type: 'integer' }, intent_share_pct: { type: 'number' }, wrong_lead_share_pct: { type: 'number' }, common_questions: { type: 'array', items: { type: 'object', properties: { question: { type: 'string' }, count: { type: 'integer' }, message_id: { type: 'string' }, quote: { type: 'string' } } } }, verdict: { type: 'string' } } } },
-        data_gaps: { type: 'array', items: { type: 'string' } },
-      },
-    },
-    tool_config: toolConfig(['get_workspace_context', 'get_ad_performance', 'list_leads', 'get_lead_profile', 'get_conversation', 'search_messages']),
-    data_scope: { chat_types: ['lead_bot', 'lead_rep', 'voice_note', 'ad_referral'], lookback_days: 7, mask_pii: true, exclude_opted_out: false, exclude_tags: ['test'], won_stages: 'include' },
-    triggers: [{ type: 'schedule', cron: '0 10 * * 1', timezone: 'Asia/Kolkata', enabled: true }, { type: 'manual', enabled: true }],
-    destinations: [{ type: 'results_inbox' }],
-    approval_rules: { approvers: ['admin'], expire_hours: 24 },
-    runtime: {},
-    memory: [],
-  },
-};
-
 const PAYMENT_CHASER = {
   preset_key: 'payment_chaser',
   name: 'Payment Chaser',
   description: 'Daily: customers with an outstanding balance, each with a polite reminder draft for approval.',
   icon: 'wallet',
-  sort_order: 6,
+  sort_order: 5,
   config: {
     agent: { model: 'claude-opus-5', effort: 'medium', temperature: 0.2, max_tool_calls: 60, max_tokens_per_run: 600000, max_output_tokens: 16000, monthly_budget_inr: null, auto_accept_memory: false },
     instructions: `# Goal
@@ -383,7 +348,7 @@ Help reps collect balances politely.
   },
 };
 
-const PRESETS = [LEAD_SIGNAL, REASON_FINDER, FOLLOW_UP_DRAFTER, RESPONSE_TIME_WATCHER, AD_TO_CHAT_QUALITY, PAYMENT_CHASER];
+const PRESETS = [LEAD_SIGNAL, REASON_FINDER, FOLLOW_UP_DRAFTER, RESPONSE_TIME_WATCHER, PAYMENT_CHASER];
 
 async function syncPresets() {
   for (const p of PRESETS) {

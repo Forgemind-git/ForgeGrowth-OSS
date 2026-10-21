@@ -19,10 +19,7 @@ const truncate = (s, n = 80) => { s = (s == null ? '' : String(s)).replace(/\s+/
 const GRAPH_BASE = 'https://graph.facebook.com/v20.0';
 const IG_API = 'https://graph.instagram.com/v21.0';   // Instagram API with Instagram Login
 const OAUTH_REDIRECT = socialEnv.INSTAGRAM_OAUTH_REDIRECT || (socialEnv.PUBLIC_BASE_URL ? socialEnv.PUBLIC_BASE_URL.replace(/\/+$/, '') + '/api/social/instagram/oauth/callback' : '');
-const OAUTH_SCOPES = 'instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_manage_insights,instagram_business_content_publish';
-// Public origin Instagram fetches uploaded media from (it must resolve image_url/video_url
-// over the internet). Derived from the OAuth redirect so it tracks the deployed host.
-const PUBLIC_BASE = socialEnv.PUBLIC_BASE_URL || OAUTH_REDIRECT.replace(/\/api\/.*$/, '');
+const OAUTH_SCOPES = 'instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_manage_insights';
 
 // ── In-memory cache (prevents repeat API calls & rate limit burn) ─
 // Rate limit: 200 calls/hour per user token. getStats() uses 5 calls per run.
@@ -637,7 +634,6 @@ async function getStats(period = '30D', account = null) {
     trend:    trendData.length ? trendData : [profile.followers_count],
     trendDays: trendDays.length ? trendDays : ['Now'],
     trendSeries,
-    isThreads: false,
     isReal:    true,
   };
   cacheSet(cacheKey, result, CACHE_TTL.stats);
@@ -752,8 +748,6 @@ function candidateSecrets() {
   // The Meta app secret signs Page-object deliveries.
   const fb = (socialEnv.FACEBOOK_APP_SECRET || '').trim();
   if (fb) list.push(fb);
-  // ForgeSocial app secret saved from the "Receive Instagram DMs" settings card
-  try { const s = require('./services/metaPageLink').appSecretForWebhook(); if (s) list.push(s); } catch (_) {}
   return [...new Set(list)];
 }
 
@@ -1062,54 +1056,6 @@ async function upsertAccount({ accountId, name, username, pageId }) {
   );
 }
 
-// ── Subscribe Facebook Pages to this app's webhook ──
-// Per-page subscription covers Instagram DMs (the `messages` field). Instagram
-// COMMENTS are delivered via the app-level Instagram-object webhook (configured
-// once in the App Dashboard), not per-page — so we only send `messages` here.
-// Uses the stored USER token to derive each Page token, subscribes the page,
-// and registers the linked IG account so the Inbox can label it by name.
-async function subscribePages(pageIds, fields = 'messages') {
-  const userToken = await getSetting('instagram_access_token');
-  if (!userToken) throw new Error('No stored access token in app_settings');
-
-  const url = new URL(`${GRAPH_BASE}/me/accounts`);
-  url.searchParams.set('fields', 'id,name,access_token,instagram_business_account{id,username}');
-  url.searchParams.set('limit', '200');
-  url.searchParams.set('access_token', userToken);
-  const res = await fetch(url);
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message);
-  const pages = data.data || [];
-
-  const results = [];
-  for (const pid of pageIds.map(String)) {
-    const page = pages.find(p => p.id === pid);
-    if (!page) { results.push({ pageId: pid, ok: false, error: 'Page not visible to this token' }); continue; }
-    if (!page.access_token) { results.push({ pageId: pid, name: page.name, ok: false, error: 'No Page token (missing pages_show_list / pages_manage_metadata)' }); continue; }
-
-    const subUrl = new URL(`${GRAPH_BASE}/${pid}/subscribed_apps`);
-    subUrl.searchParams.set('subscribed_fields', fields);
-    subUrl.searchParams.set('access_token', page.access_token);
-    let subData;
-    try {
-      const subRes = await fetch(subUrl, { method: 'POST' });
-      subData = await subRes.json();
-    } catch (e) { subData = { error: { message: e.message } }; }
-
-    const iga = page.instagram_business_account;
-    if (iga?.id) {
-      await upsertAccount({ accountId: iga.id, name: page.name, username: iga.username, pageId: page.id });
-    }
-    results.push({
-      pageId: pid, name: page.name,
-      igAccountId: iga?.id || null, igUsername: iga?.username || null,
-      ok: subData?.success === true,
-      response: subData,
-    });
-  }
-  return results;
-}
-
 // ── Meta signed_request (data-deletion / deauthorize callbacks) ──
 // Format: "<base64url(HMAC-SHA256 sig)>.<base64url(JSON payload)>"
 function parseSignedRequest(signedRequest) {
@@ -1355,7 +1301,7 @@ async function replyToComment({ commentId, accountId, message }) {
 
 // Delete an Instagram comment (DELETE /{comment-id}). Needs instagram_manage_comments.
 // IG lets the media owner delete ANY comment on their media (own or others'), so
-// this is a true delete (no "hide" fallback like YouTube). Mirrors the removal locally.
+// this is a true delete (no "hide" fallback). Mirrors the removal locally.
 async function deleteComment(commentId, accountId) {
   if (!commentId) throw new Error('commentId is required');
 
@@ -1380,152 +1326,6 @@ async function deleteComment(commentId, accountId) {
   }
   await pool.query('DELETE FROM instagram_comments WHERE comment_id = $1 OR parent_id = $1', [commentId]).catch(() => {});
   return { ok: true };
-}
-
-// ── Content publishing (Instagram API with Instagram Login) ──────────
-// Two-step Graph publish: create a media container (/me/media) → publish it
-// (/me/media_publish). Video (reels/video carousel children) is async — the
-// container must reach status_code FINISHED before it can be published.
-// Requires the instagram_business_content_publish scope on the account token.
-const _sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
-async function _igCall(base, edge, params, token, method = 'POST') {
-  const url = new URL(`${base}${edge}`);
-  url.searchParams.set('access_token', token);
-  url.searchParams.set('locale', 'en_US');   // force Meta's error_user_msg to English
-  Object.entries(params || {}).forEach(([k, v]) => { if (v != null) url.searchParams.set(k, String(v)); });
-  const res = await fetch(url.toString(), { method });
-  const data = await res.json().catch(() => ({}));
-  if (data.error) throw new Error(data.error.error_user_msg || data.error.message || 'Instagram publish error');
-  return data;
-}
-
-// Build the caption: the typed caption plus the composer's separate hashtags field
-// (normalized to #tags, capped at 30 per IG, whole caption capped at 2200 chars).
-function _composeCaption(job) {
-  let caption = (job.caption || '').toString();
-  const tags = Array.isArray(job.details && job.details.hashtags) ? job.details.hashtags : [];
-  const norm = tags.map(t => String(t).trim()).filter(Boolean)
-    .map(t => (t.startsWith('#') ? t : '#' + t.replace(/\s+/g, ''))).slice(0, 30);
-  if (norm.length) caption = (caption ? caption + '\n\n' : '') + norm.join(' ');
-  return caption.slice(0, 2200);
-}
-
-// collaborators → JSON array of up to 3 plain usernames (Graph expects ['a','b']).
-function _collaborators(details) {
-  const list = (Array.isArray(details.collaborators) ? details.collaborators : [])
-    .map(u => String(u).replace(/^@/, '').trim()).filter(Boolean).slice(0, 3);
-  return list.length ? JSON.stringify(list) : null;
-}
-
-// user_tags → JSON [{username,x,y}]. Feed images REQUIRE x/y (0–1); we center them
-// since the API gives no way to capture exact tap positions outside Instagram's app.
-function _userTags(details) {
-  const list = (Array.isArray(details.tagPeople) ? details.tagPeople : [])
-    .map(u => String(u).replace(/^@/, '').trim()).filter(Boolean)
-    .map(username => ({ username, x: 0.5, y: 0.5 }));
-  return list.length ? JSON.stringify(list) : null;
-}
-
-// Poll a video container until processing finishes (or fails / times out).
-async function _waitForContainer(base, creationId, token, { tries = 30, delayMs = 4000 } = {}) {
-  for (let i = 0; i < tries; i++) {
-    const s = await _igCall(base, `/${creationId}`, { fields: 'status_code' }, token, 'GET');
-    if (s.status_code === 'FINISHED') return;
-    if (s.status_code === 'ERROR' || s.status_code === 'EXPIRED')
-      throw new Error(`Instagram could not process the media (status: ${s.status_code})`);
-    await _sleep(delayMs);
-  }
-  throw new Error('Instagram media processing timed out — try a smaller/shorter video');
-}
-
-// Publish a job to Instagram. Returns { ok, simulated:false, externalId, permalink }.
-async function publishContent(job) {
-  const accountId = job.account_id;
-  if (!accountId) throw new Error('No Instagram account selected for this post');
-  const auth = await getAccountAuth(accountId);
-  if (!auth.ig)
-    throw new Error('Instagram publishing needs an OAuth-connected account. Reconnect it on the Integrations page to grant the content-publish permission.');
-  const { base, token } = auth;
-
-  const caption = _composeCaption(job);
-  const media = Array.isArray(job.media) ? job.media : [];
-  const postType = job.post_type;
-  const details = job.details || {};
-  const absUrl = (u) => !u ? null : (/^https?:\/\//.test(u) ? u : PUBLIC_BASE + u);
-  const isVideo = (m) => String(m && m.mime || '').toLowerCase().startsWith('video');
-
-  let creationId;
-
-  if (postType === 'highlight') {
-    throw new Error('Instagram highlights can\'t be created via the API — they\'re built from existing stories.');
-  } else if (postType === 'story') {
-    const m = media[0];
-    if (!m) throw new Error('A story needs an image or video');
-    const c = await _igCall(base, '/me/media',
-      isVideo(m) ? { media_type: 'STORIES', video_url: absUrl(m.url) }
-                 : { media_type: 'STORIES', image_url: absUrl(m.url) }, token);
-    creationId = c.id;
-    if (isVideo(m)) await _waitForContainer(base, creationId, token);
-  } else if (postType === 'reel' || (postType === 'post' && media.length === 1 && isVideo(media[0]))) {
-    const m = media[0];
-    if (!m || !isVideo(m)) throw new Error('A reel needs a video file');
-    const params = { media_type: 'REELS', video_url: absUrl(m.url), caption };
-    const cover = absUrl(details.thumbnailUrl);
-    if (cover) params.cover_url = cover;                                  // custom reel cover image
-    if (details.audio) params.audio_name = String(details.audio).slice(0, 100); // name the reel's audio
-    params.share_to_feed = details.shareToFeed === 'no' ? 'false' : 'true';     // also show in Feed (default yes)
-    const col = _collaborators(details); if (col) params.collaborators = col;   // co-authors (≤3)
-    const c = await _igCall(base, '/me/media', params, token);
-    creationId = c.id;
-    await _waitForContainer(base, creationId, token);
-  } else if (postType === 'post') {
-    if (!media.length) throw new Error('An Instagram post needs at least one image');
-    if (media.length === 1) {
-      const params = { image_url: absUrl(media[0].url), caption };
-      if (details.altText) params.alt_text = String(details.altText).slice(0, 1000); // accessibility text
-      const ut = _userTags(details);     if (ut)  params.user_tags = ut;             // tag people (centered)
-      const col = _collaborators(details); if (col) params.collaborators = col;       // co-authors (≤3)
-      const c = await _igCall(base, '/me/media', params, token);
-      creationId = c.id;
-    } else {
-      // Carousel — up to 10 children, then a CAROUSEL container.
-      const children = [];
-      for (const m of media.slice(0, 10)) {
-        const child = await _igCall(base, '/me/media',
-          isVideo(m) ? { media_type: 'VIDEO', video_url: absUrl(m.url), is_carousel_item: true }
-                     : { image_url: absUrl(m.url), is_carousel_item: true }, token);
-        if (isVideo(m)) await _waitForContainer(base, child.id, token);
-        children.push(child.id);
-      }
-      // Caption + collaborators live on the parent (per-child user_tags/alt_text not wired).
-      const params = { media_type: 'CAROUSEL', children: children.join(','), caption };
-      const col = _collaborators(details); if (col) params.collaborators = col;
-      const c = await _igCall(base, '/me/media', params, token);
-      creationId = c.id;
-    }
-  } else {
-    throw new Error(`Unsupported Instagram post type: ${postType}`);
-  }
-
-  // Publish the finished container.
-  const pub = await _igCall(base, '/me/media_publish', { creation_id: creationId }, token);
-  const mediaId = pub.id;
-
-  // Turn off commenting if requested — a post-publish toggle on the live media, NOT
-  // a create-container param. Best-effort: the post is already live, so a failure here
-  // must not fail the job.
-  if (details.commenting === 'off') {
-    try { await _igCall(base, `/${mediaId}`, { comment_enabled: 'false' }, token); }
-    catch (e) { console.error('Disable comments failed for', mediaId, '-', e.message); }
-  }
-
-  let permalink = null;
-  try {
-    const info = await _igCall(base, `/${mediaId}`, { fields: 'permalink' }, token, 'GET');
-    permalink = info.permalink || null;
-  } catch { /* permalink is best-effort */ }
-  return { ok: true, simulated: false, externalId: mediaId, permalink };
 }
 
 // ── Resolve a DM peer's profile (webhook only gives the opaque IGSID) ──
@@ -1603,7 +1403,7 @@ async function resolveUserProfile(igsid, accountId, { force = false } = {}) {
 // Graph call per connected account using `comments{...replies{...}}` nested field
 // expansion → gets all recent posts + their comment trees in a single request.
 // Idempotent via ON CONFLICT — safe to run alongside webhook ingest. 15s self-throttle
-// matches the FB/YT/Threads syncComments pattern.
+// matches the other periodic syncs.
 let _lastIgCommentSync = 0;
 
 async function _upsertIgComment(c, accountId, mediaId, parentId) {
@@ -2034,11 +1834,11 @@ module.exports = {
   normalizeStoredAttachments,
   testConnection, saveCredentials, refreshToken, refreshAccountTokens, getStats, getAllPosts, getAudience,
   verifyWebhookSignature, logWebhookEvent, handleWebhook, localizeAttachments,
-  listAccounts, upsertAccount, subscribePages, sampleFollowers,
+  listAccounts, upsertAccount, sampleFollowers,
   parseSignedRequest, handleDataDeletion, sendDirectMessage, resolveUserProfile,
   resolveAllConversations,
   getOAuthUrl, exchangeOAuthCode, disconnectAccount, markConversationRead,
-  publishContent, replyToComment, deleteComment, _composeCaption,
+  replyToComment, deleteComment,
   upsertContact, syncComments, syncMessages,
   getAccountAuth,
 };

@@ -11,8 +11,8 @@ change it safely*.
 
 ## What this is
 
-A self-hosted WhatsApp-native growth stack: Meta ad → click-to-WhatsApp conversation → lead →
-funnel stage → payment, in one Express + React app over one PostgreSQL database.
+A self-hosted WhatsApp-native growth stack: WhatsApp conversation → lead → funnel stage → sale,
+with an Instagram workspace beside it, in one Express + React app over one PostgreSQL database.
 
 Single-tenant by design. There is no workspace or organisation concept anywhere — every config
 table is a singleton `id = 1` row. Do not add a `workspace_id` that would only ever hold one value.
@@ -51,7 +51,7 @@ they use different Redis database indexes (`redis://redis:6379/0` vs `/1`).
 
 ### Stage changes are observed, not hooked
 
-Eight code paths write `leads.stage`, several in raw SQL. Anything that must react to a stage change
+Many code paths write `leads.stage`, several in raw SQL. Anything that must react to a stage change
 walks the append-only `lead_events` log with a saved cursor (see `services/funnelTags.js`). This is
 why a new write path is covered for free. **Add to that pattern; do not add a ninth hook** — the
 ninth is the one someone forgets.
@@ -75,7 +75,7 @@ the configured value is non-empty first, and treat "unconfigured" as "matches no
 
 ### Webhook handling must never throw
 
-Meta retries on non-2xx and times out at 20 seconds. Attribution, analytics and agent work are all
+Meta retries on non-2xx and times out at 20 seconds. Analytics and agent work are both
 best-effort around message ingestion: catch, log, continue. Anything slow (agent runs, media
 downloads) goes on a queue rather than running inline.
 
@@ -92,8 +92,8 @@ scoping, and code must not imply there is.
 
 ### The MCP proxy canonicalises before it gates
 
-`fetch()` strips dot-segments, so gating on the raw path string once let `/marketing/../users`
-through as `area_marketing` and then delivered it to `/api/users`. Canonicalise **first**, gate on
+`fetch()` strips dot-segments, so gating on the raw path string once let `/social/../users`
+through as `area_social` and then delivered it to `/api/users`. Canonicalise **first**, gate on
 the result. Any change there must keep "the path we check" identical to "the path the server
 receives".
 
@@ -263,7 +263,7 @@ backend/src/
 frontend/src/
   api.js           the only place fetch is called
   components/      chat UI, automation builder, agent editor
-  pages/           marketing/ · sales/ · admin · chats
+  pages/           sales/ · admin · chats
 supabase/migrations/   numbered SQL
 caddy/Caddyfile        HTTPS in front of `web`; only used when the `tls` profile is on
 scripts/               install · up · down · uninstall · migrate · generate-secrets

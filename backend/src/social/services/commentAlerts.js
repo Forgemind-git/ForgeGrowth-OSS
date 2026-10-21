@@ -17,14 +17,14 @@
 //
 // "Instant": a live Instagram comment webhook calls onNewComment(), which waits
 // a few seconds for the batch, runs the analyzer on what is new, then
-// dispatches. Everything else (other platforms arrive by sync) is picked up by
+// dispatches. Everything else (comments that arrive by sync) is picked up by
 // the analyzer's own 10-minute run, which also calls dispatch() at the end.
 const pool = require('../db');
 const bot = require('./telegramBot');
 const socialEnv = require('../env');
 
 const K = 'comment_alert_settings';
-const PLATFORM_NAME = { instagram: 'Instagram', facebook: 'Facebook', youtube: 'YouTube', threads: 'Threads' };
+const PLATFORM_NAME = { instagram: 'Instagram' };
 const CATEGORY_NAME = {
   praise: 'Praise', question: 'Question', lead: 'Lead', feedback: 'Feedback', complaint: 'Complaint',
   request: 'Request', spam: 'Spam', other: 'Other',
@@ -116,12 +116,11 @@ function SELECT_ROWS() {
     SELECT a.platform, a.comment_id, a.sentiment, a.sentiment_conf, a.category, a.category_conf, a.toxic, a.analyzed_at,
            src.text, src.author, src.ts, src.post_id, src.parent_id, src.acct,
            p.caption, p.permalink,
-           COALESCE('@' || ia.username, ia.name, sa.label, '@' || sa.username) AS account_label
+           COALESCE('@' || ia.username, ia.name) AS account_label
       FROM comment_analysis a
       JOIN src ON src.platform = a.platform AND src.comment_id = a.comment_id
       LEFT JOIN LATERAL (SELECT COALESCE(NULLIF(caption,''), title) AS caption, permalink FROM posts WHERE external_id = src.post_id LIMIT 1) p ON true
-      LEFT JOIN instagram_accounts ia ON a.platform = 'instagram' AND ia.account_id = src.acct
-      LEFT JOIN LATERAL (SELECT label, username FROM social_accounts WHERE platform = a.platform AND account_key = src.acct LIMIT 1) sa ON true`;
+      LEFT JOIN instagram_accounts ia ON a.platform = 'instagram' AND ia.account_id = src.acct`;
 }
 
 const esc = bot.escapeHtml;
@@ -141,7 +140,7 @@ function alertMessage(r, reason, { test = false } = {}) {
   if (r.toxic != null && r.toxic >= 0.7) labels.push('⚠️ abusive');
   if (r.parent_id) labels.push('reply to a comment');
   if (labels.length) lines.push(labels.join(' · '));
-  lines.push(`👤 ${esc(r.author ? (r.platform === 'instagram' || r.platform === 'threads' ? '@' + r.author : r.author) : 'Unknown')}${r.ts ? ' · ' + esc(fmtTime(r.ts)) : ''}`);
+  lines.push(`👤 ${esc(r.author ? (r.platform === 'instagram' ? '@' + r.author : r.author) : 'Unknown')}${r.ts ? ' · ' + esc(fmtTime(r.ts)) : ''}`);
   lines.push(`<blockquote>${esc(trunc(r.text, 900))}</blockquote>`);
   if (r.caption) lines.push(`📝 On: ${esc(trunc(r.caption, 140))}`);
   const buttons = [];
@@ -251,13 +250,10 @@ async function log({ limit = 50 } = {}) {
   const { rows } = await pool.query(`
     WITH x AS (SELECT * FROM comment_alerts ORDER BY created_at DESC LIMIT ${lim})
     SELECT x.*, c.title, c.first_name, c.last_name, c.username, c.chat_id AS cid,
-           COALESCE(ig.text, fb.message, yt.text, th.text) AS text
+           ig.text AS text
       FROM x
       LEFT JOIN telegram_chats c ON c.chat_id = x.chat_id
       LEFT JOIN instagram_comments ig ON x.platform = 'instagram' AND ig.comment_id = x.comment_id
-      LEFT JOIN facebook_comments fb ON x.platform = 'facebook' AND fb.comment_id = x.comment_id
-      LEFT JOIN youtube_comments yt ON x.platform = 'youtube' AND yt.comment_id = x.comment_id
-      LEFT JOIN threads_comments th ON x.platform = 'threads' AND th.comment_id = x.comment_id
      ORDER BY x.created_at DESC`);
   return rows.map(r => ({
     platform: r.platform, commentId: r.comment_id, chatId: String(r.chat_id),

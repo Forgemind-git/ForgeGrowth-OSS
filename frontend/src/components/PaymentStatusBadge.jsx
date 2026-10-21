@@ -1,4 +1,4 @@
-// The Sales Log's payment-status pill. Says "Not set" — never a confident
+// A sale's payment-status pill. Says "Not set" — never a confident
 // status — when something was paid but the product has no price to compare
 // against and nobody has set it by hand.
 import { C } from '../constants.js';

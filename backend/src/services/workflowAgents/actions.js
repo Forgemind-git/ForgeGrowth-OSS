@@ -193,7 +193,7 @@ const EXECUTORS = {
     const thread = await leadThread(pool, normalizeScope({}).scope, lead);
     if (!thread) return { ok: false, error: 'No WhatsApp thread with this lead.' };
     if (a.payload.kind === 'text') {
-      const { sendOnThread } = require('../paymentFlow');
+      const { sendOnThread } = require('../threadSender');
       const r = await sendOnThread({ waNumber: thread.wa_number, contactNumber: thread.contact_number, body: String(a.payload.text), requireWindow: true });
       return r.sent ? { ok: true, local_message_id: r.localMessageId } : { ok: false, error: r.detail || r.reason };
     }

@@ -261,21 +261,18 @@ async function backfillFromWebhookEvents({ sinceDays = 400 } = {}) {
 
 // ── Meta pricing_analytics ──────────────────────────────────────────────────
 
-async function metaToken() {
-  const { rows } = await pool.query(
-    `SELECT access_token_encrypted, status FROM coexistence.meta_ads_config WHERE id = 1`
-  ).catch(() => ({ rows: [] }));
-  const cfg = rows[0];
-  if (!cfg?.access_token_encrypted || cfg.status === 'disconnected') return null;
-  try { return decrypt(cfg.access_token_encrypted) || null; } catch { return null; }
+// The WABA's own WhatsApp access token (a system-user token with
+// whatsapp_business_management) is what can read its pricing_analytics.
+function accountToken(encrypted) {
+  if (!encrypted) return null;
+  try { return decrypt(encrypted) || null; } catch { return null; }
 }
 
 /**
  * Pull one WABA's real cost.
  *
  * ⚠ start/end are UNIX SECONDS. Passing milliseconds lands tens of thousands of
- * years in the future and Meta returns an EMPTY list rather than an error — the
- * same trap the Razorpay ledger sync documented.
+ * years in the future and Meta returns an EMPTY list rather than an error.
  *
  * Meta's lookback is capped at 90 days.
  */
@@ -371,15 +368,18 @@ async function syncPricingForWaba(wabaId, token, { days = 30 } = {}) {
   }
 }
 
-/** Sync every registered WABA. Idles with zero API calls when Meta is not connected. */
+/** Sync every registered WABA, each with its own account's token. Idles with zero API calls when no account has one. */
 async function syncAllPricing({ days = 30 } = {}) {
-  const token = await metaToken();
-  if (!token) return { skipped: 'meta_not_connected' };
   const { rows } = await pool.query(
-    `SELECT DISTINCT waba_id FROM coexistence.whatsapp_accounts WHERE waba_id IS NOT NULL AND is_active`
+    `SELECT DISTINCT ON (waba_id) waba_id, access_token_encrypted
+       FROM coexistence.whatsapp_accounts
+      WHERE waba_id IS NOT NULL AND is_active AND access_token_encrypted IS NOT NULL
+      ORDER BY waba_id, is_default DESC, id`
   );
+  const targets = rows.map(r => ({ wabaId: r.waba_id, token: accountToken(r.access_token_encrypted) })).filter(t => t.token);
+  if (!targets.length) return { skipped: 'no_whatsapp_token' };
   const results = [];
-  for (const r of rows) results.push(await syncPricingForWaba(r.waba_id, token, { days }));
+  for (const t of targets) results.push(await syncPricingForWaba(t.wabaId, t.token, { days }));
   await pool.query(`UPDATE coexistence.message_cost_config SET last_pricing_sync_at = NOW(), updated_at = NOW() WHERE id = 1`).catch(() => {});
   await attributeMessages().catch(() => {});
   return { results };

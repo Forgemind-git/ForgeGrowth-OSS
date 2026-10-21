@@ -5,8 +5,8 @@
 // ForgeGrowth's own, prefixed:
 //
 //   #/social                          Overview
-//   #/social/<inbox|messenger|contacts|automations|comment-analyzer>
-//   #/social/<library|publish|media>  the Content Library hub's three tabs
+//   #/social/<inbox|contacts|automations|comment-analyzer>
+//   #/social/<library|media>          the Content Library hub's two tabs
 //   #/social/settings[/<tab>]         Social settings
 //   #/social/integrations[/<platform>] Settings → Integrations (connect accounts)
 //
@@ -23,7 +23,6 @@ import TokenHealthBanner from './components/TokenHealthBanner.jsx';
 import HandoffPopup from './components/HandoffPopup.jsx';
 import OverviewPage from './pages/OverviewPage.jsx';
 import InboxPage from './pages/InboxPage.jsx';
-import MessengerPage from './pages/MessengerPage.jsx';
 import ContactsPage from './pages/ContactsPage.jsx';
 import AutomationsPage from './pages/AutomationsPage.jsx';
 import LibraryHub from './pages/LibraryHub.jsx';
@@ -61,7 +60,6 @@ export default function SocialSection({ subParts, navigate, user }) {
   if (route.view === 'settings') {
     page = null;   // redirecting to the one Settings (effect above)
   } else if (route.view === 'inbox') page = <InboxPage user={socialUser} />;
-  else if (route.view === 'messenger') page = <MessengerPage onOpenIntegrations={() => navigate('social', 'integrations', 'facebook')} />;
   else if (route.view === 'contacts') page = <ContactsPage user={socialUser} />;
   else if (route.view === 'library') page = <LibraryHub tab={route.libraryTab} onTab={go} user={socialUser} />;
   else if (route.view === 'automations') page = <AutomationsPage user={socialUser} />;

@@ -1,16 +1,12 @@
 import { useState, useEffect } from "react";
-import { Trash2, Inbox, SearchX, Eye, Heart, Play, LayoutGrid, List, ExternalLink, Info, Plus } from "lucide-react";
+import { Inbox, SearchX, Eye, Heart, Play, LayoutGrid, List, ExternalLink, Info } from "lucide-react";
 import { useContentLibrary } from '../hooks/useContentLibrary.js';
-import { api } from '../api.js';
 import { PLATFORMS, PLATFORM_ORDER, SCORE_TIERS, DATE_FILTER_MAP } from '../data/mockData.js';
 import { fmtCompact, fmtNum } from '../data/mockData.js';
 import { C, FONT, T, BTN } from '../constants.js';
 import { PlatformBadge, PageHeader, SearchBar, EmptyState, Tooltip } from '../components/UI.jsx';
 import { SearchableSelect, MultiSelect } from '../components/Dropdown.jsx';
-import { useConfirm } from '../ConfirmDialog.jsx';
-import { showToast } from '../Toast.jsx';
 import PostPreviewModal from '../components/PostPreviewModal.jsx';
-import ComposerModal from '../components/ComposerModal.jsx';
 import { useScope } from '../components/scope/scopeStore.js';
 import DefaultViewButton from '../components/scope/DefaultViewButton.jsx';
 
@@ -35,16 +31,12 @@ const scoreTier = (score) => {
 };
 const engRate = (c) => c.views > 0 ? (c.eng * 100 / c.views) : null;
 const isVideo = (t) => /reel|video|short/i.test(t || "");
-// Facebook doesn't report per-post views — show a dash, not "0".
-const viewsText = (c) => (!c.views && c.platform === "facebook") ? "—" : fmtCompact(c.views);
 const caption = (c) => (c.caption || c.title || "").replace(/\s+/g, " ").trim() || "No caption";
 
 function readView() { try { return localStorage.getItem("fs.library.view") || "grid"; } catch (_) { return "grid"; } }
 function saveView(v) { try { localStorage.setItem("fs.library.view", v); } catch (_) {} }
 
-export default function ContentLibraryPage({ user, onPublished }) {
-  const isAdmin = user?.role === "admin";
-  const [ConfirmDialog, confirm] = useConfirm();
+export default function ContentLibraryPage() {
   const [view, setView] = useState(readView);
   const [search, setSearch] = useState("");
   const [platformFilter, setPlatformFilter] = useState(null);
@@ -58,11 +50,9 @@ export default function ContentLibraryPage({ user, onPublished }) {
   const [sortBy, setSortBy] = useState("date");
   const [page, setPage] = useState(1);
   const [preview, setPreview] = useState(null);
-  const [deletingId, setDeletingId] = useState(null);
-  const [composing, setComposing] = useState(false);
   const limit = view === "grid" ? 24 : 25;
 
-  const { data, loading, refetch } = useContentLibrary({
+  const { data, loading } = useContentLibrary({
     platform: platformFilter, topic: topicFilter, format: formatFilter, dateFilter,
     account: accountFilter.join(","), sortBy, search, page, limit,
   });
@@ -82,27 +72,13 @@ export default function ContentLibraryPage({ user, onPublished }) {
   const setV = (v) => { setView(v); saveView(v); };
   const open = (c) => setPreview({ platform: c.platform, post: { ...c, id: c.externalId } });
 
-  async function deletePost(c) {
-    const name = PLATFORMS[c.platform]?.name || c.platform;
-    if (!await confirm({ title: "Delete this post?", body: `This permanently deletes the post on ${name} and removes it from ForgeGrowth. This can't be undone.`, confirmLabel: "Delete post", danger: true })) return;
-    setDeletingId(c.id);
-    try {
-      const r = await api.deletePost(c.id);
-      showToast(r?.alreadyGone ? `Post was already removed on ${name} — cleared from ForgeGrowth` : `Post deleted from ${name}`, "success");
-      refetch();
-    } catch (e) { showToast(e.message, "error"); }
-    finally { setDeletingId(null); }
-  }
-  const canDelete = (c) => isAdmin && c.platform !== "instagram";   // Instagram has no media-delete API
 
   return (
     <div style={{ fontFamily: FONT }}>
-      {ConfirmDialog}
       <PageHeader title="Content Library" sub={loading && !data ? "Loading…" : `${fmtNum(total)} posts${dateFilter ? ` · ${dateFilter.toLowerCase()}` : " · all time"}`}
         right={<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <SearchableSelect label="Sort" value={sortBy} options={SORTS} onChange={(v) => setSortBy(v || "date")} />
           <ViewToggle view={view} onChange={setV} />
-          <button onClick={() => setComposing(true)} style={BTN.primary}><Plus size={15} strokeWidth={2.4} /> New post</button>
         </div>} />
 
       {/* toolbar */}
@@ -139,10 +115,10 @@ export default function ContentLibraryPage({ user, onPublished }) {
         </div>
       ) : view === "grid" ? (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: 14, opacity: loading ? .6 : 1, transition: "opacity .15s" }}>
-          {posts.map(c => <PostCard key={c.id} c={c} onOpen={() => open(c)} onDelete={canDelete(c) ? () => deletePost(c) : null} deleting={deletingId === c.id} />)}
+          {posts.map(c => <PostCard key={c.id} c={c} onOpen={() => open(c)} />)}
         </div>
       ) : (
-        <PostList posts={posts} onOpen={open} canDelete={canDelete} onDelete={deletePost} deletingId={deletingId} loading={loading} />
+        <PostList posts={posts} onOpen={open} loading={loading} />
       )}
 
       {totalPages > 1 && (
@@ -153,10 +129,6 @@ export default function ContentLibraryPage({ user, onPublished }) {
         </div>
       )}
 
-      {composing && (
-        <ComposerModal isMember={!isAdmin} onClose={() => setComposing(false)}
-          onCreated={() => { setComposing(false); showToast("Post created — follow it in the Publish tab", "success"); onPublished?.(); }} />
-      )}
       {preview && <PostPreviewModal platform={preview.platform} post={preview.post} onClose={() => setPreview(null)} />}
     </div>
   );
@@ -212,24 +184,18 @@ function Thumb({ c, ratio = "4 / 5", radius = 12, size }) {
   );
 }
 
-function PostCard({ c, onOpen, onDelete, deleting }) {
+function PostCard({ c, onOpen }) {
   const tier = scoreTier(c.score);
   const er = engRate(c);
   return (
     <div className="fs-lib-card" onClick={onOpen} role="button" tabIndex={0} onKeyDown={e => e.key === "Enter" && onOpen()}
-      style={{ background: C.raised, borderRadius: 16, padding: 8, cursor: "pointer", display: "flex", flexDirection: "column", gap: 10, position: "relative", opacity: deleting ? .5 : 1 }}>
+      style={{ background: C.raised, borderRadius: 16, padding: 8, cursor: "pointer", display: "flex", flexDirection: "column", gap: 10, position: "relative" }}>
       <div style={{ position: "relative" }}>
         <Thumb c={c} />
         <span style={{ position: "absolute", top: 8, left: 8 }}><PlatformBadge platform={c.platform} size="sm" /></span>
         <span title={`${tier.label} — ${SCORE_INFO}`} style={{ position: "absolute", bottom: 8, left: 8, display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 700, padding: "3px 8px", borderRadius: 8, background: "rgba(0,0,0,.62)", color: "#fff", fontVariantNumeric: "tabular-nums" }}>
           <i style={{ width: 7, height: 7, borderRadius: "50%", background: tier.color === C.textSecondary ? "#bbb" : tier.color }} />Score {c.score}
         </span>
-        {onDelete && (
-          <button className="fs-lib-del" onClick={e => { e.stopPropagation(); onDelete(); }} aria-label="Delete post" title="Delete post"
-            style={{ position: "absolute", bottom: 8, right: 8, width: 30, height: 30, borderRadius: 8, border: "none", background: "rgba(0,0,0,.6)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}>
-            <Trash2 size={14} />
-          </button>
-        )}
       </div>
       <div style={{ padding: "0 4px", display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
         <div style={{ fontSize: 13.5, fontWeight: 600, color: C.text, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", minHeight: 38 }}>{caption(c)}</div>
@@ -237,17 +203,17 @@ function PostCard({ c, onOpen, onDelete, deleting }) {
           {c.accountUsername ? `@${c.accountUsername.replace(/^@/, "")} · ` : ""}{c.type} · {c.date}
         </div>
         <div style={{ display: "flex", gap: 12, alignItems: "center", fontSize: 12.5, color: C.textSecondary, fontVariantNumeric: "tabular-nums", marginTop: 2, paddingBottom: 4 }}>
-          <span title="Views" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Eye size={13} /> {viewsText(c)}</span>
+          <span title="Views" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Eye size={13} /> {fmtCompact(c.views)}</span>
           <span title={`Engagements — ${fmtNum(c.likes || 0)} likes, ${fmtNum(c.comments || 0)} comments, ${fmtNum(c.shares || 0)} shares, ${fmtNum(c.saves || 0)} saves`} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Heart size={13} /> {fmtCompact(c.eng)}</span>
           {er != null && <span title="Engagement rate (engagements ÷ views)" style={{ marginLeft: "auto", fontWeight: 650, color: C.text }}>{er.toFixed(1)}%</span>}
         </div>
       </div>
-      <style>{".fs-lib-card{transition:background .14s}.fs-lib-card:hover{background:var(--fc-surface) !important}.fs-lib-del{opacity:0;transition:opacity .14s}.fs-lib-card:hover .fs-lib-del,.fs-lib-del:focus{opacity:1}"}</style>
+      <style>{".fs-lib-card{transition:background .14s}.fs-lib-card:hover{background:var(--fc-surface) !important}"}</style>
     </div>
   );
 }
 
-function PostList({ posts, onOpen, canDelete, onDelete, deletingId, loading }) {
+function PostList({ posts, onOpen, loading }) {
   const th = { padding: "10px 12px", fontSize: 12, fontWeight: 650, color: C.textMuted, textAlign: "right", whiteSpace: "nowrap" };
   const td = { padding: "10px 12px", fontSize: 13.5, color: C.text, textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
   return (
@@ -263,7 +229,7 @@ function PostList({ posts, onOpen, canDelete, onDelete, deletingId, loading }) {
               const tier = scoreTier(c.score);
               const er = engRate(c);
               return (
-                <tr key={c.id} className="fs-lib-row" onClick={() => onOpen(c)} style={{ cursor: "pointer", boxShadow: `inset 0 1px 0 ${C.surface2}`, opacity: deletingId === c.id ? .5 : 1 }}>
+                <tr key={c.id} className="fs-lib-row" onClick={() => onOpen(c)} style={{ cursor: "pointer", boxShadow: `inset 0 1px 0 ${C.surface2}` }}>
                   <td style={{ padding: "8px 12px 8px 16px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
                       <div style={{ position: "relative" }}>
@@ -276,14 +242,13 @@ function PostList({ posts, onOpen, canDelete, onDelete, deletingId, loading }) {
                       </div>
                     </div>
                   </td>
-                  <td style={td}>{viewsText(c)}</td>
+                  <td style={td}>{fmtCompact(c.views)}</td>
                   <td style={td} title={`${fmtNum(c.likes || 0)} likes · ${fmtNum(c.comments || 0)} comments · ${fmtNum(c.shares || 0)} shares · ${fmtNum(c.saves || 0)} saves`}>{fmtCompact(c.eng)}</td>
                   <td style={td}>{er != null ? `${er.toFixed(1)}%` : "—"}</td>
                   <td style={td}><span title={tier.label} style={{ fontSize: 12.5, fontWeight: 750, padding: "3px 9px", borderRadius: 8, background: tier.bg, color: tier.color }}>{c.score}</span></td>
                   <td style={{ ...td, paddingRight: 12 }}>
                     <span style={{ display: "inline-flex", gap: 4 }}>
                       {c.permalink && <a href={c.permalink} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} aria-label="Open on platform" title="Open on platform" style={{ ...BTN.icon, width: 30, height: 30, background: "transparent" }}><ExternalLink size={14} /></a>}
-                      {canDelete(c) && <button onClick={e => { e.stopPropagation(); onDelete(c); }} aria-label="Delete post" title="Delete post" style={{ ...BTN.icon, width: 30, height: 30, background: "transparent", color: C.errText }}><Trash2 size={14} /></button>}
                     </span>
                   </td>
                 </tr>

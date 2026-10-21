@@ -36,26 +36,6 @@ const shape = (r, extra = {}) => ({
   ...extra,
 });
 
-/**
- * ⚠ A payment template mints a LIVE Razorpay link per recipient. Putting that
- * in a loop that fires every week, unattended, is the re-runnable-money-action
- * trap this codebase already guards against with a unique index elsewhere.
- * Refused outright rather than gated behind a confirmation, because the person
- * who set the series up is not present when it fires.
- */
-async function refusePaymentTemplate(templateId) {
-  if (!templateId) return null;
-  const { rows } = await pool.query(
-    `SELECT id, name, buttons FROM coexistence.message_templates WHERE id = $1`, [templateId],
-  );
-  if (!rows[0]) return null;
-  const { templateHasPaymentButton } = require('../services/paymentFlow');
-  if (templateHasPaymentButton(rows[0])) {
-    return `"${rows[0].name}" carries a payment button, so every run would create a new live payment link for every recipient. Send that one manually instead.`;
-  }
-  return null;
-}
-
 /** Shared validation for create + update. Throws { status, message }. */
 async function validate(b, { partial = false, current = null } = {}) {
   const out = {};
@@ -84,8 +64,6 @@ async function validate(b, { partial = false, current = null } = {}) {
   const effTpl = out.template_id !== undefined ? out.template_id : current?.template_id;
   if (effType === 'template') {
     if (!effTpl) throw Object.assign(new Error('Pick the template this sends.'), { status: 400 });
-    const refusal = await refusePaymentTemplate(effTpl);
-    if (refusal) throw Object.assign(new Error(refusal), { status: 400 });
   }
 
   if (!partial || b.audience !== undefined) out.audience = JSON.stringify(svc.normalizeAudience(b.audience));

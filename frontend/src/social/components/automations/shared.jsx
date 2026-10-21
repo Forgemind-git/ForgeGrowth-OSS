@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, MessageCircle, MessageSquare, MousePointerClick, Reply, AtSign, Link2, ClipboardList, UserPlus } from "lucide-react";
+import { X, MessageCircle, MessageSquare, MousePointerClick, Reply, AtSign, Link2 } from "lucide-react";
 import { C, FONT, LABEL, INPUT, T } from "../../constants.js";
 import { Toggle } from "../UI.jsx";
 
@@ -172,7 +172,7 @@ export function dmSummary(m) {
   return m.text || null;
 }
 
-// ── Templates (ManyChat-style quick starts) ─────────────────
+// ── Template (the one quick start) ──────────────────────────
 // `seed` is merged over a blank rule in RuleEditor (Graph-format fields).
 export const TEMPLATES = [
   {
@@ -184,54 +184,6 @@ export const TEMPLATES = [
       reply_texts: ["Thanks! Please see DMs.", "Sent you a message! Check it out!", "Nice! Check your DMs!"],
       dm_message: { attachment: { type: "template", payload: { template_type: "button", text: "Hey! Thanks for your interest. Here's the link you asked for:", buttons: [{ type: "web_url", title: "Open link", url: "" }] } } },
     },
-  },
-  {
-    id: "comment_followers", Icon: UserPlus,
-    title: "Followers-only link from comments",
-    body: "DM the link to commenters, but only once they follow you.",
-    seed: {
-      name: "Comment → followers-only link", trigger: "comment", keywords: ["link"],
-      reply_texts: ["Sent you a DM!", "Check your DMs!"],
-      // Instagram only lets us check follows after they tap, so the opening message goes first.
-      opening_dm: true, follow_gate: true,
-      dm_message: { attachment: { type: "template", payload: { template_type: "button", text: "Thanks for following! Here's the link:", buttons: [{ type: "web_url", title: "Open link", url: "" }] } } },
-    },
-  },
-  {
-    id: "comment_leads", Icon: ClipboardList,
-    title: "Collect leads from comments",
-    body: "DM commenters, ask for their name and phone, save them under Leads.",
-    seed: {
-      name: "Comment → collect leads", trigger: "comment",
-      reply_texts: ["Thanks! Sent you a DM.", "Check your DMs!"],
-      opening_dm: true,
-      dm_message: { text: "Great, let's get you the details." },
-      collect: [
-        { type: "name", key: "name", label: "Name", prompt: "What's your name?" },
-        { type: "phone", key: "phone", label: "Phone", prompt: "What's the best number to reach you on?" },
-      ],
-    },
-  },
-  {
-    id: "dm_keyword", Icon: MessageSquare,
-    title: "Reply to DM keywords",
-    body: "Answer instantly when someone DMs you a keyword like PRICE.",
-    seed: { name: "DM keyword reply", trigger: "dm", dm_message: { text: "" } },
-  },
-  {
-    id: "dm_followers", Icon: UserPlus,
-    title: "Followers-only link from DMs",
-    body: "Someone DMs a keyword: check they follow, then send the link.",
-    seed: {
-      name: "DM → followers-only link", trigger: "dm", keywords: ["link"], follow_gate: true,
-      dm_message: { attachment: { type: "template", payload: { template_type: "button", text: "Thanks for following! Here it is:", buttons: [{ type: "web_url", title: "Open link", url: "" }] } } },
-    },
-  },
-  {
-    id: "story_reply", Icon: Reply,
-    title: "Reply to story replies",
-    body: "Send a DM to everyone who replies to your stories.",
-    seed: { name: "Story reply", trigger: "story_reply", dm_message: { text: "" } },
   },
 ];
 

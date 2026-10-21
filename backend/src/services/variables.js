@@ -223,20 +223,11 @@ function neededContext(texts) {
 }
 
 async function loadSaleData(leadId) {
-  // Same payment_id dedupe as everything else that reads razorpay_events.
-  // Lazy require — routes/leads.js also requires services at its top level.
-  const { RZP_CAPTURED } = require('../routes/leads');
   const { rows } = await pool.query(
-    `SELECT amount_paise, pay_date, method, kind, custom_fields, product_label, notes FROM (
-       SELECT amount_paise, created_at::date AS pay_date,
-              COALESCE(NULLIF(method,''),'Razorpay') AS method, 'razorpay' AS kind,
-              NULL::jsonb AS custom_fields, NULL::text AS product_label, NULL::text AS notes, created_at AS ord
-         FROM ( ${RZP_CAPTURED('matched_lead_id = $1')} ) rz
-       UNION ALL
-       SELECT amount_paise, payment_date, COALESCE(NULLIF(method,''),'Manual'), 'manual',
-              custom_fields, product_label, notes, created_at
-         FROM coexistence.sales_log WHERE lead_id = $1
-     ) t ORDER BY pay_date DESC NULLS LAST, ord DESC`,
+    `SELECT amount_paise, payment_date AS pay_date, COALESCE(NULLIF(method,''),'Manual') AS method, 'manual' AS kind,
+            custom_fields, product_label, notes
+       FROM coexistence.sales_log WHERE lead_id = $1
+      ORDER BY payment_date DESC NULLS LAST, created_at DESC`,
     [leadId]);
   const last = rows[0] || null;
   const latestCustomRow = rows.find(r => r.custom_fields && Object.keys(r.custom_fields).length);

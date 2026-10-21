@@ -6,19 +6,16 @@ import { PlatformPill, PillTabs } from "./UI.jsx";
 import { LineChart } from "./Charts.jsx";
 import { api } from "../api.js";
 
-// In-app post viewer — opens the ACTUAL post from the platform in a modal via
-// each platform's embed endpoint, so content can be reviewed without leaving
-// ForgeGrowth. Falls back to the stored thumbnail + caption when a platform
-// has no embeddable URL (private post, missing permalink).
+// In-app post viewer — opens the ACTUAL Instagram post in a modal via its
+// embed endpoint, so content can be reviewed without leaving ForgeGrowth.
+// Falls back to the stored thumbnail + caption when there is no embeddable URL
+// (private post, missing permalink).
 //
 // post: { id (external id), permalink, title, caption, thumbnail, date,
 //         views, eng, likes, comments, score }
 function embedUrl(platform, post) {
   const link = post.permalink || "";
   try {
-    if (platform === "youtube" && post.id) {
-      return { url: `https://www.youtube.com/embed/${post.id}`, ratio: "16x9" };
-    }
     if (platform === "instagram") {
       // Canonical embed URL — extract the shortcode and rebuild as
       // `/p|reel|tv/{code}/embed/captioned/`. Requesting `/embed` without the
@@ -26,17 +23,6 @@ function embedUrl(platform, post) {
       // with its login/session redirects) loops → ERR_TOO_MANY_REDIRECTS.
       const m = link.match(/instagram\.com\/(p|reel|tv)\/([A-Za-z0-9_-]+)/);
       if (m) return { url: `https://www.instagram.com/${m[1]}/${m[2]}/embed/captioned/`, ratio: "tall" };
-    }
-    if (platform === "facebook" && link) {
-      return { url: `https://www.facebook.com/plugins/post.php?href=${encodeURIComponent(link)}&width=500&show_text=true`, ratio: "tall" };
-    }
-    if (platform === "threads") {
-      // Same trailing-slash requirement as Instagram (shared infra).
-      const m = link.match(/threads\.(?:net|com)\/(@[^/]+\/post\/[A-Za-z0-9_-]+|t\/[A-Za-z0-9_-]+)/);
-      if (m) return { url: `https://www.threads.net/${m[1]}/embed/`, ratio: "tall" };
-    }
-    if (platform === "linkedin" && post.id && /^urn:li:/.test(String(post.id))) {
-      return { url: `https://www.linkedin.com/embed/feed/update/${post.id}`, ratio: "tall" };
     }
   } catch (_) { /* malformed permalink → fallback card */ }
   return null;
@@ -59,18 +45,18 @@ function openOnPlatformUrl(platform, post) {
   return link || null;
 }
 
-// Instagram & Threads embeds are served from instagram.com/threads.net behind
+// Instagram embeds are served from instagram.com behind
 // login/session redirects. The classic failure is ERR_TOO_MANY_REDIRECTS — but
 // it's triggered by the VIEWER's own instagram.com session cookies, not the
 // embed URL (the canonical /embed/captioned/ URL is already correct). We dodge
 // it by loading these embeds CREDENTIAL-LESS (no cookies sent → instagram.com
-// just serves the public post), so they can auto-load like YouTube. A load
+// just serves the public post), so they can auto-load. A load
 // timeout still falls back to our stored snapshot if the frame never renders.
-const COOKIELESS_EMBED = new Set(["instagram", "threads"]);
+const COOKIELESS_EMBED = new Set(["instagram"]);
 
 // Platforms that are NOT auto-loaded (live embed is opt-in via a button). With
-// the credential-less fix above, Instagram now auto-loads like YouTube/Facebook;
-// nothing is opt-in by default, but the set is kept so a platform can be parked
+// the credential-less fix above, Instagram now auto-loads; nothing is opt-in
+// by default, but the set is kept so a platform can be parked
 // here if its embed ever proves unreliable again.
 const NO_AUTOLOAD = new Set();
 
@@ -172,7 +158,6 @@ export default function PostPreviewModal({ platform, post, onClose }) {
     const t = setTimeout(() => setLoadFailed(true), EMBED_LOAD_TIMEOUT_MS);
     return () => clearTimeout(t);
   }, [showEmbed, frameLoaded]);
-  const isWide = embed?.ratio === "16x9";
   const stats = [
     ["Views", post.views], ["Engagements", post.eng],
     ["Likes", post.likes], ["Comments", post.comments], ["Score", post.score],
@@ -185,7 +170,7 @@ export default function PostPreviewModal({ platform, post, onClose }) {
           `transform: none`, which would undo a translate-based centring. */}
       <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 301, pointerEvents: "none" }}>
       <div style={{
-        width: isWide ? "min(860px, calc(92vw / var(--fg-zoom, 1)))" : "min(560px, calc(92vw / var(--fg-zoom, 1)))",
+        width: "min(560px, calc(92vw / var(--fg-zoom, 1)))",
         maxHeight: "calc(90vh / var(--fg-zoom, 1))", display: "flex", flexDirection: "column", pointerEvents: "auto",
         background: C.card, borderRadius: 24, boxShadow: C.shadowLg,
         fontFamily: FONT, padding: 24, boxSizing: "border-box",
@@ -223,7 +208,7 @@ export default function PostPreviewModal({ platform, post, onClose }) {
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
           {/* Body — the stored snapshot is always reliable; the LIVE platform
               embed is auto-loaded for stable platforms and opt-in for fragile
-              ones (IG/Threads), so an embed redirect-loop can never appear here
+              ones, so an embed redirect-loop can never appear here
               unsolicited. */}
           <div style={{ flexShrink: 0, background: C.surface, borderRadius: 16, overflow: "hidden" }}>
             {showEmbed ? (
@@ -236,7 +221,7 @@ export default function PostPreviewModal({ platform, post, onClose }) {
                 <iframe
                   ref={(el) => {
                     // `credentialless` loads the embed in a fresh, cookie-less
-                    // context so the viewer's instagram.com/threads.net session
+                    // context so the viewer's instagram.com session
                     // can't trigger the login redirect loop. Set via ref because
                     // React doesn't reliably pass the boolean attribute through.
                     if (el && COOKIELESS_EMBED.has(platform)) el.setAttribute("credentialless", "");
@@ -249,7 +234,7 @@ export default function PostPreviewModal({ platform, post, onClose }) {
                   allowFullScreen
                   style={{
                     display: "block", width: "100%", border: "none",
-                    height: isWide ? "min(460px, calc(52vw / var(--fg-zoom, 1)))" : "min(600px, calc(62vh / var(--fg-zoom, 1)))",
+                    height: "min(600px, calc(62vh / var(--fg-zoom, 1)))",
                     opacity: frameLoaded ? 1 : 0, transition: "opacity .2s",
                   }}
                 />

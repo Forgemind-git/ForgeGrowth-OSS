@@ -1,98 +1,14 @@
-// Ads, automation flow runs and broadcasts.
+// Automation flow runs and broadcasts.
 
-const { toIst, istDate, dateOnly, round, key10 } = require('../format');
+const { toIst, key10 } = require('../format');
 const { KEY10 } = require('../sql');
 const { leadScopeSql, isAll } = require('../scope');
-const { err, binder, pageArgs, paginate, windowArgs, leadIdentity, strArr, idList } = require('./common');
+const { err, binder, pageArgs, paginate, windowArgs, leadIdentity } = require('./common');
 const { nodeTitle } = require('./leads');
-
-const GST = 1.18;
-
-const getAdPerformance = {
-  key: 'get_ad_performance',
-  category: 'Marketing',
-  kind: 'read',
-  title: 'Ad performance',
-  description: 'Meta ad results in a window, per ad: campaign, ad set, status, spend (pre-GST, from Meta) and spend_incl_gst (×1.18 — use this when discussing cost), impressions, clicks, click-to-WhatsApp conversations started (Meta\'s count), leads attributed (distinct in-scope leads whose first click came from the ad), and cost per attributed lead incl. GST. Revenue per ad is NOT attributable here; never claim it.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      from: { type: 'string', description: 'IST date. Default and floor: the scope lookback.' },
-      to: { type: 'string', description: 'IST date, inclusive.' },
-      ad_ids: { type: 'array', items: { type: 'string' } },
-    },
-    additionalProperties: false,
-  },
-  async handler(input, ctx) {
-    const { pool, scope } = ctx;
-    const win = windowArgs({ since: input.from, until: input.to }, ctx);
-    if (win.error) return win;
-    const adIds = strArr(input.ad_ids);
-    const fromDate = istDate(win.since);
-    const toDate = istDate(win.until);
-    const { params, add } = binder();
-    const { rows: daily } = await pool.query(
-      `SELECT d.ad_external_id, SUM(d.spend)::numeric AS spend, SUM(d.impressions)::bigint AS impressions,
-              SUM(d.clicks)::bigint AS clicks, SUM(d.leads)::int AS conversations, MIN(d.stat_date) AS first_day, MAX(d.stat_date) AS last_day
-         FROM coexistence.ad_daily_stats d
-        WHERE d.stat_date >= ${add(fromDate)}::date AND d.stat_date <= ${add(toDate)}::date
-          ${adIds.length ? `AND d.ad_external_id = ANY(${add(adIds)}::text[])` : ''}
-        GROUP BY d.ad_external_id`, params);
-
-    const b = binder();
-    const { rows: attributed } = await pool.query(
-      `SELECT r.source_id, COUNT(DISTINCT l.id)::int AS leads
-         FROM coexistence.ctwa_referrals r
-         JOIN coexistence.leads l ON l.id = r.lead_id OR ${KEY10('l.whatsapp_number')} = ${KEY10('r.contact_number')}
-        WHERE r.source_type = 'ad' AND r.clicked_at >= ${b.add(win.since)} AND r.clicked_at < ${b.add(win.until)}
-          ${adIds.length ? `AND r.source_id = ANY(${b.add(adIds)}::text[])` : ''}
-          ${leadScopeSql(scope, b.add)}
-        GROUP BY r.source_id`, b.params);
-    const attrBy = new Map(attributed.map(a => [a.source_id, a.leads]));
-    const ids = [...new Set([...daily.map(d => d.ad_external_id), ...attributed.map(a => a.source_id)])];
-    const { rows: meta } = await pool.query(
-      `SELECT ca.ad_external_id, ca.name, ca.status, ca.adset_name, ca.campaign_external_id, cmp.name AS campaign_name
-         FROM coexistence.campaign_ads ca LEFT JOIN coexistence.campaigns cmp ON cmp.external_id = ca.campaign_external_id
-        WHERE ca.ad_external_id = ANY($1::text[])`, [ids]);
-    const metaBy = new Map(meta.map(m => [m.ad_external_id, m]));
-    const ads = ids.map(id => {
-      const d = daily.find(x => x.ad_external_id === id) || {};
-      const m = metaBy.get(id) || {};
-      const spend = d.spend == null ? null : Number(d.spend);
-      const inclGst = spend == null ? null : round(spend * GST, 2);
-      const leads = attrBy.get(id) || 0;
-      return {
-        ad_id: id, ad_name: m.name || null, status: m.status || null, ad_set: m.adset_name || null,
-        campaign_id: m.campaign_external_id || null, campaign_name: m.campaign_name || null,
-        spend: spend == null ? null : round(spend, 2), spend_incl_gst: inclGst,
-        impressions: d.impressions == null ? null : Number(d.impressions), clicks: d.clicks == null ? null : Number(d.clicks),
-        ctwa_conversations_started: d.conversations ?? null,
-        leads_attributed: leads,
-        cost_per_attributed_lead_incl_gst: inclGst != null && leads ? round(inclGst / leads, 2) : null,
-        spend_days: d.first_day ? { first: dateOnly(d.first_day), last: dateOnly(d.last_day) } : null,
-      };
-    }).sort((a, b2) => (b2.spend_incl_gst || 0) - (a.spend_incl_gst || 0));
-    const totalSpend = ads.reduce((s, a) => s + (a.spend || 0), 0);
-    return {
-      window: { from: fromDate, to: toDate, clamped_to_lookback: win.clamped },
-      totals: {
-        spend: round(totalSpend, 2), spend_incl_gst: round(totalSpend * GST, 2),
-        ctwa_conversations_started: ads.reduce((s, a) => s + (a.ctwa_conversations_started || 0), 0),
-        leads_attributed: ads.reduce((s, a) => s + a.leads_attributed, 0),
-      },
-      ads,
-      notes: [
-        'spend is pre-GST as reported by Meta; spend_incl_gst = spend × 1.18.',
-        'Daily spend is synced for a rolling 45 days; older windows may show null spend.',
-        'Revenue per ad is not attributable in this workspace.',
-      ],
-    };
-  },
-};
 
 const getFlowRuns = {
   key: 'get_flow_runs',
-  category: 'Marketing',
+  category: 'Automations',
   kind: 'read',
   title: 'Automation flow runs',
   description: 'Where in-scope leads went and dropped in WhatsApp automations: per flow, runs started, completed, still waiting (and on which node), errors, reply timeouts and no-match replies, and the nodes where leads most often stopped. Pass flow_id for one flow and its per-lead runs.',
@@ -167,7 +83,7 @@ const getFlowRuns = {
 
 const getBroadcastResults = {
   key: 'get_broadcast_results',
-  category: 'Marketing',
+  category: 'Automations',
   kind: 'read',
   title: 'Broadcast results',
   description: 'Broadcast campaigns sent in the window: template, recipients, delivered / read / failed (from WhatsApp receipts), and how many replied within 72 hours. Pass campaign_id for per-lead results (in-scope leads only). Image and template messages often have no stored text — results are counted by message row, never by matching text.',
@@ -242,4 +158,4 @@ const getBroadcastResults = {
   },
 };
 
-module.exports = { tools: [getAdPerformance, getFlowRuns, getBroadcastResults], GST, idList };
+module.exports = { tools: [getFlowRuns, getBroadcastResults] };

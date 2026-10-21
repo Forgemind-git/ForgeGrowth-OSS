@@ -63,7 +63,7 @@ details; nothing assumes the bundled containers.
 > **`.env` is part of your backup.** `POSTGRES_PASSWORD` is applied only when Postgres first creates
 > its data directory, so a regenerated `.env` cannot open an existing database — the symptom is an
 > authentication loop that appears to blame the network. `FORGECRM_ENCRYPTION_KEY` is the only thing
-> that decrypts stored Meta, Google and payment credentials; lose it and they must all be re-entered.
+> that decrypts stored Meta, Google and Instagram credentials; lose it and they must all be re-entered.
 > A database backup without the `.env` that goes with it is half a backup.
 
 ---

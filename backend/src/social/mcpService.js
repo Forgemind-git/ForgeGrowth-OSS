@@ -5,7 +5,7 @@
 // HARD RULE: every read here is a pure DB query — ZERO outbound Graph/API calls
 // (no revalidate kicks, no testConnection), so an external MCP client can never
 // burn the platforms' rate budgets. The only outbound calls live behind the
-// write capabilities (engage / publish_create), which are OFF by default and go
+// write capability (engage), which is OFF by default and goes
 // through the same rate-gated module functions the UI uses.
 
 const crypto = require('crypto');
@@ -14,19 +14,15 @@ const syncService = require('./syncService');
 const accounts = require('./accounts');
 const mockService = require('./mockService');
 const tokenService = require('./tokenService');
-const publishService = require('./publishService');
 const instagram = require('./instagram');
-const facebook = require('./facebook');
-const youtube = require('./youtube');
-const threads = require('./threads');
 const reportData = require('./reportData');
 const insightsService = require('./insightsService');
 
-const CAPABILITY_KEYS = ['analytics', 'insights', 'content', 'reports', 'inbox', 'contacts', 'publishing', 'engage', 'publish_create'];
+const CAPABILITY_KEYS = ['analytics', 'insights', 'content', 'reports', 'inbox', 'contacts', 'engage'];
 // Reads default ON, writes default OFF — admin flips them in Settings → MCP Access.
 const DEFAULT_CAPABILITIES = {
-  analytics: true, insights: true, content: true, reports: true, inbox: true, contacts: true, publishing: true,
-  engage: false, publish_create: false,
+  analytics: true, insights: true, content: true, reports: true, inbox: true, contacts: true,
+  engage: false,
 };
 
 /* --------------------------- tables + settings --------------------------- */
@@ -40,10 +36,13 @@ function hashApiKey(plain) {
 async function loadSettings() {
   const { rows } = await pool.query('SELECT master_enabled, capabilities FROM mcp_settings WHERE id = 1');
   const r = rows[0] || { master_enabled: false, capabilities: {} };
-  return {
-    masterEnabled: !!r.master_enabled,
-    capabilities: { ...DEFAULT_CAPABILITIES, ...(r.capabilities || {}) },
-  };
+  // Only known keys survive: a stored toggle for a removed capability
+  // (publishing / publish_create) must not reappear in the settings.
+  const capabilities = { ...DEFAULT_CAPABILITIES };
+  for (const k of CAPABILITY_KEYS) {
+    if (r.capabilities && r.capabilities[k] !== undefined) capabilities[k] = r.capabilities[k];
+  }
+  return { masterEnabled: !!r.master_enabled, capabilities };
 }
 
 // Validate a raw bearer key. Returns { keyId, capabilities } or throws
@@ -77,15 +76,9 @@ async function resolveScope(platform, accountId) {
   const id = String(accountId || '').trim();
   if (!p || !id || !accounts.PLATFORMS.includes(p)) return null;
   let label = null, username = null;
-  if (p === 'instagram') {
-    const { rows } = await pool.query(
-      'SELECT name, username FROM instagram_accounts WHERE account_id = $1', [id]);
-    if (rows[0]) { label = rows[0].name; username = rows[0].username; }
-  } else {
-    const { rows } = await pool.query(
-      'SELECT label, username FROM social_accounts WHERE platform = $1 AND account_key = $2', [p, id]);
-    if (rows[0]) { label = rows[0].label; username = rows[0].username; }
-  }
+  const { rows } = await pool.query(
+    'SELECT name, username FROM instagram_accounts WHERE account_id = $1', [id]);
+  if (rows[0]) { label = rows[0].name; username = rows[0].username; }
   return { platform: p, accountId: id, label: label || username || id, username: username || null };
 }
 
@@ -168,9 +161,9 @@ async function getOverview(period = '30D', scope = null) {
   if (!snapshots.length) {
     // No snapshot for this period — fall back to the latest of any period,
     // clearly flagged (numbers belong to that other period, not scaled).
-    const params = [];
-    let where = '';
-    if (scope) { params.push(scope.platform, scope.accountId); where = 'WHERE platform = $1 AND account_key = $2'; }
+    const params = [accounts.PLATFORMS];
+    let where = 'WHERE platform = ANY($1)';
+    if (scope) { params.push(scope.platform, scope.accountId); where += ' AND platform = $2 AND account_key = $3'; }
     const { rows } = await pool.query(`
       SELECT DISTINCT ON (platform) platform, data, fetched_at, period AS snap_period
         FROM sync_snapshots ${where} ORDER BY platform, fetched_at DESC`, params);
@@ -297,6 +290,7 @@ async function getAudienceInsights(key = null, scope = null) {
     const parts = r.key.split(':'); // audience_cache:<platform>:<account>
     const platform = parts[1] || null;
     const account = parts[2] || null;
+    if (!accounts.PLATFORMS.includes(platform)) continue;   // cache left by a removed platform
     if (key && platform !== key) continue;
     // Scoped: only this account's cache row. The `:active` / `:primary` aliases
     // hold whichever account the dashboard last looked at, so they're excluded.
@@ -333,7 +327,7 @@ async function generateReport({ platforms, from, to } = {}, scope = null) {
   const keys = scope
     ? [scopedPlatform(scope, Array.isArray(platforms) && platforms.length === 1 ? platforms[0] : null)]
     : ((platforms && (Array.isArray(platforms) ? platforms.length : String(platforms).trim()))
-        ? platforms : reportData.ALLOWED.filter(k => k !== 'linkedin'));
+        ? platforms : reportData.ALLOWED);
   const range = _defaultRange(from, to);
   const out = await reportData.generateReport({
     platforms: keys, from: range.from, to: range.to,
@@ -352,7 +346,7 @@ const POST_SORTS = {
 async function listPosts({ platform, q, days, sortBy = 'date', limit = 50 } = {}, scope = null) {
   limit = Math.max(1, Math.min(parseInt(limit, 10) || 50, 200));
   platform = scopedPlatform(scope, platform);
-  const conds = [], params = [];
+  const conds = ['pl.key = ANY($1)'], params = [accounts.PLATFORMS];
   if (platform) { params.push(platform); conds.push(`pl.key = $${params.length}`); }
   if (scope) { params.push(scope.accountId); conds.push(`p.account_key = $${params.length}`); }
   if (q) { params.push(`%${q}%`); conds.push(`(p.title ILIKE $${params.length} OR p.caption ILIKE $${params.length} OR p.topic ILIKE $${params.length})`); }
@@ -365,14 +359,13 @@ async function listPosts({ platform, q, days, sortBy = 'date', limit = 50 } = {}
   params.push(limit);
   const { rows } = await pool.query(
     `SELECT p.id, pl.key AS "platform", p.external_id AS "externalId",
-            COALESCE(ia.username, ia.name, sa.username, sa.label) AS "accountUsername",
+            COALESCE(ia.username, ia.name) AS "accountUsername",
             p.title, p.caption, p.type, p.topic, p.date, p.permalink,
             p.views, p.engagements, p.likes, p.comments, p.shares, p.saves, p.clicks, p.score
        FROM posts p
        JOIN platforms pl ON pl.id = p.platform_id
        LEFT JOIN instagram_accounts ia ON pl.key = 'instagram' AND ia.account_id = p.account_key
-       LEFT JOIN social_accounts sa ON sa.platform = pl.key AND sa.account_key = p.account_key
-      ${conds.length ? 'WHERE ' + conds.join(' AND ') : ''}
+      WHERE ${conds.join(' AND ')}
       ORDER BY ${POST_SORTS[sortBy] || POST_SORTS.date}
       LIMIT $${params.length}`, params);
   return { posts: rows, total: rows.length, sortBy: POST_SORTS[sortBy] ? sortBy : 'date', ...scopeStamp(scope) };
@@ -420,7 +413,7 @@ async function listMessages({ account, peer, q, limit = 100 } = {}, scope = null
   return { messages: rows, total: rows.length, platform: 'instagram' };
 }
 
-// Comments across the four live platforms, normalized to one shape.
+// Instagram comments, normalized to one shape.
 async function listComments({ platform = 'instagram', account, q, limit = 100 } = {}, scope = null) {
   limit = Math.max(1, Math.min(parseInt(limit, 10) || 100, 500));
   platform = scopedPlatform(scope, platform);
@@ -441,47 +434,8 @@ async function listComments({ platform = 'instagram', account, q, limit = 100 } 
               AND p.platform_id = (SELECT id FROM platforms WHERE key = 'instagram' LIMIT 1)
             WHERE ${conds.join(' AND ')}
             ORDER BY c.ts DESC NULLS LAST, c.id DESC LIMIT $${params.length}`;
-  } else if (platform === 'facebook') {
-    const conds = ['TRUE'];
-    if (q) { params.push(`%${q}%`); conds.push(`(c.message ILIKE $${params.length} OR c.from_name ILIKE $${params.length})`); }
-    params.push(limit);
-    sql = `SELECT 'facebook' AS platform, c.id, c.comment_id AS "commentId", c.post_id AS "postId",
-                  c.parent_id AS "parentId", c.from_name AS "author", c.message AS text,
-                  c.like_count AS "likeCount", c.ts,
-                  COALESCE(NULLIF(p.caption,''), p.title) AS "postCaption", p.permalink AS "postPermalink", p.date AS "postDate"
-             FROM facebook_comments c
-             LEFT JOIN posts p ON p.external_id = c.post_id
-              AND p.platform_id = (SELECT id FROM platforms WHERE key = 'facebook' LIMIT 1)
-            WHERE ${conds.join(' AND ')}
-            ORDER BY c.ts DESC NULLS LAST, c.id DESC LIMIT $${params.length}`;
-  } else if (platform === 'youtube') {
-    const conds = ['TRUE'];
-    if (q) { params.push(`%${q}%`); conds.push(`(c.text ILIKE $${params.length} OR c.author_name ILIKE $${params.length})`); }
-    params.push(limit);
-    sql = `SELECT 'youtube' AS platform, c.id, c.comment_id AS "commentId", c.video_id AS "postId",
-                  c.parent_id AS "parentId", c.author_name AS "author", c.text,
-                  c.like_count AS "likeCount", c.ts,
-                  COALESCE(NULLIF(p.title,''), p.caption) AS "postCaption", p.permalink AS "postPermalink", p.date AS "postDate"
-             FROM youtube_comments c
-             LEFT JOIN posts p ON p.external_id = c.video_id
-              AND p.platform_id = (SELECT id FROM platforms WHERE key = 'youtube' LIMIT 1)
-            WHERE ${conds.join(' AND ')}
-            ORDER BY c.ts DESC NULLS LAST, c.id DESC LIMIT $${params.length}`;
-  } else if (platform === 'threads') {
-    const conds = ['TRUE'];
-    if (q) { params.push(`%${q}%`); conds.push(`(c.text ILIKE $${params.length} OR c.author_username ILIKE $${params.length})`); }
-    params.push(limit);
-    sql = `SELECT 'threads' AS platform, c.id, c.comment_id AS "commentId", c.thread_id AS "postId",
-                  c.parent_id AS "parentId", c.author_username AS "author", c.text,
-                  NULL::int AS "likeCount", c.ts,
-                  COALESCE(NULLIF(p.caption,''), p.title) AS "postCaption", p.permalink AS "postPermalink", p.date AS "postDate"
-             FROM threads_comments c
-             LEFT JOIN posts p ON p.external_id = c.thread_id
-              AND p.platform_id = (SELECT id FROM platforms WHERE key = 'threads' LIMIT 1)
-            WHERE ${conds.join(' AND ')}
-            ORDER BY c.ts DESC NULLS LAST, c.id DESC LIMIT $${params.length}`;
   } else {
-    const e = new Error(`Comments are available for instagram, facebook, youtube, threads — not '${platform}'`);
+    const e = new Error(`Comments are available for instagram only — not '${platform}'`);
     e.status = 400; throw e;
   }
   const { rows } = await pool.query(sql, params);
@@ -529,55 +483,21 @@ async function listTags() {
   return { tags: tags.rows, categories: categories.rows };
 }
 
-/* ------------------------------ publishing ------------------------------ */
+/* ------------------------------- accounts ------------------------------- */
 
-async function listPublishJobs({ status, platform, limit = 100 } = {}, scope = null) {
-  limit = Math.max(1, Math.min(parseInt(limit, 10) || 100, 500));
-  platform = scopedPlatform(scope, platform);
-  const where = [], params = [];
-  if (status) { params.push(status); where.push(`status = $${params.length}`); }
-  if (platform) { params.push(platform); where.push(`platform = $${params.length}`); }
-  if (scope) { params.push(scope.accountId); where.push(`account_id = $${params.length}`); }
-  params.push(limit);
-  const { rows } = await pool.query(
-    `SELECT id, platform, account_id AS "accountId", account_label AS "accountLabel",
-            post_type AS "postType", caption, schedule_type AS "scheduleType",
-            scheduled_at AS "scheduledAt", status, attempts, last_error AS "error",
-            external_post_id AS "externalPostId", simulated,
-            created_by AS "createdBy", created_at AS "createdAt", published_at AS "publishedAt"
-       FROM publish_jobs
-      ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-      ORDER BY created_at DESC LIMIT $${params.length}`, params);
-  return { jobs: rows, total: rows.length, ...scopeStamp(scope) };
-}
-
-// Connected accounts across all platforms — pure DB (instagram_accounts +
-// social_accounts), no cached-status probes. NOTE: the user-chosen primary is
-// stored in app_settings (`primary_account:<platform>`), NOT as a column on
-// social_accounts — resolve it via the accounts module, never SELECT is_primary.
+// Connected Instagram accounts — pure DB, no cached-status probes. NOTE: the
+// user-chosen primary is stored in app_settings (`primary_account:<platform>`) —
+// resolve it via the accounts module.
 async function listConnectedAccounts(scope = null) {
-  const [ig, sa] = await Promise.all([
-    pool.query(
-      `SELECT account_id AS "accountId", name, username, (token IS NOT NULL) AS "canPublish"
-         FROM instagram_accounts
-        WHERE NOT COALESCE(hidden,false) AND (name IS NOT NULL OR username IS NOT NULL)
-        ORDER BY name NULLS LAST`),
-    pool.query(
-      `SELECT platform, account_key AS "accountId", label, username
-         FROM social_accounts ORDER BY platform, label NULLS LAST`),
-  ]);
-  // Resolve the primary account per platform from app_settings.
-  const idsByPlatform = { instagram: ig.rows.map(r => r.accountId) };
-  for (const r of sa.rows) (idsByPlatform[r.platform] = idsByPlatform[r.platform] || []).push(r.accountId);
-  const primary = {};
-  for (const platform of Object.keys(idsByPlatform)) {
-    try { primary[platform] = await accounts.resolvePrimaryId(platform, idsByPlatform[platform]); }
-    catch { primary[platform] = null; }
-  }
-  const all = [
-    ...ig.rows.map(r => ({ platform: 'instagram', accountId: r.accountId, label: r.name || (r.username ? '@' + r.username : r.accountId), username: r.username, canPublish: r.canPublish, isPrimary: r.accountId === primary.instagram })),
-    ...sa.rows.map(r => ({ platform: r.platform, accountId: r.accountId, label: r.label || r.username || r.accountId, username: r.username, isPrimary: r.accountId === primary[r.platform] })),
-  ];
+  const ig = await pool.query(
+    `SELECT account_id AS "accountId", name, username, (token IS NOT NULL) AS "canPublish"
+       FROM instagram_accounts
+      WHERE NOT COALESCE(hidden,false) AND (name IS NOT NULL OR username IS NOT NULL)
+      ORDER BY name NULLS LAST`);
+  let primary = null;
+  try { primary = await accounts.resolvePrimaryId('instagram', ig.rows.map(r => r.accountId)); }
+  catch { primary = null; }
+  const all = ig.rows.map(r => ({ platform: 'instagram', accountId: r.accountId, label: r.name || (r.username ? '@' + r.username : r.accountId), username: r.username, canPublish: r.canPublish, isPrimary: r.accountId === primary }));
   // Scoped keys see exactly the one account they are locked to — the rest of the
   // workspace's accounts are not disclosed, not even by name.
   const visible = scope
@@ -603,7 +523,7 @@ function getTokenHealth(scope = null) {
 
 /* ------------------------- writes (gated, off by default) ---------------- */
 
-// Reply to a comment on any of the four live platforms. Goes through the same
+// Reply to an Instagram comment. Goes through the same
 // rate-gated module functions the Inbox uses; kicks a background re-sync so the
 // reply shows up in the stored data.
 async function replyToComment({ platform, commentId, message, accountId }, scope = null) {
@@ -619,23 +539,12 @@ async function replyToComment({ platform, commentId, message, accountId }, scope
       if (!rows[0]) denied(`Comment '${commentId}' does not belong to ${scopeLabel(scope)} — this key cannot reply to it.`);
     }
   }
-  let r;
-  if (platform === 'instagram') {
-    r = await instagram.replyToComment({ commentId, accountId: accountId || null, message });
-    instagram.syncComments({ force: true }).catch(() => {});
-  } else if (platform === 'facebook') {
-    r = await facebook.replyToComment({ commentId, message });
-    facebook.syncComments({ force: true }).catch(() => {});
-  } else if (platform === 'youtube') {
-    r = await youtube.replyToComment({ parentId: commentId, text: message });
-    youtube.syncComments({ force: true }).catch(() => {});
-  } else if (platform === 'threads') {
-    r = await threads.replyToComment({ commentId, text: message });
-    threads.syncComments({ force: true }).catch(() => {});
-  } else {
-    const e = new Error(`Replies are supported on instagram, facebook, youtube, threads — not '${platform}'`);
+  if (platform && platform !== 'instagram') {
+    const e = new Error(`Replies are supported on instagram only — not '${platform}'`);
     e.status = 400; throw e;
   }
+  const r = await instagram.replyToComment({ commentId, accountId: accountId || null, message });
+  instagram.syncComments({ force: true }).catch(() => {});
   return { ok: true, ...r };
 }
 
@@ -648,74 +557,6 @@ function sendInstagramDm({ accountId, recipientId, text }, scope = null) {
     const e = new Error('accountId, recipientId and text are required'); e.status = 400; throw e;
   }
   return instagram.sendDirectMessage({ accountId, recipientId, text });
-}
-
-// Create a publish job — same flow as POST /api/publish/jobs (media snapshot →
-// validate → queued insert → fire). created_by is stamped 'MCP'.
-async function createPost(b = {}, scope = null) {
-  if (scope) b = { ...b, platform: scopedPlatform(scope, b.platform), accountId: scopedAccount(scope, b.accountId) };
-  let media = [];
-  const ids = Array.isArray(b.mediaIds) ? b.mediaIds.filter(n => Number.isFinite(Number(n))) : [];
-  if (ids.length) {
-    const { rows } = await pool.query(
-      'SELECT id, title, cover_url, cover_type, files FROM media WHERE id = ANY($1::bigint[])', [ids]);
-    const byId = new Map(rows.map(r => [String(r.id), r]));
-    media = ids.map(id => byId.get(String(id))).filter(Boolean).map(r => {
-      const first = Array.isArray(r.files) && r.files[0] ? r.files[0] : null;
-      return {
-        mediaId: r.id,
-        url: first?.url || r.cover_url,
-        name: first?.name || r.title,
-        mime: first?.mime || (r.cover_type === 'video' ? 'video/*' : 'image/*'),
-      };
-    });
-  }
-  const err = publishService.validatePublishJob(b, media);
-  if (err) { const e = new Error(err); e.status = 400; throw e; }
-  if (b.platform === 'instagram') {
-    const { rows: acct } = await pool.query(
-      'SELECT (token IS NOT NULL) AS connected, name, username FROM instagram_accounts WHERE account_id = $1', [b.accountId]);
-    if (!acct[0] || !acct[0].connected) {
-      const e = new Error('This Instagram account is not OAuth-connected for publishing. Connect it from Settings → Integrations first.');
-      e.status = 400; throw e;
-    }
-    if (!b.accountLabel) b.accountLabel = acct[0].name || (acct[0].username ? '@' + acct[0].username : b.accountId);
-  }
-  const scheduleType = b.scheduleType === 'scheduled' ? 'scheduled' : 'immediate';
-  if (scheduleType === 'scheduled' && !(new Date(b.scheduledAt) > new Date())) {
-    const e = new Error('scheduledAt must be a valid future ISO timestamp'); e.status = 400; throw e;
-  }
-  const scheduledAt = scheduleType === 'scheduled' ? new Date(b.scheduledAt).toISOString() : new Date().toISOString();
-  const { rows } = await pool.query(
-    `INSERT INTO publish_jobs
-       (platform, account_id, account_label, post_type, caption, media, details,
-        schedule_type, scheduled_at, status, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'queued','MCP')
-     RETURNING id`,
-    [b.platform, b.accountId || null, b.accountLabel || null, b.postType,
-     (b.caption || b.details?.caption || b.details?.text || null),
-     JSON.stringify(media), JSON.stringify(b.details || {}),
-     scheduleType, scheduledAt]);
-  const id = rows[0].id;
-  if (scheduleType === 'immediate') publishService.fireSoon(id);
-  return { ok: true, id, scheduleType, scheduledAt };
-}
-
-async function cancelPublishJob(id, scope = null) {
-  // The account predicate is part of the UPDATE, so a scoped key cannot cancel
-  // another account's queued post even by guessing its job id.
-  const params = [id];
-  let acctClause = '';
-  if (scope) { params.push(scope.accountId); acctClause = ` AND account_id = $${params.length}`; }
-  const { rows } = await pool.query(
-    `UPDATE publish_jobs SET status='canceled' WHERE id=$1 AND status='queued'${acctClause} RETURNING id`, params);
-  if (!rows[0]) {
-    const e = new Error(scope
-      ? `Job ${id} is not a queued post belonging to ${scopeLabel(scope)}.`
-      : 'Only queued jobs can be canceled');
-    e.status = 409; throw e;
-  }
-  return { ok: true, id: rows[0].id };
 }
 
 /* ------------------------------- insights ------------------------------ */
@@ -742,6 +583,6 @@ module.exports = {
   listPosts, listMedia,
   listMessages, listComments,
   listContacts, listTags,
-  listPublishJobs, listConnectedAccounts, getTokenHealth,
-  replyToComment, sendInstagramDm, createPost, cancelPublishJob,
+  listConnectedAccounts, getTokenHealth,
+  replyToComment, sendInstagramDm,
 };

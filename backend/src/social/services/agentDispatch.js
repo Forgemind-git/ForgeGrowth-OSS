@@ -60,9 +60,9 @@ function triggerMatches(agent, text) {
 
 async function findActiveAgent({ platform, accountId, channel }) {
   // channel: 'dm' (reply_dms) or 'comment' (reply_comments). Account match is
-  // strict for IG/Threads (multi-account); platform-only for FB/YT.
+  // strict (Instagram is multi-account).
   const col = channel === 'dm' ? 'reply_dms' : 'reply_comments';
-  const matchAccount = (platform === 'instagram' || platform === 'threads') && accountId;
+  const matchAccount = platform === 'instagram' && accountId;
   const params = [platform];
   let sql = `SELECT * FROM agents WHERE is_active = TRUE AND status = 'active' AND platform = $1 AND ${col} = TRUE`;
   if (matchAccount) { params.push(accountId); sql += ` AND (account_id = $2 OR account_id IS NULL)`; }
@@ -225,16 +225,13 @@ async function onInstagramDm({ accountId, peerId, text, attachments = null }) {
 
 /* ---------------------------- comments ------------------------------- */
 
-// Per-platform candidate query: fresh top-level comments not authored by us,
+// Candidate query: fresh top-level comments not authored by us,
 // with no reply under them, not already handled by an agent run.
 const COMMENT_SOURCES = {
   instagram: {
     table: 'instagram_comments', idCol: 'comment_id', textCol: 'text', tsCol: 'ts',
     accountCol: 'account_id', authorCol: 'from_id',
   },
-  facebook: { table: 'facebook_comments', idCol: 'comment_id', textCol: 'message', tsCol: 'ts', accountCol: null, authorCol: 'from_id' },
-  youtube: { table: 'youtube_comments', idCol: 'comment_id', textCol: 'text', tsCol: 'ts', accountCol: null, authorCol: 'author_channel_id' },
-  threads: { table: 'threads_comments', idCol: 'comment_id', textCol: 'text', tsCol: 'ts', accountCol: 'account_key', authorCol: null },
 };
 
 async function candidateComments({ platform, agent, sinceFloor, limit }) {
@@ -243,7 +240,7 @@ async function candidateComments({ platform, agent, sinceFloor, limit }) {
   const params = [];
   let where = `parent_id IS NULL AND ${src.textCol} IS NOT NULL AND ${src.textCol} <> ''`;
   params.push(sinceFloor); where += ` AND ${src.tsCol} >= $${params.length}`;
-  if (src.accountCol && (platform === 'instagram' || platform === 'threads') && agent.account_id) {
+  if (src.accountCol && agent.account_id) {
     params.push(agent.account_id); where += ` AND ${src.accountCol} = $${params.length}`;
   }
   // Don't reply to our own comments (best-effort).
@@ -263,7 +260,7 @@ async function candidateComments({ platform, agent, sinceFloor, limit }) {
   return rows;
 }
 
-// Sweep all four platforms for active comment-agents. Capped per call so a
+// Sweep Instagram comments for active comment-agents. Capped per call so a
 // backlog never produces a burst of replies.
 async function sweepComments() {
   try {

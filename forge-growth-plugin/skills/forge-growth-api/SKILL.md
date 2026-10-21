@@ -3,16 +3,15 @@ name: forge-growth-api
 description: >-
   How to reach Forge Growth features that have no dedicated MCP tool, using the
   forgechat_request proxy — contacts, team members, follow-ups, funnel config,
-  sales log, message costs, repeating broadcasts, click-to-WhatsApp, conversion
-  API and the product list. Use when a Forge Growth task has no matching tool, when
+  sales, message costs, repeating broadcasts and the product list. Use when a Forge Growth task has no matching tool, when
   forgechat_request returns 403, or when reading money/revenue figures out of Forge
   Growth. Carries the invariants that make those numbers wrong if ignored.
 ---
 
 # Reaching Forge Growth beyond the dedicated tools
 
-Most of Forge Growth has a purpose-built tool — check for one first (Social, Marketing,
-Sales and the Sales Log, Payments trend, funnel and leads all have them now). The rest is
+Most of Forge Growth has a purpose-built tool — check for one first (Social, Sales,
+products, funnel and leads all have them). The rest is
 reached with **`forgechat_request`**. It calls the app's own internal API
 as an admin, so all the normal validation, permissions and side effects still apply.
 
@@ -37,35 +36,25 @@ means the area is off, not that the path is wrong.
 |---|---|
 | Contacts & tags | `/contacts` `/tags` `/categories` `/numbers` |
 | Messages & conversations | `/messages` `/agent-conversation` (pause or resume the bot on one chat) |
-| Broadcasts & content | `/broadcasts` `/broadcast-series` `/templates` `/media-library` `/message-formats` |
+| Broadcasts & content | `/broadcasts` `/broadcast-series` `/templates` `/media-library` |
 | Automations | `/chatbots` `/executions` — but prefer the dedicated tools: `list_automations`, `validate_automation`, `create_automation`, `update_automation`, `get_automation_runs` |
 | Leads & funnel | `/leads` `/funnel` `/lead-sources` `/entity-fields` |
-| Marketing | `/marketing` `/campaigns` `/webinars` `/ctwa` |
-| Products | `/products` `/payment-links` |
-| Payments | `/razorpay` `/sales-log` `/students` |
+| Products | `/products` `/courses` |
+| Sales | `/students` |
 | Dashboard & logs | `/dashboard` `/webhook-history` `/message-costs` |
 | Social | `/social/*` — but prefer the `social_*` tools (see **forge-growth-social**) |
-| **Admin (sensitive)** | `/users` `/whatsapp-accounts` `/integrations` `/ai-models` `/capi` `/marketing/clo` `/payment-requests` `/razorpay/config` `/social/credentials` `/social/settings` `/social/integrations` `/social/users` `/social/mcp` |
+| **Admin (sensitive)** | `/users` `/whatsapp-accounts` `/integrations` `/ai-models` `/social/credentials` `/social/settings` `/social/integrations` `/social/users` `/social/mcp` |
 
-**Admin is deliberately the highest tier.** `/payment-requests` mints Razorpay links a
-customer can really pay, `/capi` and `/marketing/clo` send conversions that move ad
-spend, and `/razorpay/config` holds the gateway secret. Note `/marketing/clo` sits here
-despite its path — it is under `/marketing`, but it transmits to Meta, so it is gated
-with the other spend-moving routes rather than with read-only marketing reporting. Never treat a task as blocked-by-a-toggle and suggest enabling Admin casually
-— say what it would grant.
+**Admin is deliberately the highest tier.** It holds user management, WhatsApp account
+credentials, integrations and AI model keys. Never treat a task as blocked-by-a-toggle and
+suggest enabling Admin casually — say what it would grant.
 
 ## Invariants that silently corrupt numbers
 
-**Money is stored in paise, converted at the API boundary — but not everywhere.**
+**Money may be stored in paise, converted at the API boundary — but not everywhere.**
 Field names ending `_paise` are integer paise; a field named `amount` or `total` is
 usually already rupees. Read the field name before doing arithmetic. Reporting paise
 as rupees overstates by 100×.
-
-**Razorpay writes SEVERAL rows with `status='captured'` for ONE payment**
-(`payment.captured`, `order.paid`, and for link payments `payment_link.paid` too).
-Summing captured rows double- or triple-counts. Anything you aggregate out of
-`/razorpay` must be deduped by `payment_id`. Prefer the endpoints that already do
-this — `/razorpay/payments/summary`, `/students` — over summing raw rows yourself.
 
 **Keys are immutable, labels are not.** `stage_key`, `field_key` and a tag's id are
 permanent; their labels can be renamed freely. Never key logic off a label, and never

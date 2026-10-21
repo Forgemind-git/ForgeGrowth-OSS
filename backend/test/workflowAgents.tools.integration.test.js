@@ -158,17 +158,15 @@ describe('conversation shape', () => {
     assert.equal(byId.get(mid('h6')).rep_user_id, String(ids.repB), 'Rep B took number A over 48 hours ago');
   });
 
-  test('ad referral and first message are attached', async (t) => {
+  test('stage history and thread window are attached', async (t) => {
     if (skip(t)) return;
     const p = await reg.runTool(await ctxFor(), 'get_lead_profile', { contact_id: String(ids.hot) });
-    assert.equal(p.ad_referral.ad_id, names.ad);
-    assert.equal(p.ad_referral.first_message_id, mid('h1'));
     assert.equal(p.stage_history.length, 3);
     assert.equal(p.threads[0].window_open, true);
   });
 });
 
-describe('metrics, sales, ads', () => {
+describe('metrics and sales', () => {
   test('engagement metrics count voice notes and unanswered messages', async (t) => {
     if (skip(t)) return;
     const r = await reg.runTool(await ctxFor(), 'get_engagement_metrics', { contact_ids: [String(ids.hot), String(ids.optedOut)] });
@@ -183,11 +181,11 @@ describe('metrics, sales, ads', () => {
     assert.equal(m.human_replies_attributed, 1);
   });
 
-  test('sales dedupe the double Razorpay row and derive payment types', async (t) => {
+  test('sales derive payment types', async (t) => {
     if (skip(t)) return;
     const r = await reg.runTool(await ctxFor(), 'get_sales', { limit: 200 });
     const mine = r.payments.filter(p => p.contact_id === String(ids.enrolled));
-    assert.equal(mine.length, 2, 'one gateway payment (written twice) + one manual');
+    assert.equal(mine.length, 2, 'two sales_log rows');
     assert.deepEqual(mine.map(p => p.payment_type).sort(), ['new_admission', 'partial']);
     assert.ok(mine.every(p => p.gst === null && p.closed_by_rep_id === null));
     assert.equal((await reg.runTool(await ctxFor(), 'get_sales', { rep_id: '1' })).error, 'not_recorded');
@@ -195,16 +193,6 @@ describe('metrics, sales, ads', () => {
     const owed = b.balances.find(x => x.contact_id === String(ids.enrolled));
     assert.equal(owed.outstanding.rupees, 2000);
     assert.equal(owed.outstanding.display, '₹2,000');
-  });
-
-  test('ad performance adds GST and attributes in-scope leads', async (t) => {
-    if (skip(t)) return;
-    const r = await reg.runTool(await ctxFor(), 'get_ad_performance', { ad_ids: [names.ad] });
-    assert.equal(r.ads.length, 1);
-    assert.equal(r.ads[0].spend, 100);
-    assert.equal(r.ads[0].spend_incl_gst, 118);
-    assert.equal(r.ads[0].leads_attributed, 1);
-    assert.equal(r.ads[0].cost_per_attributed_lead_incl_gst, 118);
   });
 });
 

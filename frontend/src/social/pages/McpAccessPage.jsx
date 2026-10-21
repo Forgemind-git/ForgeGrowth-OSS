@@ -7,15 +7,13 @@ import { useConfirm } from "../ConfirmDialog.jsx";
 import { showToast } from "../Toast.jsx";
 
 const MCP_CAPABILITIES = [
-  { key: "analytics",      label: "Analytics & stats",    desc: "Overview KPIs, per-platform stats, followers trend, audience demographics." },
+  { key: "analytics",      label: "Analytics & stats",    desc: "Overview KPIs, per-platform stats, followers trend, audience demographics, connected accounts and token health." },
   { key: "insights",       label: "Insights & decisions", desc: "Cross-platform executive scorecard, content-theme ROI, and trends/anomaly alerts for managerial decisions." },
   { key: "content",        label: "Content",              desc: "Content library posts with per-post metrics and scores, plus the media library." },
   { key: "reports",        label: "Reports & forecast",   desc: "Generate per-platform performance reports for any date range, plus a forward-looking forecast of what to post next week." },
-  { key: "inbox",          label: "Inbox",                desc: "Instagram DMs and comments across Instagram, Facebook, YouTube and Threads." },
+  { key: "inbox",          label: "Inbox",                desc: "Instagram DMs and comments." },
   { key: "contacts",       label: "Contacts & tags",      desc: "CRM contacts built from DM history, notes, and the tag taxonomy." },
-  { key: "publishing",     label: "Publishing data",      desc: "Publish queue and log, connected accounts, and token health." },
-  { key: "engage",         label: "Reply & DM (write)",   desc: "Reply to comments and send Instagram DMs — posts on the REAL platforms.", write: true },
-  { key: "publish_create", label: "Create posts (write)", desc: "Queue immediate or scheduled posts; cancel queued ones. Instagram publishes for real.", write: true },
+  { key: "engage",         label: "Reply & DM (write)",   desc: "Reply to comments and send Instagram DMs — posts on the REAL platform.", write: true },
 ];
 
 const ALL_SCOPE = { scopePlatform: null, scopeAccountId: null };
@@ -381,7 +379,7 @@ export default function McpAccessTab() {
                   <li>Enable the master switch and the capabilities you want, then <b>Generate a key</b> (the popup shows a ready-to-paste URL).</li>
                   <li>Set the key's <b>Account scope</b> to lock it to a single account — a scoped connector can only ever read that one account, on that one platform. Leave it on <b>All accounts</b> for your own full-workspace key. You can re-point or unlock a key any time; it applies on the connector's next request.</li>
                   <li>In Claude (web / desktop / mobile) go to <b>Settings → Connectors → Add custom connector</b> and paste the URL below with your key in place of <span style={{ fontFamily: MONO, fontSize: 12.5 }}>&lt;YOUR_KEY&gt;</span>.</li>
-                  <li>Ask Claude anything about your ForgeGrowth data — overview, top posts, comments, contacts, publish log.</li>
+                  <li>Ask Claude anything about your ForgeGrowth data — overview, top posts, comments, contacts.</li>
                 </ol>
                 {install?.remoteUrl && (
                   <>

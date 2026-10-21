@@ -15,7 +15,7 @@ const syncService = require('./syncService');
 const accounts = require('./accounts');
 const mockService = require('./mockService');
 
-const ALLOWED = ['instagram', 'facebook', 'threads', 'youtube', 'linkedin'];
+const ALLOWED = ['instagram'];
 const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s || '');
 
 function _addDaysIso(iso, n) {
@@ -217,7 +217,7 @@ function summarizePlatform(p, rangeDays) {
   const totalViews = sumBy(posts, x => x.views);
   const totalEng = sumBy(posts, x => x.eng);
   const engRate = totalViews > 0 ? round1((totalEng / totalViews) * 100) : null;
-  const followersLabel = p.key === 'youtube' ? 'subscribers' : 'followers';
+  const followersLabel = 'followers';
 
   let growth = null;
   const series = p.followersSeries || [];
@@ -306,26 +306,6 @@ const INDUSTRY_PLAYBOOK = {
     'Reels with a strong hook in the first 3 seconds and on-screen captions consistently out-reach static posts.',
     'Carousels that teach ONE idea per slide drive saves and shares (the signals IG ranks on).',
     'Use trending audio early, reply to every comment in the first hour, and post 4-7x/week.',
-  ],
-  youtube: [
-    'Search-intent titles plus a high-contrast thumbnail with a single clear subject win the click.',
-    'Earn retention in the first 30 seconds; the first 24-48h watch-time decides the algorithm push.',
-    'Use Shorts as a discovery funnel into long-form, and keep a steady weekly upload cadence.',
-  ],
-  facebook: [
-    'Native video and relatable, share-worthy posts beat outbound links on reach.',
-    'Repurposing your best Instagram Reels as FB Reels extends their life for near-zero effort.',
-    'Posts that spark comments/shares (questions, community wins) get the widest organic distribution.',
-  ],
-  threads: [
-    'Conversational hot-takes and genuine questions that invite replies travel furthest.',
-    'Reply to your own thread to add context — it re-surfaces the post and lifts reach.',
-    'Post 1-3 short updates a day and ride timely, in-the-moment topics.',
-  ],
-  linkedin: [
-    'Document/PDF carousels and first-person build-in-public stories earn the most dwell time.',
-    'A strong first line (the "hook" before the see-more fold) decides whether the post opens.',
-    'Comment back within the first hour; consistent 3-5x/week posting compounds reach.',
   ],
 };
 

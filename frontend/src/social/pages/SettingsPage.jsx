@@ -12,8 +12,6 @@ import { SearchableSelect } from '../components/Dropdown.jsx';
 const NOTIF_ROWS = [
   ["dm",                "New Instagram DMs"],
   ["comment",           "New comments"],
-  ["publish_published", "Publish succeeded"],
-  ["publish_failed",    "Publish failed"],
   ["token",             "Token expiry / reconnect"],
   ["anomaly",           "Insight alerts (spikes & drops)"],
   ["email_digest",      "Daily email digest"],

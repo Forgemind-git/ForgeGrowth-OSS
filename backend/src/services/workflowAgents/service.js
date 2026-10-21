@@ -150,7 +150,13 @@ function applySetup(src, setup) {
   if (setup.monthly_budget_inr !== undefined) src.agent = { ...(src.agent || {}), monthly_budget_inr: setup.monthly_budget_inr };
 }
 
+// The presets that exist are the ones in code. A row for a preset retired from
+// code (ad_to_chat_quality) may linger in workflow_agent_presets; it is ignored,
+// never offered. Agents already made from it keep working.
+const isLivePreset = (key) => PRESETS.some(p => p.preset_key === key);
+
 async function getPreset(key) {
+  if (!isLivePreset(key)) throw new ServiceError(404, `Unknown preset "${key}".`);
   const { rows: [row] } = await pool.query(`SELECT preset_key, name, description, icon, config FROM coexistence.workflow_agent_presets WHERE preset_key = $1`, [key]);
   const p = row || PRESETS.find(x => x.preset_key === key);
   if (!p) throw new ServiceError(404, `Unknown preset "${key}".`);
@@ -166,6 +172,7 @@ async function getPreset(key) {
 async function createAgent({ presetKey = null, name, description, icon, setup = null, userId }) {
   let preset = null;
   if (presetKey) {
+    if (!isLivePreset(presetKey)) throw new ServiceError(404, `Unknown preset "${presetKey}".`);
     const { rows } = await pool.query(`SELECT * FROM coexistence.workflow_agent_presets WHERE preset_key = $1`, [presetKey]);
     preset = rows[0] || null;
     if (!preset) {
@@ -474,7 +481,9 @@ async function cancelRun(runId, userId) {
 }
 
 async function listPresets() {
-  const { rows } = await pool.query(`SELECT preset_key, name, description, icon, sort_order, config FROM coexistence.workflow_agent_presets ORDER BY sort_order`);
+  const { rows } = await pool.query(
+    `SELECT preset_key, name, description, icon, sort_order, config FROM coexistence.workflow_agent_presets
+      WHERE preset_key = ANY($1::text[]) ORDER BY sort_order`, [PRESETS.map(p => p.preset_key)]);
   const list = rows.length ? rows : PRESETS;
   return list.map(p => ({
     preset_key: p.preset_key, name: p.name, description: p.description, icon: p.icon,

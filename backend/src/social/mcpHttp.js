@@ -7,8 +7,8 @@ const socialEnv = require('./env');
 // mcpService directly (in-process), gated by the per-request key's capabilities.
 //
 // Every tool here maps to one capability toggle in Settings → MCP Access:
-//   analytics | content | inbox | contacts | publishing  (reads, default ON)
-//   engage | publish_create                              (writes, default OFF)
+//   analytics | insights | content | reports | inbox | contacts  (reads, default ON)
+//   engage                                                        (writes, default OFF)
 //
 // A key may additionally be ACCOUNT-SCOPED (Settings → MCP Access → Account
 // scope): locked to one account on one platform. When it is, the `platform` and
@@ -33,8 +33,8 @@ function gated(capabilities, cap, fn) {
   };
 }
 
-const PLATFORM_ENUM = z.enum(['instagram', 'youtube', 'facebook', 'threads', 'linkedin']);
-const COMMENT_PLATFORM_ENUM = z.enum(['instagram', 'facebook', 'youtube', 'threads']);
+const PLATFORM_ENUM = z.enum(['instagram']);
+const COMMENT_PLATFORM_ENUM = z.enum(['instagram']);
 const PERIOD_ENUM = z.enum(['7D', '30D', '90D']);
 
 // Build the tool catalog for one request's capabilities + account scope.
@@ -71,7 +71,7 @@ function buildCatalog(capabilities, scope = null) {
   /* ------------------------------ analytics ----------------------------- */
   server.registerTool('get_overview', {
     title: 'Cross-platform overview',
-    description: 'KPI roll-up across all connected social platforms (Instagram, YouTube, Facebook, Threads, LinkedIn): total audience, net growth, impressions, average engagement rate, plus a per-platform breakdown with last-sync freshness. Start here for "how are we doing" questions.',
+    description: 'KPI roll-up across the connected Instagram accounts: total audience, net growth, impressions, average engagement rate, plus a per-platform breakdown with last-sync freshness. Start here for "how are we doing" questions.',
     inputSchema: { period: PERIOD_ENUM.optional().describe('Reporting window (default 30D).') },
   }, gated(capabilities, 'analytics', ({ period }) => mcpService.getOverview(period, scope)));
 
@@ -98,16 +98,16 @@ function buildCatalog(capabilities, scope = null) {
 
   server.registerTool('get_audience_insights', {
     title: 'Audience demographics',
-    description: 'Cached audience insights per platform/account: age/gender/country demographics, online-followers hours (Instagram), traffic sources (YouTube). Data is the daily cached payload — refreshed once a day, never fetched live.',
+    description: 'Cached audience insights per platform/account: age/gender/country demographics, online-followers hours. Data is the daily cached payload — refreshed once a day, never fetched live.',
     inputSchema: { ...open({ platform: PLATFORM_ENUM.optional().describe('Filter to one platform. Omit for all cached entries.') }) },
   }, gated(capabilities, 'analytics', ({ platform }) => mcpService.getAudienceInsights(platform || null, scope)));
 
   /* ------------------------------- reports ------------------------------ */
   server.registerTool('generate_report', {
     title: 'Generate a performance report (with forecast)',
-    description: 'Build a per-platform performance report for a date range AND the raw material for a research-backed forecast. For each platform it returns audience growth, window stats, posting cadence, a trajectory label, and — most importantly — `content.posts`: every post (top AND bottom performers) with its FULL caption, hashtags, posting day/time (IST), and per-post rate signals (save/share/comment/like rate as % of views). USE THIS to reason about WHY specific posts performed. The included `forecast` is a DETERMINISTIC FALLBACK only (do not ship it verbatim — it is generic and contains NO competitor data). See `analysisGuidance` in the result: you are expected to (1) read the captions/rates and explain why each top post won vs the misses, and (2) do LIVE WEB RESEARCH on what top creators/competitors in this niche are doing now, then author your own content-grounded, research-backed forecast and render it via the forgesocial-report skill. ForgeSocial holds first-party data only; competitor analysis must come from your web research. DB-only, no live platform calls. Omit dates for the last 30 days; omit platforms for all four live platforms.',
+    description: 'Build a per-platform performance report for a date range AND the raw material for a research-backed forecast. For each platform it returns audience growth, window stats, posting cadence, a trajectory label, and — most importantly — `content.posts`: every post (top AND bottom performers) with its FULL caption, hashtags, posting day/time (IST), and per-post rate signals (save/share/comment/like rate as % of views). USE THIS to reason about WHY specific posts performed. The included `forecast` is a DETERMINISTIC FALLBACK only (do not ship it verbatim — it is generic and contains NO competitor data). See `analysisGuidance` in the result: you are expected to (1) read the captions/rates and explain why each top post won vs the misses, and (2) do LIVE WEB RESEARCH on what top creators/competitors in this niche are doing now, then author your own content-grounded, research-backed forecast and render it via the forgesocial-report skill. ForgeSocial holds first-party data only; competitor analysis must come from your web research. DB-only, no live platform calls. Omit dates for the last 30 days; omit platforms for Instagram.',
     inputSchema: {
-      ...open({ platforms: z.array(z.enum(['instagram', 'facebook', 'threads', 'youtube', 'linkedin'])).optional().describe('Platforms to include (default: instagram, facebook, threads, youtube).') }),
+      ...open({ platforms: z.array(PLATFORM_ENUM).optional().describe('Platforms to include (default: instagram).') }),
       from: z.string().optional().describe('Range start YYYY-MM-DD (default: 30 days ago, IST).'),
       to: z.string().optional().describe('Range end YYYY-MM-DD (default: today, IST).'),
     },
@@ -173,7 +173,7 @@ function buildCatalog(capabilities, scope = null) {
 
   server.registerTool('list_comments', {
     title: 'List comments',
-    description: 'Comments on our posts for one platform (instagram, facebook, youtube or threads), newest first, each with the parent post caption/permalink. parentId null = top-level comment, set = a reply. Filter by text/author search; Instagram also by account id. The commentId values are what reply_to_comment takes.',
+    description: 'Comments on our Instagram posts, newest first, each with the parent post caption/permalink. parentId null = top-level comment, set = a reply. Filter by text/author search or account id. The commentId values are what reply_to_comment takes.',
     inputSchema: {
       ...open({ platform: COMMENT_PLATFORM_ENUM.describe('Which platform.') }),
       ...open({ account: z.string().optional().describe('Instagram only: filter to one connected account id.') }),
@@ -200,38 +200,28 @@ function buildCatalog(capabilities, scope = null) {
     inputSchema: {},
   }, gated(capabilities, 'contacts', () => mcpService.listTags()));
 
-  /* ------------------------------ publishing ---------------------------- */
-  server.registerTool('list_publish_jobs', {
-    title: 'List publish jobs',
-    description: 'The posting queue + log: every composer posting with status (queued / publishing / published / failed / canceled), schedule, attempts, errors, and whether it was simulated (non-Instagram platforms simulate publishing). Job ids are what cancel_publish_job takes.',
-    inputSchema: {
-      status: z.enum(['queued', 'publishing', 'published', 'failed', 'canceled']).optional().describe('Filter by status.'),
-      ...open({ platform: PLATFORM_ENUM.optional().describe('Filter by platform.') }),
-      limit: z.number().int().min(1).max(500).optional().describe('Max rows (default 100).'),
-    },
-  }, gated(capabilities, 'publishing', (a) => mcpService.listPublishJobs(a, scope)));
-
+  /* ------------------------------- accounts ----------------------------- */
   server.registerTool('list_connected_accounts', {
     title: 'List connected accounts',
-    description: 'Every connected social account across all platforms with its label/username; Instagram rows include canPublish (OAuth-connected for publishing). The accountId values are what other tools take as account filters.',
+    description: 'Every connected Instagram account with its label/username; canPublish = OAuth-connected (holds a token that can act). The accountId values are what other tools take as account filters.',
     inputSchema: {},
-  }, gated(capabilities, 'publishing', () => mcpService.listConnectedAccounts(scope)));
+  }, gated(capabilities, 'analytics', () => mcpService.listConnectedAccounts(scope)));
 
   server.registerTool('get_token_health', {
     title: 'Token health',
     description: 'OAuth token health for every credential: days until expiry, last refresh, and which accounts need attention (expiring / refresh failed / needs reconnect). Pure DB read.',
     inputSchema: {},
-  }, gated(capabilities, 'publishing', () => mcpService.getTokenHealth(scope)));
+  }, gated(capabilities, 'analytics', () => mcpService.getTokenHealth(scope)));
 
   /* --------------------- writes (capabilities default OFF) -------------- */
   server.registerTool('reply_to_comment', {
     title: 'Reply to a comment',
-    description: 'Post a reply under a comment on instagram, facebook, youtube or threads. Get the commentId from list_comments first, and CONFIRM the reply text with the user before sending — this posts publicly on the real platform.',
+    description: 'Post a reply under an Instagram comment. Get the commentId from list_comments first, and CONFIRM the reply text with the user before sending — this posts publicly on the real platform.',
     inputSchema: {
       ...open({ platform: COMMENT_PLATFORM_ENUM.describe('Which platform the comment is on.') }),
-      commentId: z.string().describe('The platform comment id (from list_comments). For YouTube use a TOP-LEVEL comment id — YouTube only nests one level.'),
+      commentId: z.string().describe('The platform comment id (from list_comments).'),
       message: z.string().min(1).describe('The reply text.'),
-      ...open({ accountId: z.string().optional().describe('Instagram only: which connected account replies (from the comment row).') }),
+      ...open({ accountId: z.string().optional().describe('Which connected account replies (from the comment row).') }),
     },
   }, gated(capabilities, 'engage', (a) => mcpService.replyToComment(a, scope)));
 
@@ -244,27 +234,6 @@ function buildCatalog(capabilities, scope = null) {
       text: z.string().min(1).describe('The message text.'),
     },
   }, gated(capabilities, 'engage', (a) => mcpService.sendInstagramDm(a, scope)));
-
-  server.registerTool('create_post', {
-    title: 'Create a post (publish job)',
-    description: 'Queue a post for immediate or scheduled publishing. Instagram publishes for REAL (account must be OAuth-connected — check canPublish via list_connected_accounts); other platforms simulate. post_type per platform: instagram post/carousel/reel/story, others vary. Use list_media for mediaIds. CONFIRM platform, account, caption, media and timing with the user before creating.',
-    inputSchema: {
-      ...open({ platform: PLATFORM_ENUM.describe('Target platform.') }),
-      ...open({ accountId: z.string().optional().describe('Account id (required for Instagram).') }),
-      postType: z.string().describe('Post type, e.g. "post", "carousel", "reel", "story".'),
-      caption: z.string().optional().describe('Caption text.'),
-      mediaIds: z.array(z.number()).optional().describe('Media library ids (from list_media) in display order.'),
-      scheduleType: z.enum(['immediate', 'scheduled']).optional().describe('Default immediate.'),
-      scheduledAt: z.string().optional().describe('Future ISO timestamp — required when scheduleType is "scheduled".'),
-      details: z.record(z.any()).optional().describe('Optional per-type extras (hashtags array, altText, collaborators, etc.).'),
-    },
-  }, gated(capabilities, 'publish_create', (a) => mcpService.createPost(a, scope)));
-
-  server.registerTool('cancel_publish_job', {
-    title: 'Cancel a queued post',
-    description: 'Cancel a publish job that is still queued (already-publishing/published jobs cannot be canceled). Get the id from list_publish_jobs. Confirm with the user first.',
-    inputSchema: { id: z.union([z.string(), z.number()]).describe('Publish job id.') },
-  }, gated(capabilities, 'publish_create', ({ id }) => mcpService.cancelPublishJob(id, scope)));
 
   return {
     tools,

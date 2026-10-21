@@ -62,8 +62,8 @@ describe('buildCall', () => {
   });
 
   test('only listed query keys are sent', () => {
-    const c = buildCall(spec('get_click_to_whatsapp'), { days: '30', bogus: 'x', from: null });
-    assert.deepStrictEqual(c.query, { days: '30' });
+    const c = buildCall(spec('get_funnel_chart'), { source: 'ig', bogus: 'x', from: null });
+    assert.deepStrictEqual(c.query, { source: 'ig' });
   });
 
   test('a body "from" arg must be an object', () => {

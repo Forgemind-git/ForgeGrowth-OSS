@@ -9,18 +9,18 @@ const context = require('./context');
 const leads = require('./leads');
 const chats = require('./chats');
 const sales = require('./sales');
-const marketing = require('./marketing');
+const automations = require('./automations');
 const draft = require('./draft');
 const write = require('./write');
 
 const TOOLS = [
-  ...context.tools, ...leads.tools, ...chats.tools, ...sales.tools, ...marketing.tools, ...draft.tools, ...write.tools,
+  ...context.tools, ...leads.tools, ...chats.tools, ...sales.tools, ...automations.tools, ...draft.tools, ...write.tools,
 ];
 const TOOLS_BY_KEY = new Map(TOOLS.map(t => [t.key, t]));
 if (TOOLS_BY_KEY.size !== TOOLS.length) throw new Error('workflowAgents: duplicate tool key');
 
 const PERMISSIONS_BY_KIND = { read: ['read'], draft: ['draft'], write: ['write', 'draft'] };
-const CATEGORY_ORDER = ['Context', 'Leads & funnel', 'Conversations', 'Sales', 'Marketing', 'Agent', 'Drafts', 'Actions'];
+const CATEGORY_ORDER = ['Context', 'Leads & funnel', 'Conversations', 'Sales', 'Automations', 'Agent', 'Drafts', 'Actions'];
 const RESULT_CHAR_CAP = 150000;
 const DESCRIPTION_MAX = 2000;
 

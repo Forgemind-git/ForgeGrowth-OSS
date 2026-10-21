@@ -1,5 +1,5 @@
 // One input widget for a registry custom field, switched on its fieldType —
-// shared by the Sales Log's Add Sale / Add Transaction / edit forms. Values
+// shared by the lead and transaction forms. Values
 // are stored as strings (arrays for checkbox, boolean for Yes/No), matching
 // what the JSONB bag and the variable resolver expect.
 

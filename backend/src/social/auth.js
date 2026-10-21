@@ -278,63 +278,6 @@ async function ensureTables() {
     CREATE INDEX IF NOT EXISTS idx_ig_comments_ts        ON instagram_comments(ts DESC);
     CREATE INDEX IF NOT EXISTS idx_ig_webhook_events_rcv ON instagram_webhook_events(received_at DESC);
 
-    -- ── Facebook + YouTube comments (Inbox, polled — no webhook) ──
-    -- Populated on the sync cron via facebook.syncComments() / youtube.syncComments().
-    -- Mutable rows (likes/text can change) → upserted, unlike the IG webhook log.
-    CREATE TABLE IF NOT EXISTS facebook_comments (
-      id            BIGSERIAL PRIMARY KEY,
-      comment_id    TEXT UNIQUE,
-      post_id       TEXT,
-      parent_id     TEXT,            -- set when this comment is a reply to another
-      from_id       TEXT,
-      from_name     TEXT,
-      from_pic      TEXT,
-      message       TEXT,
-      like_count    INTEGER DEFAULT 0,
-      liked_by_us   BOOLEAN DEFAULT false,   -- did our Page like this comment
-      permalink     TEXT,
-      raw           JSONB,
-      ts            TIMESTAMPTZ,
-      created_at    TIMESTAMPTZ DEFAULT now()
-    );
-    CREATE TABLE IF NOT EXISTS youtube_comments (
-      id                BIGSERIAL PRIMARY KEY,
-      comment_id        TEXT UNIQUE,
-      video_id          TEXT,
-      parent_id         TEXT,        -- top-level comment id when this is a reply
-      author_name       TEXT,
-      author_channel_id TEXT,
-      author_pic        TEXT,
-      text              TEXT,
-      like_count        INTEGER DEFAULT 0,
-      raw               JSONB,
-      ts                TIMESTAMPTZ,
-      created_at        TIMESTAMPTZ DEFAULT now()
-    );
-    -- Threads replies (Inbox, polled). Threads only exposes a username string for
-    -- arbitrary reply authors (no stable user-id or profile pic), so identity
-    -- matching is by username. account_key = the Threads user_id of the post owner.
-    CREATE TABLE IF NOT EXISTS threads_comments (
-      id              BIGSERIAL PRIMARY KEY,
-      comment_id      TEXT UNIQUE,
-      thread_id       TEXT,           -- the root post this reply lives under
-      parent_id       TEXT,           -- the reply this is replying to (NULL = direct under post)
-      account_key     TEXT,           -- Threads user_id of the post owner
-      author_username TEXT,
-      text            TEXT,
-      permalink       TEXT,
-      raw             JSONB,
-      ts              TIMESTAMPTZ,
-      created_at      TIMESTAMPTZ DEFAULT now()
-    );
-    CREATE INDEX IF NOT EXISTS idx_fb_comments_ts   ON facebook_comments(ts DESC);
-    CREATE INDEX IF NOT EXISTS idx_fb_comments_post ON facebook_comments(post_id);
-    CREATE INDEX IF NOT EXISTS idx_yt_comments_ts    ON youtube_comments(ts DESC);
-    CREATE INDEX IF NOT EXISTS idx_yt_comments_video ON youtube_comments(video_id);
-    CREATE INDEX IF NOT EXISTS idx_th_comments_ts      ON threads_comments(ts DESC);
-    CREATE INDEX IF NOT EXISTS idx_th_comments_thread  ON threads_comments(thread_id);
-    CREATE INDEX IF NOT EXISTS idx_th_comments_account ON threads_comments(account_key);
-
     -- Tag categories (admin-managed). Tags belong to one category; categories have
     -- no direct relation to contacts. id is a text slug so it stays stable across
     -- renames and is what gets written into contacts.tags JSONB arrays.
@@ -384,55 +327,6 @@ async function ensureTables() {
     CREATE INDEX IF NOT EXISTS idx_contacts_last_seen ON contacts(last_seen_at DESC);
     CREATE INDEX IF NOT EXISTS idx_contacts_account   ON contacts(account_id);
 
-    -- Generalized multi-account store for YouTube/Facebook/Threads/LinkedIn.
-    -- (Instagram keeps its own instagram_accounts table — it's wired to webhooks/inbox.)
-    CREATE TABLE IF NOT EXISTS social_accounts (
-      id               BIGSERIAL PRIMARY KEY,
-      platform         TEXT NOT NULL,
-      account_key      TEXT,                        -- external id (channel/page/user/org id)
-      label            TEXT,                        -- friendly display name
-      username         TEXT,
-      token            TEXT,                        -- access token (page/user token)
-      refresh_token    TEXT,                        -- YouTube refresh token
-      extra            JSONB NOT NULL DEFAULT '{}', -- per-platform: {orgId,userId,pageId,appId,...}
-      token_expires_at TIMESTAMPTZ,
-      hidden           BOOLEAN DEFAULT false,
-      last_sync_at     TIMESTAMPTZ,
-      last_error       TEXT,
-      created_at       TIMESTAMPTZ DEFAULT now()
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_social_accounts_uniq     ON social_accounts(platform, account_key);
-    CREATE INDEX        IF NOT EXISTS idx_social_accounts_platform ON social_accounts(platform);
-
-    -- Publish feature: one row = one posting job AND its log entry.
-    -- attempts/result/last_error capture the outcome history, so no separate
-    -- attempts table is needed. The send-to-platform call is stubbed for now
-    -- (simulated = true); real Graph/API calls drop into publishService.js later.
-    CREATE TABLE IF NOT EXISTS publish_jobs (
-      id               BIGSERIAL PRIMARY KEY,
-      platform         TEXT NOT NULL,                  -- instagram|youtube|facebook|threads|linkedin
-      account_id       TEXT,                           -- IG account_id; NULL for single-account platforms
-      account_label    TEXT,                           -- friendly snapshot for the log UI
-      post_type        TEXT NOT NULL,                  -- per-platform: post|reel|story|video|text|...
-      caption          TEXT,
-      media            JSONB NOT NULL DEFAULT '[]',    -- [{mediaId,url,name,mime}] snapshot from media library
-      details          JSONB NOT NULL DEFAULT '{}',    -- per-type extras: audio,tagPeople,location,title,...
-      schedule_type    TEXT NOT NULL DEFAULT 'immediate' CHECK (schedule_type IN ('immediate','scheduled')),
-      scheduled_at     TIMESTAMPTZ,                    -- UTC; NULL for immediate
-      status           TEXT NOT NULL DEFAULT 'queued'
-                         CHECK (status IN ('queued','publishing','published','failed','canceled')),
-      attempts         INTEGER NOT NULL DEFAULT 0,
-      last_error       TEXT,
-      external_post_id TEXT,                           -- platform post id once published (simulated in stub mode)
-      result           JSONB,                          -- raw adapter return
-      simulated        BOOLEAN NOT NULL DEFAULT true,  -- true while the publish adapter is stubbed
-      created_by       TEXT,
-      created_at       TIMESTAMPTZ DEFAULT now(),
-      published_at     TIMESTAMPTZ
-    );
-    CREATE INDEX IF NOT EXISTS idx_publish_jobs_due     ON publish_jobs(status, scheduled_at);
-    CREATE INDEX IF NOT EXISTS idx_publish_jobs_created ON publish_jobs(created_at DESC);
-
     -- MCP access (Settings → MCP Access): bearer API keys are stored as
     -- SHA-256 hashes only (plaintext shown once at creation); mcp_settings is
     -- a single row holding the master switch + per-capability toggles.
@@ -455,7 +349,7 @@ async function ensureTables() {
     CREATE TABLE IF NOT EXISTS mcp_settings (
       id             INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
       master_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-      capabilities   JSONB NOT NULL DEFAULT '{"analytics":true,"content":true,"inbox":true,"contacts":true,"publishing":true,"engage":false,"publish_create":false}'::jsonb,
+      capabilities   JSONB NOT NULL DEFAULT '{"analytics":true,"content":true,"inbox":true,"contacts":true,"engage":false}'::jsonb,
       updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
@@ -490,16 +384,12 @@ async function ensureTables() {
     `DO $$ BEGIN ALTER TABLE sync_snapshots ADD COLUMN account_key TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
     `DO $$ BEGIN ALTER TABLE posts ADD COLUMN fetched_at TIMESTAMPTZ; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
     `DO $$ BEGIN ALTER TABLE integrations ADD COLUMN last_sync_at TIMESTAMPTZ; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
-    `DO $$ BEGIN ALTER TABLE facebook_comments ADD COLUMN liked_by_us BOOLEAN DEFAULT false; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
     `DO $$ BEGIN ALTER TABLE posts ALTER COLUMN topic DROP NOT NULL; EXCEPTION WHEN others THEN NULL; END $$`,
     `DO $$ BEGIN ALTER TABLE posts ADD CONSTRAINT posts_platform_external_id_unique UNIQUE (platform_id, external_id); EXCEPTION WHEN duplicate_table THEN NULL; END $$`,
     // Token auto-refresh health tracking (tokenService.js)
     `DO $$ BEGIN ALTER TABLE instagram_accounts ADD COLUMN last_refresh_at TIMESTAMPTZ; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
     `DO $$ BEGIN ALTER TABLE instagram_accounts ADD COLUMN last_refresh_error TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
     `DO $$ BEGIN ALTER TABLE instagram_accounts ADD COLUMN needs_reconnect BOOLEAN DEFAULT false; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
-    `DO $$ BEGIN ALTER TABLE social_accounts ADD COLUMN last_refresh_at TIMESTAMPTZ; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
-    `DO $$ BEGIN ALTER TABLE social_accounts ADD COLUMN last_refresh_error TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
-    `DO $$ BEGIN ALTER TABLE social_accounts ADD COLUMN needs_reconnect BOOLEAN DEFAULT false; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
     // IG comment like counts (synced via syncComments, not available in webhooks)
     `DO $$ BEGIN ALTER TABLE instagram_comments ADD COLUMN like_count INTEGER; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
     `CREATE INDEX IF NOT EXISTS idx_ig_comments_parent ON instagram_comments(parent_id)`,
@@ -509,10 +399,6 @@ async function ensureTables() {
     `UPDATE instagram_comments ch SET parent_id = p.comment_id
        FROM instagram_comments p, jsonb_array_elements(COALESCE(p.raw->'replies'->'data', '[]'::jsonb)) r
       WHERE ch.parent_id IS NULL AND r->>'id' = ch.comment_id AND p.comment_id <> ch.comment_id`,
-    // YouTube ToS compliance: stored API data must be refreshed or deleted within
-    // 30 days — refreshed_at is stamped on every upsert; the deep comment sync
-    // deletes rows that haven't been re-confirmed by the API within the window.
-    `DO $$ BEGIN ALTER TABLE youtube_comments ADD COLUMN refreshed_at TIMESTAMPTZ DEFAULT now(); EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
   ];
   for (const q of migrationQueries) {
     try { await pool.query(q); } catch (e) { /* ignore */ }
@@ -520,11 +406,7 @@ async function ensureTables() {
 
   // Seed default platforms
   const platforms = [
-    { key: 'youtube',   name: 'YouTube',   short: 'YT', color: '#CC0000', bg: '#FCEAEA', textOnBg: '#8A0F0F' },
     { key: 'instagram', name: 'Instagram', short: 'IG', color: '#C13584', bg: '#FBE8F2', textOnBg: '#7A1F52' },
-    { key: 'linkedin',  name: 'LinkedIn',  short: 'IN', color: '#0A66C2', bg: '#E3EEF8', textOnBg: '#053F7A' },
-    { key: 'threads',   name: 'Threads',   short: 'TH', color: '#111111', bg: '#EEEEE8', textOnBg: '#111111' },
-    { key: 'facebook',  name: 'Facebook',  short: 'FB', color: '#1877F2', bg: '#E7F0FE', textOnBg: '#0A4FA8' },
   ];
   for (const p of platforms) {
     await pool.query(`
@@ -539,11 +421,7 @@ async function ensureTables() {
   // ago"), and the three without a platform tester (GA, WhatsApp, HubSpot) are
   // never re-checked — on a fresh install they would claim a live connection.
   const integrations = [
-    { name: 'YouTube', platform: 'youtube' },
     { name: 'Instagram', platform: 'instagram' },
-    { name: 'LinkedIn', platform: 'linkedin' },
-    { name: 'Threads', platform: 'threads' },
-    { name: 'Facebook', platform: 'facebook' },
     { name: 'Google Analytics', platform: null, iconBg: '#FFF3E0', iconColor: '#E65100' },
     { name: 'WhatsApp Business', platform: null, iconBg: '#E6F9ED', iconColor: '#25D366' },
     { name: 'CRM (HubSpot)', platform: null, iconBg: '#FFE5DA', iconColor: '#E65100' },
@@ -559,48 +437,21 @@ async function ensureTables() {
 
   // (No seeded admin: users are mirrored from ForgeGrowth on first request.)
 
-  // Drafts (P2): widen the publish_jobs status enum to include 'draft'. A draft is
-  // a saved-but-not-queued post (no scheduled_at); the worker only ever claims
-  // 'queued' rows, so drafts sit inert until promoted. Drop+add is idempotent.
-  await pool.query(`ALTER TABLE publish_jobs DROP CONSTRAINT IF EXISTS publish_jobs_status_check`);
-  await pool.query(`ALTER TABLE publish_jobs ADD CONSTRAINT publish_jobs_status_check
-    CHECK (status IN ('draft','pending_review','rejected','queued','publishing','published','failed','canceled'))`);
-
   // Activity log (P4) — who did what, for team accountability. Written at the key
-  // mutation sites (publish create/approve/reject/delete, user changes, inbox
-  // assignment, comment deletes). Read-only audit trail in Settings → Activity.
+  // mutation sites (user changes, inbox assignment, comment deletes). Read-only audit trail in Settings → Activity.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS activity_log (
       id          BIGSERIAL PRIMARY KEY,
       user_id     BIGINT,
       user_name   TEXT,
-      action      TEXT NOT NULL,      -- e.g. publish.create | publish.approve | user.invite
-      entity_type TEXT,               -- publish_job | user | inbox_item | comment
+      action      TEXT NOT NULL,      -- e.g. inbox.update | user.invite
+      entity_type TEXT,               -- user | inbox_item | comment
       entity_id   TEXT,
       meta        JSONB,
       created_at  TIMESTAMPTZ DEFAULT now()
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_log(created_at DESC)`);
-
-  // Reusable content helpers (P2): caption templates + hashtag groups. Mirrors the
-  // tags/categories shape. Admin-managed; everyone can read them in the composer.
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS content_templates (
-      id         BIGSERIAL PRIMARY KEY,
-      name       TEXT NOT NULL,
-      body       TEXT NOT NULL DEFAULT '',
-      created_at TIMESTAMPTZ DEFAULT now()
-    );
-  `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS hashtag_groups (
-      id         BIGSERIAL PRIMARY KEY,
-      name       TEXT NOT NULL,
-      tags       JSONB NOT NULL DEFAULT '[]',
-      created_at TIMESTAMPTZ DEFAULT now()
-    );
-  `);
 
   // Saved replies / canned responses (P3) — reusable text snippets for the inbox.
   // {name} is substituted with the recipient/commenter name at insert time.
@@ -659,13 +510,13 @@ async function ensureTables() {
     );
   `);
 
-  // Notifications — in-app alert feed (new DMs/comments, publish results, token
+  // Notifications — in-app alert feed (new DMs/comments, token
   // health, insight anomalies). read_by is the set of user ids who've read it;
   // dedupe_key (UNIQUE) prevents the same event/daily-check notifying twice.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS notifications (
       id          BIGSERIAL PRIMARY KEY,
-      type        TEXT NOT NULL,                 -- dm|comment|publish_failed|publish_published|token|anomaly
+      type        TEXT NOT NULL,                 -- dm|comment|token|anomaly
       severity    TEXT NOT NULL DEFAULT 'info',  -- info|good|warn|error
       title       TEXT NOT NULL,
       body        TEXT,
@@ -710,7 +561,7 @@ async function ensureTables() {
       llm_model               TEXT,
       status                  TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','active')),
       is_active               BOOLEAN NOT NULL DEFAULT false,
-      platform                TEXT,                  -- instagram|facebook|youtube|threads
+      platform                TEXT,                  -- instagram
       account_id              TEXT,
       account_label           TEXT,
       reply_dms               BOOLEAN NOT NULL DEFAULT false,  -- IG DMs (instagram only)
@@ -725,7 +576,7 @@ async function ensureTables() {
       humanize                BOOLEAN NOT NULL DEFAULT true,   -- jittered delay + varied replies
       min_delay_sec           INT NOT NULL DEFAULT 5,
       max_delay_sec           INT NOT NULL DEFAULT 10,
-      capabilities            JSONB NOT NULL DEFAULT '{"analytics":true,"content":true,"inbox":true,"contacts":false,"engage":false,"publish":false}'::jsonb,
+      capabilities            JSONB NOT NULL DEFAULT '{"analytics":true,"content":true,"inbox":true,"contacts":false,"engage":false}'::jsonb,
       created_by              BIGINT,
       created_at              TIMESTAMPTZ DEFAULT now(),
       updated_at              TIMESTAMPTZ DEFAULT now()
@@ -830,7 +681,7 @@ async function ensureTables() {
   // Notification preferences (workspace-global). Each key gates whether emit()
   // records that notification type; email_digest is the optional daily email.
   const DEFAULT_NOTIF_PREFS = {
-    dm: true, comment: true, publish_failed: true, publish_published: true,
+    dm: true, comment: true,
     token: true, anomaly: true, email_digest: false,
   };
   await pool.query(`

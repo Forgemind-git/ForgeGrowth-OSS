@@ -9,18 +9,19 @@ import {
 // both work on it unchanged. One permission key — 'social' — covers them all.
 export const SOCIAL_NAV = [
   // In the order the work happens (2026-10-16): see how it is going, make and
-  // publish content, answer people, know who they are, automate the repeats.
+  // manage content, answer people, know who they are, automate the repeats.
   // Inbox opens a tabbed hub (components/AutomationHub.jsx HUBS);
   // Settings lives in the one app Settings (gear beside the bell).
   { id: 'social', label: 'Overview', Icon: LayoutDashboard },
   { id: 'social/library', label: 'Content Library', Icon: BookOpen },
-  { id: 'social/inbox', label: 'Inbox', Icon: MessageCircle },          // + Messenger, Comment Analyzer
+  { id: 'social/inbox', label: 'Inbox', Icon: MessageCircle },          // + Comment Analyzer
   { id: 'social/contacts', label: 'Contacts', Icon: Users },
   { id: 'social/automations', label: 'Automations', Icon: Zap },
 ];
 export const SOCIAL_PAGE_ALIASES = Object.fromEntries(SOCIAL_NAV.map(i => [i.id, ['social']]));
 
-const VIEWS = new Set(['inbox', 'messenger', 'contacts', 'automations', 'comment-analyzer']);
+const VIEWS = new Set(['inbox', 'contacts', 'automations', 'comment-analyzer']);
+// 'publish' is the retired Publish tab: old links land on Posts.
 const LIBRARY_TABS = new Set(['library', 'publish', 'media']);
 const SETTINGS_TABS = new Set(['general', 'privacy', 'tags', 'fields', 'category', 'openrouter', 'mcp', 'activity']);
 
@@ -33,7 +34,7 @@ export function socialRoute(subParts = []) {
     const tab = b === 'ai-models' || b === 'ai-usage' ? 'openrouter' : (SETTINGS_TABS.has(b) ? b : 'general');
     return { view: 'settings', settingsTab: tab, platform: null };
   }
-  if (LIBRARY_TABS.has(a)) return { view: 'library', libraryTab: a };
+  if (LIBRARY_TABS.has(a)) return { view: 'library', libraryTab: a === 'publish' ? 'library' : a };
   if (VIEWS.has(a)) return { view: a };
   return { view: 'overview' };
 }

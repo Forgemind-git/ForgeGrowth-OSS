@@ -70,7 +70,6 @@ export const CHAT_TYPE_INFO = {
   broadcast: { label: 'Broadcasts', hint: 'Bulk and scheduled campaign messages.' },
   voice_note: { label: 'Voice notes', hint: 'Audio from leads, with transcripts where available.' },
   media: { label: 'Images & files', hint: 'Photos, documents and video (never the bytes).' },
-  ad_referral: { label: 'Ad clicks', hint: 'Click-to-WhatsApp ad referrals.' },
   internal_note: { label: 'Internal notes', hint: 'Notes on the lead that the customer never saw.' },
 };
 

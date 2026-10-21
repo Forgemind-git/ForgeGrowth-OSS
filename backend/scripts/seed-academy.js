@@ -56,21 +56,6 @@ async function main() {
     bdaIds.push(id);
   }
 
-  // ── campaigns ───────────────────────────────────────────────────────────────
-  const campaigns = [
-    { name: 'Meta CTWA — Job Seekers', platform: 'CTWA Ad', spend: 48000, leads: 320, enr: 22, source: 'ctwa' },
-    { name: 'YouTube Pre-roll — Free Class', platform: 'YouTube', spend: 32000, leads: 180, enr: 11, source: 'manual' },
-    { name: 'Instagram Reels Boost', platform: 'Instagram', spend: 21000, leads: 140, enr: 7, source: 'manual' },
-    { name: 'Referral Rewards Q3', platform: 'Referral', spend: 9000, leads: 60, enr: 9, source: 'manual' },
-  ];
-  for (const c of campaigns) {
-    await pool.query(
-      `INSERT INTO coexistence.campaigns (name, platform, status, spend, leads_generated, enrollments, start_date, end_date, source)
-       VALUES ($1,$2,'active',$3,$4,$5,$6,$7,$8)`,
-      [c.name, c.platform, c.spend, c.leads, c.enr, daysAgo(45), daysAgo(1), c.source]
-    );
-  }
-
   // ── webinars ────────────────────────────────────────────────────────────────
   const webinars = [
     { batch: 'Batch 12 — Aug Cohort', when: daysAgo(-4), reg: 210, att: 0, ns: 0 },
@@ -233,7 +218,7 @@ async function main() {
      VALUES ('__academy_seed_marker__', 'Link', FALSE, TRUE)`
   );
 
-  console.log(`[seed] done: ${bdaIds.length} BDAs, ${campaigns.length} campaigns, ${webinarIds.length} webinars, ${leadIds.length} leads, ${content.length + liveLinks.length} resources, 220 activity rows.`);
+  console.log(`[seed] done: ${bdaIds.length} BDAs, ${webinarIds.length} webinars, ${leadIds.length} leads, ${content.length + liveLinks.length} resources, 220 activity rows.`);
   process.exit(0);
 }
 

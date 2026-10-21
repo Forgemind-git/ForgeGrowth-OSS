@@ -25,18 +25,6 @@ const CREDENTIALS = [
     help: 'Instagram → API setup with Instagram login → Instagram app secret. Also used to verify webhook signatures.' },
   { key: 'INSTAGRAM_WEBHOOK_VERIFY_TOKEN', group: 'meta', label: 'Webhook verify token', secret: true,
     help: 'Any text you choose. Type the same text into the app’s Webhooks setup.' },
-  { key: 'THREADS_APP_ID', group: 'threads', label: 'Threads App ID', secret: false,
-    help: 'Threads use case → Settings → Threads app ID.' },
-  { key: 'THREADS_APP_SECRET', group: 'threads', label: 'Threads App secret', secret: true,
-    help: 'Threads use case → Settings → Threads app secret.' },
-  { key: 'YT_GOOGLE_CLIENT_ID', group: 'google', label: 'Google OAuth client ID', secret: false,
-    help: 'Google Cloud → APIs & Services → Credentials → OAuth client (Web application).' },
-  { key: 'YT_GOOGLE_CLIENT_SECRET', group: 'google', label: 'Google OAuth client secret', secret: true,
-    help: 'Same OAuth client → Client secret.' },
-  { key: 'LINKEDIN_CLIENT_ID', group: 'linkedin', label: 'LinkedIn client ID', secret: false,
-    help: 'LinkedIn Developers → your app → Auth → Client ID.' },
-  { key: 'LINKEDIN_CLIENT_SECRET', group: 'linkedin', label: 'LinkedIn client secret', secret: true,
-    help: 'Same page → Primary client secret.' },
 ];
 const BY_KEY = new Map(CREDENTIALS.map(c => [c.key, c]));
 
@@ -46,10 +34,8 @@ const BY_KEY = new Map(CREDENTIALS.map(c => [c.key, c]));
 const FORMAT = {
   FACEBOOK_APP_ID: [/^\d{6,20}$/, 'should be digits only (App settings → Basic → App ID)'],
   INSTAGRAM_OAUTH_CLIENT_ID: [/^\d{6,20}$/, 'should be digits only'],
-  THREADS_APP_ID: [/^\d{6,20}$/, 'should be digits only'],
   FACEBOOK_APP_SECRET: [/^[0-9a-f]{32}$/, 'should be 32 characters of 0-9 and a-f'],
   INSTAGRAM_OAUTH_CLIENT_SECRET: [/^[0-9a-f]{32}$/, 'should be 32 characters of 0-9 and a-f'],
-  THREADS_APP_SECRET: [/^[0-9a-f]{32}$/, 'should be 32 characters of 0-9 and a-f'],
 };
 const PREFIX = 'credential:';
 

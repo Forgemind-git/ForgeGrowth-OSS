@@ -11,7 +11,9 @@
 const { normKey } = require('./format');
 const { KEY10, OWNER_SQL } = require('./sql');
 
-const CHAT_TYPES = ['lead_bot', 'lead_rep', 'broadcast', 'voice_note', 'media', 'ad_referral', 'internal_note'];
+const CHAT_TYPES = ['lead_bot', 'lead_rep', 'broadcast', 'voice_note', 'media', 'internal_note'];
+// Retired with the Marketing section: still found in stored scopes, dropped quietly.
+const RETIRED_CHAT_TYPES = ['ad_referral'];
 
 const WON_STAGE_MODES = ['include', 'exclude', 'exclude_unless_outstanding'];
 
@@ -59,7 +61,7 @@ function normalizeScope(raw) {
     won_stages: WON_STAGE_MODES.includes(r.won_stages) ? r.won_stages : 'include',
   };
   if (Array.isArray(r.chat_types)) {
-    const bad = r.chat_types.map(String).filter(t => !CHAT_TYPES.includes(t));
+    const bad = r.chat_types.map(String).filter(t => !CHAT_TYPES.includes(t) && !RETIRED_CHAT_TYPES.includes(t));
     if (bad.length) errors.push(`Unknown chat type(s): ${bad.join(', ')}. Valid: ${CHAT_TYPES.join(', ')}.`);
   }
   if (r.lookback_days !== undefined) {
@@ -105,21 +107,14 @@ function leadScopeSql(scope, add, { alias = 'l', ownerExpr = null } = {}) {
     const won = `${alias}.stage IN (SELECT fs.stage_key FROM coexistence.funnel_stages fs WHERE fs.is_won AND fs.active)`;
     if (scope.won_stages === 'exclude') parts.push(`NOT (${won})`);
     else {
-      // Outstanding = a known product price above everything paid (gateway + manual).
+      // Outstanding = a known product price above everything paid.
       parts.push(`(NOT (${won}) OR EXISTS (
         SELECT 1 FROM coexistence.courses c
          WHERE ${alias}.paid_course IS NOT NULL AND lower(btrim(c.name)) = lower(btrim(${alias}.paid_course))
            AND c.default_price_paise > 0
            AND COALESCE(${alias}.payment_status, '') <> 'paid'
            AND c.default_price_paise > COALESCE((
-             SELECT SUM(p.amount_paise) FROM (
-               (SELECT DISTINCT ON (COALESCE(re.payment_id, 'evt'||re.id::text)) re.amount_paise
-                  FROM coexistence.razorpay_events re
-                 WHERE re.status = 'captured' AND re.matched_lead_id = ${alias}.id
-                 ORDER BY COALESCE(re.payment_id, 'evt'||re.id::text), (re.event_type = 'payment.captured') DESC, re.id)
-               UNION ALL
-               SELECT sl.amount_paise FROM coexistence.sales_log sl WHERE sl.lead_id = ${alias}.id
-             ) p), 0)))`);
+             SELECT SUM(sl.amount_paise) FROM coexistence.sales_log sl WHERE sl.lead_id = ${alias}.id), 0)))`);
     }
   }
 

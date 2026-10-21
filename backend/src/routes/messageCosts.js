@@ -6,7 +6,7 @@
 //
 // EVERY aggregation below builds on messageCosts.PRICED_CTE, so the per-template
 // total and the per-category total can never disagree about what one message
-// cost. Same single-source discipline as GROUP_CTE in razorpay.js.
+// cost.
 //
 // Admin-only throughout: this is billing data.
 

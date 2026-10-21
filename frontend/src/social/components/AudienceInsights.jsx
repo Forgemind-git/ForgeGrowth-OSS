@@ -42,7 +42,7 @@ function InfoTip({ text }) {
 
 // Horizontal bar list — top entries of one demographic breakdown, drawn with
 // the shared rail recipe (22px rounded rail on the surface tint, label left,
-// count right). Values are absolute follower counts (IG/Threads) or % (YT).
+// count right). Values are absolute follower counts.
 function BarList({ title, items, accent, kind, unit = "followers", max = 6 }) {
   const [tip, setTip] = useState(null);
   if (!items?.length) return null;
@@ -122,13 +122,12 @@ export function OnlineFollowersStrip({ buckets, accent = C.primary }) {
 const hasDemo = (demo) => !!(demo?.age?.length || demo?.gender?.length || demo?.country?.length);
 
 // A row of Age / Gender / Top countries bar lists for one demographic set.
-// countryUnit: IG/Threads report follower counts per country; YT reports views.
-function DemoRow({ demo, accent, countryUnit = "followers" }) {
+function DemoRow({ demo, accent }) {
   return (
     <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
       <BarList title="Age" items={demo.age} accent={accent} kind="age" />
       <BarList title="Gender" items={demo.gender} accent={accent} kind="gender" max={4} />
-      <BarList title="Top countries" items={demo.country} accent={accent} kind="country" unit={countryUnit} />
+      <BarList title="Top countries" items={demo.country} accent={accent} kind="country" />
     </div>
   );
 }
@@ -145,12 +144,10 @@ const TitleWithInfo = ({ icon: IconCmp, title, infoText }) => (
 export function AudienceSection({ audience, accent, platformName }) {
   if (!audience || audience.available === false) return null;
   const hasAnything = audience.age?.length || audience.gender?.length || audience.country?.length
-    || audience.engaged || audience.onlineFollowers || audience.trafficSources;
+    || audience.engaged || audience.onlineFollowers;
   if (!hasAnything) return null;
 
-  const followerSource = platformName === "YouTube"
-    ? "Reported by the YouTube Analytics API: viewer age/gender as a percentage of watch time and top countries by views, last 90 days. Updated once a day."
-    : `Reported by the ${platformName} API: demographic breakdown of your current followers (lifetime totals, accounts with 100+ followers only). Updated once a day.`;
+  const followerSource = `Reported by the ${platformName} API: demographic breakdown of your current followers (lifetime totals, accounts with 100+ followers only). Updated once a day.`;
   const engagedInfo = `Reported by the ${platformName} API: demographics of accounts that interacted with your content (engaged audience), which can differ from who follows you. Updated once a day.`;
   const showFollows = hasDemo(audience);
   const showEngaged = hasDemo(audience.engaged);
@@ -161,10 +158,10 @@ export function AudienceSection({ audience, accent, platformName }) {
         <Card style={{ marginBottom: 16 }}>
           <SectionHead right={<Badge label="Updated daily" bg={C.surface} color={C.textMuted} />}>
             {showFollows
-              ? <TitleWithInfo icon={Users} title={platformName === "YouTube" ? "Audience · who watches you" : "Audience · who follows you"} infoText={followerSource} />
+              ? <TitleWithInfo icon={Users} title="Audience · who follows you" infoText={followerSource} />
               : <TitleWithInfo icon={HeartHandshake} title="Audience · who engages with you" infoText={engagedInfo} />}
           </SectionHead>
-          {showFollows && <DemoRow demo={audience} accent={accent} countryUnit={platformName === "YouTube" ? "views" : "followers"} />}
+          {showFollows && <DemoRow demo={audience} accent={accent} />}
           {/* The engaged-audience breakdown sits ON the raised card as a surface card. */}
           {showFollows && showEngaged && (
             <div style={{ marginTop: 18, background: C.surface, borderRadius: 16, padding: 18 }}>
@@ -180,16 +177,6 @@ export function AudienceSection({ audience, accent, platformName }) {
       {audience.onlineFollowers && (
         <Card style={{ marginBottom: 16 }}>
           <OnlineFollowersStrip buckets={audience.onlineFollowers} accent={accent} />
-        </Card>
-      )}
-      {audience.trafficSources && (
-        <Card style={{ marginBottom: 16 }}>
-          <SectionHead right={<Badge label={`Last ${audience.windowDays || 90} days`} bg={C.surface} color={C.textMuted} />}>
-            <TitleWithInfo title={`Where ${platformName} views come from`} infoText="Reported by the YouTube Analytics API: views grouped by traffic source (search, suggested videos, Shorts feed, external links, etc.) over the last 90 days. Updated once a day." />
-          </SectionHead>
-          <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
-            <BarList title="Traffic source" items={audience.trafficSources} accent={accent} kind="source" max={8} />
-          </div>
         </Card>
       )}
     </>

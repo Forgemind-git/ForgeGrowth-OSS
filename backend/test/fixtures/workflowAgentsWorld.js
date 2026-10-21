@@ -1,7 +1,7 @@
 // Seeded world shared by the workflow-agent integration tests: two business numbers,
 // two reps (number A moved from Rep A to Rep B 48 hours ago), six leads covering the
 // scope rules, a voice note with a transcript, a button tap, a phone-app echo, a
-// broadcast template, a double-written Razorpay payment and an attributed ad.
+// broadcast template and two manual payments on the enrolled lead.
 //
 // ⚠ `node --test` runs test FILES in parallel against one database, so every test
 // file seeds its own world with a distinct one-digit tag. Two files sharing marker
@@ -19,8 +19,8 @@ function makeWorld(tag) {
   };
   const P = `wftest${T}`;
   const names = {
-    msgPrefix: `${P}.`, template: `${P}_template`, course: `WF Test Course ${T}`, ad: `${P}-ad-1`, waba: `${P}-waba`,
-    agentSlug: `${P}-agent`, userPrefix: `${P}_`, payment: `${P}_pay_1`, student: `${P} enrolled`,
+    msgPrefix: `${P}.`, template: `${P}_template`, course: `WF Test Course ${T}`, waba: `${P}-waba`,
+    agentSlug: `${P}-agent`, userPrefix: `${P}_`, student: `${P} enrolled`,
   };
   const mid = (s) => `${names.msgPrefix}${s}`;
   const ids = {};
@@ -41,11 +41,7 @@ function makeWorld(tag) {
     await pool.query(`DELETE FROM coexistence.chat_message_artifacts WHERE message_key LIKE $1`, [`${names.msgPrefix}%`]);
     await pool.query(`DELETE FROM coexistence.chat_history WHERE message_id LIKE $1 OR contact_number LIKE $2`, [`${names.msgPrefix}%`, `9191000${T}%`]);
     await pool.query(`DELETE FROM coexistence.rep_teams WHERE name LIKE $1`, [`${P}-%`]);
-    await pool.query(`DELETE FROM coexistence.ctwa_referrals WHERE source_id = $1`, [names.ad]);
-    await pool.query(`DELETE FROM coexistence.ad_daily_stats WHERE ad_external_id = $1`, [names.ad]);
-    await pool.query(`DELETE FROM coexistence.campaign_ads WHERE ad_external_id = $1`, [names.ad]);
-    await pool.query(`DELETE FROM coexistence.razorpay_events WHERE payment_id = $1`, [names.payment]);
-    await pool.query(`DELETE FROM coexistence.sales_log WHERE student_name = $1`, [names.student]);
+    await pool.query(`DELETE FROM coexistence.sales_log WHERE student_name LIKE $1`, [`${names.student}%`]);
     await pool.query(`DELETE FROM coexistence.lead_notes WHERE lead_id IN (SELECT id FROM coexistence.leads WHERE whatsapp_number LIKE $1)`, [`9191000${T}%`]);
     await pool.query(`DELETE FROM coexistence.contacts WHERE contact_number LIKE $1`, [`9191000${T}%`]);
     await pool.query(`DELETE FROM coexistence.leads WHERE whatsapp_number LIKE $1`, [`9191000${T}%`]);
@@ -123,19 +119,13 @@ function makeWorld(tag) {
     await msg(pool, { id: mid('x1'), wa: NUM_A, to: L.old, body: 'fees? (old)', at: ago(24 * 40) });
     await msg(pool, { id: mid('e1'), wa: NUM_A, to: L.enrolled, body: 'paid', at: ago(24 * 4) });
 
-    // The enrolled lead: one gateway payment written TWICE (the Razorpay double-row) +
-    // one manual sales_log row. Price ₹5,000; paid ₹2,000 + ₹1,000.
+    // The enrolled lead: two sales_log rows. Price ₹5,000; paid ₹2,000 + ₹1,000.
     await pool.query(
-      `INSERT INTO coexistence.razorpay_events (event_type, status, payment_id, amount_paise, matched_lead_id, method, created_at, signature_valid)
-       VALUES ('payment.captured','captured',$3,200000,$1,'upi',$2,TRUE), ('order.paid','captured',$3,200000,$1,'upi',$2,TRUE)`,
-      [ids.enrolled, ago(24 * 4), names.payment]);
+      `INSERT INTO coexistence.sales_log (lead_id, student_name, course_id, amount_paise, payment_date, method)
+       VALUES ($1, $3, $2, 200000, (NOW() AT TIME ZONE 'Asia/Kolkata')::date - 4, 'UPI')`, [ids.enrolled, ids.course, names.student]);
     await pool.query(
       `INSERT INTO coexistence.sales_log (lead_id, student_name, course_id, amount_paise, payment_date, method)
        VALUES ($1, $3, $2, 100000, (NOW() AT TIME ZONE 'Asia/Kolkata')::date - 1, 'Cash')`, [ids.enrolled, ids.course, names.student]);
-
-    await pool.query(`INSERT INTO coexistence.campaign_ads (ad_external_id, campaign_external_id, name, status, spend, leads, impressions, clicks) VALUES ($1,$2,'WF ad','active',100,1,10,2)`, [names.ad, `${P}-cmp`]);
-    await pool.query(`INSERT INTO coexistence.ad_daily_stats (ad_external_id, stat_date, spend, impressions, clicks, leads) VALUES ($1, (NOW() AT TIME ZONE 'Asia/Kolkata')::date - 2, 100, 10, 2, 1)`, [names.ad]);
-    await pool.query(`INSERT INTO coexistence.ctwa_referrals (contact_number, lead_id, source_id, source_type, platform, headline, message_id, clicked_at, raw) VALUES ($1,$2,$3,'ad','Instagram','Learn AI',$4,$5,'{}')`, [L.hot, ids.hot, names.ad, mid('h1'), ago(24 * 5)]);
 
     const ag = await pool.query(`INSERT INTO coexistence.workflow_agents (name, slug) VALUES ('WF test agent', $1) RETURNING id`, [names.agentSlug]);
     ids.agent = ag.rows[0].id;

@@ -400,10 +400,6 @@ apiRouter.put('/leads/:id/move', requireTool('move_lead_stage'), async (req, res
   try { res.json(await mcpService.moveLeadStage(req.params.id, req.body?.stage)); }
   catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to move lead' }); }
 });
-apiRouter.get('/campaign-performance', requireTool('get_campaign_performance'), (req, res) =>
-  discovery(res, () => mcpService.getCampaignPerformance({ campaignId: req.query.campaignId }), 'Failed to load campaign performance'));
-apiRouter.get('/webinars-list', requireTool('list_webinars'), (req, res) =>
-  discovery(res, () => mcpService.listWebinars(), 'Failed to list webinars'));
 
 /* --------- courses + payments dedicated tools --------- */
 // Named *-list / *-summary so they can't collide with the real /courses and
@@ -439,10 +435,6 @@ apiRouter.post('/route-tools/:name', (req, res, next) => requireTool(req.params.
   catch (err) { res.status(err.status || 500).json({ error: err.message || 'Tool failed' }); }
 });
 
-apiRouter.post('/ad-conversions', requireTool('get_ad_conversions'), async (req, res) => {
-  try { const b = req.body || {}; res.json(await require('../services/adConversions').getAdConversions({ from: b.from, to: b.to, adIds: b.adIds })); }
-  catch (err) { res.status(err.status || 500).json({ error: err.message || 'Could not read ad conversions' }); }
-});
 
 apiRouter.post('/chat-analysis-transcribe', requireTool('transcribe_chat'), async (req, res) => {
   try { res.json(await mcpService.transcribeChat(req.body || {})); }
@@ -466,10 +458,6 @@ apiRouter.get('/courses-list', requireTool('list_products'), (req, res) =>
   discovery(res, () => mcpService.listCourses(), 'Failed to list courses'));
 apiRouter.get('/courses-revenue', requireTool('get_product_revenue'), (req, res) =>
   discovery(res, () => mcpService.getCourseRevenue(), 'Failed to load course revenue'));
-apiRouter.get('/payments-list', requireTool('list_payments'), (req, res) =>
-  discovery(res, () => mcpService.listPayments({
-    state: req.query.state, courseId: req.query.courseId, search: req.query.search, limit: req.query.limit,
-  }), 'Failed to list payments'));
 
 /* --------- full access: generic proxy + catalog + bulk --------- */
 // Both of these were previously UNGATED at this layer — they self-gated on the
@@ -490,7 +478,7 @@ apiRouter.post('/bulk-message', requireTool('send_bulk_message'), async (req, re
   catch (err) { res.status(err.status || 500).json({ error: err.message || 'Bulk send failed' }); }
 });
 
-/* --------- config: media / templates / automations / wa-links -----------------
+/* --------- config: media / templates / automations ----------------------------
    Suffixed (*-create / *-list / *-submit) so they never collide with the real
    app paths the generic proxy forwards. --------- */
 apiRouter.post('/media-upload', requireTool('upload_media'), async (req, res) => {
@@ -548,10 +536,6 @@ apiRouter.get('/automations-runs', requireTool('get_automation_runs'), (req, res
     automationId: req.query.automationId, executionId: req.query.executionId,
     status: req.query.status, limit: req.query.limit,
   }), 'Failed to read the runs'));
-apiRouter.post('/wa-links-create', requireTool('create_wa_link'), async (req, res) => {
-  try { res.status(201).json(await mcpService.createWaLink(req.body || {})); }
-  catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to create link' }); }
-});
 
 /* --------- mutations --------- */
 apiRouter.post('/agents', requireTool('create_agent'), async (req, res) => {

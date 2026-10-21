@@ -6,7 +6,7 @@ import {
   Image, Video, FileText, Type, Link, Phone, Reply, KeyRound, Loader2, Send,
   Clock, AlertCircle, CheckCircle2, XCircle, Info, Download, RefreshCw,
   Play, Smile, Paperclip, Mic, History, RotateCcw, User, BarChart3, MousePointerClick,
-  Library, Music, CreditCard, ChevronRight, ChevronLeft, Save, ClipboardCheck, MousePointer2, MessageSquareText, Settings2
+  Library, Music, ChevronRight, ChevronLeft, Save, ClipboardCheck, MousePointer2, MessageSquareText, Settings2
 } from 'lucide-react';
 import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx';
 import { useConfirm } from '../components/ConfirmDialog.jsx';
@@ -104,49 +104,10 @@ const QUALITY_STYLES = {
 const extractVars = (t) => { const m = [...(t || '').matchAll(/\{\{(\d+)\}\}/g)]; return [...new Set(m.map(x => x[1]))].sort((a, b) => +a - +b); };
 const applyVars = (t, s) => (t || '').replace(/\{\{(\d+)\}\}/g, (_, n) => s[n] || `{{${n}}}`);
 
-// The public path a payment-link button points at. MUST match PAY_PATH in
-// backend/src/services/paymentFlow.js — the backend detects a payment template
-// by this path, so the two are a contract.
-const PAY_PATH = '/pay/';
-
-/**
- * Build a new button row for the editor.
- *
- * PAYMENT_LINK is NOT a Meta button type — Meta has only URL / PHONE_NUMBER /
- * QUICK_REPLY / COPY_CODE / OTP. It is a preset that produces a plain URL button
- * whose URL is our own redirect with a {{1}} token.
- *
- * ⚠ The base is OURS, never Razorpay's. Meta bakes a URL button's base in at
- * approval; pointing it at rzp.io would mean every approved template dies the
- * day Razorpay changes its short-link format, and re-approval takes days.
- *
- * ⚠ The scheme is pinned to https and only the HOST comes from the browser —
- * Meta rejects a non-https URL button, and the same trap already bit the Lead
- * Forms template flow when the scheme was read from the request.
- */
+// Build a new button row for the editor.
 function makeButton(type) {
-  if (type === 'PAYMENT_LINK') {
-    const base = `https://${window.location.host}${PAY_PATH}`;
-    return {
-      type: 'URL',
-      text: 'Pay now',
-      value: `${base}{{1}}`,
-      // Meta requires a sample for a dynamic URL. A realistic-looking token
-      // matters: a sample that does not resolve like the real thing is a common
-      // review rejection.
-      urlSample: `${base}a1b2c3d4e5f6a7b8c9`,
-      isPaymentLink: true,
-      otpType: 'COPY_CODE',
-    };
-  }
   return { type, text: '', value: '', otpType: 'COPY_CODE' };
 }
-
-// A stored button is a payment button when its URL points at our /pay/ path and
-// carries a variable. DERIVED, never read from a flag — the same rule the
-// backend applies, so the two can never disagree about what a template is.
-const isPaymentButton = (b) =>
-  b?.type === 'URL' && String(b.value || '').includes(PAY_PATH) && /\{\{\s*\d+\s*\}\}/.test(b.value || '');
 
 const nameOk = (n) => /^[a-z0-9_]+$/.test(n);
 
@@ -392,10 +353,6 @@ function ButtonsSection({ buttons, onAdd, onRemove, onUpdate, category, errors }
         { type: 'URL', icon: <Link size={16} />, label: 'Visit Website', hint: 'Opens a URL', disabled: urlCount >= 2, disabledMsg: 'Max 2 URL buttons' },
         { type: 'PHONE_NUMBER', icon: <Phone size={16} />, label: 'Call Phone', hint: 'Dials a number', disabled: phoneCount >= 1, disabledMsg: 'Max 1 phone button' },
         { type: 'COPY_CODE', icon: <KeyRound size={16} />, label: 'Copy Coupon Code', hint: 'One-tap copy of a promo code', disabled: couponCount >= 1, disabledMsg: 'Max 1 coupon button' },
-        // A payment button IS a URL button — Meta has no payment button type.
-        // Picking this just pre-fills the URL with our /pay/{{1}} redirect, so
-        // it counts against the same 2-URL limit.
-        { type: 'PAYMENT_LINK', icon: <CreditCard size={16} />, label: 'Payment Link', hint: 'Each recipient gets their own Razorpay link', disabled: urlCount >= 2, disabledMsg: 'Max 2 URL buttons' },
       ];
 
   const tColor = { QUICK_REPLY: B.accent, URL: '#1565C0', PHONE_NUMBER: B.green, OTP: B.green, COPY_CODE: '#8E24AA' };
@@ -444,9 +401,9 @@ function ButtonsSection({ buttons, onAdd, onRemove, onUpdate, category, errors }
             <div key={i} style={{ border: `1.5px solid ${hasErr ? B.red + '44' : B.innerBorder}`, borderRadius: 10, padding: '12px 14px', background: B.innerBg }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <span style={{ fontSize: 13, fontWeight: 700, padding: '3px 10px', borderRadius: 99,
-                  background: isPaymentButton(btn) ? 'var(--c-successBgSoft, #EDF6F1)' : tBg[btn.type],
-                  color: isPaymentButton(btn) ? 'var(--c-successText, #0F6E56)' : tColor[btn.type], fontFamily: FONT }}>
-                  {isPaymentButton(btn) ? 'Payment Link' : tLabel[btn.type]}
+                  background: tBg[btn.type],
+                  color: tColor[btn.type], fontFamily: FONT }}>
+                  {tLabel[btn.type]}
                 </span>
                 <button onClick={() => onRemove(i)} style={{ width: 22, height: 22, borderRadius: 99, background: B.redBg, border: 'none', cursor: 'pointer', color: B.red, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>×</button>
               </div>
@@ -497,23 +454,6 @@ function ButtonsSection({ buttons, onAdd, onRemove, onUpdate, category, errors }
                           ? <Hint error>{errors[`btn_code_${i}`]}</Hint>
                           : <Hint>WhatsApp shows a "Copy offer code" button; tapping copies this code (max 15 chars).</Hint>}
                       </div>
-                    ) : isPaymentButton(btn) ? (
-                      <div>
-                        <Lbl>Payment link</Lbl>
-                        <div style={{ border: '1.5px solid #9CC9B4', background: 'var(--c-successBgSoft, #EDF6F1)', borderRadius: 8, padding: '9px 12px' }}>
-                          <div style={{ fontSize: 13, color: 'var(--c-successText, #0F6E56)', fontWeight: 600, fontFamily: FONT }}>
-                            Each recipient gets their own Razorpay link
-                          </div>
-                          <div style={{ fontSize: 12, color: 'var(--c-s3c6656, #3C6656)', marginTop: 4, lineHeight: 1.5, fontFamily: FONT }}>
-                            The link is created when the message is sent — by the automation Payment node, the AI
-                            agent, or a broadcast — so one approved template works for every customer and every amount.
-                          </div>
-                          <div style={{ fontSize: 12, color: 'var(--c-s3c6656, #3C6656)', marginTop: 6, fontFamily: "'DM Mono', monospace", wordBreak: 'break-all' }}>
-                            {btn.value}
-                          </div>
-                        </div>
-                        <Hint>Do not edit this URL — the sending code recognises a payment template by it.</Hint>
-                      </div>
                     ) : btn.type !== 'QUICK_REPLY' ? (
                       <div>
                         <Lbl required>{btn.type === 'URL' ? 'Website URL' : 'Phone Number (E.164)'}</Lbl>
@@ -527,7 +467,7 @@ function ButtonsSection({ buttons, onAdd, onRemove, onUpdate, category, errors }
                       </div>
                     ) : null}
                   </div>
-                  {btn.type === 'URL' && urlVars.length > 0 && !isPaymentButton(btn) && (
+                  {btn.type === 'URL' && urlVars.length > 0 && (
                     <div style={{ padding: '10px 12px', background: B.sectionBg, border: `1px solid ${errors[`btn_urlsample_${i}`] ? B.red + '44' : B.sectionBorder}`, borderRadius: 8 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: B.t4, marginBottom: 6, fontFamily: FONT }}>
                         URL has <span style={{ fontFamily: "'DM Mono', monospace", background: B.accentBg, padding: '1px 5px', borderRadius: 4, fontSize: 13, color: B.accentDark }}>{'{{1}}'}</span> — provide a sample URL:

@@ -1,5 +1,5 @@
-// Sales → Automations (and, by the same pattern, Chats, Sales Log, the Marketing
-// groups and the Social groups): ONE sidebar destination for everything that builds or
+// Sales → Automations (and, by the same pattern, Chats and the Social
+// groups): ONE sidebar destination for everything that builds or
 // sends automated messaging — flows, AI agents, broadcasts, the templates and
 // media they send, and what that messaging costs. Modelled on Social's
 // Automations page (one nav item, tabs along the top).
@@ -14,8 +14,8 @@
 // own the whole pane, exactly as Social hides its tabs inside an automation.
 import { useEffect, useState } from 'react';
 import {
-  Zap, Bot, Megaphone, LayoutTemplate, Image as ImageIcon, IndianRupee, MessageCircle, Users2, ScanSearch, Receipt, CreditCard,
-  MousePointerClick, Link, Link2, Radio, Target, MessageSquareText, MessagesSquare,
+  Zap, Bot, Megaphone, LayoutTemplate, Image as ImageIcon, IndianRupee, MessageCircle, Users2, ScanSearch,
+  MessagesSquare,
 } from 'lucide-react';
 import { C, FONT } from '../constants.js';
 
@@ -29,38 +29,18 @@ export const HUB_TABS = [
 ];
 export const HUB_PAGES = new Set(HUB_TABS.map(t => t.key));
 
-// The same tabs-above-the-page shape, used for two more destinations so the
-// Sales menu stays short (2026-10-16):
-//   Chats     — the 1:1 inbox, WhatsApp groups and the analyser that reads both.
-//   Sales Log — the sales themselves and the money that paid for them.
+// The same tabs-above-the-page shape, used for Chats so the Sales menu stays
+// short (2026-10-16): the 1:1 inbox, WhatsApp groups and the analyser that
+// reads both.
 export const CHAT_TABS = [
   { key: 'chats', label: 'Chats', Icon: MessageCircle },
   { key: 'chat-analyzer', label: 'Chat Analyzer', Icon: ScanSearch },
-];
-export const SALES_LOG_TABS = [
-  { key: 'onboarding', label: 'Sales Log', Icon: Receipt },
-  { key: 'payments', label: 'Payments', Icon: CreditCard },
-];
-
-// Marketing (2026-10-16), in the order the work happens: run the ads, see
-// where leads came from, then send the results back to Meta.
-export const CAMPAIGN_TABS = [
-  { key: 'campaigns', label: 'Campaigns', Icon: Megaphone },
-  { key: 'ctwa-ads', label: 'Click-to-WhatsApp', Icon: MousePointerClick },
-];
-export const LEAD_SOURCE_TABS = [
-  { key: 'wa-links', label: 'Message Formats', Icon: Link },
-];
-export const CONVERSION_TABS = [
-  { key: 'conversion-api', label: 'Conversion API', Icon: Radio },
-  { key: 'clo', label: 'Lead Optimisation', Icon: Target },
 ];
 
 // Social (2026-10-16). A Social tab's key is its ROUTE ('social/<view>') and
 // one permission — 'social' — covers every one of them (`perm`).
 export const SOCIAL_INBOX_TABS = [
   { key: 'social/inbox', label: 'Inbox', Icon: MessageCircle, perm: 'social' },
-  { key: 'social/messenger', label: 'Messenger', Icon: MessageSquareText, perm: 'social' },
   { key: 'social/comment-analyzer', label: 'Comment Analyzer', Icon: MessagesSquare, perm: 'social' },
 ];
 
@@ -68,10 +48,6 @@ export const SOCIAL_INBOX_TABS = [
 export const HUBS = [
   { id: 'chatbot-builder', label: 'Automations', tabs: HUB_TABS },
   { id: 'chats', label: 'Chats', tabs: CHAT_TABS },
-  { id: 'onboarding', label: 'Sales Log', tabs: SALES_LOG_TABS },
-  { id: 'campaigns', label: 'Campaigns', tabs: CAMPAIGN_TABS },
-  { id: 'wa-links', label: 'Lead Sources', tabs: LEAD_SOURCE_TABS },
-  { id: 'conversion-api', label: 'Conversions', tabs: CONVERSION_TABS },
   { id: 'social/inbox', label: 'Inbox', tabs: SOCIAL_INBOX_TABS },
 ];
 export const hubOf = (page) => HUBS.find(h => h.tabs.some(t => t.key === page)) || null;

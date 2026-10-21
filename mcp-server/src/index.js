@@ -242,7 +242,7 @@ server.registerTool('send_interactive', {
   },
 }, tool(({ fromNumber, toNumber, interactive }) => call('POST', '/messages/interactive', { fromNumber, toNumber, interactive })));
 
-/* ============ config: media / templates / automations / wa-links ============ */
+/* ================ config: media / templates / automations ================ */
 
 server.registerTool('upload_media', {
   title: 'Upload media to the Media Library',
@@ -394,21 +394,11 @@ server.registerTool('get_automation_runs', {
   Object.entries(a).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)])
 )}`)));
 
-server.registerTool('create_wa_link', {
-  title: 'Create a click-to-chat link',
-  description: 'Create a tracked wa.me link opening a chat with a business number, optionally pre-filled with a message.',
-  inputSchema: {
-    name: z.string().describe('Link name.'),
-    accountId: z.union([z.string(), z.number()]).describe('WhatsApp account id (from list_wa_accounts).'),
-    message: z.string().optional().describe('Pre-filled message text.'),
-  },
-}, tool((args) => call('POST', '/wa-links-create', args)));
-
-/* ================= AI Academy funnel: leads / marketing / BDA ========== */
+/* ======================= AI Academy funnel: leads ===================== */
 
 server.registerTool('list_leads', {
   title: 'List funnel leads',
-  description: "List leads from the Marketing/Sales funnel. Filter by stage (a configurable funnel stage key — see GET /funnel/config; defaults new/contacted/engaged/hot/enrolled/cold_lost), a saved view (view='hot' = arrived within 24h; 'unassigned'), or a name/number/email search. Returns id, name, whatsappNumber, stage, source, assignedUserName, createdAt.",
+  description: "List leads from the Sales funnel. Filter by stage (a configurable funnel stage key — see GET /funnel/config; defaults new/contacted/engaged/hot/enrolled/cold_lost), a saved view (view='hot' = arrived within 24h; 'unassigned'), or a name/number/email search. Returns id, name, whatsappNumber, stage, source, assignedUserName, createdAt.",
   inputSchema: {
     stage: z.string().optional().describe('Funnel stage key (configurable — see GET /funnel/config).'),
     view: z.enum(['hot', 'unassigned']).optional().describe("Saved view: 'hot' = arrived within the last 24 hours."),
@@ -434,33 +424,7 @@ server.registerTool('move_lead_stage', {
   },
 }, tool(({ leadId, stage }) => call('PUT', `/leads/${encodeURIComponent(leadId)}/move`, { stage })));
 
-server.registerTool('get_campaign_performance', {
-  title: 'Get ad campaign performance',
-  description: 'Get spend/leads/cost-per-lead for one campaign (by campaignId) or the most recent 100 campaigns if omitted. Covers both manually-entered and Meta-Ads-synced campaigns.',
-  inputSchema: { campaignId: z.union([z.string(), z.number()]).optional().describe('Omit to list recent campaigns.') },
-}, tool(({ campaignId }) => call('GET', `/campaign-performance${campaignId != null ? `?campaignId=${encodeURIComponent(campaignId)}` : ''}`)));
-
-server.registerTool('get_ad_conversions', {
-  title: 'Get conversions per Meta ad',
-  description: 'Which Meta ad actually produced chats and paying students, measured in ForgeGrowth (not Ads Manager). '
-    + 'Per ad id: chats (leads whose FIRST ad touch in the range was this ad — landing page ad_id or click-to-WhatsApp referral), '
-    + 'buyers (of those, captured Razorpay payment after the touch, net of refunds, or moved to enrolled), revenue in INR, conversionRate %. '
-    + 'Dates are IST YYYY-MM-DD; defaults to the last 30 days. Read-only.',
-  inputSchema: {
-    from: z.string().optional().describe('Start date, IST, YYYY-MM-DD (inclusive). Default: 29 days before `to`.'),
-    to: z.string().optional().describe('End date, IST, YYYY-MM-DD (inclusive). Default: today.'),
-    adIds: z.array(z.string()).optional().describe('Limit to these Meta ad ids.'),
-  },
-  annotations: { readOnlyHint: true },
-}, tool((args) => call('POST', '/ad-conversions', args)));
-
-server.registerTool('list_webinars', {
-  title: 'List webinar batches',
-  description: 'List webinar/batch schedule with registrations, attendance %, and hot-lead counts.',
-  inputSchema: {},
-}, tool(() => call('GET', '/webinars-list')));
-
-/* ------------------------- courses + payments --------------------------- */
+/* ------------------------------ products -------------------------------- */
 
 // The REST paths below stay /courses-* — they are internal plumbing between
 // this stdio server and the backend, not something a user or client sees.
@@ -617,36 +581,15 @@ server.registerTool('get_chat_analysis_costs', {
 
 server.registerTool('list_products', {
   title: 'List products',
-  description: 'List the product catalog — a product is anything sold: a course, a consulting engagement, a template pack, a webinar. Each carries its optional default (headline) price plus its payment links with price, paid count and revenue. Amounts are in rupees; defaultPriceRupees is null when no default price is set.',
+  description: 'List the product catalog — a product is anything sold: a course, a consulting engagement, a template pack, a webinar. Each carries its optional default (headline) price plus its sales count and revenue. Amounts are in rupees; defaultPriceRupees is null when no default price is set.',
   inputSchema: {},
 }, tool(() => call('GET', '/courses-list')));
 
 server.registerTool('get_product_revenue', {
   title: 'Get product revenue',
-  description: 'Revenue, paid count and failed count per product, plus payments that matched no product, plus the overall total. Amounts are in rupees. Use this for "how much has product X made" / "which product sells best".',
+  description: 'Revenue, sales and payment counts per product, plus sales with no product set, plus the overall total. Amounts are in rupees. Use this for "how much has product X made" / "which product sells best".',
   inputSchema: {},
 }, tool(() => call('GET', '/courses-revenue')));
-
-server.registerTool('list_payments', {
-  title: 'List payments',
-  description:
-    'The Razorpay payment ledger, one row per payer (all their attempts grouped), newest first. Each row links back to the matched CRM lead/contact where Razorpay data allowed a match. ' +
-    'Use state="failed" to find people who tried to pay and could not — the follow-up list. Amounts are in rupees.',
-  inputSchema: {
-    state: z.enum(['paid', 'failed', 'refunded', 'pending']).optional().describe('Filter by outcome. "failed" = attempted but never succeeded (follow-up list).'),
-    courseId: z.union([z.string(), z.number()]).optional().describe('Product id from list_products, or "none" for payments that matched no product.'),
-    search: z.string().optional().describe('Partial match on payer email, phone, order id, or matched lead/contact name.'),
-    limit: z.number().int().min(1).max(200).optional().describe('Default 50.'),
-  },
-}, tool(({ state, courseId, search, limit }) => {
-  const p = new URLSearchParams();
-  if (state) p.set('state', String(state));
-  if (courseId != null) p.set('courseId', String(courseId));
-  if (search) p.set('search', String(search));
-  if (limit != null) p.set('limit', String(limit));
-  const qs = p.toString();
-  return call('GET', `/payments-list${qs ? `?${qs}` : ''}`);
-}));
 
 /* ===================== full access: proxy + bulk ===================== */
 
@@ -880,11 +823,11 @@ server.registerTool('delete_agent', {
 
 /* =============================== prompt =============================== */
 
-const GUIDE = `This is ForgeGrowth — an AI Academy Marketing/Sales lead funnel with a WhatsApp Chats layer underneath it. Before assuming this is purely an agent-builder: if the user wants to inspect or act on leads, campaigns, or webinars, use the funnel tools directly (list_leads, move_lead_stage, get_campaign_performance, list_webinars, or forgechat_request for anything else in an enabled area) — you do NOT need to build an agent for that.
+const GUIDE = `This is ForgeGrowth — an AI Academy Sales lead funnel with a WhatsApp Chats layer underneath it. Before assuming this is purely an agent-builder: if the user wants to inspect or act on leads, use the funnel tools directly (list_leads, move_lead_stage, or forgechat_request for anything else in an enabled area) — you do NOT need to build an agent for that.
 
-Social (Instagram, Facebook, Threads, YouTube, LinkedIn) has its own social_* tools: analytics and the content library (social_get_overview, social_get_platform_stats, social_list_posts), the inbox (social_list_messages, social_list_comments), Instagram automations and flows (social_list_automations, social_create_automation, social_list_flows, social_get_flow, social_create_flow — always create with active:false and switch on after the user confirms) and Social AI agents (social_list_agents, social_create_agent). Marketing reads: get_marketing_overview, get_click_to_whatsapp, get_campaign_roi. Sales reads: list_sales, get_payments_trend, get_funnel.
+Social (Instagram) has its own social_* tools: analytics and the content library (social_get_overview, social_get_platform_stats, social_list_posts), the inbox (social_list_messages, social_list_comments), Instagram automations and flows (social_list_automations, social_create_automation, social_list_flows, social_get_flow, social_create_flow — always create with active:false and switch on after the user confirms) and Social AI agents (social_list_agents, social_create_agent). Sales reads: list_sales, get_sale_transactions, get_funnel.
 
-You can also CONFIGURE the whole app from a plain-language "game plan": upload a poster (upload_media), create + submit a WhatsApp template for Meta approval (create_template → submit_template → sync_template), build an automation flow (ALWAYS validate_automation on the graph first, then create_automation — it lands as a draft and update_automation{active:true} takes it live after a second check; get_automation_runs says what a flow actually did), generate a click-to-chat link (create_wa_link), and send/broadcast (send_message, send_template, send_media, send_bulk_message). ALWAYS summarise what you will do and get the user's explicit confirmation before any create/submit/send step.
+You can also CONFIGURE the whole app from a plain-language "game plan": upload a poster (upload_media), create + submit a WhatsApp template for Meta approval (create_template → submit_template → sync_template), build an automation flow (ALWAYS validate_automation on the graph first, then create_automation — it lands as a draft and update_automation{active:true} takes it live after a second check; get_automation_runs says what a flow actually did), and send/broadcast (send_message, send_template, send_media, send_bulk_message). ALWAYS summarise what you will do and get the user's explicit confirmation before any create/submit/send step.
 
 The rest of this guide covers creating a WhatsApp AI agent. Gather and CONFIRM the full configuration with the user before calling create_agent. Offer real options fetched from their account — never guess ids, spreadsheets, tabs, models, or numbers.
 

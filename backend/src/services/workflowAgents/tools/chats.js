@@ -18,7 +18,7 @@ function numberFilter(ctx, add, col = 'ch.wa_number') {
 
 const CHAT_TYPE_SCHEMA = {
   type: 'array',
-  items: { type: 'string', enum: ['lead_bot', 'lead_rep', 'broadcast', 'voice_note', 'media', 'ad_referral', 'internal_note'] },
+  items: { type: 'string', enum: ['lead_bot', 'lead_rep', 'broadcast', 'voice_note', 'media', 'internal_note'] },
   description: 'Chat types to include (intersected with the agent\'s data scope). Default: every type in scope.',
 };
 
@@ -74,17 +74,6 @@ const getConversation = {
         `SELECT id, body, author_user_id, source, created_at FROM coexistence.lead_notes
           WHERE lead_id = $1 AND created_at >= $2 AND created_at <= $3 ORDER BY created_at`, [id, win.since, win.until]);
       out.internal_notes = notes.map(n => ({ note_id: String(n.id), body: n.body, source: n.source, ...repRef(ctx.users, n.author_user_id), created_at: toIst(n.created_at) }));
-    }
-    if (types.includes('ad_referral')) {
-      const { rows: refs } = await pool.query(
-        `SELECT r.source_id, r.source_type, r.platform, r.headline, r.source_url, r.clicked_at, r.message_id, ca.name AS ad_name
-           FROM coexistence.ctwa_referrals r LEFT JOIN coexistence.campaign_ads ca ON ca.ad_external_id = r.source_id
-          WHERE (r.lead_id = $1 OR ${KEY10('r.contact_number')} = ${KEY10('$2')}) AND r.clicked_at <= $3
-          ORDER BY r.clicked_at`, [id, lead.whatsapp_number, win.until]);
-      out.ad_referrals = refs.map(r => ({
-        ad_id: r.source_id, ad_name: r.ad_name || null, source_type: r.source_type, platform: r.platform,
-        headline: r.headline || null, source_url: r.source_url || null, clicked_at: toIst(r.clicked_at), first_message_id: r.message_id,
-      }));
     }
     return out;
   },

@@ -32,15 +32,7 @@ const ACTIVITY_LATERAL = (alias = 'l') => `LEFT JOIN LATERAL (
   ) act ON TRUE`;
 
 const PAYMENTS_SQL = `
-  SELECT 'gateway' AS kind, rz.id, rz.amount_paise, rz.created_at AS paid_at, rz.method, NULL::bigint AS course_id, rz.payment_id AS reference
-    FROM (
-      SELECT DISTINCT ON (COALESCE(payment_id, 'evt'||id::text)) id, amount_paise, created_at, method, payment_id
-        FROM coexistence.razorpay_events
-       WHERE status = 'captured' AND matched_lead_id = $1
-       ORDER BY COALESCE(payment_id, 'evt'||id::text), (event_type = 'payment.captured') DESC, id
-    ) rz
-  UNION ALL
-  SELECT 'manual', sl.id, sl.amount_paise, (sl.payment_date::timestamp AT TIME ZONE 'Asia/Kolkata'), sl.method, sl.course_id, NULL
+  SELECT 'manual' AS kind, sl.id, sl.amount_paise, (sl.payment_date::timestamp AT TIME ZONE 'Asia/Kolkata') AS paid_at, sl.method, sl.course_id, NULL AS reference
     FROM coexistence.sales_log sl WHERE sl.lead_id = $1`;
 
 const SORTS = {
@@ -100,8 +92,7 @@ const listLeads = {
     const tags = strArr(input.tags).map(normKey);
     if (tags.length) where.push(`EXISTS (SELECT 1 FROM jsonb_array_elements(tg.tags) x WHERE trim(both '_' from regexp_replace(lower(x->>'name'), '[^a-z0-9]+', '_', 'g')) = ANY(${add(tags)}::text[]))`);
     if (typeof input.has_payment === 'boolean') {
-      const pay = `(EXISTS (SELECT 1 FROM coexistence.razorpay_events re WHERE re.status='captured' AND re.matched_lead_id = l.id)
-                    OR EXISTS (SELECT 1 FROM coexistence.sales_log sl WHERE sl.lead_id = l.id))`;
+      const pay = `EXISTS (SELECT 1 FROM coexistence.sales_log sl WHERE sl.lead_id = l.id)`;
       where.push(input.has_payment ? pay : `NOT ${pay}`);
     }
     if (input.sort && !SORTS[input.sort]) return err('invalid_input', `sort must be one of ${Object.keys(SORTS).join(', ')}.`);
@@ -138,7 +129,7 @@ const getLeadProfile = {
   category: 'Leads & funnel',
   kind: 'read',
   title: 'Lead profile',
-  description: 'Everything about one lead: profile, language hint, stage and full stage history, product, owner rep, tags, payments and outstanding balance, WhatsApp threads with 24-hour window state, recent automation flow runs, form answers, internal notes, the ad that brought them (if any), and this agent\'s contact memory for them. Returns {"error":"out_of_scope"} for leads you may not see.',
+  description: 'Everything about one lead: profile, language hint, stage and full stage history, product, owner rep, tags, payments and outstanding balance, WhatsApp threads with 24-hour window state, recent automation flow runs, form answers, internal notes and this agent\'s contact memory for them. Returns {"error":"out_of_scope"} for leads you may not see.',
   input_schema: {
     type: 'object',
     properties: { contact_id: { type: 'string', description: 'Lead id.' } },
@@ -154,7 +145,7 @@ const getLeadProfile = {
          FROM coexistence.leads l ${TAGS_LATERAL('l')} WHERE l.id = $1`, [id]);
     const labels = await stageLabels(pool);
 
-    const [events, payments, threads, flows, notes, referral, memory, price] = await Promise.all([
+    const [events, payments, threads, flows, notes, memory, price] = await Promise.all([
       pool.query(`SELECT id, ts, from_value, to_value, actor FROM coexistence.lead_events
                    WHERE lead_id = $1 AND event_type = 'stage_changed' ORDER BY ts, id`, [id]),
       pool.query(`${PAYMENTS_SQL} ORDER BY paid_at`, [id]),
@@ -180,7 +171,6 @@ const getLeadProfile = {
       scope.chat_types.includes('internal_note')
         ? pool.query(`SELECT n.id, n.body, n.author_user_id, n.source, n.created_at FROM coexistence.lead_notes n WHERE n.lead_id = $1 ORDER BY n.created_at DESC LIMIT 20`, [id])
         : Promise.resolve({ rows: [] }),
-      scope.chat_types.includes('ad_referral') ? firstReferral(pool, l) : Promise.resolve(null),
       activeMemory(pool, ctx.agent.id, { kinds: ['contact'], leadIds: [id], now }),
       pool.query(`SELECT id, name, default_price_paise FROM coexistence.courses WHERE lower(btrim(name)) = lower(btrim($1)) ORDER BY id LIMIT 1`, [l.paid_course || '']),
     ]);
@@ -230,7 +220,6 @@ const getLeadProfile = {
       })),
       flow_runs: flows.rows.map(f => flowRunShape(f)),
       internal_notes: notes.rows.map(n => ({ note_id: String(n.id), body: n.body, source: n.source, ...repRef(ctx.users, n.author_user_id), created_at: toIst(n.created_at) })),
-      ad_referral: referral,
       contact_memory: memory,
     };
   },
@@ -248,25 +237,6 @@ function flowRunShape(f) {
     status: f.status, waiting_for: f.status === 'paused' ? (f.awaiting_kind || 'reply') : null,
     stopped_at_node: nodeTitle(f.config, f.awaiting_node_id || f.last_node_id),
     started_at: toIst(f.started_at), completed_at: toIst(f.completed_at), error: f.error_message || null,
-  };
-}
-
-async function firstReferral(pool, lead) {
-  const { rows: [r] } = await pool.query(
-    `SELECT r.source_id, r.source_type, r.source_url, r.platform, r.headline, r.body, r.clicked_at, r.message_id,
-            ca.name AS ad_name, cmp.name AS campaign_name, ch.message_body AS first_message
-       FROM coexistence.ctwa_referrals r
-       LEFT JOIN coexistence.campaign_ads ca ON ca.ad_external_id = r.source_id
-       LEFT JOIN coexistence.campaigns cmp ON cmp.external_id = ca.campaign_external_id
-       LEFT JOIN coexistence.chat_history ch ON ch.message_id = r.message_id
-      WHERE r.lead_id = $1 OR ${KEY10('r.contact_number')} = ${KEY10('$2')}
-      ORDER BY r.clicked_at ASC LIMIT 1`, [lead.id, lead.whatsapp_number]);
-  if (!r) return null;
-  return {
-    ad_id: r.source_id, source_type: r.source_type, platform: r.platform, ad_name: r.ad_name || null,
-    campaign_name: r.campaign_name || null, headline: r.headline || null, source_url: r.source_url || null,
-    clicked_at: toIst(r.clicked_at), first_message_id: r.message_id || null,
-    first_message_text: r.first_message ? `<customer_message>${r.first_message}</customer_message>` : null,
   };
 }
 
