@@ -15,7 +15,6 @@ const DEST_META = {
   results_inbox: { Icon: Inbox, title: 'Results inbox', hint: 'Every run is kept on the Results tab. Always on.' },
   rep_worklist: { Icon: ListChecks, title: 'Rep worklist', hint: 'Each rep sees their own leads on “My leads today”, grouped by who owns the lead right now.' },
   whatsapp_template: { Icon: MessageCircle, title: 'WhatsApp template', hint: 'Sends an approved template: each rep gets their own lead count on their notify phone, or fixed numbers get the team total.' },
-  telegram: { Icon: Send, title: 'Telegram', hint: 'Posts the result to a Telegram chat. The bot token is set in Team & settings.' },
   email: { Icon: Mail, title: 'Email', hint: 'Sends the result as text through the connected Gmail account.' },
   webhook: { Icon: Webhook, title: 'Webhook', hint: 'POSTs the JSON output, signed with X-Forge-Signature (HMAC-SHA256 of the body).' },
 };
@@ -23,7 +22,6 @@ const DEST_META = {
 const NEW_DEST = {
   rep_worklist: { type: 'rep_worklist', split_by: 'owner_rep', enabled: true },
   whatsapp_template: { type: 'whatsapp_template', to: 'rep', numbers: [], template: '', send_at: null, enabled: true },
-  telegram: { type: 'telegram', chat_id: '', format: 'summary', enabled: true },
   email: { type: 'email', to: [], format: 'text', enabled: true },
   webhook: { type: 'webhook', url: '', secret: '', enabled: true },
 };
@@ -53,13 +51,6 @@ function DestinationBody({ d, onChange, templates }) {
           <div style={{ fontSize: T.meta, color: C.textMuted, marginBottom: 12, lineHeight: LH.normal }}>
             Template variables are filled in this order, as many as the template has: rep name (or “Team”), number of leads, number of hot leads, top three leads, run date.
           </div>
-        </>
-      );
-    case 'telegram':
-      return (
-        <>
-          <Field label="Chat ID" hint="The group or channel id, e.g. -1001234567890. Add the bot to the chat first."><input value={d.chat_id} onChange={e => set('chat_id', e.target.value)} style={{ ...inputStyle, fontFamily: MONO, maxWidth: 300 }} /></Field>
-          <Field label="What to post"><Segmented value={d.format} onChange={(v) => set('format', v)} options={[{ value: 'summary', label: 'Summary' }, { value: 'full', label: 'Full result' }]} /></Field>
         </>
       );
     case 'email':

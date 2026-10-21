@@ -298,7 +298,7 @@ describe('config', () => {
     ]);
     assert.equal(destinations[0].type, 'results_inbox');
     assert.equal(errors.length, 2);
-    assert.equal(destinations.find(d => d.type === 'telegram').enabled, false, 'a Telegram destination without a chat is off');
+    assert.ok(!destinations.some(d => d.type === 'telegram'), 'a retired Telegram destination is dropped quietly');
   });
   test('approval rules always include admin', () => {
     assert.deepEqual(config.normalizeApprovalRules({ approvers: ['owner_rep', 'nobody'] }).approvers, ['admin', 'owner_rep']);

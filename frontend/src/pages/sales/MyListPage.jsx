@@ -412,7 +412,7 @@ function CalendarView({ user, isAdmin, onOpenChat, onChanged }) {
             dayList.map(f => <AgendaItem key={f.id} f={f} today={today} onOpenChat={onOpenChat} onDone={markDone} onEdit={() => setEditing(f)} />)
           ) : (
             <div style={{ padding: '14px 14px 16px', fontSize: T.body, color: C.textSecondary, lineHeight: LH.normal }}>
-              Nothing planned for this day. Set follow-ups from any chat with the <CalendarClock size={13} style={{ verticalAlign: '-2px' }} /> button, or from the Chat Analyzer&apos;s suggested date.
+              Nothing planned for this day. Set follow-ups from any chat with the <CalendarClock size={13} style={{ verticalAlign: '-2px' }} /> button.
             </div>
           )}
         </AgendaCard>

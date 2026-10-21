@@ -1905,8 +1905,8 @@ async function executeAgentNode(client, executionId, node, context) {
 // ─── Shared helpers for the legacy AI node ───────────────────────────
 
 // runChatCompletion + pickDefaultModel moved to ../llm/chatCompletion (required
-// at the top of this file) so the Chat Analyser service can reuse them without
-// pulling in the engine. Definitions are byte-identical — no behaviour change.
+// at the top of this file) so other services can reuse them without pulling in
+// the engine. Definitions are byte-identical — no behaviour change.
 
 // Enqueue an approved template to the current contact (used by the AI node's
 // outside-window fallback). Enforces the same WABA guard as the Message node.

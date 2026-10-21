@@ -599,9 +599,6 @@ export const api = {
     performance: (period = 'month') => req(`/bda-performance?period=${period}`),
     webinarConversion: () => req('/webinar-conversion'),
   },
-  // Chat Analyzer — reads conversations (1:1 and WhatsApp groups) and says what
-  // they are about. Every run costs money, so `estimate` exists to be called
-  // before `runBulk`, never after.
   // Leads → My list (pinned chats) + the follow-up calendar.
   myList: {
     list: () => req('/my-list'),
@@ -618,41 +615,12 @@ export const api = {
     google: () => req('/follow-ups/google'),
     googleSync: (data = {}) => req('/follow-ups/google/sync', { method: 'POST', body: JSON.stringify(data) }),
   },
-  chatAnalyzer: {
-    list: (params = {}) => req(`/chat-analysis${qs(params)}`),
-    conversation: (source, key) => req(`/chat-analysis/conversation${qs({ source, key })}`),
-    // Business context: what we sell, read by every analysis.
-    context: {
-      get: () => req('/chat-analysis/context'),
-      saveBusiness: (business) => req('/chat-analysis/context', { method: 'PUT', body: JSON.stringify({ business }) }),
-      addProduct: (p) => req('/chat-analysis/context/products', { method: 'POST', body: JSON.stringify(p) }),
-      updateProduct: (id, p) => req(`/chat-analysis/context/products/${id}`, { method: 'PUT', body: JSON.stringify(p) }),
-      deleteProduct: (id) => req(`/chat-analysis/context/products/${id}`, { method: 'DELETE' }),
-      importProducts: () => req('/chat-analysis/context/import-products', { method: 'POST' }),
-    },
-    // What was SAID (timestamped, voice notes as their exact transcript), as
-    // opposed to `conversation`, which is what it MEANT.
-    transcript: (params = {}) => req(`/chat-analysis/transcript${qs(params)}`),
-    transcribe: (body) => req('/chat-analysis/transcribe', { method: 'POST', body: JSON.stringify(body) }),
-    // One voice note from the Chats window: its transcript, or what making one would cost.
-    voiceNote: (messageId) => req(`/chat-analysis/voice-notes/${encodeURIComponent(messageId)}`),
-    transcribeVoiceNote: (messageId) => req(`/chat-analysis/voice-notes/${encodeURIComponent(messageId)}/transcribe`, { method: 'POST' }),
-    // Replace an older model's (Whisper) transcript with the current model's.
-    retranscribeVoiceNote: (messageId) => req(`/chat-analysis/voice-notes/${encodeURIComponent(messageId)}/retranscribe`, { method: 'POST' }),
-    legacyTranscripts: () => req('/chat-analysis/retranscribe-legacy'),
-    retranscribeLegacyBatch: () => req('/chat-analysis/retranscribe-legacy', { method: 'POST' }),
-    run: (body) => req('/chat-analysis/run', { method: 'POST', body: JSON.stringify(body) }),
-    estimate: (body) => req('/chat-analysis/estimate', { method: 'POST', body: JSON.stringify(body) }),
-    runBulk: (body) => req('/chat-analysis/run-bulk', { method: 'POST', body: JSON.stringify(body) }),
-    batch: (batchId) => req(`/chat-analysis/batches/${batchId}`),
-    runs: (params = {}) => req(`/chat-analysis/runs${qs(params)}`),
-    summary: (params = {}) => req(`/chat-analysis/summary${qs(params)}`),
-    applied: (body) => req('/chat-analysis/applied', { method: 'POST', body: JSON.stringify(body) }),
-    dismiss: (body) => req('/chat-analysis/dismiss', { method: 'POST', body: JSON.stringify(body) }),
-    config: {
-      get: () => req('/chat-analysis/config'),
-      update: (data) => req('/chat-analysis/config', { method: 'PUT', body: JSON.stringify(data) }),
-    },
+  // One voice note from the Chats window: its transcript, or what making one
+  // would cost; transcribe it; or replace an older model's (Whisper) transcript.
+  voiceNotes: {
+    get: (messageId) => req(`/voice-notes/${encodeURIComponent(messageId)}`),
+    transcribe: (messageId) => req(`/voice-notes/${encodeURIComponent(messageId)}/transcribe`, { method: 'POST' }),
+    retranscribe: (messageId) => req(`/voice-notes/${encodeURIComponent(messageId)}/retranscribe`, { method: 'POST' }),
   },
 
   funnel: {

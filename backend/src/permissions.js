@@ -35,10 +35,8 @@ const PAGES = [
   // 'onboarding' (the Sales Log page), 'sales-log' and 'payments' (Razorpay)
   // were removed 2026-10-21 with their pages.
   'sales-pipeline', 'leads',
-  // Chat Analyzer — reads conversations (1:1 and groups) and produces a verdict.
-  // Non-admins are scoped to their own leads and never see groups, which carry
-  // other customers' messages; enforced in routes/chatAnalyser.js canAccess().
-  'chat-analyzer',
+  // 'chat-analyzer' removed 2026-10-21 with the Chat Analyzer. A stored grant
+  // naming it is inert (nothing checks it) and is filtered out on the next save.
   'sales-funnel',
   // Message costs — billing data. Lives in the Chats section; admin-only by
   // default (deliberately absent from every other role's defaults below).

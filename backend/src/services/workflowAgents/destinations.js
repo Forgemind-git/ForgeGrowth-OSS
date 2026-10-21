@@ -5,8 +5,7 @@
 
 const crypto = require('crypto');
 const pool = require('../../db');
-const { renderMarkdown, renderSummary, isLeadSignal } = require('./markdown');
-const { decrypt } = require('../../util/crypto');
+const { renderMarkdown, isLeadSignal } = require('./markdown');
 const { OWNER_SQL } = require('./sql');
 const { toIst } = require('./format');
 
@@ -127,19 +126,6 @@ async function whatsappTemplate(run, agent, dest) {
   return { status: sent ? 'sent' : (perRep.some(p => p.status === 'failed') ? 'failed' : 'skipped'), detail: { template: tpl.name, per_rep: perRep }, error: sent ? null : 'No rep could be messaged; see details.' };
 }
 
-async function telegram(run, agent, dest) {
-  const { rows: [s] } = await pool.query(`SELECT telegram_bot_token_encrypted FROM coexistence.workflow_agent_settings WHERE id = 1`);
-  const token = s?.telegram_bot_token_encrypted ? decrypt(s.telegram_bot_token_encrypted) : null;
-  if (!token) return { status: 'skipped', error: 'No Telegram bot token is saved (Workflow Agents → Settings).' };
-  if (!dest.chat_id) return { status: 'skipped', error: 'No Telegram chat id is set on this destination.' };
-  const text = (dest.format === 'full' ? renderMarkdown(run.output, { agentName: agent.name }) : renderSummary(run.output, { agentName: agent.name })).slice(0, 4000);
-  const res = await fetchWithTimeout(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: dest.chat_id, text, disable_web_page_preview: true }),
-  });
-  const body = await res.json().catch(() => ({}));
-  return res.ok && body.ok ? { status: 'sent', detail: { message_id: body.result?.message_id } } : { status: 'failed', error: body.description || `Telegram answered HTTP ${res.status}.` };
-}
-
 async function email(run, agent, dest) {
   const { gmailSend } = require('../../integrations/googleClient');
   const text = renderMarkdown(run.output, { agentName: agent.name });
@@ -167,7 +153,7 @@ async function webhook(run, agent, dest) {
   }
 }
 
-const HANDLERS = { whatsapp_template: whatsappTemplate, telegram, email, webhook };
+const HANDLERS = { whatsapp_template: whatsappTemplate, email, webhook };
 
 async function deliverOne(run, agent, dest, index) {
   if (dest.type === 'results_inbox') return record(run.id, index, dest.type, 'sent', { detail: { stored: true } });

@@ -1,7 +1,7 @@
 // One voice note in a chat: read its transcript, estimate what transcribing it
 // would cost, and transcribe it — from the Chats window, one bubble at a time.
 //
-// ⚠ SAME CACHE AS THE CHAT ANALYZER, AGENTS AND MCP (chat_message_artifacts,
+// ⚠ SAME CACHE AS AI AGENTS AND WORKFLOW AGENTS (chat_message_artifacts,
 // kind 'transcript'). A note transcribed anywhere shows here, and a note
 // transcribed here is reused everywhere. A note that already has a transcript is
 // NEVER sent to the model again and its text is never overwritten:
@@ -21,6 +21,44 @@ function secondsFromBytes(bytes, mime) {
   if (!bytes) return null;
   const kbps = /ogg|opus/i.test(mime || '') ? 16 : 64;
   return Math.max(1, Math.round((bytes * 8) / (kbps * 1000)));
+}
+
+// ── transcription settings ──────────────────────────────────────────────────
+//
+// The length cap, rate card and USD→INR rate were saved in
+// coexistence.chat_analyser_config, the Chat Analyzer's settings row. That
+// feature was removed (2026-10-21) but the row is kept, so an install that
+// raised its voice-note cap keeps it. Only these transcription columns are read;
+// the defaults below (the migration-110/123 defaults) apply when the row or the
+// table is missing.
+const TRANSCRIPTION_DEFAULTS = {
+  transcribe_model: 'microsoft/mai-transcribe-2',
+  max_audio_seconds: 300,
+  usd_to_inr: 88,
+  rate_card: { audio: { 'microsoft/mai-transcribe-2': { perMinute: 0.00167 }, default: { perMinute: 0.00167 } } },
+};
+
+let _cfgCache = null;
+let _cfgAt = 0;
+
+async function loadConfig() {
+  if (_cfgCache && Date.now() - _cfgAt < 15000) return _cfgCache;
+  let row = null;
+  try {
+    const { rows } = await pool.query(
+      `SELECT max_audio_seconds, usd_to_inr, rate_card
+         FROM coexistence.chat_analyser_config WHERE id = 1`);
+    row = rows[0] || null;
+  } catch { /* table absent: defaults */ }
+  const conf = { ...TRANSCRIPTION_DEFAULTS };
+  if (row) {
+    if (Number(row.max_audio_seconds) > 0) conf.max_audio_seconds = Number(row.max_audio_seconds);
+    if (Number(row.usd_to_inr) > 0) conf.usd_to_inr = Number(row.usd_to_inr);
+    if (row.rate_card && row.rate_card.audio) conf.rate_card = row.rate_card;
+  }
+  _cfgCache = conf;
+  _cfgAt = Date.now();
+  return conf;
 }
 
 async function loadNote(messageId) {
@@ -73,7 +111,7 @@ function shapeArtifact(a, conf) {
 /** Transcript if there is one, else the estimated cost of making one. */
 async function voiceNoteInfo(messageId) {
   const row = await loadNote(messageId);
-  const conf = await require('./chatAnalyser').loadConfig();
+  const conf = await loadConfig();
   const a = await readArtifact(messageId);
   const base = { messageId, waNumber: row.wa_number, contactNumber: row.contact_number };
 
@@ -111,7 +149,7 @@ async function voiceNoteInfo(messageId) {
  */
 async function transcribeVoiceNote(messageId) {
   const row = await loadNote(messageId);
-  const conf = await require('./chatAnalyser').loadConfig();
+  const conf = await loadConfig();
   const apiKey = await extract.resolveTranscriptionKey();
   if (!apiKey) {
     throw Object.assign(new Error('No OpenRouter key is connected. Add one in Admin Settings → AI Models.'), { status: 400 });
@@ -138,7 +176,7 @@ async function transcribeVoiceNote(messageId) {
  */
 async function retranscribeVoiceNote(messageId) {
   const row = await loadNote(messageId);
-  const conf = await require('./chatAnalyser').loadConfig();
+  const conf = await loadConfig();
   const before = await readArtifact(messageId);
   if (!extract.isLegacyTranscript(before, conf)) {
     throw Object.assign(new Error(before && before.status === 'ok'
@@ -166,87 +204,6 @@ async function retranscribeVoiceNote(messageId) {
   };
 }
 
-// ── every older transcript, for the admin's one-click redo ──────────────────
-
-// Notes whose redo failed in this process. A failure keeps its old transcript,
-// so without this it would sort first again and every batch would retry the
-// same unfixable notes instead of making progress. Cleared on restart.
-const failedRedo = new Set();
-
-async function legacyRows(conf, limit, { skipFailed = false } = {}) {
-  const params = [conf.transcribe_model];
-  let skip = '';
-  if (skipFailed && failedRedo.size) { params.push([...failedRedo]); skip = `AND message_key <> ALL($${params.length})`; }
-  let lim = '';
-  if (limit) { params.push(limit); lim = `LIMIT $${params.length}`; }
-  const { rows } = await pool.query(
-    `SELECT source, message_key, conversation_key, model, status, audio_seconds
-       FROM coexistence.chat_message_artifacts
-      WHERE kind = 'transcript' AND status IN ('ok','empty')
-        AND model IS NOT NULL AND model <> $1 ${skip}
-      ORDER BY updated_at ASC ${lim}`,
-    params
-  );
-  return rows;
-}
-
-/** How many older transcripts exist and what redoing them all would cost. */
-async function legacySummary() {
-  const conf = await require('./chatAnalyser').loadConfig();
-  const rows = await legacyRows(conf);
-  const seconds = rows.reduce((s, r) => s + (r.audio_seconds == null ? 30 : Number(r.audio_seconds)), 0);
-  const micros = extract.audioCostMicros(conf.rate_card, conf.transcribe_model, seconds);
-  const models = [...new Set(rows.map(r => r.model))];
-  return {
-    count: rows.length, seconds: Math.round(seconds), models,
-    estimate: { usd: micros / 1e6, inr: extract.microsToInr(micros, conf.usd_to_inr) },
-    model: conf.transcribe_model,
-    perBatch: conf.max_media_per_run,
-  };
-}
-
-let batchRunning = false;
-/**
- * Redo up to max_media_per_run older transcripts. Call again while `remaining`
- * is above zero. One batch at a time per process, so two admins pressing the
- * button together cannot pay twice for the same notes.
- */
-async function retranscribeLegacyBatch() {
-  if (batchRunning) throw Object.assign(new Error('A re-transcription batch is already running'), { status: 409 });
-  batchRunning = true;
-  try {
-    const conf = await require('./chatAnalyser').loadConfig();
-    const apiKey = await extract.resolveTranscriptionKey();
-    if (!apiKey) {
-      throw Object.assign(new Error('No OpenRouter key is connected. Add one in Admin Settings → AI Models.'), { status: 400 });
-    }
-    const rows = await legacyRows(conf, conf.max_media_per_run, { skipFailed: true });
-    let replaced = 0, micros = 0;
-    const failed = [];
-    for (const r of rows) {
-      const { rows: [h] } = r.source === 'chat'
-        ? await pool.query(`SELECT media_mime_type FROM coexistence.chat_history WHERE message_id = $1`, [r.message_key])
-        : { rows: [{}] };
-      const out = await extract.retranscribeArtifact({
-        source: r.source, messageKey: r.message_key, conversationKey: r.conversation_key,
-        mime: h?.media_mime_type, conf, apiKey,
-      });
-      micros += out.costMicros;
-      if (out.status === 'ok') { replaced += 1; failedRedo.delete(r.message_key); }
-      else { failed.push({ messageId: r.message_key, reason: out.error || out.status }); failedRedo.add(r.message_key); }
-    }
-    // `remaining` is what the next call can still make progress on; notes that
-    // failed keep their old transcript and are reported, not retried in a loop.
-    return {
-      replaced, failed, costInr: extract.microsToInr(micros, conf.usd_to_inr),
-      remaining: (await legacyRows(conf, null, { skipFailed: true })).length,
-      keptOldAfterFailure: failedRedo.size,
-    };
-  } finally {
-    batchRunning = false;
-  }
-}
-
 /** { messageId: {status, transcript, model, canRetranscribe} } for the voice notes on a page of chat. */
 async function transcriptsFor(messageIds) {
   const ids = (messageIds || []).filter(Boolean);
@@ -257,7 +214,7 @@ async function transcriptsFor(messageIds) {
       WHERE source = 'chat' AND kind = 'transcript' AND message_key = ANY($1)`,
     [ids]
   );
-  const conf = rows.length ? await require('./chatAnalyser').loadConfig() : null;
+  const conf = rows.length ? await loadConfig() : null;
   const out = {};
   for (const r of rows) {
     out[r.message_key] = {
@@ -269,6 +226,6 @@ async function transcriptsFor(messageIds) {
 }
 
 module.exports = {
+  loadConfig, TRANSCRIPTION_DEFAULTS,
   voiceNoteInfo, transcribeVoiceNote, retranscribeVoiceNote, transcriptsFor, secondsFromBytes,
-  legacySummary, retranscribeLegacyBatch,
 };

@@ -552,10 +552,10 @@ function pickApiKey(agent) {
 // transcript back into chat_history so it shows in the conversation + future
 // context.
 //
-// ⚠ SHARES THE CHAT ANALYZER'S PER-MESSAGE CACHE (chat_message_artifacts, kind
-// 'transcript'). A voice note already transcribed — by the analyser, the MCP, or
-// an earlier agent run on the same message — is reused and costs nothing; a
-// fresh transcript is stored there, so the analyser never pays for it again.
+// ⚠ SHARES THE PER-MESSAGE CACHE (chat_message_artifacts, kind 'transcript').
+// A voice note already transcribed — from the Chats window or by an earlier
+// agent run on the same message — is reused and costs nothing; a fresh
+// transcript is stored there, so nobody pays for it again.
 //
 // Returns { text, tooLong }:
 //   text    — the transcript, or the plain body for a non-audio message ('' if

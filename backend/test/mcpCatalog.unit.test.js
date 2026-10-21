@@ -232,7 +232,7 @@ describe('seedCategories never widens access', () => {
     // a derived version passed while silently dropping a whole category.)
     //
     // This snapshot is what the live connector could actually reach when the
-    // Chat Analyzer shipped. New tools never disturb it; a tool losing access
+    // Chat Analyzer shipped (that feature itself was removed on 2026-10-21). New tools never disturb it; a tool losing access
     // always fails it. (The Forms + Projects tools were removed on purpose on
     // 2026-10-16, and the Marketing + Razorpay tools on 2026-10-21; they came
     // out of this list with them.)
@@ -259,13 +259,19 @@ describe('seedCategories never widens access', () => {
         'these tools work on the live instance today and this deploy would switch them off');
     });
 
-    test('a NEW category seeds off, so nothing gains access on deploy', () => {
-      // The other half of the same rule. Chat Analyzer bills the AI provider per
-      // call, so it must arrive switched off and wait for an admin.
-      assert.strictEqual(seeded.chat_analysis, false);
-      for (const t of ['analyze_chat', 'list_analysed_chats', 'get_chat_analysis']) {
-        assert.strictEqual(catalog.isToolAllowed(t, seeded), false,
-          `${t} is new and must not be reachable until an admin enables it`);
+    test('the AI follow-up date sits with the calendar and says it costs money', () => {
+      // It moved out of the removed Chat Analyzer category. Leads & Funnel is a
+      // 'build' tier, so the tool must carry its own 'spend' kind or Settings
+      // would show a billed call as a plain change.
+      assert.strictEqual(catalog.toolCategory('suggest_follow_up_date'), 'leads');
+      assert.strictEqual(catalog.toolKind('suggest_follow_up_date'), 'spend');
+    });
+
+    test('the removed Chat Analyzer leaves no category or tool behind', () => {
+      assert.ok(!('chat_analysis' in seeded), 'chat_analysis belongs to a removed feature');
+      for (const t of ['analyze_chat', 'list_analysed_chats', 'get_chat_analysis', 'get_chat_analysis_costs',
+        'get_chat_transcript', 'transcribe_chat', 'get_chat_image']) {
+        assert.ok(!catalog.TOOL_NAMES.includes(t), `${t} was removed with the Chat Analyzer`);
       }
     });
 

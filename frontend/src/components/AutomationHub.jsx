@@ -14,7 +14,7 @@
 // own the whole pane, exactly as Social hides its tabs inside an automation.
 import { useEffect, useState } from 'react';
 import {
-  Zap, Bot, Megaphone, LayoutTemplate, Image as ImageIcon, IndianRupee, MessageCircle, Users2, ScanSearch,
+  Zap, Bot, Megaphone, LayoutTemplate, Image as ImageIcon, IndianRupee, MessageCircle, Users2,
 } from 'lucide-react';
 import { C, FONT } from '../constants.js';
 
@@ -28,12 +28,12 @@ export const HUB_TABS = [
 ];
 export const HUB_PAGES = new Set(HUB_TABS.map(t => t.key));
 
-// The same tabs-above-the-page shape, used for Chats so the Sales menu stays
-// short (2026-10-16): the 1:1 inbox, WhatsApp groups and the analyser that
-// reads both.
+// The same tabs-above-the-page shape, used for Chats. Its second tab, the Chat
+// Analyzer, was removed on 2026-10-21; with one tab the strip is not drawn,
+// but Chats keeps rendering inside the hub's flex frame, which its scrolling
+// panes are laid out against.
 export const CHAT_TABS = [
   { key: 'chats', label: 'Chats', Icon: MessageCircle },
-  { key: 'chat-analyzer', label: 'Chat Analyzer', Icon: ScanSearch },
 ];
 
 // Every hub, keyed by the sidebar item that opens it (= its first tab).

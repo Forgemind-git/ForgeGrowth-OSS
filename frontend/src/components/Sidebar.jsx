@@ -39,7 +39,7 @@ const SALES_GROUPS = [
       // Contacts (route key `leads`): Funnel and All Contacts (table / board) are
       // internal views of LeadsHubPage.
       { id: 'leads', label: 'Contacts', Icon: Contact },
-      // Hub: Chats · Chat Analyzer.
+      // Hub: Chats (one tab since the Chat Analyzer was removed).
       { id: 'chats', label: 'Chats', Icon: MessageCircle },
       // Pinned lead chats + the follow-up calendar. Shown to anyone who can see
       // Leads (see PAGE_ALIASES) so no role needs editing.

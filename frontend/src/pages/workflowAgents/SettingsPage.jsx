@@ -89,7 +89,7 @@ export default function SettingsPage({ navigate }) {
     try {
       const [s, t] = await Promise.all([api.workflowAgents.settings(), api.workflowAgents.team()]);
       setSettings(s); setTeam(t);
-      setForm({ business_name: s.business_name || '', default_working_hours: s.default_working_hours, usd_to_inr: s.usd_to_inr, rate_card: s.rate_card || {}, telegram_bot_token: '' });
+      setForm({ business_name: s.business_name || '', default_working_hours: s.default_working_hours, usd_to_inr: s.usd_to_inr, rate_card: s.rate_card || {} });
     } catch (e) { showError(e.message); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -98,17 +98,10 @@ export default function SettingsPage({ navigate }) {
     setBusy(true);
     try {
       const patch = { business_name: form.business_name, default_working_hours: form.default_working_hours || null, usd_to_inr: form.usd_to_inr, rate_card: form.rate_card };
-      if (form.telegram_bot_token.trim()) patch.telegram_bot_token = form.telegram_bot_token.trim();
       const s = await api.workflowAgents.updateSettings(patch);
-      setSettings(s); setForm(f => ({ ...f, telegram_bot_token: '' }));
+      setSettings(s);
       showSuccess('Settings saved.');
     } catch (e) { showError(e.message); } finally { setBusy(false); }
-  };
-
-  const clearTelegram = async () => {
-    const ok = await confirm({ title: 'Remove the Telegram bot token?', body: 'Telegram destinations stop sending until a token is added again.', confirmLabel: 'Remove', danger: true });
-    if (!ok) return;
-    try { setSettings(await api.workflowAgents.updateSettings({ telegram_bot_token: '' })); showSuccess('Token removed.'); } catch (e) { showError(e.message); }
   };
 
   const teamCall = async (fn, msg) => { try { setTeam(await fn()); if (msg) showSuccess(msg); } catch (e) { showError(e.message); throw e; } };
@@ -151,12 +144,6 @@ export default function SettingsPage({ navigate }) {
             </Field>
             <Field label="Default working hours" hint="Used when a rep has no hours of their own, for example to judge response times.">
               <HoursEditor value={form.default_working_hours} onChange={(v) => setForm(f => ({ ...f, default_working_hours: v }))} />
-            </Field>
-            <Field label="Telegram bot token" hint={settings.telegram_configured ? 'A token is saved. Paste a new one to replace it.' : 'From @BotFather. Stored encrypted and never shown again.'}>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input type="password" autoComplete="new-password" value={form.telegram_bot_token} placeholder={settings.telegram_configured ? '••••••••  (saved)' : '123456:ABC…'} onChange={e => setForm(f => ({ ...f, telegram_bot_token: e.target.value }))} style={{ ...inputStyle, fontFamily: MONO }} />
-                {settings.telegram_configured && <Button variant="danger" icon={Trash2} onClick={clearTelegram} aria-label="Remove token" />}
-              </div>
             </Field>
           </Panel>
 

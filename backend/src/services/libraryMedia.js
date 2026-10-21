@@ -9,8 +9,8 @@
 // media messages matched). So the match is by content, which also covers every
 // historical message and every send path, including ones added later.
 //
-// ⚠ WHY THIS MATTERS: without it, the analyser either sees a bare "[document]"
-// or pays to parse/transcribe the SAME company file once per recipient (the
+// ⚠ WHY THIS MATTERS: without it, an AI reading the chat either sees a bare
+// "[document]" or pays to parse/transcribe the SAME company file once per recipient (the
 // Live Lab voice note went out 74 times). With it, the description says what was
 // shared — "course brochure: syllabus, fees, dates" — for free.
 //
@@ -128,7 +128,7 @@ function libraryLabel(lib, type) {
 
 // ── what is INSIDE a document we send ─────────────────────────────────────────
 //
-// A one-line description ("has syllabus, fees, dates") tells the analyser that
+// A one-line description ("has syllabus, fees, dates") tells an AI reader that
 // a brochure exists, not what it SAYS — so it could not know the customer had
 // already been given the schedule, the class dates or the "Claude Pro is
 // mandatory" note, and recommended telling them again. The file is ours and

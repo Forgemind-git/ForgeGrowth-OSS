@@ -8,7 +8,7 @@
 //   POST   /follow-ups     {waNumber, contactNumber, dueDate, dueTime?, note?, source?, aiReason?}
 //   PATCH  /follow-ups/:id {dueDate?, dueTime?, note?, status?}
 //   DELETE /follow-ups/:id
-//   GET    /follow-ups/chat?waNumber=&contactNumber=           pinned? open follow-up? AI suggestion?
+//   GET    /follow-ups/chat?waNumber=&contactNumber=           pinned? open follow-up?
 //   POST   /follow-ups/suggest {waNumber, contactNumber}       AI-recommended next date
 //   GET    /follow-ups/google                                  Google Calendar status
 //   POST   /follow-ups/google/sync {scope?, autoSync?}         mirror into Google Calendar

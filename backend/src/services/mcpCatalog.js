@@ -77,7 +77,7 @@ const TIERS = {
 // can Claude do in Social?" without knowing any tool names.
 const AREAS = [
   { key: 'social', label: 'Social', description: 'Instagram — numbers, inbox, Instagram automations and Social AI agents.' },
-  { key: 'sales', label: 'Sales', description: 'Leads and the funnel, the follow-up calendar, sales, products and the Chat Analyzer.' },
+  { key: 'sales', label: 'Sales', description: 'Leads and the funnel, the follow-up calendar, sales and products.' },
   { key: 'chats', label: 'Chats & Automations', description: 'WhatsApp conversations, sending, broadcasts, templates, media, automation flows and WhatsApp AI agents.' },
   { key: 'admin', label: 'Admin', description: 'Connected numbers and models, Google, deleting things, and the unrestricted API escape hatch.' },
 ];
@@ -115,7 +115,6 @@ const API_AREAS = [
   { key: 'area_resources', label: 'Resources', description: 'Live links and the trigger library.' },
   { key: 'area_courses', label: 'Products', description: 'Product catalogue.' },
   { key: 'area_payments', label: 'Sales', description: 'Sales (students), their payments and refunds.' },
-  { key: 'area_chat_analysis', label: 'Chat Analyzer', description: 'Conversation analyses and what they cost.' },
   { key: 'area_social', label: 'Social', description: 'The Social workspace: analytics, inbox, Instagram automations, flows and Social AI agents. Its credentials and settings stay under Admin.' },
 ];
 
@@ -189,26 +188,11 @@ const CATEGORIES = [
     legacyCaps: ['area_automations'],
   },
   {
-    key: 'chat_analysis',
-    area: 'sales',
-    label: 'Chat Analyzer',
-    description:
-      'Read what a WhatsApp conversation is about — its summary, intent, objections and suggested funnel stage — and analyse one conversation on demand, optionally including its voice notes, images and PDFs.',
-    // 'spend', not 'read': three of these tools only read, but analyse_chat
-    // bills the AI provider per call, and a category's tier has to describe the
-    // most powerful thing inside it or the Settings badge misleads.
-    tier: 'spend',
-    // ⚠ There is deliberately NO bulk tool here. A bulk run costs money per
-    // conversation with nobody watching; it stays a click in the tab, behind a
-    // cost estimate.
-    legacyCaps: ['area_chat_analysis'],
-  },
-  {
     key: 'leads',
     area: 'sales',
     label: 'Leads & Funnel',
     description:
-      'Read leads and the funnel, edit a lead\'s details, move a lead between funnel stages, and manage the follow-up calendar.',
+      'Read leads and the funnel, edit a lead\'s details, move a lead between funnel stages, and manage the follow-up calendar — including asking the AI for the next follow-up date, which is one small billed AI call.',
     tier: 'build',
     legacyCaps: ['area_leads'],
   },
@@ -363,21 +347,16 @@ const HAND_TOOLS = {
   update_automation:       { category: 'automations', summary: 'Edit a flow, or switch it live / pause it.' },
   get_automation_runs:     { category: 'automations', summary: 'Read what a flow actually did, step by step.' },
 
-  list_analysed_chats:     { category: 'chat_analysis', summary: 'List conversations and what the analyser found in them.' },
-  get_chat_analysis:       { category: 'chat_analysis', summary: 'Read one conversation\'s analysis, and what has been read of it so far.' },
-  analyze_chat:            { category: 'chat_analysis', summary: 'Analyse one conversation now. Costs money; media costs more.' },
-  get_chat_analysis_costs: { category: 'chat_analysis', summary: 'Estimated spend on analysis, split by media type.' },
-  get_chat_transcript:     { category: 'chat_analysis', summary: 'Read a conversation word for word, with voice notes transcribed.' },
-  transcribe_chat:         { category: 'chat_analysis', summary: 'Transcribe a conversation\'s voice notes (once each, then free).' },
-  suggest_follow_up_date:  { category: 'chat_analysis', summary: 'Ask the AI for the best next follow-up date for a chat.' },
-  get_chat_image:          { category: 'chat_analysis', summary: 'Look at images a customer sent. Free — no vision model involved.' },
-
   /* --- Leads & Funnel --- */
   list_leads:              { category: 'leads', summary: 'List leads, filtered by stage, source or saved view.' },
   move_lead_stage:         { category: 'leads', summary: 'Move a lead to a different funnel stage.' },
   list_follow_ups:         { category: 'leads', summary: 'Read the follow-up calendar: who to contact on which day.' },
   set_follow_up:           { category: 'leads', summary: 'Put a lead on the follow-up calendar (or reschedule them).' },
   update_follow_up:        { category: 'leads', summary: 'Reschedule, add a note, mark done or delete a follow-up.' },
+  // Was in the Chat Analyzer category until that feature was removed
+  // (2026-10-21). Its own kind, because the category tier is 'build' and this
+  // one bills the AI provider for a small call.
+  suggest_follow_up_date:  { category: 'leads', summary: 'Ask the AI for the best next follow-up date for a chat.', kind: 'spend' },
 
   /* --- Conversations --- */
   list_conversations:      { category: 'inbox', summary: 'List recent conversations with 24-hour window status.' },

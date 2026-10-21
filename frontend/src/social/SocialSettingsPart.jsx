@@ -7,7 +7,7 @@
 //   General      → Social notifications (its Workspace card held placeholder
 //                  values and its Team card repeated Settings → Users, so both
 //                  are gone)
-//   Integrations → Instagram / Telegram
+//   Integrations → Instagram
 //   AI Models    → Social's OpenRouter key and spend
 //   Tags / Category / Fields → the Social contacts' own lists
 //   MCP Tools    → Social MCP access

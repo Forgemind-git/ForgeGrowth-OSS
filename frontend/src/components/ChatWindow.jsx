@@ -1,7 +1,7 @@
 import { toLayout } from '../lib/uiZoom.js';
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { notify } from '../lib/feedback.js';
-import { Search, ScanSearch, Loader2, MoreVertical, Phone, Pencil, X, Send, Lock, Paperclip, Image as ImageIcon, FileText, Video, Music, Library, RefreshCw, CheckCircle2, AlertTriangle, Mic, Square, Trash2, User, Download, Reply, Forward, Tag, UserPlus, Check, Bot, Pin, PinOff, CalendarClock, Flag } from 'lucide-react';
+import { Search, Loader2, MoreVertical, Phone, Pencil, X, Send, Lock, Paperclip, Image as ImageIcon, FileText, Video, Music, Library, RefreshCw, CheckCircle2, AlertTriangle, Mic, Square, Trash2, User, Download, Reply, Forward, Tag, UserPlus, Check, Bot, Pin, PinOff, CalendarClock, Flag } from 'lucide-react';
 import PillStrip from './PillStrip.jsx';
 import { usePolling } from '../hooks/usePolling.js';
 import { useServerEvents } from '../hooks/useServerEvents.js';
@@ -9,7 +9,6 @@ import { api } from '../api.js';
 import { C, FONT, MONO, relativeTime, formatTime, maskPhone } from '../constants.js';
 import MaskedNumber from './MaskedNumber.jsx';
 import ChatProfilePanel from './ChatProfilePanel.jsx';
-import ChatAnalyzerPanel from './ChatAnalyzerPanel.jsx';
 import FollowUpModal from './FollowUpModal.jsx';
 import { useFunnelConfig } from '../hooks/useFunnelConfig.js';
 import { relativeDay, todayIST } from '../lib/followUpDates.js';
@@ -156,9 +155,8 @@ export default function ChatWindow({ waNumber, contactNumber, user, onContactSav
   const [stageSaving, setStageSaving] = useState(false);
   const { stages: funnelStages, stageMeta } = useFunnelConfig();
   const [headerSaving, setHeaderSaving] = useState(false);
-  const [analyzerOpen, setAnalyzerOpen] = useState(false);
   // My list + follow-up: is this chat pinned, does it have an open follow-up?
-  const [fuState, setFuState] = useState({ pinned: false, followUp: null, suggestion: null });
+  const [fuState, setFuState] = useState({ pinned: false, followUp: null });
   const [fuOpen, setFuOpen] = useState(false);
   const loadFuState = useCallback(() => {
     if (!waNumber || !contactNumber) return;
@@ -177,7 +175,7 @@ export default function ChatWindow({ waNumber, contactNumber, user, onContactSav
   const assignMenuRef = useRef(null);
   const stageMenuRef = useRef(null);
   // The header carries ~10 controls; on a narrow chat pane they overflowed and the
-  // contact name collapsed to nothing. Below this width, Pin / Analyse / Search
+  // contact name collapsed to nothing. Below this width, Pin / Search
   // move into the ⋮ menu.
   const headerRef = useRef(null);
   const [headerCompact, setHeaderCompact] = useState(false);
@@ -533,8 +531,8 @@ export default function ChatWindow({ waNumber, contactNumber, user, onContactSav
   // The placeholder changes as the reply window loads, and a long placeholder
   // wraps too — so re-measure when anything that picks it changes.
   useLayoutEffect(fitComposer, [composerText, isRecording, windowStatus?.canSendFreeForm, windowStatus?.reason, !!pendingFile, !!audioBlob, fitComposer]);
-  // Re-measure when the box's WIDTH changes (first layout, the profile or
-  // analyser panel opening, a window resize) — the same text wraps differently.
+  // Re-measure when the box's WIDTH changes (first layout, the profile panel
+  // opening, a window resize) — the same text wraps differently.
   useEffect(() => {
     const el = composerRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
@@ -1234,17 +1232,6 @@ export default function ChatWindow({ waNumber, contactNumber, user, onContactSav
               {fuState.followUp && <span style={{ whiteSpace: 'nowrap' }}>{relativeDay(fuState.followUp.dueDate)}</span>}
             </button>
 
-            {/* Analyse this conversation. Opens the same panel as the Chat
-                Analyzer tab — one implementation, so the controls here and there
-                cannot drift. */}
-            {!headerCompact && <button
-              onClick={() => setAnalyzerOpen(true)}
-              title="Analyse this conversation"
-              style={{ ...headerIconBtn, background: analyzerOpen ? 'rgba(255,255,255,0.22)' : 'transparent' }}
-            >
-              <ScanSearch size={18} />
-            </button>}
-
             {/* Search toggle */}
             {!headerCompact && <button onClick={() => setSearchOpen(true)} title="Search messages" style={headerIconBtn}>
               <Search size={18} />
@@ -1260,7 +1247,6 @@ export default function ChatWindow({ waNumber, contactNumber, user, onContactSav
                   {headerCompact && [
                     { key: 'edit', Icon: Pencil, label: 'Edit contact name', run: handleEditClick },
                     { key: 'pin', Icon: Pin, label: fuState.pinned ? 'Unpin from Follow-up' : 'Pin to Follow-up', run: togglePin },
-                    { key: 'analyse', Icon: ScanSearch, label: 'Analyse conversation', run: () => setAnalyzerOpen(true) },
                     { key: 'search', Icon: Search, label: 'Search messages', run: () => setSearchOpen(true) },
                   ].map(it => (
                     <button
@@ -1403,51 +1389,9 @@ export default function ChatWindow({ waNumber, contactNumber, user, onContactSav
           contactNumber={contactNumber}
           name={contactName || `+${contactNumber}`}
           existing={fuState.followUp}
-          suggestion={fuState.followUp ? null : fuState.suggestion}
           onClose={() => setFuOpen(false)}
           onSaved={() => { loadFuState(); onListChange?.(); }}
         />
-      )}
-
-      {/* Chat Analyzer slide-over. A panel rather than a modal because reading
-          the verdict against the conversation behind it is the whole point. */}
-      {analyzerOpen && (
-        <>
-          <div onClick={() => setAnalyzerOpen(false)} style={{
-            position: 'fixed', inset: 0, background: 'var(--c-overlaySoft, rgba(0,0,0,.25))', zIndex: 190,
-          }} />
-          <aside style={{
-            position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(440px, calc(100vw / var(--fg-zoom, 1)))',
-            background: 'var(--c-cardBg)', borderLeft: `1px solid ${C.border}`,
-            boxShadow: C.shadowLg, zIndex: 200,
-            display: 'flex', flexDirection: 'column', fontFamily: FONT,
-          }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '13px 15px', borderBottom: `1px solid ${C.border}`, flexShrink: 0,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                <ScanSearch size={16} color={C.textSecondary} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Chat Analyzer</div>
-                  <div style={{
-                    fontSize: 11.5, color: C.textMuted, overflow: 'hidden',
-                    textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>{contactName || contactNumber}</div>
-                </div>
-              </div>
-              <button onClick={() => setAnalyzerOpen(false)} title="Close" style={{
-                background: 'transparent', border: 'none', cursor: 'pointer',
-                color: C.textMuted, padding: 4, display: 'flex',
-              }}><X size={17} /></button>
-            </div>
-            {/* Only this half scrolls, so the header stays put on a long verdict. */}
-            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 15 }}>
-              <ChatAnalyzerPanel source="chat" conversationKey={contactNumber} waNumber={waNumber} compact
-                onFollowUpSet={() => { loadFuState(); onListChange?.(); }} />
-            </div>
-          </aside>
-        </>
       )}
 
       {/* Reply composer */}

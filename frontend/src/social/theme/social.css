@@ -80,7 +80,11 @@
 }
 .social-root > * { flex-shrink: 0; }
 .social-root > .fc-fill { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
-.social-root.social-root--settings { padding-top: 16px; }
+/* Inside Settings the page already pads its content; only a top gap is added. */
+.social-root.social-root--settings { padding: 16px 0 0; }
+/* Inside the one Settings page the tab header already names the page, so a
+   Social page's own small caps label would only repeat it. */
+.social-root--settings .fs-page-label { display: none; }
 
 /* ── 3. ForgeSocial's element rules, scoped ───────────────────────────────── */
 .social-root [style*="DM Sans"]:not(.fs-report-page *) { font-family: var(--fc-font) !important; }

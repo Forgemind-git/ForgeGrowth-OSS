@@ -21,8 +21,7 @@
  *
  * ⚠ The budget is RAISED, not merely renamed. A reasoning model spends tokens
  * thinking before it emits anything, and those count against the same limit —
- * so the caller's figure (256 for the automation node, 400 for the chat
- * analyser, 1024 for the agent) can be consumed entirely by reasoning, leaving
+ * so the caller's figure (256 for the automation node, 1024 for the agent) can be consumed entirely by reasoning, leaving
  * no output and producing the second error above. REASONING_MIN_TOKENS is the
  * floor; a caller asking for more still gets more.
  */

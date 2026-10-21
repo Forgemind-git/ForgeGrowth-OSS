@@ -945,8 +945,8 @@ router.get('/messages', async (req, res) => {
       }
     }
 
-    // Voice notes carry their stored transcript (Chat Analyzer / agents / the
-    // per-bubble Transcribe button all write the same cache), so the bubble can
+    // Voice notes carry their stored transcript (agents and the per-bubble
+    // Transcribe button write the same cache), so the bubble can
     // show it without a request per note.
     const audioIds = rows.filter(r => r.message_type === 'audio' || r.message_type === 'voice').map(r => r.message_id);
     const transcripts = audioIds.length

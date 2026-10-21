@@ -220,15 +220,18 @@ describe('destinations', () => {
     try {
       const { rows: [run] } = await pool.query(`SELECT * FROM coexistence.workflow_agent_runs WHERE id = $1`, [runId]);
       const { rows: [agent] } = await pool.query(`SELECT * FROM coexistence.workflow_agents WHERE id = $1`, [agentId]);
+      // send_at is a time TODAY (IST), so "two hours from now" only schedules
+      // while it is still today: after 22:00 IST it wraps past midnight, reads
+      // as already gone and is sent at once — so the case is left out then.
+      const nowIst = new Date(Date.now() + 5.5 * 36e5).toISOString().slice(11, 16);
       const later = new Date(Date.now() + 5.5 * 36e5 + 2 * 36e5).toISOString().slice(11, 16);
       const config = {
         destinations: [
           { type: 'results_inbox' },
           { type: 'rep_worklist' },
           { type: 'webhook', url: `http://127.0.0.1:${server.address().port}/hook`, secret: 's3cret', enabled: true },
-          { type: 'telegram', chat_id: '123', enabled: true },
           { type: 'whatsapp_template', template: 'no_such_template', enabled: true },
-          ...(later > '00:10' ? [{ type: 'whatsapp_template', template: 'no_such_template', send_at: later, enabled: true }] : []),
+          ...(later > nowIst ? [{ type: 'whatsapp_template', template: 'no_such_template', send_at: later, enabled: true }] : []),
         ],
       };
       await destinations.deliverRun({ ...run, output_markdown: '# md' }, agent, config);
@@ -241,15 +244,13 @@ describe('destinations', () => {
       assert.equal(received.sig, `sha256=${expected}`);
       assert.equal(JSON.parse(received.body).output.run_date, '2026-09-17');
       assert.equal(by(3).status, 'skipped');
-      assert.match(by(3).error, /Telegram bot token/);
-      assert.equal(by(4).status, 'skipped');
-      assert.match(by(4).error, /APPROVED template/);
-      if (by(5)) {
-        assert.equal(by(5).status, 'scheduled');
+      assert.match(by(3).error, /APPROVED template/);
+      if (by(4)) {
+        assert.equal(by(4).status, 'scheduled');
         await pool.query(`UPDATE coexistence.workflow_agent_runs SET config_snapshot = $2 WHERE id = $1`, [runId, JSON.stringify(config)]);
         assert.ok(await destinations.sendDueDeliveries(new Date(Date.now() + 26 * 36e5)) >= 1);
-        const { rows: [d5] } = await pool.query(`SELECT status FROM coexistence.workflow_agent_deliveries WHERE run_id = $1 AND destination_index = 5`, [runId]);
-        assert.equal(d5.status, 'skipped', 'processed when due; skipped because the template does not exist');
+        const { rows: [d4] } = await pool.query(`SELECT status FROM coexistence.workflow_agent_deliveries WHERE run_id = $1 AND destination_index = 4`, [runId]);
+        assert.equal(d4.status, 'skipped', 'processed when due; skipped because the template does not exist');
       }
     } finally {
       server.close();

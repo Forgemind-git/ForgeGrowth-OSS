@@ -585,7 +585,7 @@ function UploadModal({ onClose, onUploaded, onError }) {
 
         <div style={{ marginTop: 12 }}>
           <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.textSecondary, marginBottom: 4 }}>
-            Description <span style={{ fontWeight: 400, color: C.textMuted }}>(optional — what this file is; Chat Analyzer, AI agents and Claude read it whenever the file is sent)</span>
+            Description <span style={{ fontWeight: 400, color: C.textMuted }}>(optional — what this file is; AI agents read it whenever the file is sent)</span>
           </label>
           <input
             type="text"
@@ -957,14 +957,14 @@ function PreviewModal({ media, onClose, onSaved, onError }) {
           </a>
         </div>
 
-        {/* Description — what Chat Analyzer, AI agents and Claude read in place
-            of this file whenever it is sent in a chat. */}
+        {/* Description — what AI agents read in place of this file whenever it
+            is sent in a chat. */}
         <div style={{ padding: '12px 18px 16px', borderTop: `1px solid ${C.border}` }}>
           <label style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.textSecondary, marginBottom: 4 }}>
             Description
           </label>
           <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 6 }}>
-            Chat Analyzer, AI agents and Claude (MCP) read this whenever this file is sent in a chat, so they know what the customer was given.
+            AI agents read this whenever this file is sent in a chat, so they know what the customer was given.
           </div>
           <textarea
             data-testid="media-description"

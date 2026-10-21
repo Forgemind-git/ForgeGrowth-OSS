@@ -404,18 +404,9 @@ apiRouter.put('/leads/:id/move', requireTool('move_lead_stage'), async (req, res
 /* --------- courses + payments dedicated tools --------- */
 // Named *-list / *-summary so they can't collide with the real /courses and
 // /payments app routes reachable through the generic proxy.
-// Chat Analyzer. Suffixed (`chat-analysis-*`) so these can never collide with
-// the real /chat-analysis paths that forgechat_request forwards — same
+// Follow-up calendar. Suffixed (`follow-ups-*`) so these can never collide
+// with the real /follow-ups paths that forgechat_request forwards — same
 // convention as /courses-list.
-apiRouter.get('/chat-analysis-list', requireTool('list_analysed_chats'), (req, res) =>
-  discovery(res, () => mcpService.listAnalysedChats(req.query || {}), 'Failed to list conversations'));
-
-apiRouter.get('/chat-analysis-get', requireTool('get_chat_analysis'), (req, res) =>
-  discovery(res, () => mcpService.getChatAnalysis(req.query || {}), 'Failed to read that analysis'));
-
-apiRouter.get('/chat-analysis-transcript', requireTool('get_chat_transcript'), (req, res) =>
-  discovery(res, () => mcpService.getChatTranscript(req.query || {}), 'Failed to read that transcript'));
-
 const mcpWrite = (fn, fallback) => async (req, res) => {
   try { res.json(await fn(req)); }
   catch (err) { res.status(err.status || 500).json({ error: err.message || fallback }); }
@@ -435,24 +426,6 @@ apiRouter.post('/route-tools/:name', (req, res, next) => requireTool(req.params.
   catch (err) { res.status(err.status || 500).json({ error: err.message || 'Tool failed' }); }
 });
 
-
-apiRouter.post('/chat-analysis-transcribe', requireTool('transcribe_chat'), async (req, res) => {
-  try { res.json(await mcpService.transcribeChat(req.body || {})); }
-  catch (err) { res.status(err.status || 500).json({ error: err.message || 'Could not transcribe those voice notes' }); }
-});
-
-apiRouter.post('/chat-analysis-images', requireTool('get_chat_image'), async (req, res) => {
-  try { res.json(await mcpService.getChatImages(req.body || {})); }
-  catch (err) { res.status(err.status || 500).json({ error: err.message || 'Could not read those images' }); }
-});
-
-apiRouter.get('/chat-analysis-costs', requireTool('get_chat_analysis_costs'), (req, res) =>
-  discovery(res, () => mcpService.getChatAnalysisCosts(req.query || {}), 'Failed to load analysis costs'));
-
-apiRouter.post('/chat-analysis-run', requireTool('analyze_chat'), async (req, res) => {
-  try { res.json(await mcpService.analyzeChat(req.body || {})); }
-  catch (err) { res.status(err.status || 500).json({ error: err.message || 'Failed to analyse that conversation' }); }
-});
 
 apiRouter.get('/courses-list', requireTool('list_products'), (req, res) =>
   discovery(res, () => mcpService.listCourses(), 'Failed to list courses'));

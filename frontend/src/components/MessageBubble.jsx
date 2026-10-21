@@ -197,7 +197,7 @@ function PauseIcon({ size = 18, color = 'var(--c-x1f3c2e, #1f3c2e)' }) {
 
 /* ── Voice-note transcript (view, or estimate + transcribe) ────────────
  * Every voice note gets this strip under its player.
- *  - Already transcribed (Chat Analyzer, an agent, MCP or an earlier click):
+ *  - Already transcribed (an agent or an earlier click):
  *    "Transcript" toggles the stored text. Nothing is sent to the model again.
  *  - Not yet: "Transcribe" first fetches the ESTIMATED cost and asks, then
  *    transcribes on confirm. The server never overwrites an existing transcript.
@@ -217,7 +217,7 @@ function VoiceTranscript({ message, isOutgoing }) {
   const [err, setErr] = useState('');
 
   // The chat refetches every few seconds; adopt a transcript that appeared
-  // elsewhere (e.g. the analyser ran) without clobbering one we just made.
+  // elsewhere (e.g. an agent transcribed it) without clobbering one we just made.
   useEffect(() => {
     if (message.transcript && (!data || data.status !== 'ok')) setData(message.transcript);
   }, [message.transcript]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -238,7 +238,7 @@ function VoiceTranscript({ message, isOutgoing }) {
   const askRedo = async () => {
     setErr(''); setBusy('estimate');
     try {
-      const r = await api.chatAnalyzer.voiceNote(message.message_id);
+      const r = await api.voiceNotes.get(message.message_id);
       if (!r.canRetranscribe) { setData(r); return; }
       setRedo(r.retranscribeEstimate || { seconds: null, inr: 0 });
     } catch (e) { setErr(e.message || 'Could not load the estimate'); }
@@ -247,7 +247,7 @@ function VoiceTranscript({ message, isOutgoing }) {
   const doRedo = async () => {
     setErr(''); setBusy('redo');
     try {
-      const r = await api.chatAnalyzer.retranscribeVoiceNote(message.message_id);
+      const r = await api.voiceNotes.retranscribe(message.message_id);
       setData(r); setRedo(null);
       if (r.replaced) setOpen(true);
       else setErr(`Kept the old transcript — ${r.retranscribeError}`);
@@ -281,7 +281,7 @@ function VoiceTranscript({ message, isOutgoing }) {
   const askEstimate = async () => {
     setErr(''); setBusy('estimate');
     try {
-      const r = await api.chatAnalyzer.voiceNote(message.message_id);
+      const r = await api.voiceNotes.get(message.message_id);
       if (r.status === 'ok') { setData(r); setOpen(true); }
       else setEstimate(r);
     } catch (e) { setErr(e.message || 'Could not load the estimate'); }
@@ -291,7 +291,7 @@ function VoiceTranscript({ message, isOutgoing }) {
   const transcribe = async () => {
     setErr(''); setBusy('transcribe');
     try {
-      const r = await api.chatAnalyzer.transcribeVoiceNote(message.message_id);
+      const r = await api.voiceNotes.transcribe(message.message_id);
       setData(r); setEstimate(null);
       if (r.status === 'ok') setOpen(true);
       else setErr(r.error || 'No speech was found in this voice note');
@@ -326,7 +326,7 @@ function VoiceTranscript({ message, isOutgoing }) {
         }}>
           {estimate.estimate?.overCap ? (
             <div>
-              This note is about {estimate.estimate.seconds}s — over the {estimate.estimate.capSeconds}s limit set in Chat Analyzer settings, so it will not be transcribed.
+              This note is about {estimate.estimate.seconds}s — over the {estimate.estimate.capSeconds}s transcription limit, so it will not be transcribed.
             </div>
           ) : (
             <>
@@ -1120,7 +1120,7 @@ export default function MessageBubble({ message, isOutgoing, senderAvatarUrl, co
           )}
           {renderContent()}
           {/* One of our own Media Library files — its name and description are
-              what Chat Analyzer, agents and Claude read in place of the file. */}
+              what AI agents and the follow-up AI read in place of the file. */}
           {message.library && (
             <div data-testid="library-chip" title={message.library.description || 'No description yet — add one in Media Library'}
               style={{ marginTop: 5, fontSize: 12.5, lineHeight: 1.35, color: C.textMuted, fontFamily: FONT, maxWidth: 340 }}>

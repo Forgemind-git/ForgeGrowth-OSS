@@ -165,6 +165,7 @@ server.registerTool('read_messages', {
   title: 'Read a conversation',
   description:
     'Read the message history of one conversation (oldest→newest), plus a `window` object showing whether the 24-hour window is open. ' +
+    'A voice note that has already been transcribed carries its `transcript` (nothing is transcribed by this call). ' +
     'Pass the waNumber + contactNumber from list_conversations.',
   inputSchema: {
     waNumber: z.string().describe('Business WhatsApp number (from list_conversations).'),
@@ -428,61 +429,9 @@ server.registerTool('move_lead_stage', {
 
 // The REST paths below stay /courses-* — they are internal plumbing between
 // this stdio server and the backend, not something a user or client sees.
-// ── Chat Analyzer ──
-// Mirrors backend/src/mcpHttp.js exactly. Name, title, description and schema
-// must match or test/mcpCatalog.unit.test.js fails on transport drift.
-server.registerTool('list_analysed_chats', {
-  title: 'List conversations and their analysis',
-  description: 'Conversations the Chat Analyzer can read — 1:1 chats and WhatsApp groups — with whatever it has already found. `readSoFar` says which of text/audio/image/document the standing summary actually covers, so "analysed" is never mistaken for "read everything". Filter: all | never | stale | analysed | errors.',
-  inputSchema: {
-    source: z.enum(['all', 'chat', 'community']).optional(),
-    filter: z.enum(['all', 'never', 'stale', 'analysed', 'errors']).optional(),
-    search: z.string().optional(),
-    limit: z.number().optional(),
-  },
-}, tool((args) => call('GET', `/chat-analysis-list?${new URLSearchParams(
-  Object.entries(args || {}).filter(([, v]) => v !== undefined && v !== null && v !== '')
-)}`)));
-
-server.registerTool('get_chat_analysis', {
-  title: 'Read one conversation\'s analysis',
-  description: 'The stored analysis for one conversation, plus `coverage` — how far each modality has been read. Does not analyse anything and costs nothing.',
-  inputSchema: {
-    source: z.enum(['chat', 'community']).optional(),
-    key: z.string(),
-  },
-}, tool((args) => call('GET', `/chat-analysis-get?${new URLSearchParams(
-  Object.entries(args || {}).filter(([, v]) => v !== undefined && v !== null && v !== '')
-)}`)));
-
-server.registerTool('analyze_chat', {
-  title: 'Analyse one conversation',
-  description: 'Analyse ONE conversation now and return the verdict. COSTS MONEY: the analysis call is billed by tokens, and each voice note, image or PDF is billed per item the first time it is read (cached and free afterwards). Defaults to text only — add modalities deliberately. A date range or keyword makes the run a one-off that is saved but does NOT replace the conversation\'s standing summary. Use list_analysed_chats first to get the key.',
-  inputSchema: {
-    source: z.enum(['chat', 'community']).optional(),
-    key: z.string(),
-    modalities: z.array(z.enum(['text', 'audio', 'image', 'document'])).optional(),
-    from: z.string().optional(),
-    to: z.string().optional(),
-    keyword: z.string().optional(),
-    incremental: z.boolean().optional(),
-  },
-}, tool((args) => call('POST', '/chat-analysis-run', args)));
-
-server.registerTool('get_chat_transcript', {
-  title: 'Read a conversation word for word',
-  description: 'The timestamped transcript of one conversation: text messages as sent, and voice notes as their exact transcript. This is what was SAID — use get_chat_analysis for what it MEANT. Reading costs nothing; voice notes already transcribed are returned free, and any that are not yet appear with notTranscribedYet so you can tell silence from an untranscribed note. Images and documents are listed by timestamp and caption only — their contents are NOT returned.',
-  inputSchema: {
-    source: z.enum(['chat', 'community']).optional(),
-    key: z.string(),
-    from: z.string().optional(),
-    to: z.string().optional(),
-    audioOnly: z.boolean().optional(),
-  },
-}, tool((args) => call('GET', `/chat-analysis-transcript?${new URLSearchParams(
-  Object.entries(args || {}).filter(([, v]) => v !== undefined && v !== null && v !== '')
-)}`)));
-
+// ── Follow-up calendar ──
+// Mirrors backend/src/mcpHttp.js. Names and schemas must match or
+// test/mcpCatalog.unit.test.js fails on transport drift.
 server.registerTool('list_follow_ups', {
   title: 'Read the follow-up calendar',
   description: 'The follow-ups on the sales calendar (Sales → Follow-up): who we plan to contact on which day, with the note, owner, lead stage and Google Calendar state. Defaults to OPEN; status "done" | "cancelled" | "any". Dates are IST days (YYYY-MM-DD).',
@@ -525,59 +474,12 @@ server.registerTool('update_follow_up', {
 
 server.registerTool('suggest_follow_up_date', {
   title: 'Ask the AI for the next follow-up date',
-  description: 'The AI-recommended next follow-up day (and time if it matters) for a customer, with a reason. Free when the Chat Analyzer already suggested one and nothing new arrived; otherwise one small AI call. Does not change the calendar — call set_follow_up to apply it.',
+  description: 'The AI-recommended next follow-up day (and time if it matters) for a customer, with a reason. One small AI call over the chat\'s timing and recent messages. Does not change the calendar — call set_follow_up to apply it.',
   inputSchema: {
     contactNumber: z.string(),
     waNumber: z.string().optional(),
   },
 }, tool((args) => call('POST', '/follow-ups-suggest', args)));
-
-server.registerTool('transcribe_chat', {
-  title: 'Transcribe a conversation\'s voice notes',
-  description: 'Transcribe the voice notes in ONE conversation and return every voice note as text. Uses microsoft/mai-transcribe-2 via OpenRouter (multilingual — Tamil, Hindi, English and mixed speech). COSTS MONEY per new note, but each note is transcribed ONCE, ever: notes that already have a transcript are returned free and never re-sent. Call it again if `remaining` is above zero. Use list_analysed_chats first to get the key; use get_chat_transcript afterwards to read the full conversation with these transcripts in place.',
-  inputSchema: {
-    source: z.enum(['chat', 'community']).optional(),
-    key: z.string(),
-    from: z.string().optional(),
-    to: z.string().optional(),
-  },
-}, tool((args) => call('POST', '/chat-analysis-transcribe', args)));
-
-// Shaped by hand rather than through tool(), which JSON-stringifies everything —
-// that would hand the model base64 text instead of a picture.
-server.registerTool('get_chat_image', {
-  title: 'Look at images from a conversation',
-  description: 'Returns the actual images a customer sent, so you can see them yourself. FREE — this is a disk read, not a vision model; prefer it over analysing images when you just need to know what one shows. Get the messageId of an image from get_chat_transcript first. Up to 5 per call, images only (video and PDFs are not returned).',
-  inputSchema: {
-    source: z.enum(['chat', 'community']).optional(),
-    key: z.string(),
-    messageIds: z.array(z.string()),
-  },
-}, async (args) => {
-  try {
-    const r = await call('POST', '/chat-analysis-images', args || {});
-    const content = [];
-    for (const img of r.images || []) {
-      content.push({ type: 'text', text: `${img.from} · ${new Date(img.at).toISOString()}${img.caption ? ` · caption: ${img.caption}` : ''}` });
-      content.push({ type: 'image', data: img.base64, mimeType: img.mimeType });
-    }
-    if ((r.skipped || []).length) {
-      content.push({ type: 'text', text: `Not returned:\n${r.skipped.map(x => `- ${x.messageId || '(extra)'}: ${x.reason}`).join('\n')}` });
-    }
-    if (!content.length) content.push({ type: 'text', text: 'No images were returned.' });
-    return { content };
-  } catch (err) {
-    return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
-  }
-});
-
-server.registerTool('get_chat_analysis_costs', {
-  title: 'What analysis has cost',
-  description: 'Estimated spend on chat analysis, split by media type, with run counts. Figures are ESTIMATES computed from the workspace rate card — OpenAI reports tokens, never a price.',
-  inputSchema: { from: z.string().optional(), to: z.string().optional() },
-}, tool((args) => call('GET', `/chat-analysis-costs?${new URLSearchParams(
-  Object.entries(args || {}).filter(([, v]) => v !== undefined && v !== null && v !== '')
-)}`)));
 
 server.registerTool('list_products', {
   title: 'List products',
