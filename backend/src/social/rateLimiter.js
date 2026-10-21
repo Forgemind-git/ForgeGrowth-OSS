@@ -17,13 +17,12 @@ const crypto = require('crypto');
 const redis = require('./redis');
 
 // Per-API-host limits. Conservative vs the real ceilings (IG = 200/hr/token) so
-// we always stay safely under. graph.facebook.com serves both IG (page tokens)
-// and Facebook; per-token bucketing keeps each token independently bounded.
+// we always stay safely under. graph.facebook.com serves Instagram accounts
+// connected through a Facebook Page token; per-token bucketing keeps each token
+// independently bounded.
 const HOST_LIMITS = {
   'graph.instagram.com': { bucket: 'ig', max: 180, windowMs: 3600000 },
   'graph.facebook.com':  { bucket: 'fb', max: 180, windowMs: 3600000 },
-  'graph.threads.net':   { bucket: 'th', max: 180, windowMs: 3600000 },
-  'api.linkedin.com':    { bucket: 'li', max: 100, windowMs: 3600000 },
 };
 
 // Messaging has its OWN limits per Instagram professional account, separate from

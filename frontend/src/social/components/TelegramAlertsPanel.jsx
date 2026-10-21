@@ -10,7 +10,7 @@ import { showToast } from "../Toast.jsx";
 // Only chats approved in Settings → Integrations → Telegram can be picked.
 
 const TYPE_ICON = { private: User, group: Users, supergroup: Users, channel: Megaphone };
-const PLAT = { instagram: "Instagram", facebook: "Facebook", youtube: "YouTube", threads: "Threads" };
+const PLAT = { instagram: "Instagram" };
 const REASON = { negative: "Negative", toxic: "Abusive", complaint: "Complaint" };
 const spin = { animation: "spin 1s linear infinite" };
 

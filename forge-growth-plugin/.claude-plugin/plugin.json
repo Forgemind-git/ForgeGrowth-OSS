@@ -1,14 +1,13 @@
 {
   "name": "forge-growth",
   "version": "1.4.0",
-  "description": "Configure and read Forge Growth end-to-end from a plain-language game plan \u2014 Social (Instagram automations, flows and AI agents, analytics, inbox), Meta ads and campaign ROI, leads and sales, WhatsApp templates, automation flows that are checked before they are saved, AI agents with real usage limits, and broadcasts \u2014 all driven by Claude with a confirmation step before anything goes live.",
+  "description": "Configure and read Forge Growth end-to-end from a plain-language game plan \u2014 Social (Instagram automations, flows and AI agents, analytics, inbox), leads and sales, WhatsApp templates, automation flows that are checked before they are saved, AI agents with real usage limits, and broadcasts \u2014 all driven by Claude with a confirmation step before anything goes live.",
   "author": {
     "name": "Forgemind"
   },
   "keywords": [
     "forge-growth",
     "whatsapp",
-    "marketing",
     "sales",
     "funnel",
     "mcp"

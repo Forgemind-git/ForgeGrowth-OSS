@@ -20,7 +20,7 @@
 // Legacy `#/leads/funnel` and `#/leads/pipeline` still resolve.
 //
 // Each view keeps its own PageShell (title/subtitle/actions differ) and renders
-// the shared tab strip as its first child — the shape PaymentsPage uses.
+// the shared tab strip as its first child.
 import { C, FONT } from '../../constants.js';
 import PipelinePage from './PipelinePage.jsx';
 import FunnelViewerPage from './FunnelViewerPage.jsx';

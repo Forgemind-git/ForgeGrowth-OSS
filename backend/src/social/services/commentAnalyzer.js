@@ -1,4 +1,4 @@
-// Comment Analyzer — classifies comments from all four platforms with TypeSafe
+// Comment Analyzer — classifies Instagram comments with TypeSafe
 // Jev (OpenRouter "decisions" endpoint): sentiment, what the commenter is doing,
 // insightful?, needs a reply?, abusive?
 //
@@ -16,12 +16,12 @@ const openRouter = require('./openRouter');
 
 const FEATURE = 'comment_analyzer';
 const K_SETTINGS = 'comment_analyzer_settings';
-const PLATFORMS = ['instagram', 'facebook', 'youtube', 'threads'];
+const PLATFORMS = ['instagram'];
 const DEFAULTS = {
   enabled: false,
   model: 'typesafe/jev-1.13',
   platforms: PLATFORMS,
-  accounts: null,            // null = every account; else ['instagram|<id>', 'facebook|<page id>', …]
+  accounts: null,            // null = every account; else ['instagram|<id>', …]
   sinceDays: 90,
   minWords: 3,
   skipAutomationKeywords: true,
@@ -172,7 +172,7 @@ async function automationKeywords() {
   return [...out];
 }
 
-// All comments (4 platforms) in one shape, newest first. `ours` = written by
+// All Instagram comments in one shape, newest first. `ours` = written by
 // one of our accounts (never analysed).
 const SOURCE = `
   -- Accounts with no stored username: the handle that writes most of the replies
@@ -188,7 +188,6 @@ const SOURCE = `
     SELECT lower(username) u FROM instagram_accounts WHERE username IS NOT NULL
     UNION SELECT u FROM ig_inferred
   ),
-  yt AS (SELECT account_key k FROM social_accounts WHERE platform = 'youtube'),
   src AS (
     -- Instagram withholds the author on some API-synced comments. When one of our
     -- accounts replied, Instagram starts the reply with "@theirhandle" — use it.
@@ -202,18 +201,6 @@ const SOURCE = `
            c.media_id AS post_id, c.parent_id, c.ts,
            (lower(COALESCE(c.from_username,'')) IN (SELECT u FROM own)) AS ours, c.account_id, c.account_id AS acct
       FROM instagram_comments c
-    UNION ALL
-    SELECT 'facebook', c.comment_id, c.message, c.from_name, c.post_id, c.parent_id, c.ts,
-           (c.from_id IS NOT NULL AND c.from_id = split_part(c.post_id, '_', 1)), NULL, split_part(c.post_id, '_', 1)
-      FROM facebook_comments c
-    UNION ALL
-    SELECT 'youtube', c.comment_id, c.text, c.author_name, c.video_id, c.parent_id, c.ts,
-           (c.author_channel_id IN (SELECT k FROM yt)), NULL, (SELECT k FROM yt LIMIT 1)
-      FROM youtube_comments c
-    UNION ALL
-    SELECT 'threads', c.comment_id, c.text, c.author_username, c.thread_id, c.parent_id, c.ts,
-           (lower(COALESCE(c.author_username,'')) IN (SELECT u FROM own)), c.account_key, c.account_key
-      FROM threads_comments c
   )`;
 const TOKEN = `(src.platform || '|' || COALESCE(src.acct, ''))`;
 
@@ -235,14 +222,10 @@ async function listAccounts() {
      WHERE c.parent_id IS NOT NULL AND c.from_username IS NOT NULL
      GROUP BY c.account_id, c.from_username HAVING count(*) >= 10 ORDER BY c.account_id, count(*) DESC`);
   for (const r of inferred) { const a = ig.find(x => x.account_id === r.account_id); if (a) a.username = r.u; }
-  const { rows: soc } = await pool.query(`SELECT platform, account_key, label, username FROM social_accounts`);
-  const fbName = (await getSetting('facebook_page_name')) || null;
   const igMap = new Map(ig.map(r => [r.account_id, r]));
   return rows.filter(r => !(r.platform === 'instagram' && (r.acct === '0' || r.acct === ''))).map(r => {
-    const a = r.platform === 'instagram' ? igMap.get(r.acct) : null;
-    const so = soc.find(x => x.platform === r.platform && x.account_key === r.acct);
-    const label = r.platform === 'instagram' ? (a?.username ? '@' + a.username : a?.name || `Instagram account …${r.acct.slice(-6)}`)
-      : so?.label || (so?.username ? '@' + so.username : null) || (r.platform === 'facebook' ? fbName || `Facebook Page …${r.acct.slice(-6)}` : `${r.platform[0].toUpperCase() + r.platform.slice(1)} account`);
+    const a = igMap.get(r.acct);
+    const label = a?.username ? '@' + a.username : a?.name || `Instagram account …${r.acct.slice(-6)}`;
     return { value: `${r.platform}|${r.acct}`, platform: r.platform, label, sublabel: a?.name && a?.username ? a.name : null, hidden: !!a?.hidden, comments: r.comments, recent: r.recent };
   });
 }

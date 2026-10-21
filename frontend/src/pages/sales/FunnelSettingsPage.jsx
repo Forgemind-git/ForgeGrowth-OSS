@@ -204,7 +204,7 @@ function SourcesTab() {
 // The Sales section's Products page was removed 2026-08-12 and folded in here:
 // a product is a thing you configure once, like a stage or a source, not a
 // place you visit. The `courses` table behind it is unchanged — its id is the
-// FK the Razorpay money-attribution path uses.
+// FK sales_log uses.
 //
 // Every product also owns a TAG (managed, auto-applied when a sale records it)
 // so a customer's purchases are filterable in Chats. The tag is created and
@@ -264,11 +264,11 @@ function ProductsTab() {
   return (
     <Card title="Products" right={<span style={{ fontFamily: FONT, fontSize: 14, color: C.textMuted }}>What you sell — name, price, and its own tag</span>}>
       <div style={{ fontFamily: FONT, fontSize: 15, color: C.textSecondary, marginBottom: 14 }}>
-        These drive the Sales Log product dropdown and payment attribution. Each one gets a matching tag,
+        These drive the product on a sale and payment attribution. Each one gets a matching tag,
         applied to the customer automatically when a sale records that product.
       </div>
       {products.length === 0 && !adding ? (
-        <EmptyState Icon={Package} title="No products yet" hint="Add what you sell — it appears in the Sales Log straight away." />
+        <EmptyState Icon={Package} title="No products yet" hint="Add what you sell — it can be set on a sale straight away." />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {products.map(p => (

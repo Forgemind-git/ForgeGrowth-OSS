@@ -25,10 +25,10 @@ export default function AiAgentBuilderPage({ user, navigate }) {
   const [waAccounts, setWaAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [editingId, setEditingId] = useState(null); // null = list view, 'new' = create, <number> = edit
+  const [editingId, setEditingId] = useState(null); // null = list view, <number> = edit (new agents start from a preset in QuickAgentEditor)
   // "New agent" opens the template picker (like Social's Quick Automations);
-  // picking one opens the one-page Quick AI Agent editor, "Start from scratch"
-  // the full five-tab editor.
+  // picking one opens the one-page Quick AI Agent editor. The full five-tab
+  // editor is for agents that already exist.
   const [picker, setPicker] = useState(false);
   const [quick, setQuick] = useState(null); // a QUICK_AGENTS template while the quick editor is open
   const editing = editingId !== null || quick !== null;
@@ -134,7 +134,7 @@ export default function AiAgentBuilderPage({ user, navigate }) {
         )}
         {editingId !== null && (
           <AgentEditor
-            agentId={editingId === 'new' ? null : editingId}
+            agentId={editingId}
             waAccounts={waAccounts}
             user={user}
             navigate={navigate}
@@ -150,7 +150,6 @@ export default function AiAgentBuilderPage({ user, navigate }) {
         <QuickAgentTemplates
           onClose={() => setPicker(false)}
           onQuick={(t) => { setPicker(false); setEditingId(null); setQuick(t); }}
-          onScratch={() => { setPicker(false); setQuick(null); setEditingId('new'); }}
         />
       )}
     </div>

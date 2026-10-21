@@ -28,7 +28,7 @@ stubModule('../src/queue/agentQueue', {
 // tests exercise, and a stub would assert the stub. Only the queue and the
 // message sender are replaced.
 const { getPauseState, resumeAgent, performHandoff } = require('../src/services/agentHandoff');
-stubModule('../src/services/paymentFlow', {
+stubModule('../src/services/threadSender', {
   sendOnThread: async () => ({ sent: true }),
 });
 

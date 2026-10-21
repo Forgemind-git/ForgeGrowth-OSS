@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Plus, ArrowLeft, Loader2, Zap, Activity, ClipboardList, RefreshCw, Bot, LayoutGrid, List } from "lucide-react";
+import { Plus, ArrowLeft, Loader2, Zap, Activity, RefreshCw, Bot, LayoutGrid, List } from "lucide-react";
 import { api } from "../api.js";
 import { C, FONT, BTN } from "../constants.js";
 import { showToast } from "../Toast.jsx";
@@ -11,9 +11,7 @@ import AutomationDetail from "../components/automations/AutomationDetail.jsx";
 import AutomationTable, { toRows } from "../components/automations/AutomationTable.jsx";
 import TemplatesModal from "../components/automations/TemplatesModal.jsx";
 import ActivityLog from "../components/automations/ActivityLog.jsx";
-import LeadsTable from "../components/automations/LeadsTable.jsx";
 import FlowBuilder from "../components/flows/FlowBuilder.jsx";
-import { blankGraph } from "../components/flows/flowDefs.js";
 import { useScope } from "../components/scope/scopeStore.js";
 import AutomationsDashboard from "../components/automations/AutomationsDashboard.jsx";
 import IgAgentList from "../components/agents/IgAgentList.jsx";
@@ -28,7 +26,8 @@ const readView = () => { try { return localStorage.getItem(VIEW_KEY) === "grid" 
  *  - Quick Automations (rules, backend services/commentAutomation.js): simple step editor + detail page.
  *  - Flow Builder (node graphs, backend services/flowEngine.js): canvas editor.
  * Dashboard cards on top. Tabs: My Automations (both, one table — Grid or List) · AI Agents (Instagram AI agents,
- * quick editor) · Activity · Leads. "New Automation" opens the Templates picker (it also lists the AI agent presets).
+ * quick editor) · Activity. "New Automation" opens the picker with the one automation preset; "New AI agent"
+ * opens it on the AI agent presets. Creation is preset-only.
  * View state is local, like Agent Builder.
  */
 export default function AutomationsPage({ user }) {
@@ -41,7 +40,6 @@ export default function AutomationsPage({ user }) {
   const [rules, setRules] = useState([]);
   const [flows, setFlows] = useState([]);
   const [log, setLog] = useState([]);
-  const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [picker, setPicker] = useState(false); // false | the Templates filter to open on ("all" | "agent")
   const [agents, setAgents] = useState([]);
@@ -58,26 +56,24 @@ export default function AutomationsPage({ user }) {
     setLoading(true);
     try {
       const acc = account || undefined;
-      const [r, f, l, d, a, m, ag] = await Promise.all([
+      const [r, f, l, a, m, ag] = await Promise.all([
         api.automations.list(acc), api.automations.flows(acc).catch(() => []),
-        api.automations.log({ account_id: acc, limit: 200 }), api.automations.leads({ account_id: acc }),
+        api.automations.log({ account_id: acc, limit: 200 }),
         api.automations.accounts().catch(() => []), api.automations.meta().catch(() => null),
         api.agents.list().catch(() => []),
       ]);
-      setRules(r); setFlows(f); setLog(l); setLeads(d); setAccounts(a); setMeta(m);
+      setRules(r); setFlows(f); setLog(l); setAccounts(a); setMeta(m);
       setAgents((ag || []).filter(x => !x.platform || x.platform === "instagram"));
     } catch (e) { showToast(e.message, "error"); }
     finally { setLoading(false); }
   }, [account]);
 
   useEffect(() => { refresh(); }, [refresh]);
-  // Activity + leads tick over on their own while the tab is open.
+  // Activity ticks over on its own while the tab is open.
   useEffect(() => {
-    if (view || tab === "rules" || tab === "agents") return;
+    if (view || tab !== "activity") return;
     const t = setInterval(() => {
-      const acc = account || undefined;
-      if (tab === "activity") api.automations.log({ account_id: acc, limit: 200 }).then(setLog).catch(() => {});
-      else api.automations.leads({ account_id: acc }).then(setLeads).catch(() => {});
+      api.automations.log({ account_id: account || undefined, limit: 200 }).then(setLog).catch(() => {});
     }, 15000);
     return () => clearInterval(t);
   }, [tab, view, account]);
@@ -143,9 +139,7 @@ export default function AutomationsPage({ user }) {
       {picker && (
         <TemplatesModal onClose={() => setPicker(false)} initialFilter={picker}
           onAgent={isAdmin ? (t) => { setPicker(false); setTab("agents"); setView({ mode: "agent", template: t }); } : undefined}
-          onQuick={(t) => { setPicker(false); setView({ mode: "edit", seed: t }); }}
-          onFlow={(t) => { setPicker(false); setView({ mode: "flow", seed: { key: t.id + Date.now(), name: t.title, template: t.id, graph: t.graph() } }); }}
-          onScratch={(kind) => { setPicker(false); setView({ mode: "flow", seed: { key: "blank" + Date.now(), name: "Untitled automation", graph: blankGraph(kind) } }); }} />
+          onQuick={(t) => { setPicker(false); setView({ mode: "edit", seed: t }); }} />
       )}
       {view?.mode === "detail" ? (
         <AutomationDetail key={view.rule.id} rule={view.rule} isAdmin={isAdmin}
@@ -190,7 +184,6 @@ export default function AutomationsPage({ user }) {
                   { id: "rules", label: "My Automations", Icon: Zap, count: rows.length },
                   { id: "agents", label: "AI Agents", Icon: Bot, count: shownAgents.length },
                   { id: "activity", label: "Activity", Icon: Activity },
-                  { id: "leads", label: "Leads", Icon: ClipboardList, count: leads.length },
                 ]} />
                 {tab === "rules" && (
                   <div style={{ flexShrink: 0, paddingBottom: 6 }} data-testid="automation-layout">
@@ -209,8 +202,7 @@ export default function AutomationsPage({ user }) {
                     stateFilter={stateFilter} onStateFilter={(v) => setStateFilter(v || "")} />
                 : tab === "agents" ? <IgAgentList agents={shownAgents} accounts={accounts} isAdmin={isAdmin}
                     onOpen={(a) => setView({ mode: "agent", agent: a })} onToggle={toggleAgent} onDelete={removeAgent} onCreate={() => setPicker("agent")} />
-                : tab === "activity" ? <ActivityLog rows={log} isAdmin={isAdmin} />
-                : <LeadsTable rows={leads} />}
+                : <ActivityLog rows={log} isAdmin={isAdmin} />}
               {meta && tab === "rules" && rows.length > 0 && (
                 <div style={{ fontSize: 12.5, color: C.textMuted, marginTop: 14 }}>
                   Up to {meta.maxPerHour} automated replies per account per hour, to stay inside Meta's limits.

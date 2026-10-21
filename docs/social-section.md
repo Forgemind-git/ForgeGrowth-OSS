@@ -1,9 +1,8 @@
 # Social section
 
-The **Social** header tab manages your Instagram, Facebook, Threads, YouTube and
-LinkedIn accounts from inside Forge Growth: Overview,
-Insights, Inbox, Contacts, Content Library (publish + media), Instagram
-Automations, Comment Analyzer and Settings (Integrations, OpenRouter, tags,
+The **Social** header tab manages your Instagram accounts from inside Forge Growth: Overview,
+Insights, Inbox, Contacts, Content Library (synced posts + media), Instagram
+Automations (Activity), Comment Analyzer and Settings (Integrations, OpenRouter, tags,
 fields, MCP access, activity log, privacy policy).
 
 ## How it is wired
@@ -32,10 +31,10 @@ Required:
 
 | Variable | Purpose |
 |---|---|
-| `SOCIAL_ENCRYPTION_KEY` | Encrypts stored secrets (AI keys, Meta tokens). Saving any secret is refused until it is set. Use a long random string and never change it once secrets are saved. |
-| `SOCIAL_PUBLIC_BASE_URL` | Defaults to this install's own address (`https://$TLS_DOMAIN`, else the first `CORS_ORIGIN`). OAuth callbacks are `<base>/api/social/<platform>/callback`. |
+| `SOCIAL_ENCRYPTION_KEY` | Encrypts stored secrets (AI keys, Instagram tokens). Saving any secret is refused until it is set. Use a long random string and never change it once secrets are saved. |
+| `SOCIAL_PUBLIC_BASE_URL` | Defaults to this install's own address (`https://$TLS_DOMAIN`, else the first `CORS_ORIGIN`). The OAuth callback is `<base>/api/social/instagram/oauth/callback`. |
 
-The Meta app (Instagram, Facebook Login, Webhooks). These can also be entered in
+The Meta app (Instagram, Webhooks). These can also be entered in
 Social → Settings → Integrations → App credentials instead of `.env`:
 
 | Variable | Value |
@@ -45,20 +44,14 @@ Social → Settings → Integrations → App credentials instead of `.env`:
 | `SOCIAL_INSTAGRAM_APP_SECRET` | The Instagram app secret (verifies webhook signatures) |
 | `SOCIAL_INSTAGRAM_WEBHOOK_VERIFY_TOKEN` | Any random string; paste the same into the app's webhook setup |
 | `SOCIAL_META_APP_ID` | The app's App ID (used to check saved page tokens belong to it) |
-| `SOCIAL_THREADS_APP_ID` / `SOCIAL_THREADS_APP_SECRET` | If Threads is used |
 
-Optional: `SOCIAL_YT_GOOGLE_CLIENT_ID` / `SOCIAL_YT_GOOGLE_CLIENT_SECRET` (YouTube),
-`SOCIAL_LINKEDIN_CLIENT_ID` / `SOCIAL_LINKEDIN_CLIENT_SECRET`, `SOCIAL_REDIS_URL`
-(defaults to ForgeGrowth's), `SOCIAL_SYNC_INTERVAL_MINUTES` (30).
+Optional: `SOCIAL_REDIS_URL` (defaults to ForgeGrowth's), `SOCIAL_SYNC_INTERVAL_MINUTES` (30).
 
 ### URLs to register in the Meta app
 
 - Instagram OAuth redirect: `https://<your-host>/api/social/instagram/oauth/callback`
-- Facebook Login redirect: `https://<your-host>/api/social/facebook/callback`
-- Threads redirect: `https://<your-host>/api/social/threads/callback`
 - Webhook callback (Instagram): `https://<your-host>/api/social/instagram/webhook`
 - Privacy policy URL: `https://<your-host>/#/social-privacy`
-- YouTube (Google Cloud OAuth client): `https://<your-host>/api/social/youtube/callback`
 
 ## Turning it on
 

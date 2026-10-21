@@ -12,7 +12,7 @@ import { LineChart } from '../components/Charts.jsx';
 import PostPreviewModal from '../components/PostPreviewModal.jsx';
 
 // Top-post thumbnail — renders the post's real image, falling back to the
-// platform badge / play glyph when there's no thumbnail or it fails to load.
+// platform badge when there's no thumbnail or it fails to load.
 function PostThumb({ post, platformKey }) {
   const [err, setErr] = useState(false);
   const col = platformColor(platformKey);
@@ -20,9 +20,7 @@ function PostThumb({ post, platformKey }) {
   if (!post.thumbnail || err) {
     return (
       <div style={box}>
-        {platformKey === "youtube"
-          ? <svg width="20" height="20" viewBox="0 0 24 24" fill={col}><polygon points="9,7 18,12 9,17" /></svg>
-          : <PlatformBadge platform={platformKey} size="md" />}
+        <PlatformBadge platform={platformKey} size="md" />
       </div>
     );
   }
@@ -30,11 +28,6 @@ function PostThumb({ post, platformKey }) {
     <div style={box}>
       <img src={post.thumbnail} alt="" loading="lazy" onError={() => setErr(true)}
         style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-      {platformKey === "youtube" && (
-        <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill={C.onAccent} style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,.65))" }}><polygon points="9,7 18,12 9,17" /></svg>
-        </span>
-      )}
     </div>
   );
 }
@@ -63,8 +56,7 @@ const NoData = ({ body, style }) => (
 // account at a time, the four numbers that say how it is going — followers
 // (with growth), reach, engagement rate, posts — one followers chart that
 // follows the period, and the top five posts. Everything else (impressions,
-// clicks, platform-specific extras, audience, daily performance, YouTube video
-// health) was removed from this page; the same data is reachable over MCP for
+// clicks, platform-specific extras, audience, daily performance) was removed from this page; the same data is reachable over MCP for
 // a custom dashboard.
 const TOP_POSTS = 5;
 
@@ -99,7 +91,7 @@ export default function OverviewPage({ period, setPeriod }) {
   const shownAccounts = (platformData?.accounts || []).filter(a => activeTab !== "instagram" || scope.hasIg(a.accountId));
   const selectedAccount = account || platformData?.primaryAccount;
   const accountLabel = platformData?.accounts?.find(a => a.accountId === selectedAccount)?.accountLabel || null;
-  // Threads reports no reach — views is the closest thing it does report.
+  // No reach reported for the period — views is the closest thing.
   const reachCard = platformData?.reach != null
     ? { label: "Reach", value: platformData.reach, delta: platformData.reachDelta, info: "Unique people who saw your content." }
     : { label: "Views", value: platformData?.impressions, delta: platformData?.impressionsDelta, info: "Views across your content in the period." };
@@ -144,7 +136,7 @@ export default function OverviewPage({ period, setPeriod }) {
           <NoData body={`Go to Integrations and click Re-sync to fetch data from ${platform.name}.`} />
         ) : (<>
           <div data-testid="overview-kpis" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10, marginBottom: 16 }}>
-            <StatCard label={activeTab === "youtube" ? "Subscribers" : "Followers"} value={platformData.followers} delta={platformData.growthPct} deltaLabel={`+${platformData.scaledGrowth} in ${info.days}d`} positive info="People following or subscribed to this account." />
+            <StatCard label="Followers" value={platformData.followers} delta={platformData.growthPct} deltaLabel={`+${platformData.scaledGrowth} in ${info.days}d`} positive info="People following this account." />
             <StatCard label={reachCard.label} value={reachCard.value} delta={reachCard.delta} deltaLabel={`vs prev. ${info.days}d`} positive={(reachCard.delta ?? 0) >= 0} info={reachCard.info} />
             <StatCard label="Engagement rate" value={platformData.engagementRate} suffix="%" delta={platformData.engagementDelta} deltaLabel="pp vs prev." positive={platformData.engagementDelta >= 0} info="Share of viewers who liked, commented, shared or clicked." />
             <StatCard label="Posts" value={platformData.posts} delta={platformData.postsDelta} deltaLabel={`vs prev. ${info.days}d`} positive={platformData.postsDelta >= 0} info="Posts, videos or reels published in the period." />
@@ -152,7 +144,7 @@ export default function OverviewPage({ period, setPeriod }) {
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: 16 }}>
             <Card>
-              <SectionHead right={<span style={{ fontSize: 12.5, color: C.textMuted, fontWeight: 500 }}>{info.label}</span>}>{activeTab === "youtube" ? "Subscribers" : "Followers"}</SectionHead>
+              <SectionHead right={<span style={{ fontSize: 12.5, color: C.textMuted, fontWeight: 500 }}>{info.label}</span>}>Followers</SectionHead>
               {ftLoading && !followersTrend ? (
                 <div style={{ height: 300, display: "flex", alignItems: "center", justifyContent: "center", color: C.textMuted, fontSize: 14 }}>Loading…</div>
               ) : followersTrend?.points?.length ? (
@@ -160,7 +152,7 @@ export default function OverviewPage({ period, setPeriod }) {
                   data={{ [activeTab]: followersTrend.points.map(p => p.value) }}
                   days={followersTrend.points.map(p => p.label)}
                   meta={followersTrend.points.map(p => ({ delta: p.delta, estimated: p.estimated, carried: p.carried }))}
-                  unit={activeTab === "youtube" ? "subscribers" : "followers"}
+                  unit="followers"
                   height={300}
                 />
               ) : (
@@ -171,7 +163,7 @@ export default function OverviewPage({ period, setPeriod }) {
             </Card>
 
             <Card>
-              <SectionHead right={<span style={{ fontSize: 12.5, color: C.textMuted, fontWeight: 500 }}>{info.label}</span>}>{activeTab === "youtube" ? "Top videos" : "Top posts"}</SectionHead>
+              <SectionHead right={<span style={{ fontSize: 12.5, color: C.textMuted, fontWeight: 500 }}>{info.label}</span>}>Top posts</SectionHead>
               {platformData.topPosts.length === 0 ? (
                 <div style={{ height: 240, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: C.textMuted, textAlign: "center", padding: "0 20px" }}>
                   No posts on {platform.name} in this period. Try a longer one.

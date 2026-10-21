@@ -1,5 +1,5 @@
-// App credentials — the Meta / Threads / Google / LinkedIn app keys the
-// Connect buttons and webhooks need, entered here instead of on the server.
+// App credentials — the Meta app keys the Instagram Connect button and
+// webhooks need, entered here instead of on the server.
 // Admin only. Secrets are write-only: the server says whether one is set and
 // shows its last 4 characters, never the value.
 import { useState, useEffect } from 'react';
@@ -10,16 +10,10 @@ import { Card, SectionHead } from './UI.jsx';
 import { showToast } from '../Toast.jsx';
 
 const GROUPS = [
-  { id: 'meta', title: 'Meta app — Instagram & Facebook',
-    sub: 'Needed for Connect Instagram / Connect Facebook, and for DMs and comments to arrive.',
-    urls: [['Instagram OAuth redirect', 'instagramRedirect'], ['Facebook Login redirect', 'facebookRedirect'],
+  { id: 'meta', title: 'Meta app — Instagram',
+    sub: 'Needed for Connect Instagram, and for DMs and comments to arrive.',
+    urls: [['Instagram OAuth redirect', 'instagramRedirect'],
            ['Webhook callback URL', 'instagramWebhook'], ['Privacy policy URL', 'privacyPolicy']] },
-  { id: 'threads', title: 'Threads', sub: 'Only if Threads is used.',
-    urls: [['Threads redirect', 'threadsRedirect']] },
-  { id: 'google', title: 'Google — YouTube', sub: 'Only if YouTube is used.',
-    urls: [['Authorised redirect URI', 'youtubeRedirect']] },
-  { id: 'linkedin', title: 'LinkedIn', sub: 'Only if LinkedIn is used.',
-    urls: [['Redirect URL', 'linkedinRedirect']] },
 ];
 
 function SourceChip({ c }) {
@@ -142,7 +136,7 @@ export default function AppCredentialsCard() {
     <Card style={{ marginBottom: 22 }}>
       <SectionHead right={<KeyRound size={16} color={C.textMuted} />}>App credentials</SectionHead>
       <div style={{ fontSize: 13, color: C.textSecondary, margin: '-4px 0 14px' }}>
-        The keys of your own Meta, Google and LinkedIn apps. A value saved here takes effect immediately and is used instead of any value set on the server.
+        The keys of your own Meta app. A value saved here takes effect immediately and is used instead of any value set on the server.
       </div>
       {error && <div style={{ fontSize: 13, color: C.errText }}>{error}</div>}
       {!data && !error && <div style={{ fontSize: 13, color: C.textMuted }}>Loading…</div>}

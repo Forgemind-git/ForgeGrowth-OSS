@@ -1,22 +1,9 @@
 // ─── Per-product totals, read FROM THE SALES LOG ──────────────────────────────
 //
-// ⚠ WHY THIS FILE EXISTS. The Products page used to count a product's sales by
-// asking `razorpay_events` which payments had been AMOUNT-MATCHED to one of that
-// product's payment_links (`razorpay_events.course_id`, stamped by
-// courses.matchLink). The Sales Log answers a completely different question: it
-// lists the leads at the won stage and reads each one's Product from
-// `leads.paid_course` (what its Product dropdown writes), with per-transaction
-// overrides on `sales_log.course_id`.
-//
-// Two independent attribution paths over the same money, so they disagreed by
-// construction — measured live on 2026-08-08: Products said 9 sold / ₹48,491
-// while the Sales Log listed 14 sales / 13 transactions / ₹58,991. Amount
-// matching only ever sees gateway payments that (a) arrived through a
-// registered link at (b) exactly its price, so a manual sale, a part payment,
-// a discounted amount or a payment that predates the link is invisible to it.
-//
-// So the Products page now derives everything from the Sales Log, and this is
-// the ONE place that mapping lives. Three call sites read it (the products
+// ⚠ WHY THIS FILE EXISTS. A product's sales are the leads at the won stage whose
+// Product (`leads.paid_course`) names it, with per-transaction overrides on
+// `sales_log.course_id`. Independent attribution paths over the same money
+// disagree by construction, so this is the ONE place that mapping lives. Three call sites read it (the products
 // list, the revenue endpoint, and the MCP `get_product_revenue` tool) — each of
 // them previously carried its own copy of the old query, which is exactly how
 // a number drifts away from the page it is supposed to agree with.
@@ -24,9 +11,7 @@
 // The mapping, stated once:
 //   sale        = a lead at a won stage (what GET /students lists)
 //   its product = the product whose NAME equals leads.paid_course
-//   transaction = a deduped captured Razorpay payment matched to that lead,
-//                 or a manual sales_log row for it (the same UNION the Sales
-//                 Log's installments table shows)
+//   transaction = a sales_log row for that lead
 //   a transaction's product = its own course_id when set, otherwise the sale's
 //                 ("— Same as enrolment —", the literal wording in the
 //                 Add Transaction modal)
@@ -40,17 +25,15 @@
 
 const pool = require('../db');
 
-// Built lazily: routes/leads.js owns both the won-stage definition and the
-// payment-dedupe CTE, and importing it at module load would fix a require order
-// this service does not need to care about.
+// Built lazily: routes/leads.js owns the won-stage definition, and importing it
+// at module load would fix a require order this service does not need to care about.
 function leadsHelpers() {
-  const { RZP_CAPTURED, SALE_STAGE_KEYS } = require('../routes/leads');
-  return { RZP_CAPTURED, SALE_STAGE_KEYS };
+  const { SALE_STAGE_KEYS } = require('../routes/leads');
+  return { SALE_STAGE_KEYS };
 }
 
 // The shared CTE chain. $1 is the won-stage key array.
 function salesLogCte() {
-  const { RZP_CAPTURED } = leadsHelpers();
   return `
     sales AS (
       SELECT l.id AS lead_id, c.id AS product_id
@@ -60,10 +43,6 @@ function salesLogCte() {
        WHERE l.stage = ANY($1)
     ),
     txns AS (
-      SELECT s.product_id, rz.amount_paise
-        FROM ( ${RZP_CAPTURED('matched_lead_id IS NOT NULL')} ) rz
-        JOIN sales s ON s.lead_id = rz.lead_id
-      UNION ALL
       SELECT COALESCE(sl.course_id, s.product_id) AS product_id, sl.amount_paise
         FROM coexistence.sales_log sl
         JOIN sales s ON s.lead_id = sl.lead_id
@@ -94,16 +73,10 @@ async function productTotals() {
   }));
 }
 
-// The two ways money can sit outside a product's totals. They are reported
-// separately because they need different fixes, and folding them together
-// would point the reader at the wrong one:
-//   unattributed    — it IS in the Sales Log, but no Product is set on the sale
-//                     → open the sale and pick its Product
-//   outsideSalesLog — a captured gateway payment that belongs to no sale at all
-//                     (unmatched payer, or a lead that never reached the won
-//                     stage) → nothing to attribute it to until it becomes one
+// Sales whose Product is not set, so their money is in no product's totals —
+// open the sale and pick its Product.
 async function unattributedTotals() {
-  const { RZP_CAPTURED, SALE_STAGE_KEYS } = leadsHelpers();
+  const { SALE_STAGE_KEYS } = leadsHelpers();
   const { rows: [u] } = await pool.query(
     `WITH ${salesLogCte()}
      SELECT (SELECT COUNT(*) FROM sales WHERE product_id IS NULL)::int                            AS sales_count,
@@ -111,25 +84,11 @@ async function unattributedTotals() {
             (SELECT COALESCE(SUM(amount_paise), 0) FROM txns WHERE product_id IS NULL)::bigint    AS revenue_paise`,
     [SALE_STAGE_KEYS()],
   );
-  const { rows: [o] } = await pool.query(
-    `WITH ${salesLogCte()},
-     rz AS ( ${RZP_CAPTURED('TRUE')} )
-     SELECT COUNT(*)::int AS payment_count,
-            COALESCE(SUM(rz.amount_paise), 0)::bigint AS revenue_paise
-       FROM rz
-      WHERE rz.lead_id IS NULL
-         OR NOT EXISTS (SELECT 1 FROM sales s WHERE s.lead_id = rz.lead_id)`,
-    [SALE_STAGE_KEYS()],
-  );
   return {
     unattributed: {
       sales_count: u.sales_count,
       payment_count: u.payment_count,
       revenue_paise: Number(u.revenue_paise),
-    },
-    outsideSalesLog: {
-      payment_count: o.payment_count,
-      revenue_paise: Number(o.revenue_paise),
     },
   };
 }
@@ -142,15 +101,13 @@ async function unattributedTotals() {
  * the same question and must share one implementation — independent queries
  * answer subtly different questions under the same name and all look correct.
  *
- * A "sale" is a lead at a won stage; a transaction is a deduped captured
- * Razorpay payment matched to that lead UNION a manual sales_log row. Both come
- * from `RZP_CAPTURED` / `SALE_STAGE_KEYS`, never re-derived — Razorpay writes
- * several `captured` rows per real payment, so a private copy double-counts.
+ * A "sale" is a lead at a won stage (`SALE_STAGE_KEYS`, never re-derived); a
+ * transaction is a sales_log row for it.
  *
  * `uid` scopes to one BDA's own leads (null = org-wide).
  */
 async function salesSummary({ days, uid = null }) {
-  const { RZP_CAPTURED, SALE_STAGE_KEYS } = leadsHelpers();
+  const { SALE_STAGE_KEYS } = leadsHelpers();
   const scope = uid == null ? '' : ' AND l.assigned_user_id = $3';
   const params = uid == null ? [SALE_STAGE_KEYS(), days] : [SALE_STAGE_KEYS(), days, uid];
 
@@ -165,10 +122,6 @@ async function salesSummary({ days, uid = null }) {
         WHERE l.stage = ANY($1)${scope}
      ),
      txns AS (
-       SELECT rz.amount_paise, rz.created_at AS paid_at
-         FROM ( ${RZP_CAPTURED('matched_lead_id IS NOT NULL')} ) rz
-         JOIN sales s ON s.lead_id = rz.lead_id
-       UNION ALL
        SELECT sl.amount_paise, sl.created_at AS paid_at
          FROM coexistence.sales_log sl
          JOIN sales s ON s.lead_id = sl.lead_id
@@ -201,7 +154,7 @@ async function salesSummary({ days, uid = null }) {
 
 /** The most recent sales, for the Home "Latest sales" strip. */
 async function recentSales({ limit = 6, uid = null }) {
-  const { RZP_CAPTURED, SALE_STAGE_KEYS } = leadsHelpers();
+  const { SALE_STAGE_KEYS } = leadsHelpers();
   const scope = uid == null ? '' : ' AND l.assigned_user_id = $2';
   const params = uid == null ? [SALE_STAGE_KEYS()] : [SALE_STAGE_KEYS(), uid];
   const { rows } = await pool.query(
@@ -214,9 +167,6 @@ async function recentSales({ limit = 6, uid = null }) {
        SELECT s.lead_id, SUM(t.amount_paise)::bigint AS paise, MAX(t.paid_at) AS last_paid
          FROM sales s
          JOIN (
-           SELECT rz.lead_id, rz.amount_paise, rz.created_at AS paid_at
-             FROM ( ${RZP_CAPTURED('matched_lead_id IS NOT NULL')} ) rz
-           UNION ALL
            SELECT sl.lead_id, sl.amount_paise, sl.created_at AS paid_at
              FROM coexistence.sales_log sl
          ) t ON t.lead_id = s.lead_id

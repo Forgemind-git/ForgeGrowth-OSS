@@ -234,16 +234,17 @@ describe('seedCategories never widens access', () => {
     // This snapshot is what the live connector could actually reach when the
     // Chat Analyzer shipped. New tools never disturb it; a tool losing access
     // always fails it. (The Forms + Projects tools were removed on purpose on
-    // 2026-10-16 and came out of this list with them.)
+    // 2026-10-16, and the Marketing + Razorpay tools on 2026-10-21; they came
+    // out of this list with them.)
     const REACHABLE_ON_DEPLOY_DAY = [
       'add_google_sheets_tool', 'add_http_tool', 'add_tool',
       'create_agent', 'create_automation', 'create_template',
-      'create_wa_link', 'forgechat_request', 'get_agent', 'get_automation_runs',
-      'get_campaign_performance', 'get_product_revenue', 'get_template', 'list_agents',
+      'forgechat_request', 'get_agent', 'get_automation_runs',
+      'get_product_revenue', 'get_template', 'list_agents',
       'list_automations', 'list_conversations', 'list_endpoints',
-      'list_leads', 'list_media', 'list_models', 'list_payments',
+      'list_leads', 'list_media', 'list_models',
       'list_products', 'list_sheet_tabs', 'list_templates',
-      'list_wa_accounts', 'list_webinars', 'move_lead_stage',
+      'list_wa_accounts', 'move_lead_stage',
       'read_messages', 'read_sheet_values', 'search_spreadsheets', 'send_bulk_message',
       'send_interactive', 'send_media', 'send_message', 'send_template',
       'submit_template', 'sync_template', 'update_agent', 'update_automation',

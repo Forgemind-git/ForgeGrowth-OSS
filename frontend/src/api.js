@@ -390,86 +390,6 @@ export const api = {
     replay: (id) => req(`/webhook-events/${id}/replay`, { method: 'POST' }),
     delete: (id) => req(`/webhook-events/${id}`, { method: 'DELETE' }),
   },
-  razorpay: {
-    status: () => req('/razorpay/status'),
-    getConfig: () => req('/razorpay/config'),
-    saveConfig: (body) => req('/razorpay/config', { method: 'PUT', body: JSON.stringify(body) }),
-    events: (filters = {}) => {
-      const qs = new URLSearchParams();
-      Object.entries(filters).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
-      const s = qs.toString();
-      return req(`/razorpay/events${s ? `?${s}` : ''}`);
-    },
-    event: (id) => req(`/razorpay/events/${id}`),
-    // The pulled ledger — what Razorpay actually holds, including everything
-    // from before the webhook existed. Distinct from events() above, which is
-    // the webhook audit trail.
-    payments: (filters = {}) => {
-      const qs = new URLSearchParams();
-      Object.entries(filters).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
-      const s = qs.toString();
-      return req(`/razorpay/payments${s ? `?${s}` : ''}`);
-    },
-    // KPI summary for the ledger. Accepts the same from/to/method/q slice as
-    // payments() so the cards describe the current view (status is table-only —
-    // the cards ARE the status breakdown).
-    paymentsSummary: (filters = {}) => {
-      const qs = new URLSearchParams();
-      Object.entries(filters).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
-      const s = qs.toString();
-      return req(`/razorpay/payments/summary${s ? `?${s}` : ''}`);
-    },
-    // Payments dashboard: money per IST day/week/month, split by method /
-    // product / status. Same filters as payments().
-    paymentsTrend: (filters = {}) => {
-      const qs = new URLSearchParams();
-      Object.entries(filters).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
-      const s = qs.toString();
-      return req(`/razorpay/payments/trend${s ? `?${s}` : ''}`);
-    },
-    syncPayments: (full = false) =>
-      req('/razorpay/payments/sync', { method: 'POST', body: JSON.stringify({ full }) }),
-    // Proves the OUTBOUND half works. A connected webhook says nothing about
-    // API access — they are separate credentials with separate status.
-    testApi: () => req('/razorpay/test-api', { method: 'POST' }),
-  },
-  // Payments dashboard: the signed-in user's saved filter combinations.
-  paymentFilterPresets: {
-    list: (scope = 'dashboard') => req(`/payment-filter-presets?scope=${encodeURIComponent(scope)}`),
-    create: (body) => req('/payment-filter-presets', { method: 'POST', body: JSON.stringify(body) }),
-    update: (id, body) => req(`/payment-filter-presets/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
-    delete: (id) => req(`/payment-filter-presets/${id}`, { method: 'DELETE' }),
-  },
-  // Payment requests — Razorpay links minted by ForgeGrowth, each carrying our
-  // lead id so the payment attributes itself instead of being guessed from its
-  // amount. Amounts cross this boundary in RUPEES; the backend stores paise.
-  paymentRequests: {
-    list: (filters = {}) => {
-      const qs = new URLSearchParams();
-      Object.entries(filters).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
-      const s = qs.toString();
-      return req(`/payment-requests${s ? `?${s}` : ''}`);
-    },
-    summary: (filters = {}) => {
-      const qs = new URLSearchParams();
-      Object.entries(filters).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
-      const s = qs.toString();
-      return req(`/payment-requests/summary${s ? `?${s}` : ''}`);
-    },
-    get: (id) => req(`/payment-requests/${id}`),
-    create: (body) => req('/payment-requests', { method: 'POST', body: JSON.stringify(body) }),
-    refresh: (id) => req(`/payment-requests/${id}/refresh`, { method: 'POST' }),
-    cancel: (id) => req(`/payment-requests/${id}/cancel`, { method: 'POST' }),
-    delete: (id) => req(`/payment-requests/${id}`, { method: 'DELETE' }),
-    // Plain <a download> — the auth cookie rides along, same as the contact
-    // import template.
-    exportUrl: (filters = {}) => {
-      const qs = new URLSearchParams();
-      Object.entries(filters).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
-      const s = qs.toString();
-      return `/api/payment-requests/export${s ? `?${s}` : ''}`;
-    },
-  },
   // Products — anything you sell (course, consulting, template, webinar).
   // Was `api.courses` hitting /courses; the backend still answers on the old
   // path for external callers, but nothing in the app uses it.
@@ -478,9 +398,6 @@ export const api = {
     create: (body) => req('/products', { method: 'POST', body: JSON.stringify(body) }),
     update: (id, body) => req(`/products/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
     delete: (id) => req(`/products/${id}`, { method: 'DELETE' }),
-    addLink: (productId, body) => req(`/products/${productId}/links`, { method: 'POST', body: JSON.stringify(body) }),
-    updateLink: (id, body) => req(`/payment-links/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
-    deleteLink: (id) => req(`/payment-links/${id}`, { method: 'DELETE' }),
     revenue: () => req('/products/revenue'),
   },
   mediaLibrary: {
@@ -624,23 +541,6 @@ export const api = {
     updateOauthClient: (id, data) => req(`/mcp/oauth/clients/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteOauthClient: (id) => req(`/mcp/oauth/clients/${id}`, { method: 'DELETE' }),
   },
-  // Message Formats — labelled pre-filled WhatsApp openers + their tracking.
-  // The backend answers on /wa-links too; this group uses the canonical path.
-  messageFormats: {
-    list: () => req('/message-formats'),
-    get: (id) => req(`/message-formats/${id}`),
-    create: (data) => req('/message-formats', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id, data) => req(`/message-formats/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    delete: (id) => req(`/message-formats/${id}`, { method: 'DELETE' }),
-    stats: (id, days = 30) => req(`/message-formats/${id}/stats?days=${days}`),
-  },
-  // Pre-093 alias. Kept so nothing that still calls api.waLinks breaks.
-  waLinks: {
-    list: () => req('/wa-links'),
-    create: (data) => req('/wa-links', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id, data) => req(`/wa-links/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    delete: (id) => req(`/wa-links/${id}`, { method: 'DELETE' }),
-  },
   // ── AI Academy Dashboard ──────────────────────────────────────────────────
   leads: {
     list: (params = {}) => {
@@ -648,12 +548,6 @@ export const api = {
       return req(`/leads${qs.toString() ? `?${qs}` : ''}`);
     },
     board: () => req('/leads/board'),
-    onboarding: () => req('/leads/onboarding'),
-    sources: (params = {}) => {
-      const qs = new URLSearchParams();
-      Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
-      return req(`/lead-sources${qs.toString() ? `?${qs}` : ''}`);
-    },
     get: (id) => req(`/leads/${id}`),
     // Everything known about whoever is on the other end of a chat — the lead,
     // its payments and whether that makes them a customer — matched on the last
@@ -687,104 +581,6 @@ export const api = {
       return json;
     },
   },
-  marketing: {
-    // Accepts a range params object ({ days } or { from, to }, see
-    // components/DateRangeControl rangeParams) or the legacy bare `days` number.
-    overview: (range = { days: 30 }, source) => {
-      const qs = new URLSearchParams();
-      const r = typeof range === 'object' && range ? range : { days: range };
-      Object.entries(r).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
-      if (source) qs.set('source', source);
-      return req(`/marketing/overview?${qs}`);
-    },
-    metaAds: {
-      status: () => req('/marketing/meta-ads/status'),
-      connect: (token, adAccountIds) => req('/marketing/meta-ads/connect', { method: 'POST', body: JSON.stringify({ token, adAccountIds }) }),
-      setAccounts: (adAccountIds) => req('/marketing/meta-ads/accounts', { method: 'PUT', body: JSON.stringify({ adAccountIds }) }),
-      sync: () => req('/marketing/meta-ads/sync', { method: 'POST' }),
-      disconnect: () => req('/marketing/meta-ads/disconnect', { method: 'POST' }),
-    },
-  },
-  campaigns: {
-    // No params = every campaign with lifetime figures; { days } or { from, to }
-    // = campaigns that delivered in the range, with per-day Meta figures.
-    list: (params = {}) => {
-      const qs = new URLSearchParams();
-      Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
-      return req(`/campaigns${qs.toString() ? `?${qs}` : ''}`);
-    },
-    get: (id) => req(`/campaigns/${id}`),
-    create: (data) => req('/campaigns', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id, data) => req(`/campaigns/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    delete: (id) => req(`/campaigns/${id}`, { method: 'DELETE' }),
-    ads: (id) => req(`/campaigns/${id}/ads`),
-  },
-  // Click-to-WhatsApp ad performance, built from the CTWA `referral` blocks the
-  // webhook already receives (click id + ad id + creative), joined to spend.
-  ctwa: {
-    overview: (params = {}) => {
-      const qs = new URLSearchParams();
-      Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
-      return req(`/ctwa/overview${qs.toString() ? `?${qs}` : ''}`);
-    },
-    ad: (sourceId) => req(`/ctwa/ads/${encodeURIComponent(sourceId)}`),
-    backfillDailySpend: (days) => req('/marketing/meta-ads/backfill-daily', { method: 'POST', body: JSON.stringify({ days }) }),
-  },
-
-
-  // Meta Conversions API — send the click id back when a lead converts.
-  capi: {
-    config: () => req('/capi/config'),
-    updateConfig: (data) => req('/capi/config', { method: 'PUT', body: JSON.stringify(data) }),
-    discoverDatasets: () => req('/capi/datasets/discover', { method: 'POST' }),
-    createDataset: (wabaId) => req(`/capi/datasets/${encodeURIComponent(wabaId)}/create`, { method: 'POST' }),
-    linkDataset: (wabaId, datasetId) => req(`/capi/datasets/${encodeURIComponent(wabaId)}`, { method: 'PUT', body: JSON.stringify({ datasetId }) }),
-    createMapping: (data) => req('/capi/mappings', { method: 'POST', body: JSON.stringify(data) }),
-    updateMapping: (id, data) => req(`/capi/mappings/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    deleteMapping: (id) => req(`/capi/mappings/${id}`, { method: 'DELETE' }),
-    events: (params = {}) => {
-      const qs = new URLSearchParams();
-      Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
-      return req(`/capi/events${qs.toString() ? `?${qs}` : ''}`);
-    },
-    resend: (id) => req(`/capi/events/${id}/resend`, { method: 'POST' }),
-    send: (leadId, opts = {}) => req('/capi/send', { method: 'POST', body: JSON.stringify({ leadId, ...opts }) }),
-    backfill: (limit) => req('/capi/backfill', { method: 'POST', body: JSON.stringify({ limit }) }),
-    test: (eventName) => req('/capi/test', { method: 'POST', body: JSON.stringify({ eventName }) }),
-    clickIds: (params = {}) => {
-      const qs = new URLSearchParams();
-      Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
-      return req(`/capi/click-ids${qs.toString() ? `?${qs}` : ''}`);
-    },
-    learning: () => req('/capi/learning'),
-    performance: () => req('/capi/performance'),
-    fieldPreview: () => req('/capi/field-preview'),
-    timing: () => req('/capi/timing'),
-  },
-
-  // Conversion Leads Optimisation — Meta Lead Ads only, separate from capi.*
-  clo: {
-    settings: () => req('/marketing/clo/settings'),
-    updateSettings: (data) => req('/marketing/clo/settings', { method: 'PUT', body: JSON.stringify(data) }),
-    stages: () => req('/marketing/clo/stages'),
-    createStage: (data) => req('/marketing/clo/stages', { method: 'POST', body: JSON.stringify(data) }),
-    updateStage: (id, data) => req(`/marketing/clo/stages/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    deleteStage: (id) => req(`/marketing/clo/stages/${id}`, { method: 'DELETE' }),
-    reorderStages: (ids) => req('/marketing/clo/stages/reorder', { method: 'PUT', body: JSON.stringify({ ids }) }),
-    stageStats: () => req('/marketing/clo/stage-stats'),
-    testEvent: (data = {}) => req('/marketing/clo/test-event', { method: 'POST', body: JSON.stringify(data) }),
-    flush: () => req('/marketing/clo/flush', { method: 'POST' }),
-    readiness: () => req('/marketing/clo/readiness'),
-    events: (params = {}) => {
-      const qs = new URLSearchParams();
-      Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') qs.set(k, v); });
-      return req(`/marketing/clo/events${qs.toString() ? `?${qs}` : ''}`);
-    },
-    retryEvent: (id) => req(`/marketing/clo/events/${id}/retry`, { method: 'POST' }),
-    retryBulk: (filters) => req('/marketing/clo/events/retry-bulk', { method: 'POST', body: JSON.stringify(filters) }),
-    backfill: (opts = {}) => req('/marketing/clo/backfill', { method: 'POST', body: JSON.stringify(opts) }),
-  },
-
   resources: {
     list: (dynamic) => {
       const qs = new URLSearchParams();
@@ -798,20 +594,6 @@ export const api = {
     triggerLibrary: () => req('/trigger-library'),
     updateTriggers: (id, data) => req(`/resources/${id}/triggers`, { method: 'PUT', body: JSON.stringify(data) }),
     testTrigger: (phrase) => req('/trigger-test', { method: 'POST', body: JSON.stringify({ phrase }) }),
-  },
-  webinars: {
-    list: () => req('/webinars'),
-    funnel: (id) => req(`/webinars/${id}/funnel`),
-    create: (data) => req('/webinars', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id, data) => req(`/webinars/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    delete: (id) => req(`/webinars/${id}`, { method: 'DELETE' }),
-    registrations: (webinarId) => {
-      const qs = new URLSearchParams();
-      if (webinarId) qs.set('webinarId', webinarId);
-      return req(`/webinar-registrations${qs.toString() ? `?${qs}` : ''}`);
-    },
-    saveRegistration: (data) => req('/webinar-registrations', { method: 'POST', body: JSON.stringify(data) }),
-    updateRegistration: (id, data) => req(`/webinar-registrations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   },
   bda: {
     performance: (period = 'month') => req(`/bda-performance?period=${period}`),
@@ -891,8 +673,8 @@ export const api = {
     updateSource: (id, data) => req(`/funnel/sources/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteSource: (id) => req(`/funnel/sources/${id}`, { method: 'DELETE' }),
   },
-  // Entity-field registry — configurable fields for the Leads table, the
-  // Sales Log (entity 'lead') and Transactions (entity 'transaction').
+  // Entity-field registry — configurable fields for the Leads table (entity
+  // 'lead') and Transactions (entity 'transaction').
   entityFields: {
     list: () => req('/entity-fields'),
     create: (data) => req('/entity-fields', { method: 'POST', body: JSON.stringify(data) }),
@@ -902,28 +684,7 @@ export const api = {
     restore: (id) => req(`/entity-fields/${id}/restore`, { method: 'POST' }),
   },
   students: {
-    list: () => req('/students'),
-    installments: (id) => req(`/students/${id}/installments`),
     addInstallment: (id, data) => req(`/students/${id}/installments`, { method: 'POST', body: JSON.stringify(data) }),
-    // Money given back to the customer (amount, date, method, note) — several per sale.
-    addRefund: (id, data) => req(`/students/${id}/refunds`, { method: 'POST', body: JSON.stringify(data) }),
-    deleteRefund: (id, refundId) => req(`/students/${id}/refunds/${refundId}`, { method: 'DELETE' }),
-    addSale: (data) => req('/students', { method: 'POST', body: JSON.stringify(data) }),
-    delete: (id) => req(`/students/${id}`, { method: 'DELETE' }),
-    exportUrl: (format = 'csv') => `/api/students/export?format=${format}`,
-  },
-  salesLog: {
-    list: (params = {}) => {
-      const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== ''));
-      return req(`/sales-log${qs.toString() ? `?${qs}` : ''}`);
-    },
-    summary: (params = {}) => {
-      const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== ''));
-      return req(`/sales-log/summary${qs.toString() ? `?${qs}` : ''}`);
-    },
-    create: (data) => req('/sales-log', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id, data) => req(`/sales-log/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    delete: (id) => req(`/sales-log/${id}`, { method: 'DELETE' }),
   },
   upload: (file) => {
     const form = new FormData();

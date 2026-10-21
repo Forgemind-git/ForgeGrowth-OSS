@@ -7,28 +7,19 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const instagram = require('./instagram');
-const youtube = require('./youtube');
-const facebook = require('./facebook');
-const threads = require('./threads');
-const linkedin = require('./linkedin');
 const categorize = require('./categorize');
 
 const UPLOADS_DIR = socialEnv.UPLOADS_DIR || '/app/uploads';
 
 // ── Thumbnail localization ───────────────────────────────────
-// Instagram/Threads/Facebook cover URLs are signed and EXPIRE. Download them
-// once into /api/uploads (deterministic filename) and store the local path, so
-// a thumbnail never breaks between syncs. YouTube (i.ytimg.com) is permanent —
-// kept as a remote URL. Re-syncs reuse the on-disk file (no re-download).
-const PERMANENT_THUMB_HOSTS = ['i.ytimg.com', 'ytimg.com'];
+// Instagram cover URLs are signed and EXPIRE. Download them once into
+// /api/uploads (deterministic filename) and store the local path, so a
+// thumbnail never breaks between syncs. Re-syncs reuse the on-disk file.
 
 async function _localizeThumbnail(platformKey, externalId, remoteUrl) {
   if (!remoteUrl) return null;
   if (remoteUrl.startsWith('/api/social/uploads/')) return remoteUrl;   // already local
-  try {
-    const host = new URL(remoteUrl).hostname;
-    if (PERMANENT_THUMB_HOSTS.some(h => host.endsWith(h))) return remoteUrl;
-  } catch { return remoteUrl; }
+  try { new URL(remoteUrl); } catch { return remoteUrl; }
 
   const hash  = crypto.createHash('sha1').update(`${platformKey}:${externalId}`).digest('hex').slice(0, 16);
   const fname = `thumb-${platformKey}-${hash}.jpg`;
@@ -51,10 +42,6 @@ async function _localizeThumbnail(platformKey, externalId, remoteUrl) {
 
 const PLATFORM_MODULES = {
   instagram: { module: instagram, key: 'instagram' },
-  youtube:   { module: youtube,   key: 'youtube' },
-  facebook:  { module: facebook,  key: 'facebook' },
-  threads:   { module: threads,   key: 'threads' },
-  linkedin:  { module: linkedin,  key: 'linkedin' },
 };
 
 const PLATFORM_IDS = {};
@@ -142,9 +129,9 @@ async function _upsertPosts(platformKey, posts, accountKey = null) {
         media_type = EXCLUDED.media_type,
         date = EXCLUDED.date,
         -- An incoming 0 must never wipe a known view count: some fetch paths
-        -- (Threads/LinkedIn full backfill, FB posts) don't carry per-post views,
-        -- while the period stats path does — whichever ran last was clobbering
-        -- the other. Real view counts on these platforms don't decrease to 0.
+        -- don't carry per-post views while the period stats path does —
+        -- whichever ran last was clobbering the other. Real view counts don't
+        -- decrease to 0.
         views = CASE WHEN EXCLUDED.views = 0 THEN posts.views ELSE EXCLUDED.views END,
         engagements = EXCLUDED.engagements,
         likes = EXCLUDED.likes,
@@ -336,9 +323,8 @@ async function syncPlatform(key, { fullSync = false } = {}) {
           // Upsert each account's 90D posts (tagged by account) so the library reflects all accounts.
           if (period === '90D') {
             totalRecordsSynced += await _upsertPosts(key, stats.allPosts || [], acct.accountId);
-            // Only prune when allPosts is a real feed listing. YouTube's is an
-            // analytics "had views" list — pruning from it deleted every quiet
-            // video, which getAllPosts then re-inserted (a 30-min delete/re-add loop).
+            // Only prune when allPosts is a real feed listing (a module can
+            // mark it allPostsPrunable:false when it is an analytics subset).
             if (stats.allPostsPrunable !== false) {
               await _pruneDeletedPosts(key, acct.accountId, stats.allPosts || [])
                 .catch(e => console.error(`Prune failed for ${key} ${acct.accountId}:`, e.message));
@@ -349,28 +335,6 @@ async function syncPlatform(key, { fullSync = false } = {}) {
           hadError = periodErr.message;
         }
       }
-    }
-
-    // ── Additional accounts (Phase-2 multi-account) ────────────
-    // The primary account is synced above; pull each extra account's posts too,
-    // tagged with its account_key. Best-effort per account so one bad token
-    // doesn't fail the whole platform sync.
-    if (config.module.getAllPosts) {
-      try {
-        const accounts = require('./accounts');
-        for (const { accountKey, cred } of await accounts.accountCreds(key)) {
-          if (!cred) continue;   // 'primary' is already synced above
-          try {
-            const posts = await config.module.getAllPosts(cred);
-            totalRecordsSynced += await _upsertPosts(key, posts, accountKey);
-            await _pruneDeletedPosts(key, accountKey, posts)
-              .catch(e => console.error(`Prune failed for ${key} ${accountKey}:`, e.message));
-            await pool.query('UPDATE social_accounts SET last_sync_at = now(), last_error = NULL WHERE platform=$1 AND account_key=$2', [key, accountKey]).catch(() => {});
-          } catch (acctErr) {
-            await pool.query('UPDATE social_accounts SET last_error = $3 WHERE platform=$1 AND account_key=$2', [key, accountKey, acctErr.message]).catch(() => {});
-          }
-        }
-      } catch (e) { console.error(`Per-account sync error for ${key}:`, e.message); }
     }
 
     if (hadError && totalRecordsSynced === 0) {
@@ -469,24 +433,17 @@ async function getSyncStatus() {
 //   - one viral outlier no longer crushes every other post toward 0,
 //   - scores are comparable across platforms (a 90 means "top decile on its
 //     own platform" everywhere), fixing the old cross-platform skew where
-//     clicks were null on YT/Threads/LinkedIn but still carried 25% weight.
+//     clicks were null on some platforms but still carried 25% weight.
 // Weights pick the metrics each platform actually reports:
 //   er    = engagement rate (engagements/views)
 //   views = raw reach of the post
-//   depth = "strong" interactions the platform exposes (saves+shares on IG,
-//           likes+comments on YT/Threads, shares on FB, clicks on LinkedIn)
+//   depth = "strong" interactions the platform exposes (saves+shares on IG)
 const SCORE_WEIGHTS = {
   instagram: { er: 0.40, views: 0.30, depth: 0.30 },   // depth: saves + shares
-  youtube:   { er: 0.30, views: 0.45, depth: 0.25 },   // depth: likes + comments
-  facebook:  { er: 0.40, views: 0.25, depth: 0.35 },   // depth: shares
-  threads:   { er: 0.45, views: 0.30, depth: 0.25 },   // depth: likes + comments
-  linkedin:  { er: 0.35, views: 0.25, depth: 0.40 },   // depth: clicks
 };
 const _depthOf = (key, p) => {
   if (key === 'instagram') return (p.saves  || 0) + (p.shares   || 0);
-  if (key === 'facebook')  return (p.shares || 0);
-  if (key === 'linkedin')  return (p.clicks || 0);
-  return (p.likes || 0) + (p.comments || 0);            // youtube, threads
+  return (p.likes || 0) + (p.comments || 0);
 };
 
 // Percentile rank for each value: fraction of the group strictly below it,
@@ -596,7 +553,8 @@ async function revalidate(period = '30D') {
 // Newest snapshot timestamp for a period (for the "Updated Xm ago" indicator)
 async function getLastSyncAt(period = '30D') {
   const { rows } = await pool.query(
-    'SELECT max(fetched_at) AS latest FROM sync_snapshots WHERE period = $1', [period]);
+    'SELECT max(fetched_at) AS latest FROM sync_snapshots WHERE period = $1 AND platform = ANY($2)',
+    [period, Object.keys(PLATFORM_MODULES)]);
   return rows[0]?.latest || null;
 }
 
@@ -620,26 +578,16 @@ async function getLatestSnapshot(platform, period = '30D') {
 }
 
 // ── Comment polling ──────────────────────────────────────────
-// Facebook + YouTube comments are pulled here (Instagram uses webhooks). Runs on
-// the same periodic cron as syncAll; each module self-throttles with a cooldown.
-// fast=true is the 5-min lane: shallow polls (YT 1 page; FB's single call also
-// upserts new Page posts) and SKIPS Instagram — its webhooks are already
-// realtime, so polling it every 5 min would burn the 180/hr budget for nothing.
-async function syncComments({ fast = false } = {}) {
-  const out = [];
-  // Instagram added 2026-05-27 — webhooks deliver live deltas; this is the
-  // periodic catch-up + historical backfill (also runs once at boot).
-  for (const [key, mod] of [['facebook', facebook], ['youtube', youtube], ['threads', threads], ['instagram', instagram]]) {
-    if (typeof mod.syncComments !== 'function') continue;
-    if (fast && key === 'instagram') continue;
-    try {
-      const count = await mod.syncComments({ force: fast, fast });
-      out.push({ platform: key, success: true, count });
-    } catch (err) {
-      out.push({ platform: key, success: false, error: err.message });
-    }
+// Instagram comments: webhooks deliver live deltas; this is the periodic
+// catch-up + historical backfill (runs on the syncAll cron and once at boot).
+// The module self-throttles with a cooldown.
+async function syncComments() {
+  try {
+    const count = await instagram.syncComments();
+    return [{ platform: 'instagram', success: true, count }];
+  } catch (err) {
+    return [{ platform: 'instagram', success: false, error: err.message }];
   }
-  return out;
 }
 
 // ── Followers trend (time-wise, hour/day/week filterable) ────
@@ -764,8 +712,8 @@ function _bandSql(params, refFollowers) {
 }
 
 // Account-match condition: a concrete account's own rows PLUS legacy null-account
-// rows that fall in its magnitude band; for single-account/legacy platforms
-// (accountKey null, e.g. Threads) it's the null rows in band. Call AFTER _bandSql.
+// rows that fall in its magnitude band; for legacy rows (accountKey null)
+// it's the null rows in band. Call AFTER _bandSql.
 function _accountCond(params, accountKey, bandSql) {
   if (accountKey && accountKey !== 'all') {
     params.push(accountKey); const acc = '$' + params.length;
@@ -926,7 +874,7 @@ async function getLastFollowerSampleAt(platform, accountKey) {
 // failing still gets a true daily reading. If the direct sampler is unavailable
 // we fall back to a recent snapshot (<90 min old, > 0) rather than storing a
 // stale or failed-fetch value as if it were fresh.
-const _SAMPLERS = { instagram, facebook, threads, youtube, linkedin };
+const _SAMPLERS = { instagram };
 
 async function _directSamples(platform) {
   const mod = _SAMPLERS[platform];
@@ -956,7 +904,7 @@ async function recordFollowerSamples() {
   let total = 0;
   const perPlatform = {};
 
-  for (const platform of ['instagram', 'facebook', 'threads', 'youtube', 'linkedin']) {
+  for (const platform of Object.keys(_SAMPLERS)) {
     const samples = [];
     try {
       samples.push(...await _directSamples(platform));
@@ -1011,6 +959,7 @@ async function recordPostMetricSamples({ days = null } = {}) {
        FROM posts p
        JOIN platforms pl ON pl.id = p.platform_id
       WHERE p.external_id IS NOT NULL
+        AND pl.key = ANY($2)
         AND ($1::int IS NULL OR p.date >= (now() AT TIME ZONE 'Asia/Kolkata')::date - ($1)::int)
      ON CONFLICT (platform, external_id, day) DO UPDATE SET
        account_key = COALESCE(EXCLUDED.account_key, post_metric_samples.account_key),
@@ -1023,7 +972,7 @@ async function recordPostMetricSamples({ days = null } = {}) {
        engagements = GREATEST(post_metric_samples.engagements, EXCLUDED.engagements),
        score       = EXCLUDED.score,
        sampled_at  = EXCLUDED.sampled_at`,
-    [days]);
+    [days, Object.keys(PLATFORM_MODULES)]);
   if (rowCount) console.log(`Logged daily metrics for ${rowCount} post(s)`);
   return rowCount;
 }

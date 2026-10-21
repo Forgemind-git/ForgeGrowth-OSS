@@ -1,9 +1,8 @@
 ---
 name: forge-growth-social
 description: >-
-  Read and run Forge Growth's Social workspace — Instagram, Facebook, Threads, YouTube
-  and LinkedIn numbers, follower trends, the content library, DMs and comments, the
-  posting queue, and especially Instagram automations (comment-to-DM and keyword
+  Read and run Forge Growth's Social workspace — Instagram numbers, follower trends,
+  the content library, DMs and comments, and especially Instagram automations (comment-to-DM and keyword
   rules), multi-step Instagram flows and Social AI agents: list, create, update, switch
   on/off and delete. Use whenever the user asks about social media performance, posts,
   comments, DMs, or wants an Instagram automation, flow or Social agent built or changed.
@@ -17,8 +16,8 @@ Settings → MCP Tools → **Social**), plus deletes, which live in **Admin → 
 | Group | What it lets you do |
 |---|---|
 | Social analytics | `social_get_overview`, `social_get_platform_stats`, `social_get_followers_trend`, `social_get_audience`, `social_get_executive_summary`, `social_get_content_themes`, `social_list_posts` (content library), `social_list_accounts`, `social_get_token_health` |
-| Social inbox & contacts | `social_list_messages` (Instagram DMs), `social_list_comments`, `social_list_contacts`, `social_list_publish_jobs` |
-| Social replies & posting | `social_reply_to_comment`, `social_send_dm`, `social_create_post`, `social_cancel_post` — **seen by real people** |
+| Social inbox & contacts | `social_list_messages` (Instagram DMs), `social_list_comments`, `social_list_contacts` |
+| Social replies | `social_reply_to_comment`, `social_send_dm` — **seen by real people** |
 | Instagram automations & flows | rules: `social_get_automation_options`, `social_list_automations`, `social_list_instagram_posts`, `social_create_automation`, `social_update_automation`, `social_get_automation_results`, `social_list_automation_leads`; flows: `social_list_flows`, `social_get_flow`, `social_create_flow`, `social_update_flow`, `social_get_flow_results` |
 | Social AI agents | `social_list_agents`, `social_get_agent`, `social_list_agent_models`, `social_create_agent`, `social_update_agent`, `social_add_agent_tool`, `social_update_agent_tool`, `social_get_agent_runs` |
 | Delete & remove (Admin) | `social_delete_automation`, `social_delete_flow`, `social_delete_agent`, `social_delete_agent_tool` |
@@ -63,7 +62,7 @@ never invent a step type. Create with `active:false`, confirm, then switch on wi
 
 ## Social AI agents
 
-Agents that answer Instagram/Facebook DMs and/or comments. Gather: purpose → name and
+Agents that answer Instagram DMs and/or comments. Gather: purpose → name and
 system prompt → `platform` + `accountId` (`social_list_accounts`) → `replyDms` /
 `replyComments` → model (`social_list_agent_models`: `aiModelId` + `llmModel`) →
 trigger (`any` or `keyword`) → handoff. Create as `status:"draft"`, confirm, then
@@ -72,7 +71,7 @@ Read `social_get_agent_runs` to answer "what did it say" or "why is it quiet".
 
 ## Rules
 
-- Confirm before anything that reaches people (replies, DMs, posts) and before switching
+- Confirm before anything that reaches people (replies, DMs) and before switching
   an automation, flow or agent ON.
 - Confirm twice before any `social_delete_*` — there is no undo.
 - Social logins, credentials and settings are not reachable from here on purpose.

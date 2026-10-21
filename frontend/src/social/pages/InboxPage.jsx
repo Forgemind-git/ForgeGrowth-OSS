@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef, createContext, useContext } from "react";
-import { Camera, Film, Mic, Link2, Paperclip, Play, Search, X, MessageSquare, CornerDownRight, ExternalLink, Send, Trash2, EyeOff, ThumbsUp, ChevronDown, ChevronUp, Clock, Pencil, Reply as ReplyIcon, Smile, CheckCheck } from "lucide-react";
+import { Camera, Film, Mic, Link2, Paperclip, Play, Search, X, MessageSquare, CornerDownRight, ExternalLink, Send, Trash2, ChevronDown, ChevronUp, Clock, Pencil, Reply as ReplyIcon, Smile, CheckCheck } from "lucide-react";
 import { api } from '../api.js';
 import { useApi } from '../hooks/useApi.js';
 import { relativeTime, C, FONT, T, BTN } from '../constants.js';
-import { PageHeader, Badge, Card, PillTabs, UnderlineTabs, EmptyState as UIEmptyState } from '../components/UI.jsx';
-import { PLATFORMS, platformColor } from '../data/mockData.js';
+import { PageHeader, Badge, Card, UnderlineTabs, EmptyState as UIEmptyState } from '../components/UI.jsx';
 import { useConfirm } from '../ConfirmDialog.jsx';
 import { SearchableSelect } from '../components/Dropdown.jsx';
 import TagPicker, { useTagsAndCategories } from '../components/TagPicker.jsx';
@@ -534,7 +533,7 @@ function AccountFilter({ accounts, value, onChange, inline }) {
   );
 }
 
-function InstagramInbox({ switcher, isAdmin, deepLink }) {
+function InstagramInbox({ isAdmin, deepLink }) {
   const [tab, setTab] = useState("messages");
   const [account, setAccount] = useState(null);     // null = "All accounts" (Comments tab only; Messages auto-picks first)
   const [activeKey, setActiveKey] = useState(null);
@@ -681,10 +680,7 @@ function InstagramInbox({ switcher, isAdmin, deepLink }) {
       {ConfirmDialog}
       <div style={{ flexShrink: 0 }}>
         <PageHeader cycle="Instagram" title="Inbox"
-          right={<>
-            {switcher}
-            <button className="settings-btn" onClick={refetch} disabled={loading}><span style={{ opacity: loading ? 0.5 : 1 }}>↻</span> Refresh</button>
-          </>} />
+          right={<button className="settings-btn" onClick={refetch} disabled={loading}><span style={{ opacity: loading ? 0.5 : 1 }}>↻</span> Refresh</button>} />
 
         {error && <div style={{ background: C.errBg, color: C.errText, padding: '12px 14px', borderRadius: 12, fontSize: 13.5, marginBottom: 16 }}>{error}</div>}
 
@@ -925,33 +921,16 @@ function IgCommentsByPost({ comments, accounts, chipAccounts = accounts, selecte
         </div>
       )}
       <CommentsByPost
-        raw={comments} norm={norm} me={null}
-        platform="instagram" meta={igMeta} accent={igMeta.color}
+        raw={comments} norm={norm}
+        platform="instagram" meta={igMeta}
         onReply={handleReply}
         onDelete={isAdmin ? handleDelete : undefined}
-        onLike={undefined}
         initialOpenId={initialOpenId}
         emptyTitle="No comments yet"
         emptySub="Comments on your Instagram posts will appear here once they're received."
       />
     </div>
   );
-}
-
-// ── Platform switcher (Instagram / Facebook / YouTube / Threads) ───────
-function PlatformSwitch({ value, onChange, only }) {
-  const all = [
-    { key: "instagram", label: "Instagram" },
-    { key: "facebook",  label: "Facebook" },
-    { key: "youtube",   label: "YouTube" },
-    { key: "threads",   label: "Threads" },
-  ];
-  const picked = only ? all.filter(it => only(it.key) || it.key === value) : all;
-  const items = picked.length ? picked : all;
-  // Level-2 pill strip: surface container, solid-accent active item. Each item
-  // keeps its brand-colour dot as the platform cue.
-  const Dot = (key) => () => <span style={{ width: 8, height: 8, borderRadius: "50%", background: platformColor(key), display: "inline-block", boxShadow: value === key ? "0 0 0 2px rgba(255,255,255,.35)" : "none" }} />;
-  return <PillTabs size="sm" value={value} onChange={onChange} tabs={items.map(it => ({ id: it.key, label: it.label, Icon: Dot(it.key) }))} />;
 }
 
 function EmptyState({ title, sub }) {
@@ -963,31 +942,10 @@ function EmptyState({ title, sub }) {
 }
 
 // One comment line (top-level or reply). Top-level rows get a Reply toggle;
-// admins get a Delete/Hide action on every row.
-function PlatformCommentRow({ comment: c, platform, accent, onReplyClick, onDelete, onLike, isReply, hideLabels, badges }) {
+// admins get a Delete action on every row.
+function PlatformCommentRow({ comment: c, onReplyClick, onDelete, isReply, hideLabels, badges }) {
   const [deleting, setDeleting] = useState(false);
   const [err, setErr] = useState(null);
-
-  // Like state (Facebook only — YouTube's API can't like comments). Re-seed when
-  // the underlying comment changes (e.g. after a poll) so it stays in sync.
-  const [liked, setLiked] = useState(!!c.liked);
-  const [likeCount, setLikeCount] = useState(c.likes || 0);
-  useEffect(() => { setLiked(!!c.liked); setLikeCount(c.likes || 0); }, [c.liked, c.likes, c.commentId]);
-
-  const toggleLike = async () => {
-    const next = !liked;
-    setLiked(next); setLikeCount(n => Math.max(0, n + (next ? 1 : -1))); setErr(null);
-    try { await onLike(c.commentId, next); }
-    catch (e) { setLiked(!next); setLikeCount(n => Math.max(0, n + (next ? -1 : 1))); setErr(e.message); }
-  };
-
-  // YouTube and Threads can't hard-delete OTHER users' comments — YouTube moderates,
-  // Threads hides via /manage_reply. Label the action "Hide" in both cases.
-  const isHide = (platform === "youtube" || platform === "threads") && !c.ours;
-  const DelIcon = isHide ? EyeOff : Trash2;
-  const delLabel = isHide ? "Hide" : "Delete";
-  const busyLabel = isHide ? "Hiding…" : "Deleting…";
-  const delColor = isHide ? "var(--fc-text-muted)" : "var(--fc-err-text)";
 
   const del = async () => {
     setErr(null);
@@ -1009,24 +967,19 @@ function PlatformCommentRow({ comment: c, platform, accent, onReplyClick, onDele
           {c.ours && <Badge label="Your reply" bg={C.primarySoft} color={C.primary} />}
           {isReply && !c.ours && <Badge label="Reply" bg={C.amberSoft} color={C.amber} />}
           {!c.ours && !hideLabels && <LabelTags commentId={c.commentId} />}
-          {/* Read-only count when liking isn't available (YouTube); FB shows it in the Like button */}
-          {!onLike && c.likes > 0 && <span style={{ fontSize: 12.5, color: C.textMuted }}>{c.likes} {c.likes === 1 ? "like" : "likes"}</span>}
+          {/* Read-only count: Instagram has no API to like a comment */}
+          {c.likes > 0 && <span style={{ fontSize: 12.5, color: C.textMuted }}>{c.likes} {c.likes === 1 ? "like" : "likes"}</span>}
         </div>
         <div style={{ fontSize: 14, color: c.text ? C.textSecondary : C.textMuted, lineHeight: 1.45, wordBreak: "break-word", whiteSpace: "pre-wrap" }}>{c.text || "(no text)"}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 6 }}>
-          {onLike && (
-            <button onClick={toggleLike} style={{ ...ACTION_LINK, color: liked ? accent : C.textMuted }}>
-              <ThumbsUp size={13} fill={liked ? accent : "none"} /> {liked ? "Liked" : "Like"}{likeCount > 0 ? ` · ${likeCount}` : ""}
-            </button>
-          )}
           {onReplyClick && (
             <button onClick={onReplyClick} style={{ ...ACTION_LINK, color: C.primary }}>
               <CornerDownRight size={13} /> Reply
             </button>
           )}
           {onDelete && (
-            <button onClick={del} disabled={deleting} style={{ ...ACTION_LINK, color: delColor, cursor: deleting ? "wait" : "pointer" }}>
-              <DelIcon size={13} /> {deleting ? busyLabel : delLabel}
+            <button onClick={del} disabled={deleting} style={{ ...ACTION_LINK, color: "var(--fc-err-text)", cursor: deleting ? "wait" : "pointer" }}>
+              <Trash2 size={13} /> {deleting ? "Deleting…" : "Delete"}
             </button>
           )}
         </div>
@@ -1036,177 +989,9 @@ function PlatformCommentRow({ comment: c, platform, accent, onReplyClick, onDele
     </div>
   );
 }
-// Text-only action inside a comment row (Like / Reply / Delete): no fill, weight carries it.
+// Text-only action inside a comment row (Reply / Delete): no fill, weight carries it.
 const ACTION_LINK = { display: "inline-flex", alignItems: "center", gap: 5, border: "none", background: "transparent", fontSize: 12.5, fontWeight: 700, fontFamily: FONT, cursor: "pointer", padding: 0 };
 
-// Facebook / YouTube comments view + reply + delete (Instagram keeps its own component).
-function PlatformComments({ platform, switcher, isAdmin, deepLink }) {
-  const meta = PLATFORMS[platform] || {};
-  // Deep-link target (a post to auto-expand) when it matches this platform.
-  const initialOpenId = deepLink && deepLink.kind === "comment" && deepLink.platform === platform ? deepLink.mediaId : null;
-  const accent = meta.color || "var(--fc-primary)";
-  const [ConfirmDialog, confirm] = useConfirm();
-  // Per-platform API surface — keeps the rest of the component platform-agnostic.
-  // Threads added 2026-05-27: read/sync/reply via the same shape as FB/YT.
-  const apiFor = {
-    facebook: { get: api.getFacebookComments, sync: api.syncFacebookComments, reply: api.replyFacebookComment, del: api.deleteFacebookComment },
-    youtube:  { get: api.getYouTubeComments,  sync: api.syncYouTubeComments,  reply: api.replyYouTubeComment,  del: api.deleteYouTubeComment  },
-    threads:  { get: api.getThreadsComments,  sync: api.syncThreadsComments,  reply: api.replyThreadsComment,  del: api.deleteThreadsComment  },
-  }[platform] || {};
-
-  const { data, loading, error, refetch } = useApi(
-    () => apiFor.get(200),
-    [platform], { pollMs: 30000 }
-  );
-  const [localReplies, setLocalReplies] = useState([]);
-  const [deletedIds, setDeletedIds] = useState([]);
-  const [syncing, setSyncing] = useState(false);
-  const [syncErr, setSyncErr] = useState(null);
-
-  // Trigger a live poll, then re-read the DB. The cron handles routine refresh;
-  // this gives instant results on open / Refresh (module self-throttles to 15s).
-  // A poll error (e.g. YouTube needs a force-ssl reconnect, Threads needs
-  // threads_read_replies) is surfaced as a friendly "action needed" banner.
-  const doSync = () => {
-    setSyncing(true); setSyncErr(null);
-    apiFor.sync()
-      .catch(e => setSyncErr(e.message))
-      .finally(() => { setSyncing(false); refetch(true); });
-  };
-  // On opening each platform: clear optimistic replies + deletions + pull fresh.
-  useEffect(() => { setLocalReplies([]); setDeletedIds([]); doSync(); }, [platform]);
-
-  const raw = data?.comments || [];
-  const connected = data?.connected;
-  const me = data?.me || null;   // connected account identity (name/pic/id) we reply AS
-
-  // Normalize FB / YT / Threads rows to one shape so the rendering is platform-agnostic.
-  // `ours` = authored by the connected account (id or username match) or our optimistic entry.
-  // Threads only exposes `username` for reply authors — no id, no pic — so identity
-  // matching is by username (vs FB/YT which match by id).
-  // postThumbnail/postCaption/postPermalink/postDate come from the backend's LEFT JOIN
-  // on the posts table (zero extra Graph calls — the sync already populated it).
-  const norm = (c) => {
-    const postMeta = {
-      postThumbnail: c.postThumbnail || null,
-      postCaption:   c.postCaption   || null,
-      postPermalink: c.postPermalink || null,
-      postDate:      c.postDate      || null,
-    };
-    if (platform === "facebook") return {
-      id: c.id, commentId: c.commentId, groupId: c.postId, parentId: c.parentId,
-      name: c.fromName || "Facebook user", pic: c.fromPic, text: c.message,
-      ts: c.ts || c.createdAt, likes: c.likeCount || 0, liked: c.likedByUs === true,
-      ours: c.ours || (!!me && !!c.fromId && c.fromId === me.id),
-      permalink: c.permalink, kind: "Post", ...postMeta,
-    };
-    if (platform === "youtube") return {
-      id: c.id, commentId: c.commentId, groupId: c.videoId, parentId: c.parentId,
-      name: c.authorName || "YouTube user", pic: c.authorPic, text: c.text,
-      ts: c.ts || c.createdAt, likes: c.likeCount || 0, liked: false,
-      ours: c.ours || (!!me && !!c.authorChannelId && c.authorChannelId === me.id),
-      permalink: c.videoId ? "https://youtu.be/" + c.videoId : null, kind: "Video", ...postMeta,
-    };
-    // threads
-    return {
-      id: c.id, commentId: c.commentId, groupId: c.threadId, parentId: c.parentId,
-      name: c.authorUsername ? "@" + c.authorUsername : "Threads user",
-      pic: null,                                       // Threads gives no profile pic for reply authors
-      text: c.text, ts: c.ts || c.createdAt,
-      likes: 0, liked: false,                          // Threads has no comment-likes API
-      ours: c.ours || (!!me && !!c.authorUsername && c.authorUsername === me.username),
-      permalink: c.permalink || null, kind: "Thread", ...postMeta,
-    };
-  };
-
-  async function handleReply(comment, text) {
-    if (platform === "facebook") {
-      const r = await api.replyFacebookComment(comment.commentId, text);
-      setLocalReplies(p => [...p, { id: "local-" + r.id, commentId: r.id, postId: comment.groupId, parentId: comment.commentId, fromId: me?.id, fromName: me?.name || "You", fromPic: me?.pic, message: text, ts: new Date().toISOString(), likeCount: 0, ours: true }]);
-    } else if (platform === "youtube") {
-      // YouTube only nests ONE level — always reply against the top-level comment.
-      const topId = comment.parentId || comment.commentId;
-      const r = await api.replyYouTubeComment(topId, text);
-      setLocalReplies(p => [...p, { id: "local-" + r.id, commentId: r.id, videoId: comment.groupId, parentId: topId, authorChannelId: me?.id, authorName: me?.name || "You", authorPic: me?.pic, text, ts: new Date().toISOString(), likeCount: 0, ours: true }]);
-    } else {
-      // Threads: reply directly to whatever was clicked (Threads allows nested replies).
-      const r = await api.replyThreadsComment(comment.commentId, text);
-      setLocalReplies(p => [...p, { id: "local-" + r.id, commentId: r.id, threadId: comment.groupId, parentId: comment.commentId, authorUsername: me?.username || null, text, ts: new Date().toISOString(), ours: true }]);
-    }
-    setTimeout(() => refetch(true), 1500);
-  }
-
-  // Admin-only. onStart() flips the row to its busy label only after the user confirms.
-  async function handleDelete(comment, onStart) {
-    // YouTube and Threads can only HIDE OTHER users' comments (not delete them).
-    // YouTube uses moderation→rejected (restorable from Studio); Threads uses
-    // /manage_reply?hide=true (restorable from the Threads app).
-    const isHide = (platform === "youtube" || platform === "threads") && !comment.ours;
-    const restoreLocation = platform === "youtube" ? "YouTube Studio" : "the Threads app";
-    const ok = await confirm(isHide ? {
-      title: "Hide this comment?",
-      body: `It will be removed from public view on your ${meta.name || platform} post. You can restore it later from ${restoreLocation}.`,
-      confirmLabel: "Hide",
-      danger: false,
-    } : {
-      title: "Delete this comment?",
-      body: comment.ours
-        ? `This permanently removes your reply from ${meta.name || platform}. This can't be undone.`
-        : `This permanently removes this comment from your ${meta.name || platform} post. This can't be undone.`,
-      confirmLabel: "Delete",
-      danger: true,
-    });
-    if (!ok) return;
-    onStart?.();
-    await apiFor.del(comment.commentId);
-    setDeletedIds(p => [...p, comment.commentId]);
-    setTimeout(() => refetch(true), 800);
-  }
-  const onDelete = isAdmin ? handleDelete : undefined;
-
-  // Liking a comment AS the Page — Facebook only (YouTube's API can't like comments).
-  // The row toggles optimistically; reconcile from the server shortly after.
-  async function handleLike(commentId, like) {
-    await api.likeFacebookComment(commentId, like);
-    setTimeout(() => refetch(true), 1200);
-  }
-  const onLike = platform === "facebook" ? handleLike : undefined;
-
-  return (
-    <div className="fc-fill" style={{ overflow: "hidden" }}>
-      {ConfirmDialog}
-      <div style={{ flexShrink: 0 }}>
-        <PageHeader cycle={meta.name || platform} title="Inbox"
-          right={<>
-            {switcher}
-            <button className="settings-btn" onClick={doSync} disabled={loading || syncing}><span style={{ opacity: (loading || syncing) ? 0.5 : 1 }}>↻</span> {syncing ? "Syncing…" : "Refresh"}</button>
-          </>} />
-
-        {error && <div style={{ background: C.errBg, color: C.errText, padding: '12px 14px', borderRadius: 12, fontSize: 13.5, marginBottom: 16 }}>{error}</div>}
-        {syncErr && <div style={{ background: C.amberSoft, color: C.amber, padding: '10px 14px', borderRadius: 12, fontSize: 13.5, marginBottom: 16 }}>{syncErr}</div>}
-      </div>
-
-      {loading && !data ? (
-        <div style={{ padding: 20, color: C.textMuted, fontSize: 14 }}>Loading…</div>
-      ) : connected === false ? (
-        <EmptyState title={`${meta.name || platform} isn't connected`}
-          sub={`Connect ${meta.name || platform} from Settings to pull in comments.`} />
-      ) : (
-        <CommentsByPost raw={raw} norm={norm} me={me}
-          localReplies={localReplies} deletedIds={deletedIds}
-          platform={platform} meta={meta} accent={accent}
-          onReply={handleReply} onDelete={onDelete} onLike={onLike}
-          initialOpenId={initialOpenId}
-          emptyTitle="No comments yet"
-          emptySub={`Comments on your ${meta.name || platform} posts will appear here after the next sync.`} />
-      )}
-    </div>
-  );
-}
-
-// ── Comment Analyzer labels (sentiment) ───────────────────
-// Labels come from the Comment Analyzer (comment_analysis, pure DB). Shared with
-// the rows through context so the deep comment tree needs no prop threading.
 const LabelsCtx = createContext({});
 const SENTIMENTS = {
   positive: { label: "Positive", bg: "var(--fc-green-soft)", fg: "var(--fc-green)" },
@@ -1250,7 +1035,7 @@ function LabelTags({ commentId }) {
 }
 
 // ── CommentsByPost: the comments workspace ──────────────────────────────
-// Used by PlatformComments (FB/YT/Threads) AND by InstagramInbox's Comments tab.
+// Used by InstagramInbox's Comments tab.
 //   1. A summary strip — how many comments, how many still need a reply, and
 //      what kind they are (questions, leads, complaints, negative). Every tile
 //      is also a one-click filter.
@@ -1283,10 +1068,9 @@ const RANGES = [
 const PAGE = 60;
 
 function CommentsByPost({
-  raw, norm, me,
-  localReplies = [], deletedIds = [],
-  platform, meta, accent,
-  onReply, onDelete, onLike, initialOpenId,
+  raw, norm,
+  platform, meta,
+  onReply, onDelete, initialOpenId,
   emptyTitle = "No comments yet",
   emptySub   = "Comments on your posts will appear here.",
 }) {
@@ -1308,12 +1092,7 @@ function CommentsByPost({
   }, [initialOpenId]);
   useEffect(() => { setLimit(PAGE); listRef.current?.scrollTo?.({ top: 0 }); }, [postId, status, kind, query, range, sort]);
 
-  // Merge optimistic local replies, drop optimistically-deleted comments.
-  const seen = new Set(raw.map(c => c.commentId));
-  const delSet = new Set(deletedIds);
-  const all = [...raw, ...localReplies.filter(r => !seen.has(r.commentId))]
-    .map(norm)
-    .filter(c => !delSet.has(c.commentId) && !(c.parentId && delSet.has(c.parentId)));
+  const all = raw.map(norm);
 
   // Group by post; split top-level vs replies; surface orphan replies as top-level.
   const groups = new Map();
@@ -1475,8 +1254,8 @@ function CommentsByPost({
                   style={{ padding: 0 }} />
               </Card>
             ) : feed.slice(0, limit).map(i => (
-              <CommentCard key={i.c.commentId || i.c.id} item={i} showPost={!postId} platform={platform} meta={meta} accent={accent}
-                onReply={onReply} onDelete={onDelete} onLike={onLike} onOpenPost={() => setPostId(i.g.id)} />
+              <CommentCard key={i.c.commentId || i.c.id} item={i} showPost={!postId} meta={meta}
+                onReply={onReply} onDelete={onDelete} onOpenPost={() => setPostId(i.g.id)} />
             ))}
             {feed.length > limit && <button onClick={() => setLimit(l => l + PAGE)} style={{ ...BTN.secondary, alignSelf: "center", margin: "4px 0 10px" }}>Show {Math.min(PAGE, feed.length - limit)} more</button>}
           </div>
@@ -1544,7 +1323,7 @@ function SelectedPostBar({ g, meta, platform, onClear }) {
 }
 
 // One comment conversation: the comment, its replies, and an always-ready reply box.
-function CommentCard({ item: i, showPost, platform, meta, accent, onReply, onDelete, onLike, onOpenPost }) {
+function CommentCard({ item: i, showPost, meta, onReply, onDelete, onOpenPost }) {
   const [text, setText] = useState("");
   const [focused, setFocused] = useState(false);
   const [sending, setSending] = useState(false);
@@ -1572,11 +1351,11 @@ function CommentCard({ item: i, showPost, platform, meta, accent, onReply, onDel
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>On: {postTitle(i.g)}</span>
         </button>
       )}
-      <PlatformCommentRow comment={c} platform={platform} accent={accent} onDelete={onDelete} onLike={onLike} hideLabels
+      <PlatformCommentRow comment={c} onDelete={onDelete} hideLabels
         badges={<>{statusChip}<LabelTags commentId={c.commentId} /></>} />
       {i.replies.length > 0 && (
         <div style={{ margin: "0 14px 6px 62px", borderLeft: `2px solid ${C.surface2}` }}>
-          {i.replies.map(r => <div key={r.commentId || r.id} style={{ paddingLeft: 10 }}><PlatformCommentRow comment={r} platform={platform} accent={accent} onDelete={onDelete} onLike={onLike} isReply /></div>)}
+          {i.replies.map(r => <div key={r.commentId || r.id} style={{ paddingLeft: 10 }}><PlatformCommentRow comment={r} onDelete={onDelete} isReply /></div>)}
         </div>
       )}
       {canReply && (
@@ -1605,22 +1384,15 @@ function CommentCard({ item: i, showPost, platform, meta, accent, onReply, onDel
 }
 
 export default function InboxPage({ user }) {
-  const [platform, setPlatform] = useState("instagram");
   const [deepLink, setDeepLink] = useState(null);
-  // "My accounts" preset: open on the first preset platform and only offer preset platforms.
-  const scope = useScope();
-  useEffect(() => {
-    if (scope.loaded && scope.active && !scope.hasPlatform(platform) && !deepLink) setPlatform(scope.firstPlatform(["instagram", "facebook", "youtube", "threads"]) || "instagram");
-  }, [scope.loaded, scope.tokens.join(",")]);
 
-  // Consume a notification deep-link: switch to the right platform tab and hand the
-  // target (chat peer / comment post) to the platform view. Two entry points: a
-  // sessionStorage handoff on mount (fresh navigation), and a window event while
-  // already mounted (clicking a notification from inside the Inbox).
+  // Consume a notification deep-link and hand the target (chat peer / comment
+  // post) to the Instagram view. Two entry points: a sessionStorage handoff on
+  // mount (fresh navigation), and a window event while already mounted
+  // (clicking a notification from inside the Inbox).
   useEffect(() => {
     const apply = (m) => {
-      if (!m || !m.platform) return;
-      setPlatform(m.platform);
+      if (!m || m.platform !== "instagram") return;
       setDeepLink({ ...m, _t: Date.now() });  // new object each time → child effects refire
     };
     try {
@@ -1632,12 +1404,9 @@ export default function InboxPage({ user }) {
     return () => window.removeEventListener("forgesocial:inbox-deeplink", onEvt);
   }, []);
 
-  const switcher = <PlatformSwitch value={platform} only={scope.active ? scope.hasPlatform : null} onChange={(p) => { setPlatform(p); setDeepLink(null); }} />;
   return (
     <InboxToolsProvider>
-      {platform === "instagram"
-        ? <InstagramInbox switcher={switcher} isAdmin={user?.role === "admin"} deepLink={deepLink} />
-        : <PlatformComments platform={platform} switcher={switcher} isAdmin={user?.role === "admin"} deepLink={deepLink} />}
+      <InstagramInbox isAdmin={user?.role === "admin"} deepLink={deepLink} />
     </InboxToolsProvider>
   );
 }

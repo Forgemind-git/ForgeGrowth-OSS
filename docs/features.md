@@ -3,48 +3,12 @@
 The full catalogue, with the reasoning behind the decisions that look arbitrary. For the short
 version, see [`README.md`](../README.md#whats-in-it).
 
-- [Marketing](#marketing)
 - [Leads and sales](#leads-and-sales)
 - [Conversations](#conversations)
 - [Messaging at scale](#messaging-at-scale)
 - [Automation and AI](#automation-and-ai)
 - [Integrations](#integrations)
 - [Administration](#administration)
-
----
-
-## Marketing
-
-### Campaigns
-
-Real spend and results from the Meta Marketing API, arranged the way Meta structures them:
-**Campaign → Ad Set → Ad**.
-
-> Ad-set spend is *fetched* at `level=adset`, never summed from its ads. Meta attributes part of the
-> cost at that tier, so summing under-reports.
-
-### Click-to-WhatsApp
-
-Every conversation that began with an ad tap. Meta's `referral` block is promoted out of the raw
-webhook payload into its own table, which gives you:
-
-- per-ad **CPL and ROAS**
-- a **placement** breakdown
-- a drill-in showing the exact creative each person saw, plus a link straight into their chat thread
-
-### Conversion API and Lead Optimisation
-
-Closes the ad loop: when a lead reaches a funnel stage you map to a Meta event (Lead, Purchase, …),
-the conversion goes back to Meta with that lead's click-to-WhatsApp click id, so the optimiser learns
-which clicks turn into customers rather than which ones merely message.
-
-- **Off by default, and test mode first.** Turning it on changes how Meta spends your budget, so it is
-  the operator's decision, never a side effect.
-- Conversions older than Meta's 7-day window are **skipped, not back-dated**, and a sale marked won with
-  no payment recorded yet is skipped rather than sent as a zero-value purchase. Every skip is logged
-  with its reason.
-- **Lead Optimisation (CLO)** feeds Meta's CRM dataset for Lead Ads (Instant Forms) campaigns, on a
-  15-minute cycle. Setup: [`clo-setup.md`](./clo-setup.md).
 
 ---
 
@@ -64,7 +28,7 @@ a second copy of the person.
 
 ### Configurable columns
 
-A field registry makes the Leads table, the Sales Log and per-instalment transactions configurable:
+A field registry makes the Leads table and per-instalment transactions configurable:
 rename "Profession", hide "Pincode", edit a dropdown's options, or add a
 custom field — **with no schema change**.
 
@@ -75,29 +39,10 @@ custom field — **with no schema change**.
 > That last rule is not tidiness. A new field re-using an old key would silently inherit orphaned
 > values still sitting in existing JSONB blobs.
 
-### Payments
+### Sales
 
-Mint Razorpay payment links — fixed, part payment or open amount — **stamped with the lead id**, so a
-payment attributes itself instead of being guessed from its amount. Reconciliation runs off the
-Razorpay webhook and resolves a payment back to the exact lead through the ids carried in the link's
-`notes`: a fact rather than an amount-matching guess.
-
-A second tab shows the pulled ledger — every payment the gateway holds, including ones taken before
-the webhook existed.
-
-### Payment templates
-
-For reaching a customer who has gone quiet. WhatsApp refuses free-form text more than 24 hours after
-the customer's last message, so a link can only get through as an approved template.
-
-> The template's URL button points at a base **this app** owns (`/pay/{{1}}`), not at the gateway's
-> short-link domain. Meta bakes a button's base in at approval time, so pointing it at Razorpay would
-> mean every approved template breaks the day Razorpay changes its link format.
-
-### Sales Log
-
-Enrolled leads and their transactions: gateway payments deduped by `payment_id`, unioned with manually
-logged sales.
+A sale is a lead in a won stage. Payments and refunds against it are recorded by hand
+(`POST /students/:id/installments`) — nothing arrives from a payment gateway.
 
 ### Products
 
@@ -108,11 +53,6 @@ The sellable catalogue, with optional default prices.
 Pin a lead's chat and give it a follow-up date; the calendar view lists who is due today and who is
 overdue. With Google connected, each follow-up is mirrored as a calendar event that links straight
 back to the chat.
-
-### Payments dashboard
-
-Collected, pending and refunded money over time, with refunds recorded against the original sale and
-filter presets a team can share.
 
 ---
 
@@ -135,17 +75,6 @@ Reads a conversation — text, transcribed voice notes, images and documents —
 the customer's intent and sentiment, a suggested funnel stage, risks and ready-to-send follow-up
 messages. Results are cached per message, so re-analysing a long chat only pays for what is new.
 Tell it about your business once and every analysis takes that into account.
-
-### Message Formats
-
-A labelled, pre-filled WhatsApp opener you put on an Instagram reel or a web page. Tapping it opens
-WhatsApp with that exact text, and **the conversation that follows is attributable to the label** — a
-brand-new lead takes the format's label as its funnel Source.
-
-- One format can serve many numbers. Each gets its own slug, since each is a different `wa.me`
-  destination.
-- Optional **rotate mode** hands the numbers out in turn, spreading leads across agents.
-- The shared URL is the tracked redirect, so taps are counted.
 
 ---
 
@@ -184,7 +113,7 @@ hand-maintained rate card.
 > Germany's 4.0322 for the same category — one hardcoded rate would have under-reported by ~97%.
 
 Every send is stamped with its template and originating surface — broadcast, automation, agent,
-manual, MCP or payment — **at send time**, because working out "which template was this?" afterwards
+manual or MCP — **at send time**, because working out "which template was this?" afterwards
 silently misses.
 
 ### Media Library
@@ -225,7 +154,7 @@ write-back.
   refills on a clock rather than a lifetime cap. **Test numbers are exempt from the pause**, so a
   limit can never lock the operator out of their own rehearsal.
 - **Quick-start templates** for common agents (answer questions, get leads, sell & book, support), filled in from a short
-  form instead of a blank prompt.
+  form. New agents are created from a preset; the editor remains for tuning existing ones.
 
 > Agent runs execute on a queue outside the webhook path, so Meta's 20-second timeout is never hit.
 
@@ -241,7 +170,7 @@ picker with tab preview, calendar list, Gmail labels — and an automation actio
 ### MCP — drive the app from an assistant
 
 The app is itself an MCP server, so an assistant like Claude can operate it as a custom connector.
-**46 tools in 17 categories, every category defaulting to off.**
+**Tools are grouped into categories, every category defaulting to off.**
 
 A tool belongs to exactly one category, and **the category is the gate**.
 
@@ -289,9 +218,8 @@ Check these first when a connector will not finish authorising:
 
 ## Social
 
-A third header section for Instagram, Facebook, Threads, YouTube and LinkedIn: analytics and insights,
-one inbox for DMs and comments, Instagram comment and DM automations, a comment analyser and a
-content library that publishes. Off until `SOCIAL_ENCRYPTION_KEY` is set; setup in
+A third header section for Instagram: analytics and insights, one inbox for DMs and comments,
+comment-to-DM automations, a comment analyser and a content library of synced posts and media. Off until `SOCIAL_ENCRYPTION_KEY` is set; setup in
 [`social-section.md`](./social-section.md).
 
 ---

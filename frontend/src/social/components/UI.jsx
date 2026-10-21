@@ -21,7 +21,6 @@ export const DataQualityBadge = ({ kind = "demo" }) => {
   const cfg = {
     demo:      { label: "Sample data",  title: "Hardcoded sample data — not from a connected platform." },
     estimated: { label: "Estimated",    title: "No snapshot for this period yet — values are scaled from another period and may differ from the platform's own numbers." },
-    simulated: { label: "Simulated",    title: "This publish was simulated — nothing was actually posted to the platform." },
   }[kind] || { label: kind, title: "" };
   return (
     <span title={cfg.title} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 650, padding: "3px 10px", borderRadius: 999, background: C.amberSoft, color: C.amber, fontFamily: FONT, whiteSpace: "nowrap" }}>

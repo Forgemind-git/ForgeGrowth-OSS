@@ -1,6 +1,6 @@
 # Forge Growth plugin
 
-Configure **Forge Growth** (Social, Marketing, Sales and WhatsApp Chats) end-to-end by
+Configure **Forge Growth** (Social, Sales and WhatsApp Chats) end-to-end by
 talking to Claude. Give Claude a plain-language **game plan** — "get a template approved by
 Meta, then message my hot leads" — and it drives the Forge Growth MCP connector to do it,
 showing you a preview and asking for a yes before anything goes live.
@@ -9,10 +9,10 @@ showing you a preview and asking for a yes before anything goes live.
 
 - `.mcp.json` — the connector. A pointer at *your* Forge Growth server, not the tools
   themselves: those live in the Forge Growth backend and arrive automatically.
-- `skills/` — ten skills (incl. `forge-growth-social` for Instagram automations, flows, Social AI agents and social analytics). `forge-growth-marketer` is the orchestration brain (the
+- `skills/` — nine skills (incl. `forge-growth-social` for Instagram automations, flows, Social AI agents and social analytics). `forge-growth-marketer` is the orchestration brain (the
   game-plan loop, preview patterns, playbooks) and auto-activates when you talk about
   your funnel; the rest cover one area each and are loaded on demand, so a question
-  about automations does not drag in payment detail.
+  about automations does not drag in unrelated detail.
 - `commands/game-plan.md` — a `/game-plan <your plan>` command to kick things off.
 
 ## One-time setup
@@ -40,7 +40,7 @@ error.
 ### 2. Turn MCP on and choose what Claude may do
 
 In Forge Growth → **Admin Settings → MCP Tools**: switch the master toggle **on**, then
-pick an area (Social / Marketing / Sales / Chats & Automations / Admin) and enable the switches you want. Each is one switch over one process; open a card to see
+pick an area (Social / Sales / Chats & Automations / Admin) and enable the switches you want. Each is one switch over one process; open a card to see
 exactly which tools it controls.
 
 | Category | Lets Claude… | Tier |
@@ -51,10 +51,8 @@ exactly which tools it controls.
 | AI Agents | create and configure the agents that talk to customers — model, trigger, usage limits, test numbers, tools | builds |
 | Automations | build, check, edit and **switch live** automation flows, and read what a flow did on each run | builds |
 | Leads & Funnel | read leads and move them between stages | builds |
-| Message Formats | generate trackable click-to-chat links | builds |
 | Conversations | read chats, group chat and 24-hour window status | reads only |
-| Marketing Analytics | read campaigns, spend, webinars, BDA activity | reads only |
-| Products & Payments | read products, revenue and the payment ledger | reads only |
+| Products & Sales | read products, product revenue, sales and their payments | reads only |
 | Google Workspace | search connected Drive spreadsheets and read tabs | reads only |
 | **Send Messages** | **send real WhatsApp messages to one person** | reaches customers |
 | **Broadcasts** | **message a whole uploaded list at once** | reaches customers |

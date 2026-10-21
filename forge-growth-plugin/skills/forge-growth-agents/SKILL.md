@@ -126,13 +126,11 @@ tags — exists, but can only be set in the web app. It decides who gets answere
 machine and who is left for a person, so it is an admin-only decision and is ignored if
 sent over MCP. Point the user at the agent's editor rather than appearing to set it.
 
-Payment ability and CRM writes were also never included when an agent is **exported** —
-an imported agent must not arrive able to charge money on whatever gateway the receiving
-workspace has connected.
+Payment ability and CRM writes were also never included when an agent is **exported**.
 
 ## Reading what an agent did, and removing one
 
 `get_agent_runs {id}` lists recent runs — who it answered, its reply, tools used, and why
 a message was not answered (limits, a person took over). Read it before guessing why an
 agent went quiet. `delete_agent` / `delete_tool` sit under **Admin → Delete & remove**.
-Agents that answer Instagram/Facebook are a separate system: see **forge-growth-social**.
+Agents that answer Instagram are a separate system: see **forge-growth-social**.

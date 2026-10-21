@@ -26,7 +26,7 @@ Every stage has a **permanent key** and a **renameable label**. The key comes ba
 `stageKey` in API responses (it is `stage_key` in the database).
 
 `leads.stage` stores the key. So do the cold-drop engine, the conversion maths, the
-stage→WhatsApp-tag mirror and the Meta conversion mapping. **Renaming a label is
+stage→WhatsApp-tag mirror. **Renaming a label is
 completely safe** — nothing breaks, everything re-renders. Changing a key is not
 possible, by design.
 
@@ -58,8 +58,8 @@ DELETE /funnel/stages/:id
 
 - `isFunnel: false` puts a stage off to the side (a branch like *Lost*) so it does not
   count as a step in the conversion maths.
-- `isWon: true` marks the stage that means "sold". Revenue, the Sales Log and the
-  stage→conversion mapping all key off it.
+- `isWon: true` marks the stage that means "sold". Revenue and sales
+  both key off it.
 - **Reorder takes every stage id in the new order**, not a delta.
 
 Two refusals are deliberate and both return **409**:
@@ -78,8 +78,8 @@ DELETE /funnel/sources/:id
 
 A source that is in use is **deactivated rather than deleted**, so historical leads
 keep their attribution. `leads.source` stays free text — the managed list is what the
-pickers show, not a constraint. Sources arriving from Meta ads (*Instagram Ad*,
-*Facebook Ad*, *Direct*) are created automatically; renaming one is safe.
+pickers show, not a constraint. Default sources (e.g. *Direct*) are
+created automatically; renaming one is safe.
 
 ## Designing a funnel from a game plan
 

@@ -36,15 +36,9 @@
 //   body:  list of arg names sent as the JSON body, '*' = every arg that is not
 //          a path placeholder, or { from: '<arg>' } = that one arg IS the body.
 
-const PLATFORMS = ['instagram', 'facebook', 'threads', 'youtube', 'linkedin'];
-const COMMENT_PLATFORMS = ['instagram', 'facebook', 'youtube', 'threads'];
+const PLATFORMS = ['instagram'];
+const COMMENT_PLATFORMS = ['instagram'];
 const PERIODS = ['7D', '30D', '90D'];
-
-const RANGE = {
-  days: { type: 'string', desc: 'Last N days ("30") or "all". Ignored when from/to are given.' },
-  from: { type: 'string', desc: 'Start day YYYY-MM-DD (IST, inclusive).' },
-  to: { type: 'string', desc: 'End day YYYY-MM-DD (IST, inclusive).' },
-};
 
 const ROUTE_TOOLS = [
   /* ===================================================================== */
@@ -54,7 +48,7 @@ const ROUTE_TOOLS = [
     name: 'social_get_overview', category: 'social_insights', kind: 'read',
     summary: 'Cross-platform social summary: audience, growth, reach and engagement.',
     title: 'Social overview',
-    description: 'KPI roll-up across every connected social platform (Instagram, Facebook, Threads, YouTube, LinkedIn): total audience, net growth, impressions, average engagement, and a per-platform breakdown with last-sync time. Start here for "how is social doing". Reads synced data only — never calls the platforms.',
+    description: 'KPI roll-up across connected Instagram accounts: total audience, net growth, impressions, average engagement, and a per-platform breakdown with last-sync time. Start here for "how is social doing". Reads synced data only — never calls the platforms.',
     params: { period: { type: 'string', enum: PERIODS, desc: 'Reporting window (default 30D).' } },
     service: 'social.getOverview',
   },
@@ -87,7 +81,7 @@ const ROUTE_TOOLS = [
     name: 'social_get_audience', category: 'social_insights', kind: 'read',
     summary: 'Audience age, gender, country and active hours.',
     title: 'Social audience',
-    description: 'Cached audience insights per platform/account: age, gender and country, Instagram online-follower hours and YouTube traffic sources. Refreshed once a day.',
+    description: 'Cached audience insights per platform/account: age, gender and country, and Instagram online-follower hours. Refreshed once a day.',
     params: { platform: { type: 'string', enum: PLATFORMS, desc: 'Omit for every platform.' } },
     service: 'social.getAudienceInsights',
   },
@@ -126,9 +120,9 @@ const ROUTE_TOOLS = [
   },
   {
     name: 'social_list_accounts', category: 'social_insights', kind: 'read',
-    summary: 'Connected social accounts and whether each can publish.',
+    summary: 'Connected Instagram accounts.',
     title: 'Social connected accounts',
-    description: 'Every connected social account across platforms with its label/username. Instagram rows carry canPublish. The accountId values are what the other social tools — and Instagram automations, flows and agents — take as account_id / accountId.',
+    description: 'Every connected social account across platforms with its label/username. The accountId values are what the other social tools — and Instagram automations, flows and agents — take as account_id / accountId.',
     params: {},
     service: 'social.listConnectedAccounts',
   },
@@ -142,7 +136,7 @@ const ROUTE_TOOLS = [
   },
 
   /* ===================================================================== */
-  /* SOCIAL — inbox, comments, contacts, publish queue (read)               */
+  /* SOCIAL — inbox, comments, contacts (read)                             */
   /* ===================================================================== */
   {
     name: 'social_list_messages', category: 'social_inbox', kind: 'read',
@@ -183,19 +177,6 @@ const ROUTE_TOOLS = [
     },
     service: 'social.listContacts',
   },
-  {
-    name: 'social_list_publish_jobs', category: 'social_inbox', kind: 'read',
-    summary: 'Read the posting queue and its history.',
-    title: 'Social publish queue',
-    description: 'Every queued, publishing, published, failed or cancelled post with its schedule, attempts and errors.',
-    params: {
-      status: { type: 'string', enum: ['queued', 'publishing', 'published', 'failed', 'canceled'] },
-      platform: { type: 'string', enum: PLATFORMS },
-      limit: { type: 'integer', min: 1, max: 500 },
-    },
-    service: 'social.listPublishJobs',
-  },
-
   /* ===================================================================== */
   /* SOCIAL — reaches people (send)                                         */
   /* ===================================================================== */
@@ -203,7 +184,7 @@ const ROUTE_TOOLS = [
     name: 'social_reply_to_comment', category: 'social_publish', kind: 'send',
     summary: 'Post a public reply under a comment.',
     title: 'Reply to a social comment',
-    description: 'Post a PUBLIC reply under a comment on Instagram, Facebook, YouTube or Threads. Get commentId from social_list_comments and CONFIRM the text with the user first.',
+    description: 'Post a PUBLIC reply under an Instagram comment. Get commentId from social_list_comments and CONFIRM the text with the user first.',
     params: {
       platform: { type: 'string', enum: COMMENT_PLATFORMS, required: true },
       commentId: { type: 'string', required: true },
@@ -224,32 +205,6 @@ const ROUTE_TOOLS = [
     },
     service: 'social.sendInstagramDm',
   },
-  {
-    name: 'social_create_post', category: 'social_publish', kind: 'send',
-    summary: 'Publish or schedule a social post.',
-    title: 'Create a social post',
-    description: 'Queue a post for immediate or scheduled publishing. Instagram publishes for REAL (check canPublish via social_list_accounts); other platforms simulate. CONFIRM platform, account, caption, media and timing with the user first.',
-    params: {
-      platform: { type: 'string', enum: PLATFORMS, required: true },
-      accountId: { type: 'string', desc: 'Required for Instagram.' },
-      postType: { type: 'string', required: true, desc: 'post | carousel | reel | story (varies by platform).' },
-      caption: { type: 'string' },
-      mediaIds: { type: 'array', items: 'number', desc: 'Social media-library ids, in order.' },
-      scheduleType: { type: 'string', enum: ['immediate', 'scheduled'] },
-      scheduledAt: { type: 'string', desc: 'Future ISO time when scheduled.' },
-      details: { type: 'object', desc: 'Per-type extras (hashtags, altText, …).' },
-    },
-    service: 'social.createPost',
-  },
-  {
-    name: 'social_cancel_post', category: 'social_publish', kind: 'change',
-    summary: 'Cancel a queued social post.',
-    title: 'Cancel a queued social post',
-    description: 'Cancel a publish job that is still queued. Confirm with the user first.',
-    params: { id: { type: 'id', required: true, desc: 'Publish job id from social_list_publish_jobs.' } },
-    service: 'social.cancelPublishJob',
-  },
-
   /* ===================================================================== */
   /* SOCIAL — Instagram automations (keyword rules) and flows (build)      */
   /* ===================================================================== */
@@ -370,9 +325,9 @@ const ROUTE_TOOLS = [
   /* ===================================================================== */
   {
     name: 'social_list_agents', category: 'social_agents', kind: 'read',
-    summary: 'List the Social AI agents (Instagram/Facebook replies).',
+    summary: 'List the Social AI agents (Instagram replies).',
     title: 'List Social AI agents',
-    description: 'AI agents that answer Instagram/Facebook DMs and comments, with their channel, status and tool counts.',
+    description: 'AI agents that answer Instagram DMs and comments, with their channel, status and tool counts.',
     params: {},
     route: { method: 'GET', path: '/social/agents' },
   },
@@ -483,54 +438,6 @@ const ROUTE_TOOLS = [
   },
 
   /* ===================================================================== */
-  /* MARKETING (read)                                                       */
-  /* ===================================================================== */
-  {
-    name: 'get_marketing_overview', category: 'marketing', kind: 'read',
-    summary: 'Marketing headline numbers: spend, leads, cost per lead, sources.',
-    title: 'Marketing overview',
-    description: 'Top-of-funnel KPIs and charts for a date range: Meta spend, leads, cost per lead, lead sources. Spend before the oldest synced Meta day is not included — check spendCoverage.',
-    params: { ...RANGE },
-    route: { method: 'GET', path: '/marketing/overview', query: ['days', 'from', 'to'] },
-  },
-  {
-    name: 'list_campaign_ads', category: 'marketing', kind: 'read',
-    summary: 'One Meta campaign broken down into ad sets and ads.',
-    title: 'Campaign ad sets and ads',
-    description: 'One campaign\'s Campaign → Ad Set → Ad tree: each ad set\'s spend, leads, optimisation goal and budget, and each ad\'s creative and numbers. id = the campaign id from get_campaign_performance.',
-    params: { id: { type: 'id', required: true } },
-    route: { method: 'GET', path: '/campaigns/{id}/ads' },
-  },
-  {
-    name: 'get_click_to_whatsapp', category: 'marketing', kind: 'read',
-    summary: 'Click-to-WhatsApp ads: clicks, leads, enrolments, cost per lead, ROAS.',
-    title: 'Click-to-WhatsApp results',
-    description: 'Click-to-WhatsApp results for a date range: clicks, leads, enrolled, revenue vs spend (CPL, ROAS), placements, and a per-ad table. Spend is lifetime per ad (see spendIsLifetime).',
-    params: { ...RANGE, platform: { type: 'string', desc: 'Instagram | Facebook | WhatsApp — one placement only.' } },
-    route: { method: 'GET', path: '/ctwa/overview', query: ['days', 'from', 'to', 'platform'] },
-  },
-  {
-    name: 'get_conversion_api_status', category: 'marketing', kind: 'read',
-    summary: 'Is the Meta Conversions API on, and what does each stage send.',
-    title: 'Conversions API status',
-    description: 'Read-only: whether sending conversions to Meta is switched on, test or live mode, linked datasets, the funnel stage → Meta event mappings and the sent/failed/skipped counters. Changing any of it is deliberately NOT possible from here — it moves ad spend.',
-    params: {},
-    route: { method: 'GET', path: '/capi/config' },
-  },
-  {
-    name: 'list_conversion_events', category: 'marketing', kind: 'read',
-    summary: 'History of conversions sent to Meta.',
-    title: 'Conversions sent to Meta',
-    description: 'Read-only history of Conversions API events: what was sent, skipped (and why) or failed.',
-    params: {
-      status: { type: 'string', desc: 'sent | failed | skipped | pending' },
-      days: { type: 'integer', min: 1, max: 365 },
-      search: { type: 'string' },
-    },
-    route: { method: 'GET', path: '/capi/events', query: ['status', 'days', 'search'] },
-  },
-
-  /* ===================================================================== */
   /* SALES — leads, funnel                                                  */
   /* ===================================================================== */
   {
@@ -573,12 +480,12 @@ const ROUTE_TOOLS = [
   },
 
   /* ===================================================================== */
-  /* SALES — sales log, payments                                            */
+  /* SALES — sales and their payments                                      */
   /* ===================================================================== */
   {
     name: 'list_sales', category: 'sales', kind: 'read',
-    summary: 'The Sales Log: every customer who bought, with total paid and payment status.',
-    title: 'Sales Log',
+    summary: 'Every customer who bought, with total paid and payment status.',
+    title: 'Sales',
     description: 'Every sale (a lead at the won stage) with product, total paid, payment status (fully paid / partly paid / unpaid) and the WhatsApp chat it belongs to.',
     params: {},
     route: { method: 'GET', path: '/students' },
@@ -587,37 +494,10 @@ const ROUTE_TOOLS = [
     name: 'get_sale_transactions', category: 'sales', kind: 'read',
     summary: 'One customer\'s payments and instalments.',
     title: 'Sale transactions',
-    description: 'Every payment for one sale: Razorpay payments matched to the customer plus manual entries, each with amount, method and date.',
+    description: 'Every payment recorded for one sale, each with amount, method and date.',
     params: { id: { type: 'id', required: true, desc: 'The lead id of the sale (from list_sales).' } },
     route: { method: 'GET', path: '/students/{id}/installments' },
   },
-  {
-    name: 'get_payments_summary', category: 'sales', kind: 'read',
-    summary: 'Payment totals: captured, failed, refunded, by method.',
-    title: 'Payments summary',
-    description: 'Totals from the Razorpay ledger for a slice (date range, method, search): captured, failed, refunded and pending counts and amounts. Amounts are in rupees and include GST.',
-    params: {
-      from: { type: 'string', desc: 'YYYY-MM-DD (IST)' },
-      to: { type: 'string', desc: 'YYYY-MM-DD (IST)' },
-      method: { type: 'string', desc: 'upi | card | netbanking | wallet …' },
-      q: { type: 'string' },
-    },
-    route: { method: 'GET', path: '/razorpay/payments/summary', query: ['from', 'to', 'method', 'q'] },
-  },
-  {
-    name: 'get_payments_trend', category: 'sales', kind: 'read',
-    summary: 'Money collected over time (the Payments dashboard chart).',
-    title: 'Payments trend',
-    description: 'The Payments dashboard series: money collected per day / week / month (IST), optionally split by method, product or status. Amounts include GST.',
-    params: {
-      from: { type: 'string' }, to: { type: 'string' },
-      group: { type: 'string', enum: ['day', 'week', 'month'] },
-      split: { type: 'string', enum: ['none', 'method', 'product', 'status'] },
-      status: { type: 'string' }, method: { type: 'string' }, q: { type: 'string' },
-    },
-    route: { method: 'GET', path: '/razorpay/payments/trend', query: ['from', 'to', 'group', 'split', 'status', 'method', 'q'] },
-  },
-
   /* ===================================================================== */
   /* CHATS — automations, agents, numbers                                   */
   /* ===================================================================== */

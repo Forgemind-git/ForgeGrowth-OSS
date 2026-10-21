@@ -21,7 +21,7 @@ const reportData = require('./reportData');
 const mockService = require('./mockService');
 const accounts = require('./accounts');
 
-const ALLOWED = reportData.ALLOWED; // ['instagram','facebook','threads','youtube','linkedin']
+const ALLOWED = reportData.ALLOWED; // ['instagram']
 const round1 = n => (n == null ? null : Math.round(n * 10) / 10);
 
 // ── Date helpers (IST day boundaries, mirrors reportData) ─────────────
@@ -187,9 +187,10 @@ async function getContentThemes({ platform = null, period = '30D' } = {}, scope 
   const wanted = scope ? scope.platform : platform;
   const plat = wanted && ALLOWED.includes(String(wanted).toLowerCase()) ? String(wanted).toLowerCase() : null;
 
-  const params = [r.from, r.to];
-  let platClause = '';
-  if (plat) { params.push(plat); platClause = 'AND pl.key = $3'; }
+  // No platform chosen = every live platform (rows of removed ones are ignored).
+  const platFilter = plat ? [plat] : ALLOWED;
+  const params = [r.from, r.to, platFilter];
+  let platClause = 'AND pl.key = ANY($3)';
   if (scope) { params.push(scope.accountId); platClause += ` AND p.account_key = $${params.length}`; }
 
   const q = (from, to, extra) => pool.query(`
@@ -205,8 +206,7 @@ async function getContentThemes({ platform = null, period = '30D' } = {}, scope 
      GROUP BY COALESCE(p.topic, 'Uncategorized')`, extra);
 
   const curRes = await q(r.from, r.to, params);
-  const prevParams = [r.prevFrom, r.prevTo];
-  if (plat) prevParams.push(plat);
+  const prevParams = [r.prevFrom, r.prevTo, platFilter];
   if (scope) prevParams.push(scope.accountId);
   const prevRes = await q(r.prevFrom, r.prevTo, prevParams);
   const prevByTopic = Object.fromEntries(prevRes.rows.map(t => [t.topic, t]));
@@ -324,13 +324,13 @@ async function getTrendsAndAnomalies(period = '30D', scope = null) {
         message: `${name} engagement rate up ${engRateDelta} pts over ${r.days}d — identify what's resonating and do more of it.` });
     if (followersDelta != null && followersDelta < 0)
       anomalies.push({ platform: key, name, metric: 'followers', severity: 'warn',
-        message: `${name} ${name === 'YouTube' ? 'subscribers' : 'followers'} down ${Math.abs(followersDelta)}% over ${r.days}d.` });
+        message: `${name} followers down ${Math.abs(followersDelta)}% over ${r.days}d.` });
   }
 
   // Viral-candidate posts: very high percentile score in the last 14 days.
-  const viralParams = [ANOMALY.viralScore, _addDays(r.to, -14)];
-  let viralClause = '';
-  if (scope) { viralParams.push(scope.platform, scope.accountId); viralClause = 'AND pl.key = $3 AND p.account_key = $4'; }
+  const viralParams = [ANOMALY.viralScore, _addDays(r.to, -14), ALLOWED];
+  let viralClause = 'AND pl.key = ANY($3)';
+  if (scope) { viralParams.push(scope.platform, scope.accountId); viralClause += ' AND pl.key = $4 AND p.account_key = $5'; }
   const { rows: viral } = await pool.query(`
     SELECT pl.key AS platform, p.title, p.topic, p.score, p.views, p.engagements AS eng, p.permalink, p.date
       FROM posts p JOIN platforms pl ON pl.id = p.platform_id

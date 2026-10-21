@@ -1,6 +1,6 @@
 // Workflow Agents — triggers against real Postgres: schedules fire once per slot,
-// a burst of messages debounces into one run, events de-duplicate, Razorpay's
-// repeated rows count once, a quiet spell fires once, expired approvals expire.
+// a burst of messages debounces into one run, events de-duplicate, a new sale
+// fires one payment event, a quiet spell fires once, expired approvals expire.
 // The queue is stubbed (no Redis); runs are created but not executed.
 
 const { test, describe, before, after } = require('node:test');
@@ -68,7 +68,6 @@ before(async () => {
     `UPDATE coexistence.workflow_agent_settings SET
        last_chat_history_id = (SELECT COALESCE(MAX(id),0) FROM coexistence.chat_history),
        last_lead_event_id = (SELECT COALESCE(MAX(id),0) FROM coexistence.lead_events),
-       last_razorpay_event_id = (SELECT COALESCE(MAX(id),0) FROM coexistence.razorpay_events),
        last_sales_log_id = (SELECT COALESCE(MAX(id),0) FROM coexistence.sales_log) WHERE id = 1`);
 });
 
@@ -136,12 +135,12 @@ describe('events', () => {
     assert.deepEqual(runs[0].trigger_payload.items, [{ from: 'hot', to: 'enrolled' }]);
   });
 
-  test('Razorpay\'s repeated captured rows produce one payment event', async (t) => {
+  test('a new sale produces one payment event', async (t) => {
     if (skip(t)) return;
     await pool.query(
-      `INSERT INTO coexistence.razorpay_events (event_type, status, payment_id, amount_paise, matched_lead_id, created_at, signature_valid)
-       VALUES ('payment.captured','captured',$1,150000,$2,$3,TRUE), ('order.paid','captured',$1,150000,$2,$3,TRUE)`,
-      [`${world.names.payment}_b`, ids.enrolled, minutesAgo(1)]);
+      `INSERT INTO coexistence.sales_log (lead_id, student_name, amount_paise, payment_date, created_at)
+       VALUES ($1, $2, 150000, (NOW() AT TIME ZONE 'Asia/Kolkata')::date, $3)`,
+      [ids.enrolled, `${world.names.student}_b`, minutesAgo(1)]);
     try {
       await triggers.sweepEvents(await agentsForTest());
       await triggers.fireDueEvents(new Date(Date.now() + 60000));
@@ -150,7 +149,7 @@ describe('events', () => {
       assert.equal(runs[0].trigger_payload.items.length, 1);
       assert.equal(runs[0].trigger_payload.items[0].amount_rupees, 1500);
     } finally {
-      await pool.query(`DELETE FROM coexistence.razorpay_events WHERE payment_id = $1`, [`${world.names.payment}_b`]);
+      await pool.query(`DELETE FROM coexistence.sales_log WHERE student_name = $1`, [`${world.names.student}_b`]);
     }
   });
 

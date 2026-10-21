@@ -61,9 +61,6 @@ const PROXY_AREAS = [
   // Both were absent entirely, and PROXY_AREAS is default-deny, so both were
   // unreachable over MCP.
   { cap: 'area_messaging',  label: 'Messages & conversations', test: /^\/(messages|agent-conversation)(\/|$|\?)/ },
-  // PROXY_AREAS is default-deny, so a renamed path must be listed explicitly or
-  // it is refused: /message-formats is the canonical name for what /wa-links
-  // was, and both are kept.
   // /broadcast-series = a REPEATING broadcast (migration 105). It shipped with
   // no entry here at all, and PROXY_AREAS is default-deny, so the whole feature
   // was unreachable over MCP — the rule this file states ("a new route file
@@ -72,57 +69,35 @@ const PROXY_AREAS = [
   // creates real broadcasts on a timer, which is the same reach at the same
   // tier, and separating them would let one be granted without the other while
   // reading as the same capability.
-  { cap: 'area_broadcasts', label: 'Broadcasts & content', test: /^\/(broadcasts|broadcast-series|templates|media-library|media|wa-links|message-formats)(\/|$|\?)/ },
+  { cap: 'area_broadcasts', label: 'Broadcasts & content', test: /^\/(broadcasts|broadcast-series|templates|media-library|media)(\/|$|\?)/ },
   { cap: 'area_automations', label: 'Automations',        test: /^\/(chatbots|automations|executions)(\/|$|\?)/ },
-  // /razorpay/config carries the payment-gateway webhook secret (write) — it is
-  // deliberately resolved to the SENSITIVE admin area, not area_payments, so
-  // enabling the payment ledger never hands over the gateway credentials. This
-  // entry must stay ABOVE area_payments: resolveArea() is first-match-wins.
-  // /capi/* sends real conversion events into the Meta ad account, which moves
-  // ad spend — same sensitivity tier as gateway credentials, so it lives in the
-  // admin area rather than area_marketing. Read-only CTWA analytics (/ctwa) stay
-  // in area_marketing below.
-  // /payment-requests CREATES Razorpay payment links a customer can really pay.
-  // The gate is path-prefix only and cannot split reads from writes, so the
-  // whole path sits at the highest tier rather than letting the ledger
-  // capability (area_payments) also mint live links. Note this is
-  // `payment-requests`, distinct from `payment-links` under area_courses — that
-  // one is the local price registry, which charges nobody.
-  // /marketing/clo/* is Conversion Leads Optimisation — it POSTs conversion
-  // events into the Meta ad account (`/flush`, `/backfill`), which moves ad
-  // spend. That is the same action /capi performs and the same reason /capi
-  // sits here rather than in area_marketing; CLO was only ever in the marketing
-  // area because its path happens to start with /marketing. This entry must
-  // stay ABOVE area_marketing — resolveArea() is first-match-wins.
-  // Read-only CTWA analytics stay in area_marketing.
-  { cap: 'area_admin',      label: 'Admin (users, WA accounts, integrations)', test: /^\/(users|whatsapp-accounts|integrations|ai-models|razorpay\/config|capi|payment-requests|marketing\/clo|workflow-agents)(\/|$|\?)/ },
+  { cap: 'area_admin',      label: 'Admin (users, WA accounts, integrations)', test: /^\/(users|whatsapp-accounts|integrations|ai-models|workflow-agents)(\/|$|\?)/ },
   // Message costs are REPORTING — they show what Meta charged, and cannot move
   // money or reach a customer. Its mutations only edit fallback rates and
   // trigger a re-read, so it belongs with the other read surfaces rather than
   // at admin tier.
   { cap: 'area_insights',   label: 'Dashboard & logs',    test: /^\/(dashboard|webhook-history|message-costs)(\/|$|\?)/ },
-  // /entity-fields = the field registry behind the Leads table / Sales Log /
+  // /entity-fields = the field registry behind the Leads table /
   // Transactions (reads for anyone with the cap; mutations are adminOnly on
   // the route itself, and the proxy calls as admin — hence leads-tier, not
   // admin-tier: changing field labels/visibility moves no money and leaks no
   // credentials).
-  { cap: 'area_leads',      label: 'Leads & funnel',      test: /^\/(leads|lead-sources|funnel|entity-fields|follow-ups|my-list)(\/|$|\?)/ },
+  { cap: 'area_leads',      label: 'Leads & funnel',      test: /^\/(leads|funnel|entity-fields|follow-ups|my-list)(\/|$|\?)/ },
   // Reading an analysis is harmless; PRODUCING one bills the AI provider, which
   // is why the catalog puts these tools in the 'spend' tier. Bulk analysis is
   // deliberately not reachable from here at all — no route serves it to MCP.
   { cap: 'area_chat_analysis', label: 'Chat Analyzer', test: /^\/(chat-analysis)(\/|$|\?)/ },
-  { cap: 'area_marketing',  label: 'Marketing (campaigns, webinars)', test: /^\/(marketing|campaigns|webinars|webinar-registrations|ctwa)(\/|$|\?)/ },
   { cap: 'area_resources',  label: 'Resources & triggers', test: /^\/(resources|trigger-library|trigger-test)(\/|$|\?)/ },
   // `/products` is the canonical path since the Courses -> Products rename;
   // `/courses` stays matched because the backend still answers on it, and a
   // path the proxy does not cover is REFUSED (PROXY_AREAS is default-deny).
-  { cap: 'area_courses',    label: 'Products & payment links', test: /^\/(products|courses|payment-links)(\/|$|\?)/ },
-  { cap: 'area_payments',   label: 'Payments, sales log & students', test: /^\/(razorpay|sales-log|students)(\/|$|\?)/ },
+  { cap: 'area_courses',    label: 'Products', test: /^\/(products|courses)(\/|$|\?)/ },
+  { cap: 'area_payments',   label: 'Sales & students', test: /^\/(students)(\/|$|\?)/ },
   // Social (the ported ForgeSocial sub-app, mounted at /api/social). Its
   // credential, settings, user and MCP-key surfaces are carved out FIRST so the
   // broad /social rule below can never reach them — first-match-wins.
-  { cap: 'area_admin',      label: 'Admin (users, WA accounts, integrations)', test: /^\/social\/(credentials|settings|integrations|users|mcp|openrouter|telegram|meta-link|backfill|sync)(\/|$|\?)/ },
-  { cap: 'area_social',     label: 'Social (Instagram, Facebook, Threads, YouTube, LinkedIn)', test: /^\/social(\/|$|\?)/ },
+  { cap: 'area_admin',      label: 'Admin (users, WA accounts, integrations)', test: /^\/social\/(credentials|settings|integrations|users|mcp|openrouter|telegram|backfill|sync)(\/|$|\?)/ },
+  { cap: 'area_social',     label: 'Social (Instagram)', test: /^\/social(\/|$|\?)/ },
 ];
 
 // Throw a {status,message} error the route handlers map to an HTTP code and the
@@ -790,8 +765,8 @@ async function proxyRequest({ method, path, query, body } = {}, capabilities = {
 
   // SECURITY: gate on the path the SERVER will actually receive, not the one the
   // caller typed. internalApiCall hands this string to fetch(), and the WHATWG
-  // URL parser removes dot-segments — so "/marketing/../users" would be gated
-  // as area_marketing and then delivered to /api/users with an admin cookie,
+  // URL parser removes dot-segments — so "/leads/../users" would be gated
+  // as area_leads and then delivered to /api/users with an admin cookie,
   // defeating every area capability (and the /mcp + /auth block). %2e%2e
   // normalises identically. Canonicalise FIRST, then gate on the result.
   {
@@ -843,7 +818,7 @@ const ENDPOINT_CATALOG = {
     'GET /templates · GET /media-library — content for broadcasts',
     'For an UPLOADED LIST use the send_bulk_message tool (one call).',
     'POST /broadcasts {..., scheduled_at:"<ISO instant>"} — schedule one send for later; a past time is refused',
-    'GET /broadcast-series · POST /broadcast-series — a REPEATING broadcast. Its audience is a RULE re-resolved on every run, not a frozen list, so it does not re-message the same people. It always starts PAUSED, an end condition is required, and a payment template is refused outright.',
+    'GET /broadcast-series · POST /broadcast-series — a REPEATING broadcast. Its audience is a RULE re-resolved on every run, not a frozen list, so it does not re-message the same people. It always starts PAUSED, an end condition is required.',
     'PUT /broadcast-series/:id · PUT /broadcast-series/:id/active {active} — start or pause it · POST /broadcast-series/:id/run — fire one run now',
     'POST /broadcast-series/preview — who the rule matches right now, without sending',
   ],
@@ -857,22 +832,11 @@ const ENDPOINT_CATALOG = {
   area_admin: [
     'GET /users · POST /users (admin) — SENSITIVE',
     'GET /whatsapp-accounts · GET /ai-models · GET /integrations — SENSITIVE',
-    'GET /capi/config — Conversions API state: datasets, stage→event mappings, master switch, counters',
-    'PUT /capi/config {enabled,mode,testEventCode,maxClickAgeDays} — SENSITIVE: enabling in live mode starts influencing Meta ad delivery',
-    'POST/PUT/DELETE /capi/mappings — funnel stage → Meta standard event',
-    'GET /capi/events?status=&days=&search= — transmission history · POST /capi/events/:id/resend',
-    'POST /capi/send {leadId} · POST /capi/backfill {limit} · POST /capi/test — SENSITIVE: these send real conversions',
-    'GET /payment-requests?status=&q=&leadId= — Razorpay links raised from ForgeGrowth · GET /payment-requests/summary · GET /payment-requests/:id (link + payments received)',
-    'POST /payment-requests {leadId,customerName,customerPhone,customerEmail,courseId,purpose,kind,amount,minAmount,description} — SENSITIVE: creates a REAL Razorpay payment link a customer can pay. kind is "fixed" | "partial" (needs minAmount) | "open". Amounts are in RUPEES.',
-    'POST /payment-requests/:id/refresh — re-read status from Razorpay · POST /payment-requests/:id/cancel — stop a link being paid',
-    'These sit in the admin area, NOT area_payments: the gate is path-based and cannot separate reading the list from minting a live link.',
-    'GET /workflow-agents — workflow agents (scheduled/event-driven Claude agents that read leads, chats, sales and ads and propose actions)',
+    'GET /workflow-agents — workflow agents (scheduled/event-driven Claude agents that read leads, chats and sales and propose actions)',
     'GET /workflow-agents/:id · GET /workflow-agents/:id/runs · GET /workflow-agents/runs/:rid · GET /workflow-agents/runs/:rid/steps — config, run history, full trace',
     'POST /workflow-agents/:id/run {dry_run,pretend_date,config_override} — SENSITIVE: a live run spends Claude credits and files approval requests',
     'GET /workflow-agents/actions?status=pending · POST /workflow-agents/actions/:aid/approve · /reject — SENSITIVE: approving EXECUTES the action (tags, stage moves, WhatsApp sends)',
     'Workflow Agents sit in the admin area: runs spend money and approvals change customer-facing state.',
-    'GET /marketing/clo/settings · /readiness · /events · /stage-stats — Conversion Leads Optimisation (Lead Ads only)',
-    'POST /marketing/clo/flush · /backfill — SENSITIVE: these send real conversion events to Meta, which is why CLO sits here and not in area_marketing',
   ],
   area_insights: [
     'GET /dashboard?range=30d · GET /webhook-history',
@@ -885,7 +849,7 @@ const ENDPOINT_CATALOG = {
     'GET /leads?stage=&search=&view= — funnel lead list; view=hot (arrived <24h)|my|unassigned|needs-follow-up (also see list_leads tool)',
     'GET /leads/board — Kanban grouped by stage + conversion %',
     'PUT /leads/:id/move {stage} — change funnel stage (also see move_lead_stage tool)',
-    'GET /leads/:id/timeline · GET /lead-sources',
+    'GET /leads/:id/timeline',
     'GET /funnel/config — configured stages (ordered) + sources · GET /funnel/chart?source=&from=&to= — per-stage counts',
     'POST/PUT/DELETE /funnel/stages · PUT /funnel/stages/reorder · POST/PUT/DELETE /funnel/sources — funnel config (admin)',
     'GET /follow-ups?from=&to=&status=open|done|cancelled|any — the follow-up calendar (also see list_follow_ups) · POST /follow-ups {waNumber,contactNumber,dueDate,dueTime,note} · PATCH/DELETE /follow-ups/:id · POST /follow-ups/google/sync — mirror to Google Calendar',
@@ -908,33 +872,17 @@ const ENDPOINT_CATALOG = {
     'GET  /chat-analysis/summary         estimated spend, split by media type',
     'POST /chat-analysis/run             analyse ONE conversation (costs money)',
   ],
-  area_marketing: [
-    'Date ranges on /marketing/overview, /campaigns, /lead-sources and /ctwa/overview: ?days=N or ?days=all, or ?from=YYYY-MM-DD&to=YYYY-MM-DD (IST calendar days, both inclusive; from/to win over days). A windowed range reads spend from per-day Meta rows — check spendBasis/spendCoverage.partial: spend before the oldest synced day is NOT included.',
-    'GET /marketing/overview?days=30 — top-of-funnel KPIs + charts (kpis.spend is range-aware; kpis.activeSpend is the legacy lifetime figure)',
-    'GET /campaigns — no range = all campaigns with lifetime figures; with a range = Meta campaigns that delivered in it (per-day spend/leads) plus manual campaigns overlapping it (metricsBasis:"stored", excluded from totals) · GET /campaigns/:id/ads — returns {ads[], adsets[]}: the flat ad list plus the Campaign → Ad Set → Ad tree, each ad set carrying its own Meta spend/leads/optimisation goal/budget (also see get_campaign_performance tool)',
-    'GET /webinars · GET /webinars/:id/funnel (also see list_webinars tool)',
-    'GET /webinar-registrations?webinarId=',
-    'GET /ctwa/overview?days=30&platform=&sourceId= — click-to-WhatsApp ad performance: clicks, leads, enrolled, revenue, spend per ad + placement split',
-    'GET /ctwa/ads/:sourceId — one ad drill-in: every click, the creatives shown, and the leads it produced',
-  ],
   area_resources: ['GET /resources · GET /trigger-library · POST /trigger-test'],
   area_courses: [
     // A product is anything sold: a course, consulting, a template pack, a
     // webinar. /courses still answers as a deprecated alias of every path here.
-    'GET /products — catalog, each with its default price, payment links + revenue (also see list_products tool)',
-    'GET /products/revenue — sales/payments/revenue per product, read from the Sales Log, + the two gap buckets (also see get_product_revenue tool)',
+    'GET /products — catalog, each with its default price + revenue (also see list_products tool)',
+    'GET /products/revenue — sales/payments/revenue per product, + the unattributed bucket (also see get_product_revenue tool)',
     'POST /products {name,description,thumbnailUrl,defaultPrice} · PUT /products/:id · DELETE /products/:id — defaultPrice is in RUPEES and optional (null clears it)',
-    'POST /products/:id/links {label,amountRupees,matchText,url} · PUT /payment-links/:id · DELETE /payment-links/:id — a link matches a real payment by exact amount; the default price is the headline price and pre-fills a manual sale',
   ],
   area_payments: [
-    'The payer ledger is reachable ONLY via the list_payments tool — the GET /payments routes were removed with the Sales → Payments page.',
-    'GET /razorpay/status — connection state + event counts · GET /razorpay/events — raw webhook events',
-    'The gateway secret (/razorpay/config) is NOT in this area — it sits under area_admin.',
-    'GET /sales-log?courseId=&source=&from=&to=&sort= — manual sales log (paid/converted students)',
-    'GET /sales-log/summary — total sales, revenue (₹), units-by-product',
-    'POST /sales-log {studentName,courseId,amount,paymentDate,funnelSource,notes} · PUT/DELETE /sales-log/:id',
     'GET /students — enrolled students + course, total paid (₹), installment count, last payment',
-    'GET /students/:id/installments — that student\'s payments (Razorpay + manual) + total',
+    'GET /students/:id/installments — that student\'s payments + total',
     'POST /students {studentName,phone,courseId,amount,paymentDate,source,notes} — enrol a student + first installment',
     'POST /students/:id/installments {amount,paymentDate,courseId,notes} — add a payment installment',
   ],
@@ -1094,11 +1042,10 @@ async function sendBulkMessage({ fromNumber, name, messageType, templateId, text
   };
 }
 
-/* --------------- leads / marketing / BDA funnel dedicated tools ---------- */
-// Thin read (+ one write) helpers over the AI Academy funnel tables, backing
-// the list_leads / move_lead_stage / get_campaign_performance / list_webinars /
-// MCP tools. Mirror the query shapes in routes/leads.js,
-// routes/marketing.js and routes/bda.js rather than diverging from them.
+/* --------------------- leads / funnel dedicated tools -------------------- */
+// Thin read (+ one write) helpers over the funnel tables, backing the
+// list_leads / move_lead_stage MCP tools. Mirror the query shapes in
+// routes/leads.js rather than diverging from them.
 
 const funnelCfg = require('./funnelConfig');
 
@@ -1241,108 +1188,43 @@ async function moveLeadStage(leadId, stage) {
   return { lead: leadSummaryRow(rows[0]) };
 }
 
-function campaignSummaryRow(r) {
-  const spend = Number(r.spend || 0);
-  const gen = Number(r.leads_generated || 0);
-  return {
-    id: Number(r.id), name: r.name, platform: r.platform, status: r.status, source: r.source,
-    spend, leadsGenerated: gen, enrollments: Number(r.enrollments || 0),
-    costPerLead: gen ? spend / gen : null,
-    impressions: Number(r.impressions || 0), clicks: Number(r.clicks || 0),
-    lastSyncedAt: r.last_synced_at,
-  };
-}
-
-// One campaign (with cost/lead) or the most recent 100 when no id is given.
-async function getCampaignPerformance({ campaignId } = {}) {
-  if (campaignId) {
-    const { rows } = await pool.query(`SELECT * FROM coexistence.campaigns WHERE id = $1`, [parseInt(campaignId, 10)]);
-    if (!rows.length) throw svcErr(404, 'Campaign not found.');
-    return { campaign: campaignSummaryRow(rows[0]) };
-  }
-  const { rows } = await pool.query(`SELECT * FROM coexistence.campaigns ORDER BY start_date DESC NULLS LAST, id DESC LIMIT 100`);
-  return { campaigns: rows.map(campaignSummaryRow) };
-}
-
-async function listWebinars() {
-  const { rows } = await pool.query(
-    `SELECT w.*,
-            (SELECT COUNT(*) FROM coexistence.webinar_registrations wr
-               JOIN coexistence.leads l ON l.id = wr.lead_id
-              WHERE wr.webinar_id = w.id AND l.stage IN ('hot','enrolled'))::int AS hot_leads
-       FROM coexistence.webinars w ORDER BY w.date DESC NULLS LAST, w.id DESC LIMIT 100`,
-  );
-  return {
-    webinars: rows.map(r => {
-      const reg = Number(r.registrations || 0);
-      const att = Number(r.attended || 0);
-      return {
-        id: Number(r.id), batchName: r.batch_name, date: r.date,
-        registrations: reg, attended: att, noShows: Number(r.no_shows || 0),
-        attendancePct: reg ? Math.round((att / reg) * 100) : 0,
-        hotLeads: Number(r.hot_leads || 0),
-      };
-    }),
-  };
-}
-
-/* ------------------------- courses + payments --------------------------- */
+/* ------------------------------ products -------------------------------- */
 
 const paise = n => Number(n || 0);
 const rupees = n => Math.round(paise(n) / 100);
 
-// The product catalog with each product's default price, payment links, paid
-// counts and revenue. (Table is still `courses` — see migration 084.)
+// The product catalog with each product's default price, sales and revenue. (Table is still `courses` — see migration 084.)
 async function listCourses() {
   const { rows: courses } = await pool.query(
     `SELECT id, name, description, active, default_price_paise FROM coexistence.courses ORDER BY name`,
   );
-  const { rows: links } = await pool.query(
-    `SELECT pl.id, pl.course_id, pl.label, pl.amount_paise, pl.url, pl.active,
-            COALESCE(SUM(e.amount_paise) FILTER (WHERE e.event_type = 'payment.captured'), 0)::bigint AS revenue_paise,
-            COUNT(DISTINCT e.payment_id) FILTER (WHERE e.status = 'captured')::int AS paid_count
-       FROM coexistence.payment_links pl
-       LEFT JOIN coexistence.razorpay_events e ON e.payment_link_id = pl.id
-      GROUP BY pl.id ORDER BY pl.amount_paise DESC`,
-  );
   const { productTotals } = require('./productSales');
   const totals = {};
   for (const t of await productTotals()) totals[t.id] = t;
-  const byCourse = {};
-  for (const l of links) (byCourse[l.course_id] = byCourse[l.course_id] || []).push(l);
   const products = courses.map(c => ({
       id: Number(c.id), name: c.name, description: c.description, active: c.active,
       // null means no default price set — distinct from a price of 0.
       defaultPriceRupees: c.default_price_paise == null ? null : rupees(c.default_price_paise),
-      // Sales-Log totals. A link's own paidCount below counts only payments
-      // amount-matched to THAT link, so it is not a share of these.
+      // Sales totals (services/productSales.js).
       salesCount: totals[c.id]?.sales_count ?? 0,
       paymentCount: totals[c.id]?.payment_count ?? 0,
       revenueRupees: rupees(totals[c.id]?.revenue_paise ?? 0),
-      links: (byCourse[c.id] || []).map(l => ({
-        id: Number(l.id), label: l.label, url: l.url, active: l.active,
-        priceRupees: rupees(l.amount_paise),
-        paidCount: l.paid_count,
-        revenueRupees: rupees(l.revenue_paise),
-      })),
   }));
   // `courses` is a deprecated alias of the same array, kept so an MCP client
   // that already reads that key does not break on the rename.
   return { currency: 'INR', products, courses: products };
 }
 
-// Revenue leaderboard per product. Read from the SALES LOG via the shared
-// service, so this tool reports the same numbers the Products page shows —
-// this used to be a third private copy of an amount-matching query and was
-// therefore free to disagree with both pages.
+// Revenue leaderboard per product. Read via the shared service, so this tool
+// reports the same numbers the Products page shows.
 async function getCourseRevenue() {
   const { productTotals, unattributedTotals } = require('./productSales');
   const rows = await productTotals();
-  const { unattributed, outsideSalesLog } = await unattributedTotals();
+  const { unattributed } = await unattributedTotals();
   const products = rows.map(r => ({
     id: r.id, name: r.name, active: r.active,
     revenueRupees: rupees(r.revenue_paise),
-    salesCount: r.sales_count,          // customers in the Sales Log
+    salesCount: r.sales_count,          // customers who bought it
     paymentCount: r.payment_count,      // their transactions
   }));
   return {
@@ -1351,12 +1233,7 @@ async function getCourseRevenue() {
     unattributed: {
       revenueRupees: rupees(unattributed.revenue_paise),
       salesCount: unattributed.sales_count, paymentCount: unattributed.payment_count,
-      note: 'In the Sales Log but with no Product set on the sale.',
-    },
-    outsideSalesLog: {
-      revenueRupees: rupees(outsideSalesLog.revenue_paise),
-      paymentCount: outsideSalesLog.payment_count,
-      note: 'Captured gateway payments not attached to any Sales Log sale.',
+      note: 'Sales with no Product set on the sale.',
     },
     totalRevenueRupees: rupees(
       rows.reduce((s, r) => s + paise(r.revenue_paise), 0) + paise(unattributed.revenue_paise),
@@ -1364,73 +1241,8 @@ async function getCourseRevenue() {
   };
 }
 
-// The payment ledger, grouped one row per payer (same grouping the Payments page
-// uses — GROUP_CTE is imported from the route so the two can't drift).
-async function listPayments({ state, courseId, search, limit } = {}) {
-  const { GROUP_CTE } = require('../routes/razorpay');
-  const cap = Math.max(1, Math.min(200, parseInt(limit || 50, 10)));
-  const conds = [];
-  const params = [];
-  let i = 1;
-  if (search && String(search).trim()) {
-    conds.push(`(payer_email ILIKE $${i} OR payer_contact ILIKE $${i} OR order_id ILIKE $${i} OR matched_lead_name ILIKE $${i} OR matched_contact_name ILIKE $${i})`);
-    params.push(`%${String(search).trim()}%`); i++;
-  }
-  if (state) {
-    const s = String(state).trim().toLowerCase();
-    if (!['paid', 'failed', 'refunded', 'pending'].includes(s)) {
-      throw svcErr(400, `Unknown state "${state}". Use paid, failed, refunded or pending.`);
-    }
-    conds.push(`state = $${i++}`); params.push(s);
-  }
-  if (courseId === 'none') conds.push(`course_id IS NULL`);
-  else if (courseId) { conds.push(`course_id = $${i++}`); params.push(String(courseId)); }
-  const whereSql = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
-
-  const [{ rows }, { rows: [sum] }] = await Promise.all([
-    pool.query(
-      `${GROUP_CTE} SELECT g2.*, crs.name AS course_name
-         FROM g2 LEFT JOIN coexistence.courses crs ON crs.id = g2.course_id
-         ${whereSql} ORDER BY g2.last_at DESC LIMIT ${cap}`,
-      params,
-    ),
-    pool.query(
-      `${GROUP_CTE} SELECT COUNT(*)::int AS total_payers,
-          COUNT(*) FILTER (WHERE state = 'paid')::int   AS paid_count,
-          COUNT(*) FILTER (WHERE state = 'failed')::int AS failed_count,
-          COALESCE(SUM(amount_paise) FILTER (WHERE succeeded), 0)::bigint AS collected_paise
-        FROM g2 ${whereSql}`,
-      params,
-    ),
-  ]);
-  return {
-    currency: 'INR',
-    summary: {
-      totalPayers: sum.total_payers || 0,
-      paidCount: sum.paid_count || 0,
-      failedCount: sum.failed_count || 0,
-      collectedRupees: rupees(sum.collected_paise),
-    },
-    payments: rows.map(r => ({
-      state: r.state,
-      amountRupees: rupees(r.amount_paise),
-      payerEmail: r.payer_email, payerContact: r.payer_contact,
-      course: r.course_name || null,
-      leadName: r.matched_lead_name || r.matched_contact_name || null,
-      leadId: r.matched_lead_id ? Number(r.matched_lead_id) : null,
-      whatsappNumber: r.matched_contact_number || null,
-      matchMethod: r.match_method || null,
-      attempts: Number(r.attempts || 0),
-      failedAttempts: Number(r.failed_attempts || 0),
-      lastAt: r.last_at, firstAt: r.first_at,
-      orderId: r.order_id,
-      groupKey: r.gk,   // stable per-payer key (the /payments/group route was removed)
-    })),
-  };
-}
-
-/* -------- dedicated config tools (media / templates / automations /
-   wa-links) — the "let Claude configure the app" surface.
+/* -------- dedicated config tools (media / templates / automations)
+   — the "let Claude configure the app" surface.
    Each reuses the real Express routes via internalApiCall so validation,
    RBAC and side-effects are never duplicated. Capability gating happens at
    the tool layer (mcpHttp.js gated() / routes/mcp.js requireCap). ---------- */
@@ -1778,14 +1590,6 @@ async function getAutomationRuns({ automationId, executionId, status, limit } = 
   });
 }
 
-// Create a tracked click-to-chat wa.me link.
-async function createWaLink({ name, message, accountId } = {}) {
-  if (!String(name || '').trim()) throw svcErr(400, 'name is required.');
-  if (!accountId) throw svcErr(400, 'accountId is required (a WhatsApp account id from list_wa_accounts).');
-  const out = await internalApiOrThrow({ method: 'POST', path: '/wa-links', body: { name: String(name).trim(), message: message || null, accountId }, failMsg: 'Failed to create the link.' });
-  return { ok: true, link: out.link || out };
-}
-
 /* ------------------------- chat analyzer -------------------------------- */
 //
 // Required lazily: chatAnalyser pulls in the media pipeline (ffprobe, the PDF
@@ -2063,11 +1867,10 @@ module.exports = {
   listConversations, getChatHistory, sendTextMessage, sendTemplateMessage,
   sendMediaMessage, sendInteractiveMessage,
   proxyRequest, listEndpoints, sendBulkMessage,
-  listLeads, moveLeadStage, getCampaignPerformance, listWebinars,
-  listCourses, getCourseRevenue, listPayments,
+  listLeads, moveLeadStage,
+  listCourses, getCourseRevenue,
   uploadMediaFromSource, createTemplate, submitTemplate, syncTemplate,
   createAutomation, validateAutomation, updateAutomation, listAutomations, getAutomationRuns,
-  createWaLink,
   internalApiOrThrow,
   // One literal component builder, shared rather than copied per sender.
   buildLiteralTemplateComponents,

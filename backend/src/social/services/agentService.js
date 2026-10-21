@@ -3,7 +3,7 @@
 // Adapted from the ForgeChat agent builder, wired to ForgeSocial's domain: an
 // agent binds to a social CHANNEL (platform + account) instead of a WhatsApp
 // number, auto-replies to the Inbox (Instagram DMs and/or comments), and uses
-// ForgeSocial domain tools (analytics/posts/comments/contacts/engage/publish)
+// ForgeSocial domain tools (analytics/posts/comments/contacts/engage)
 // plus generic HTTP + Google Sheets tools.
 //
 // Functions throw ApiError { status, message } so callers map to HTTP codes.
@@ -11,9 +11,9 @@
 const pool = require('../db');
 
 const SUPPORTED_PROVIDERS = new Set(['anthropic', 'openai', 'kimi', 'gemini']);
-const PLATFORMS = new Set(['instagram', 'facebook', 'youtube', 'threads']);
-const CAPABILITY_KEYS = ['analytics', 'content', 'inbox', 'contacts', 'engage', 'publish'];
-const DEFAULT_CAPABILITIES = { analytics: true, content: true, inbox: true, contacts: false, engage: false, publish: false };
+const PLATFORMS = new Set(['instagram']);
+const CAPABILITY_KEYS = ['analytics', 'content', 'inbox', 'contacts', 'engage'];
+const DEFAULT_CAPABILITIES = { analytics: true, content: true, inbox: true, contacts: false, engage: false };
 
 class ApiError extends Error {
   constructor(status, message) { super(message); this.status = status; }

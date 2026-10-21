@@ -12,13 +12,7 @@ const pool = require('./db');
 const { router: authRouter, authMiddleware, adminOnly, ensureTables } = require('./auth');
 const mockService = require('./mockService');
 const instagram = require('./instagram');
-const messenger = require('./messenger');
-const youtube   = require('./youtube');
-const facebook  = require('./facebook');
-const threads   = require('./threads');
-const linkedin  = require('./linkedin');
 const syncService = require('./syncService');
-const publishService = require('./publishService');
 const backfillService = require('./backfillService');
 const accounts = require('./accounts');
 const tokenService = require('./tokenService');
@@ -164,101 +158,6 @@ app.get('/api/social/public/report/:token', async (req, res) => {
   }
 });
 
-// ── Facebook OAuth callback (public — Facebook redirects here) ─
-app.get('/api/social/facebook/callback', async (req, res) => {
-  const { code, error, state } = req.query;
-  if (error) return res.redirect(`/#/social/integrations/facebook?fb_error=${encodeURIComponent(error)}`);
-  if (!code)  return res.status(400).send('Missing OAuth code');
-  try {
-    if (state === 'fb_add') {
-      const r = await accounts.addAccountFromCode('facebook', code);
-      _triggerBackgroundSync('facebook');
-      // A grant that only carried the primary Page is a reconnect, not an add — say so.
-      const added = r.count - (r.reconnectedPrimary ? 1 : 0);
-      if (!added) return res.redirect('/#/social/integrations/facebook?fb_connected=1');
-      return res.redirect(`/#/social/integrations/facebook?fb_added=${encodeURIComponent(r.label || '1')}`);
-    }
-    await facebook.exchangeCode(code);
-    _triggerBackgroundSync('facebook');
-    res.redirect('/#/social/integrations/facebook?fb_connected=1');
-  } catch (err) {
-    console.error('Facebook OAuth callback error:', err.message);
-    res.redirect(`/#/social/integrations/facebook?fb_error=${encodeURIComponent(err.message)}`);
-  }
-});
-
-// ── Threads OAuth callback + webhook verification (public) ───
-app.get('/api/social/threads/callback', async (req, res) => {
-  // Meta webhook verification challenge
-  if (req.query['hub.mode'] === 'subscribe') {
-    // No built-in fallback: with no token configured the handshake is refused.
-    const verifyToken = socialEnv.THREADS_WEBHOOK_VERIFY_TOKEN || socialEnv.INSTAGRAM_WEBHOOK_VERIFY_TOKEN;
-    if (verifyToken && req.query['hub.verify_token'] === verifyToken) {
-      return res.type('text/plain').send(String(req.query['hub.challenge'] || ''));
-    }
-    return res.status(403).send('Forbidden');
-  }
-  // OAuth code exchange
-  const { code, error, state } = req.query;
-  if (error) return res.redirect(`/#/social/integrations/threads?th_error=${encodeURIComponent(error)}`);
-  if (!code)  return res.status(200).send('OK'); // webhook POST events land here too
-  try {
-    if (state === 'th_add') {
-      const r = await accounts.addAccountFromCode('threads', code);
-      return res.redirect(`/#/social/integrations/threads?th_added=${encodeURIComponent(r.label || '1')}`);
-    }
-    await threads.exchangeCode(code);
-    res.redirect('/#/social/integrations/threads?th_connected=1');
-  } catch (err) {
-    console.error('Threads OAuth callback error:', err.message);
-    res.redirect(`/#/social/integrations/threads?th_error=${encodeURIComponent(err.message)}`);
-  }
-});
-
-// Meta webhook POST events (data deletion, user creation) — just acknowledge
-app.post('/api/social/threads/callback', (req, res) => res.sendStatus(200));
-
-// ── LinkedIn OAuth callback (public — LinkedIn redirects here) ─
-app.get('/api/social/linkedin/callback', async (req, res) => {
-  const { code, error, state } = req.query;
-  if (error) return res.redirect(`/#/social/integrations/linkedin?li_error=${encodeURIComponent(error)}`);
-  if (!code)  return res.status(400).send('Missing OAuth code');
-  try {
-    if (state === 'li_add') {
-      const r = await accounts.addAccountFromCode('linkedin', code);
-      return res.redirect(`/#/social/integrations/linkedin?li_added=${encodeURIComponent(r.label || '1')}`);
-    }
-    await linkedin.exchangeCode(code);
-    res.redirect('/#/social/integrations/linkedin?li_connected=1');
-  } catch (err) {
-    console.error('LinkedIn OAuth callback error:', err.message);
-    res.redirect(`/#/social/integrations/linkedin?li_error=${encodeURIComponent(err.message)}`);
-  }
-});
-
-// ── YouTube OAuth callback (public — Google redirects here) ──
-app.get('/api/social/youtube/callback', async (req, res) => {
-  const { code, error, state } = req.query;
-  if (error) {
-    return res.redirect(`/#/social/integrations/youtube?yt_error=${encodeURIComponent(error)}`);
-  }
-  if (!code) {
-    return res.status(400).send('Missing OAuth code');
-  }
-  try {
-    if (state === 'yt_add') {
-      // "Add account" → append a new channel rather than overwrite the primary.
-      const r = await accounts.addAccountFromCode('youtube', code);
-      return res.redirect(`/#/social/integrations/youtube?yt_added=${encodeURIComponent(r.label || '1')}`);
-    }
-    await youtube.exchangeCode(code);
-    res.redirect('/#/social/integrations/youtube?yt_connected=1');
-  } catch (err) {
-    console.error('YouTube OAuth callback error:', err.message);
-    res.redirect(`/#/social/integrations/youtube?yt_error=${encodeURIComponent(err.message)}`);
-  }
-});
-
 // ── Instagram webhook (public — Meta calls this) ─────────────
 // GET  = one-time verification handshake (App Dashboard → Webhooks)
 // POST = live message + comment events (signature-verified, then stored)
@@ -287,12 +186,10 @@ app.post('/api/social/instagram/webhook', async (req, res) => {
   }
   try {
     // A Facebook Page subscription pointed at this URL delivers Messenger
-    // events (object === 'page'); those belong to Social → Messenger, not the
-    // Instagram DM tables.
+    // events (object === 'page'). Messenger is not supported: audit and ignore.
     if (req.body?.object === 'page') {
       instagram.logWebhookEvent(req.body, { remoteIp, signatureOk: true }).catch(() => {});
-      const r = await messenger.handleWebhook(req.body);
-      console.log(`[ig-webhook] page object → messenger: ${r.messages} message(s)`);
+      console.log('[ig-webhook] ignored a Facebook Page (Messenger) delivery');
     } else {
       const r = await instagram.handleWebhook(req.body, { remoteIp });
       console.log(`[ig-webhook] stored ${r.messages} message(s), ${r.comments} comment(s)`);
@@ -304,33 +201,6 @@ app.post('/api/social/instagram/webhook', async (req, res) => {
   return res.sendStatus(200);
 });
 
-// ── Facebook Messenger webhook (public — Meta calls this) ────
-// Point the Meta app's "Page" webhook here, fields messages + message_echoes +
-// message_reads. Same verify token and signature check as the Instagram one.
-app.get('/api/social/messenger/webhook', (req, res) => {
-  const verifyToken = socialEnv.INSTAGRAM_WEBHOOK_VERIFY_TOKEN;
-  if (verifyToken && req.query['hub.mode'] === 'subscribe' && req.query['hub.verify_token'] === verifyToken) {
-    return res.type('text/plain').send(String(req.query['hub.challenge'] || ''));
-  }
-  return res.status(403).send('Forbidden');
-});
-app.post('/api/social/messenger/webhook', async (req, res) => {
-  const remoteIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || null;
-  const sig = instagram.verifyWebhookSignature(req.rawBody, req.headers['x-hub-signature-256']);
-  if (!sig.ok) {
-    console.warn('[messenger-webhook] rejected:', sig.reason);
-    instagram.logWebhookEvent(req.body, { remoteIp, signatureOk: false }).catch(() => {});
-    return res.sendStatus(403);
-  }
-  instagram.logWebhookEvent(req.body, { remoteIp, signatureOk: true }).catch(() => {});
-  try {
-    if (req.body?.object === 'page') await messenger.handleWebhook(req.body);
-  } catch (err) {
-    console.error('[messenger-webhook] error:', err.message);
-  }
-  return res.sendStatus(200);
-});
-
 // ── Meta data-deletion & deauthorize callbacks (public, signed_request) ──
 // Friendly GET responses so a browser / Meta reachability check sees the URL as live
 // (the real callbacks are POST with a signed_request).
@@ -338,7 +208,7 @@ app.get('/api/social/instagram/deletion', (req, res) =>
   res.set('Content-Type', 'text/html').send(
     '<!doctype html><meta charset="utf-8"><body style="font-family:system-ui;max-width:560px;margin:60px auto;padding:0 20px">' +
     '<h2>ForgeSocial — Instagram Data Deletion</h2><p>This endpoint is live. It accepts <b>POST</b> data-deletion callbacks ' +
-    'from Meta (with a signed_request). To request deletion of your data, remove ForgeSocial from your Instagram/Facebook ' +
+    'from Meta (with a signed_request). To request deletion of your data, remove ForgeSocial from your Instagram ' +
     'app settings, or contact the workspace admin.</p></body>'));
 app.get('/api/social/instagram/deauthorize', (req, res) =>
   res.send('ForgeSocial deauthorize endpoint is live (accepts POST callbacks from Meta).'));
@@ -424,19 +294,13 @@ app.use('/api/social/comment-analyzer', require('./commentAnalyzerRoutes').analy
 // Telegram bot: token, who may contact it, chat viewer (telegramRoutes.js)
 app.use('/api/social/telegram', require('./telegramRoutes').telegramRouter);
 app.use('/api/social/openrouter', require('./commentAnalyzerRoutes').openRouterRouter);
-// "Receive Instagram DMs" settings card (link Pages to the ForgeSocial Meta app)
-app.use('/api/social/meta-link', require('./metaPageLinkRoutes'));
-// App credentials (Meta / Instagram / Threads / Google / LinkedIn keys) entered
+// App credentials (Meta app / Instagram keys) entered
 // in Settings → Integrations instead of the server's env file. Admin only;
 // secrets never come back — only whether they are set and their last 4.
 function credentialUrls() {
   const base = String(socialEnv.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
   return {
     instagramRedirect: base + '/api/social/instagram/oauth/callback',
-    facebookRedirect: base + '/api/social/facebook/callback',
-    threadsRedirect: base + '/api/social/threads/callback',
-    youtubeRedirect: base + '/api/social/youtube/callback',
-    linkedinRedirect: base + '/api/social/linkedin/callback',
     instagramWebhook: base + '/api/social/instagram/webhook',
     privacyPolicy: base + '/#/social-privacy',
   };
@@ -648,8 +512,9 @@ app.get('/api/social/overview', async (req, res) => {
       const { rows: fallback } = await pool.query(`
         SELECT DISTINCT ON (platform) platform, data, fetched_at, period as snap_period
         FROM sync_snapshots
+        WHERE platform = ANY($1)
         ORDER BY platform, fetched_at DESC
-      `);
+      `, [accounts.PLATFORMS]);
       snapshots = fallback;
       isFallback = true;
     }
@@ -723,11 +588,11 @@ app.get('/api/social/overview', async (req, res) => {
 // Platform stats — read from DB snapshot only
 // Overlay the permanent, localized thumbnail (from the posts table) onto a
 // snapshot's topPosts. Snapshots froze the platform's signed CDN URL at sync
-// time (IG/Threads/FB ones expire); the posts table holds the downloaded copy
+// time (Instagram's expire); the posts table holds the downloaded copy
 // under /api/uploads. Join on (platform key, external_id); leaves mock posts —
 // whose ids never match a posts row — untouched so they fall back to the glyph.
-// Snapshot topPosts are the platform's BEST posts — and some platforms (notably
-// YouTube) return them ranked by score/views REGARDLESS of date, so a top video
+// Snapshot topPosts are the platform's BEST posts — ranked by score/views
+// REGARDLESS of date, so a top post
 // from months/a year ago can appear under a "7-day window" label, shown with a
 // year-less date ("9 Jun") that makes it look recent. Scope topPosts to the
 // selected period by each post's real `timestamp`, and re-stamp the display
@@ -759,7 +624,7 @@ function scopeTopPostsToWindow(data, period) {
 // to the period window by the real DATE column (which always carries the year).
 // This eliminates the "year-old post shown under a 7-day window" class of bug for
 // EVERY platform — the frozen snapshot topPosts could rank all-time bests
-// regardless of date. Account-scoped leniently because YT/Threads rows often have
+// regardless of date. Account-scoped leniently because older rows may have
 // a NULL account_key. Returns [] if nothing in window (caller keeps its fallback).
 async function topPostsFromTable(platformKey, accountKey, period, limit = 6) {
   const days = (mockService.PERIOD_INFO[period] || mockService.PERIOD_INFO['30D']).days;
@@ -893,8 +758,6 @@ app.get('/api/social/platforms/:key/stats', async (req, res) => {
 // available:false so the UI simply hides the section.
 const AUDIENCE_PROVIDERS = {
   instagram: (account) => instagram.getAudience(account || null),
-  youtube:   () => youtube.getAudience(),
-  threads:   () => threads.getAudience(),
 };
 app.get('/api/social/platforms/:key/audience', async (req, res) => {
   const { key } = req.params;
@@ -1000,17 +863,18 @@ app.get('/api/social/content-library', async (req, res) => {
     const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10) || 10));
     const offset = (pageNum - 1) * limitNum;
 
-    const conditions = [];
-    const params = [];
-    let paramIdx = 1;
+    // Only live platforms: posts of removed platforms may remain on an upgraded install.
+    const conditions = ['pl.key = ANY($1)'];
+    const params = [accounts.PLATFORMS];
+    let paramIdx = 2;
 
     if (platform) {
       conditions.push(`pl.name = $${paramIdx++}`);
       params.push(platform);
     }
     // Multi-select account filter. A token is either a specific account
-    // ("instagram|<id>") or a whole platform ("youtube", for single-account
-    // platforms whose posts mix real + null account_key). Match accordingly.
+    // ("instagram|<id>") or a whole platform ("instagram", when only one account
+    // exists and its posts mix real + null account_key). Match accordingly.
     if (account) {
       const tokens = String(account).split(',').map(s => s.trim()).filter(Boolean);
       const composite = tokens.filter(t => t.includes('|'));
@@ -1079,15 +943,13 @@ app.get('/api/social/content-library', async (req, res) => {
              ROUND(AVG(CASE WHEN p.views > 0 THEN p.engagements::numeric * 100 / p.views END), 1)::float AS "avgEngRate"
         FROM posts p JOIN platforms pl ON pl.id = p.platform_id ${whereClause}`, params);
 
-    // Fetch paginated posts (owning-account identity joined for the post viewer:
-    // IG accounts live in instagram_accounts, the other platforms in social_accounts)
+    // Fetch paginated posts (owning-account identity joined for the post viewer)
     const postsQuery = `
       SELECT p.*, pl.key AS "platformKey", pl.name AS "platformName", pl.short, pl.color, pl.bg, pl.text_on_bg AS "textOnBg",
-             COALESCE(ia.username, ia.name, sa.username, sa.label) AS "accountUsername"
+             COALESCE(ia.username, ia.name) AS "accountUsername"
       FROM posts p
       JOIN platforms pl ON pl.id = p.platform_id
       LEFT JOIN instagram_accounts ia ON pl.key = 'instagram' AND ia.account_id = p.account_key
-      LEFT JOIN social_accounts sa ON sa.platform = pl.key AND sa.account_key = p.account_key
       ${whereClause}
       ORDER BY ${orderBy}
       LIMIT $${paramIdx++} OFFSET $${paramIdx++}
@@ -1096,7 +958,9 @@ app.get('/api/social/content-library', async (req, res) => {
     const { rows: posts } = await pool.query(postsQuery, queryParams);
 
     // Get unique topics and formats from all posts for filter dropdowns
-    const { rows: allMeta } = await pool.query(`SELECT DISTINCT topic, type FROM posts WHERE topic IS NOT NULL`);
+    const { rows: allMeta } = await pool.query(
+      `SELECT DISTINCT p.topic, p.type FROM posts p JOIN platforms pl ON pl.id = p.platform_id
+        WHERE p.topic IS NOT NULL AND pl.key = ANY($1)`, [accounts.PLATFORMS]);
     const topics = [...new Set(allMeta.map(r => r.topic).filter(Boolean))];
     const fmtLabel = (t) => { const x = String(t).replace(/_/g, ' ').toLowerCase(); return x.charAt(0).toUpperCase() + x.slice(1); };
     const formats = [...new Set(allMeta.map(r => r.type).filter(Boolean).map(fmtLabel))].sort();
@@ -1105,15 +969,15 @@ app.get('/api/social/content-library', async (req, res) => {
     // resolved to friendly labels; null-account rows fall back to the platform name.
     const { rows: acctRows } = await pool.query(`
       SELECT DISTINCT pl.key AS platform, pl.name AS "platformName", p.account_key AS "accountKey",
-             COALESCE(ia.username, ia.name, sa.username, sa.label) AS label
+             COALESCE(ia.username, ia.name) AS label
       FROM posts p
       JOIN platforms pl ON pl.id = p.platform_id
       LEFT JOIN instagram_accounts ia ON pl.key = 'instagram' AND ia.account_id = p.account_key
-      LEFT JOIN social_accounts sa ON sa.platform = pl.key AND sa.account_key = p.account_key
-      ORDER BY pl.key, label NULLS FIRST`);
-    // Collapse to one clean option per account. Platforms with a single real
-    // account (FB/YT/Threads — whose posts mix real + null account_key) become a
-    // single platform-wide option; multi-account platforms (IG) list each handle.
+      WHERE pl.key = ANY($1)
+      ORDER BY pl.key, label NULLS FIRST`, [accounts.PLATFORMS]);
+    // Collapse to one clean option per account. A platform with a single real
+    // account becomes a single platform-wide option; with several, each handle
+    // is listed.
     const byPlat = {};
     for (const r of acctRows) {
       const g = byPlat[r.platform] || (byPlat[r.platform] = { platformName: r.platformName, labels: {}, real: new Set() });
@@ -1135,7 +999,7 @@ app.get('/api/social/content-library', async (req, res) => {
     res.json({
       posts: posts.map(p => ({
         id: p.id,
-        externalId: p.external_id,   // platform-side id — needed by the in-app post viewer (YT embed)
+        externalId: p.external_id,   // platform-side id — needed by the in-app post viewer
         platform: p.platformKey,
         accountUsername: p.accountUsername || null,   // owning connected account (shown in the post viewer)
         title: p.title,
@@ -1181,13 +1045,13 @@ app.get('/api/social/performance', async (req, res) => {
 
     const { rows: posts } = await pool.query(`
       SELECT p.*, pl.key AS "platformKey", pl.name AS "platformName",
-             COALESCE(ia.username, ia.name, sa.username, sa.label) AS "accountUsername"
+             COALESCE(ia.username, ia.name) AS "accountUsername"
       FROM posts p
       JOIN platforms pl ON pl.id = p.platform_id
       LEFT JOIN instagram_accounts ia ON pl.key = 'instagram' AND ia.account_id = p.account_key
-      LEFT JOIN social_accounts sa ON sa.platform = pl.key AND sa.account_key = p.account_key
+      WHERE pl.key = ANY($1)
       ORDER BY p.score DESC
-    `);
+    `, [accounts.PLATFORMS]);
 
     // --- helpers ---
     function autoTopic(title) {
@@ -1354,8 +1218,8 @@ app.get('/api/social/performance', async (req, res) => {
     // Two fixes that made this grid "dead": (1) a 7D window rarely has posts in
     // more than one or two cells, so it's ALWAYS built from the last 90 days;
     // (2) the heat value is the average CONTENT SCORE (1-99, platform-relative
-    // percentile) instead of eng-rate — score exists for every post on every
-    // platform, including ones without per-post views (e.g. Facebook).
+    // percentile) instead of eng-rate — score exists for every post, including
+    // ones without per-post views.
     const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     const slots = ["6 AM", "9 AM", "12 PM", "3 PM", "6 PM", "9 PM"];
     const HEAT_WINDOW_DAYS = 90;
@@ -1668,8 +1532,8 @@ app.get('/api/social/activity', adminOnly, async (req, res) => {
 async function _goalCurrent(metric, platform) {
   try {
     if (metric === 'posts') {
-      const params = []; let clause = `p.date >= now() - interval '30 days'`;
-      if (platform) { params.push(platform); clause += ` AND pl.key = $1`; }
+      const params = [accounts.PLATFORMS]; let clause = `p.date >= now() - interval '30 days' AND pl.key = ANY($1)`;
+      if (platform) { params.push(platform); clause += ` AND pl.key = $2`; }
       const { rows } = await pool.query(`SELECT COUNT(*)::int AS n FROM posts p JOIN platforms pl ON pl.id = p.platform_id WHERE ${clause}`, params);
       return rows[0]?.n || 0;
     }
@@ -1730,7 +1594,8 @@ app.post('/api/social/reports/share', async (req, res) => {
 // Platforms — always DB-backed
 app.get('/api/social/platforms', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM platforms ORDER BY id');
+    // Rows for removed platforms may remain on an upgraded install — not listed.
+    const { rows } = await pool.query('SELECT * FROM platforms WHERE key = ANY($1) ORDER BY id', [accounts.PLATFORMS]);
     res.json(rows);
   } catch (err) { res.status(500).json({ error: 'Failed to load platforms' }); }
 });
@@ -1738,10 +1603,6 @@ app.get('/api/social/platforms', async (req, res) => {
 // Integrations — DB-backed with live status check
 const PLATFORM_TESTERS = {
   instagram: () => instagram.testConnection(),
-  youtube:   () => youtube.testConnection(),
-  facebook:  () => facebook.testConnection(),
-  threads:   () => threads.testConnection(),
-  linkedin:  () => linkedin.testConnection(),
 };
 
 // ── Unified multi-account integration API ───────────────────
@@ -1764,9 +1625,6 @@ app.get('/api/social/integrations/:platform/accounts', async (req, res) => {
     res.status(500).json({ error: 'Failed to load accounts' });
   }
 });
-
-// Disconnect the managed (app_settings) account — route lives in managedDisconnect.js.
-require('./managedDisconnect').mount(app, adminOnly);
 
 // Remove an additional account (the managed account is edited via its Credentials modal).
 app.delete('/api/social/integrations/:platform/accounts/:id', adminOnly, async (req, res) => {
@@ -1820,7 +1678,10 @@ app.post('/api/social/backfill/start', adminOnly, async (req, res) => {
 
 app.get('/api/social/integrations', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM integrations ORDER BY id');
+    // Rows for removed platforms may remain on an upgraded install — skipped;
+    // platform-less rows (Google Analytics, WhatsApp, CRM) are kept.
+    const { rows } = await pool.query(
+      'SELECT * FROM integrations WHERE platform IS NULL OR platform = ANY($1) ORDER BY id', [accounts.PLATFORMS]);
 
     // Dynamically check actual connection status for social platforms
     const enriched = await Promise.all(rows.map(async (row) => {
@@ -1876,67 +1737,11 @@ app.get('/api/social/posts', async (req, res) => {
       SELECT p.*, pl.key AS "platformKey", pl.name AS "platformName", pl.short, pl.color, pl.bg, pl.text_on_bg AS "textOnBg"
       FROM posts p
       JOIN platforms pl ON pl.id = p.platform_id
+      WHERE pl.key = ANY($1)
       ORDER BY p.score DESC
-    `);
+    `, [accounts.PLATFORMS]);
     res.json(rows);
   } catch (err) { res.status(500).json({ error: 'Failed to load posts' }); }
-});
-
-// The Graph "Unsupported delete request … does not support this operation" reply
-// means the post wasn't created by our app / the platform forbids API deletion.
-// NOTE: this same boilerplate ALSO contains "does not exist", so it must be
-// checked BEFORE the already-gone test below or a real undeletable post would be
-// mis-read as already-gone and wrongly removed locally (then resynced).
-const _UNSUPPORTED_DELETE = /unsupported delete|does not support this operation/i;
-// A failure reason that means "it's genuinely gone on the platform" — treat as
-// success (removing our row is correct). Excludes the unsupported-delete case.
-const _ALREADY_GONE_RE = /not found|does not exist|cannot be found|no longer|already deleted/i;
-function _isAlreadyGone(reason) {
-  return _ALREADY_GONE_RE.test(reason || '') && !_UNSUPPORTED_DELETE.test(reason || '');
-}
-function _friendlyDeleteReason(platform, reason) {
-  const name = platform.charAt(0).toUpperCase() + platform.slice(1);
-  if (_UNSUPPORTED_DELETE.test(reason || ''))
-    return `${name} won't delete this post via API — it wasn't published through ForgeSocial, so delete it in the ${name} app instead.`;
-  return reason || `Could not delete this ${name} post via API.`;
-}
-
-// Delete a Content Library post. Deletes the LIVE post on the platform FIRST
-// (FB/YT/Threads/LinkedIn via the module's deletePost); only removes the local
-// row if the platform delete actually succeeded (or the post is already gone) —
-// otherwise the next sync would just re-add it, making the delete look broken.
-// Instagram is excluded entirely (no media-delete API).
-app.delete('/api/social/posts/:id', adminOnly, async (req, res) => {
-  try {
-    const { rows } = await pool.query(
-      `SELECT p.id, p.external_id, p.account_key, p.permalink, pl.key AS platform
-         FROM posts p JOIN platforms pl ON pl.id = p.platform_id
-        WHERE p.id = $1`, [req.params.id]);
-    const post = rows[0];
-    if (!post) return res.status(404).json({ error: 'Post not found' });
-    if (post.platform === 'instagram')
-      return res.status(400).json({ error: "Instagram doesn't allow deleting posts via API — remove it in the Instagram app and ForgeSocial will sync it out automatically." });
-    if (!post.external_id)
-      return res.status(400).json({ error: 'This post has no platform id stored, so it cannot be deleted on the platform.' });
-
-    // Reuse the publish-log deleter (it dispatches per platform).
-    const r = await publishService.deletePublishedPost({
-      platform: post.platform, external_post_id: post.external_id,
-      account_id: post.account_key, simulated: false,
-    }).catch(e => ({ platformDeleted: false, reason: e.message }));
-
-    const alreadyGone = !r.platformDeleted && _isAlreadyGone(r.reason);
-    if (!r.platformDeleted && !alreadyGone) {
-      // Keep the row — don't pretend it's deleted when it's still live (it'd resync).
-      return res.status(400).json({ error: _friendlyDeleteReason(post.platform, r.reason) });
-    }
-
-    await pool.query('DELETE FROM posts WHERE id = $1', [post.id]);
-    res.json({ ok: true, platformDeleted: r.platformDeleted === true, alreadyGone, permalink: post.permalink || null });
-  } catch (err) {
-    console.error('Post delete error:', err);
-    res.status(500).json({ error: 'Failed to delete post' });
-  }
 });
 
 // ── Media library ────────────────────────────────────────────
@@ -1946,11 +1751,7 @@ app.get('/api/social/media', async (req, res) => {
       SELECT id, title, caption, cover_url AS "coverUrl", cover_type AS "coverType",
              files, file_count AS "fileCount", total_size AS "totalSize",
              format, uploaded_by AS "uploadedBy", created_at AS "createdAt",
-             m.accounts,
-             -- accounts of the posts that used this asset (publish_jobs keeps a media snapshot with mediaId)
-             COALESCE((SELECT jsonb_agg(DISTINCT CASE WHEN j.platform = 'instagram' THEN 'instagram|' || j.account_id ELSE j.platform END)
-                         FROM publish_jobs j
-                        WHERE j.status <> 'canceled' AND j.media @> jsonb_build_array(jsonb_build_object('mediaId', m.id))), '[]') AS "usedBy"
+             m.accounts
         FROM media m
        ORDER BY created_at DESC
     `);
@@ -1998,7 +1799,7 @@ app.post('/api/social/media', uploadMedia, async (req, res) => {
 // Which accounts an asset belongs to (shown / filtered by the "My accounts" preset). [] = shared.
 function cleanMediaAccounts(list) {
   return [...new Set((Array.isArray(list) ? list : []).map(String)
-    .filter(t => ['instagram', 'facebook', 'youtube', 'threads', 'linkedin'].includes(t.split('|')[0])))].slice(0, 50);
+    .filter(t => t.split('|')[0] === 'instagram'))].slice(0, 50);
 }
 app.put('/api/social/media/:id/accounts', async (req, res) => {
   try {
@@ -2024,395 +1825,27 @@ app.delete('/api/social/media/:id', async (req, res) => {
   }
 });
 
-// ── Publish — composer jobs + scheduler + log ────────────────
-// The send-to-platform call is LIVE for all platforms (see publishService.js).
-// These routes add ZERO live Graph API reads: the account picker uses DB +
-// cached status; the actual publish happens later in the scheduler worker.
-
-// Account picker for the composer (rate-safe: IG from DB, others cached testConnection)
+// ── Connected-account picker ─────────────────────────────────
+// Feeds the "My accounts" preset (scopeStore.js). Straight from the DB — no
+// Graph API call at all.
 app.get('/api/social/publish/accounts', async (req, res) => {
   try {
     const out = [];
-    // Instagram: multi-account, straight from DB (no API call at all)
-    try {
-      for (const a of await instagram.listAccounts()) {
-        // Skip webhook-noise rows (e.g. entry.id "0") with no usable identity.
-        if (!a.accountId || a.accountId === '0' || (!a.username && !a.name)) continue;
-        out.push({
-          platform: 'instagram',
-          accountId: a.accountId,
-          label: a.name || (a.username ? '@' + a.username : a.accountId),
-          username: a.username || null,
-          canPublish: a.canPublish === true, // false = registered from webhook, never OAuth-connected
-        });
-      }
-    } catch (e) { console.error('publish/accounts instagram:', e.message); }
-    // Single-account platforms: cached testConnection() (force=false → cache)
-    const singles = { youtube, facebook, threads, linkedin };
-    for (const [key, mod] of Object.entries(singles)) {
-      try {
-        const s = await mod.testConnection();
-        if (s && s.connected) {
-          out.push({
-            platform: key,
-            accountId: null,
-            label: s.profile?.name || s.profile?.orgName ||
-                   (s.profile?.username ? '@' + s.profile.username : key),
-            username: s.profile?.username || null,
-            canPublish: true, // single-account platforms only appear here when connected
-          });
-        }
-      } catch (e) { console.error(`publish/accounts ${key}:`, e.message); }
+    for (const a of await instagram.listAccounts()) {
+      // Skip webhook-noise rows (e.g. entry.id "0") with no usable identity.
+      if (!a.accountId || a.accountId === '0' || (!a.username && !a.name)) continue;
+      out.push({
+        platform: 'instagram',
+        accountId: a.accountId,
+        label: a.name || (a.username ? '@' + a.username : a.accountId),
+        username: a.username || null,
+        canPublish: a.canPublish === true, // false = registered from webhook, never OAuth-connected
+      });
     }
     res.json(out);
   } catch (err) {
-    console.error('Publish accounts error:', err);
+    console.error('Account picker error:', err);
     res.status(500).json({ error: 'Failed to load accounts' });
-  }
-});
-
-// List jobs / log
-app.get('/api/social/publish/jobs', async (req, res) => {
-  try {
-    const { status, platform } = req.query;
-    const limit = Math.min(parseInt(req.query.limit || '100', 10) || 100, 500);
-    const where = [], params = [];
-    if (status)   { params.push(status);   where.push(`status = $${params.length}`); }
-    if (platform) { params.push(platform); where.push(`platform = $${params.length}`); }
-    params.push(limit);
-    const { rows } = await pool.query(
-      `SELECT id, platform, account_id AS "accountId", account_label AS "accountLabel",
-              post_type AS "postType", caption, media, details,
-              schedule_type AS "scheduleType", scheduled_at AS "scheduledAt",
-              status, attempts, last_error AS "error",
-              external_post_id AS "externalPostId", result, simulated,
-              created_by AS "createdBy", created_at AS "createdAt",
-              published_at AS "publishedAt"
-         FROM publish_jobs
-        ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-        ORDER BY created_at DESC
-        LIMIT $${params.length}`,
-      params
-    );
-    res.json(rows);
-  } catch (err) {
-    console.error('Publish jobs list error:', err);
-    res.status(500).json({ error: 'Failed to load publish jobs' });
-  }
-});
-
-// Create a job (immediate or scheduled)
-// Resolve mediaIds → snapshot from the media library (order-preserving).
-async function _resolvePublishMedia(mediaIds) {
-  const ids = Array.isArray(mediaIds) ? mediaIds.filter(n => Number.isFinite(Number(n))) : [];
-  if (!ids.length) return [];
-  const { rows } = await pool.query(
-    'SELECT id, title, cover_url, cover_type, files FROM media WHERE id = ANY($1::bigint[])', [ids]);
-  const byId = new Map(rows.map(r => [String(r.id), r]));
-  return ids.map(id => byId.get(String(id))).filter(Boolean).map(r => {
-    const first = Array.isArray(r.files) && r.files[0] ? r.files[0] : null;
-    return {
-      mediaId: r.id, url: first?.url || r.cover_url, name: first?.name || r.title,
-      mime: first?.mime || (r.cover_type === 'video' ? 'video/*' : 'image/*'),
-    };
-  });
-}
-
-// Resolve a secondary cover/thumbnail selection (reel cover) → public URL. Mutates details.
-async function _resolvePublishThumb(details) {
-  if (details && details.thumbnailMediaId != null) {
-    const tid = Number(details.thumbnailMediaId);
-    if (Number.isFinite(tid)) {
-      const { rows: tr } = await pool.query('SELECT cover_url, files FROM media WHERE id=$1', [tid]);
-      if (tr[0]) {
-        const tf = Array.isArray(tr[0].files) && tr[0].files[0] ? tr[0].files[0] : null;
-        details.thumbnailUrl = tf?.url || tr[0].cover_url || null;
-      }
-    }
-  }
-}
-
-// Create publish job(s). Supports THREE modes via one endpoint:
-//  - single post   (b.platform/accountId/postType)        → 1 job
-//  - cross-post     (b.targets[] = [{platform,accountId,postType,details}]) → N jobs, shared caption+media
-//  - draft          (b.scheduleType === 'draft')           → saved, not queued
-// Authed (not adminOnly): members CAN compose, but their posts land as
-// 'pending_review' for an admin to approve — that's the approval workflow.
-app.post('/api/social/publish/jobs', async (req, res) => {
-  try {
-    const b = req.body || {};
-    const media = await _resolvePublishMedia(b.mediaIds);
-    const isMember = req.user?.role !== 'admin';
-
-    // Normalize to a list of targets. A single-post body is one target.
-    const targets = (Array.isArray(b.targets) && b.targets.length)
-      ? b.targets
-      : [{ platform: b.platform, accountId: b.accountId, accountLabel: b.accountLabel, postType: b.postType, details: b.details }];
-
-    const isDraft = b.scheduleType === 'draft';
-    const scheduleType = isDraft ? 'draft' : (b.scheduleType === 'scheduled' ? 'scheduled' : 'immediate');
-    const scheduledAt = scheduleType === 'scheduled' ? new Date(b.scheduledAt).toISOString()
-                      : scheduleType === 'immediate' ? new Date().toISOString() : null;
-    const createdBy = req.user?.displayName || req.user?.email || 'Unknown';
-
-    const created = [], errors = [];
-    for (const t of targets) {
-      const details = { ...(b.details || {}), ...(t.details || {}) };
-      await _resolvePublishThumb(details);
-      // The shape validatePublishJob + the IG check expect.
-      const job = {
-        platform: t.platform, accountId: t.accountId, accountLabel: t.accountLabel,
-        postType: t.postType, caption: b.caption, details,
-        scheduleType, scheduledAt: b.scheduledAt,
-      };
-
-      const vErr = publishService.validatePublishJob(job, media);
-      if (vErr) { errors.push({ platform: t.platform, accountLabel: t.accountLabel, error: vErr }); continue; }
-
-      // Instagram: the target account must be OAuth-connected (have a token).
-      if (t.platform === 'instagram') {
-        const { rows: acct } = await pool.query(
-          'SELECT (token IS NOT NULL) AS connected FROM instagram_accounts WHERE account_id = $1', [t.accountId]);
-        if (!acct[0] || !acct[0].connected) {
-          errors.push({ platform: t.platform, accountLabel: t.accountLabel,
-            error: `${t.accountLabel || 'This Instagram account'} isn't connected for publishing — reconnect it in Integrations.` });
-          continue;
-        }
-      }
-
-      // schedule_type only allows immediate|scheduled — a draft hasn't decided yet,
-      // so it stores 'immediate' as a placeholder (the promote route sets the real one).
-      const schedTypeCol = isDraft ? 'immediate' : scheduleType;
-      // Members can't publish directly — their posts await admin approval.
-      const jobStatus = isMember ? 'pending_review' : (isDraft ? 'draft' : 'queued');
-      const { rows } = await pool.query(
-        `INSERT INTO publish_jobs
-           (platform, account_id, account_label, post_type, caption, media, details,
-            schedule_type, scheduled_at, status, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-         RETURNING id`,
-        [t.platform, t.accountId || null, t.accountLabel || null, t.postType,
-         (b.caption || details.caption || details.text || null),
-         JSON.stringify(media), JSON.stringify(details),
-         schedTypeCol, scheduledAt, jobStatus, createdBy]);
-      const id = rows[0].id;
-      if (jobStatus === 'queued' && scheduleType === 'immediate') publishService.fireSoon(id);
-      created.push({ id, platform: t.platform, accountLabel: t.accountLabel });
-    }
-
-    if (!created.length) {
-      return res.status(400).json({ error: errors[0]?.error || 'No posts could be created', errors });
-    }
-    const finalStatus = isMember ? 'pending_review' : (isDraft ? 'draft' : scheduleType);
-    logActivity(req, 'publish.create', 'publish_job', created[0].id, { count: created.length, status: finalStatus, platform: targets[0]?.platform });
-    res.status(201).json({ ok: true, id: created[0].id, created, errors, count: created.length, scheduleType, status: finalStatus, pendingReview: isMember });
-  } catch (err) {
-    console.error('Publish create error:', err);
-    res.status(500).json({ error: err.message || 'Failed to create publish job' });
-  }
-});
-
-// Promote a draft into the queue — publish now (no body) or schedule (scheduledAt).
-app.post('/api/social/publish/jobs/:id/promote', adminOnly, async (req, res) => {
-  try {
-    const { scheduledAt } = req.body || {};
-    const when = scheduledAt ? new Date(scheduledAt) : null;
-    if (when && (isNaN(when) || when.getTime() < Date.now() - 60000))
-      return res.status(400).json({ error: 'Scheduled time must be in the future' });
-    const { rows } = await pool.query(
-      `UPDATE publish_jobs SET status='queued', schedule_type=$2, scheduled_at=$3, last_error=NULL
-        WHERE id=$1 AND status='draft' RETURNING id`,
-      [req.params.id, when ? 'scheduled' : 'immediate', (when || new Date()).toISOString()]);
-    if (!rows[0]) return res.status(409).json({ error: 'Only drafts can be promoted' });
-    if (!when) publishService.fireSoon(rows[0].id);
-    res.json({ ok: true, id: rows[0].id });
-  } catch (err) {
-    console.error('Promote error:', err);
-    res.status(500).json({ error: 'Failed to promote draft' });
-  }
-});
-
-// Approve a member's pending post → queue it (publish now or honour its schedule).
-app.post('/api/social/publish/jobs/:id/approve', adminOnly, async (req, res) => {
-  try {
-    const { rows } = await pool.query(
-      `UPDATE publish_jobs SET status='queued', last_error=NULL
-        WHERE id=$1 AND status='pending_review' RETURNING id, schedule_type, scheduled_at`,
-      [req.params.id]);
-    if (!rows[0]) return res.status(409).json({ error: 'Only posts awaiting review can be approved' });
-    // Fire now unless it carries a future scheduled time.
-    const future = rows[0].schedule_type === 'scheduled' && rows[0].scheduled_at && new Date(rows[0].scheduled_at).getTime() > Date.now();
-    if (!future) publishService.fireSoon(rows[0].id);
-    logActivity(req, 'publish.approve', 'publish_job', rows[0].id);
-    res.json({ ok: true, id: rows[0].id });
-  } catch (err) { console.error('Approve error:', err); res.status(500).json({ error: 'Failed to approve' }); }
-});
-
-// Reject a member's pending post (kept in the log as 'rejected' with the reason).
-app.post('/api/social/publish/jobs/:id/reject', adminOnly, async (req, res) => {
-  try {
-    const reason = (req.body && req.body.reason) ? String(req.body.reason).slice(0, 300) : 'Rejected by reviewer';
-    const { rows } = await pool.query(
-      `UPDATE publish_jobs SET status='rejected', last_error=$2
-        WHERE id=$1 AND status='pending_review' RETURNING id`,
-      [req.params.id, reason]);
-    if (!rows[0]) return res.status(409).json({ error: 'Only posts awaiting review can be rejected' });
-    logActivity(req, 'publish.reject', 'publish_job', rows[0].id, { reason });
-    res.json({ ok: true, id: rows[0].id });
-  } catch (err) { console.error('Reject error:', err); res.status(500).json({ error: 'Failed to reject' }); }
-});
-
-// Edit a draft or queued job — reschedule (calendar drag) and/or tweak the caption.
-app.put('/api/social/publish/jobs/:id', adminOnly, async (req, res) => {
-  try {
-    const { scheduledAt, caption } = req.body || {};
-    const sets = [], vals = [req.params.id]; let i = 2;
-    if (scheduledAt !== undefined) {
-      const when = new Date(scheduledAt);
-      if (isNaN(when) || when.getTime() < Date.now() - 60000)
-        return res.status(400).json({ error: 'Scheduled time must be in the future' });
-      sets.push(`scheduled_at=$${i++}`, `schedule_type='scheduled'`); vals.push(when.toISOString());
-    }
-    if (caption !== undefined) { sets.push(`caption=$${i++}`); vals.push(caption); }
-    if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
-    const { rows } = await pool.query(
-      `UPDATE publish_jobs SET ${sets.join(', ')} WHERE id=$1 AND status IN ('draft','queued') RETURNING id`, vals);
-    if (!rows[0]) return res.status(409).json({ error: 'Only draft or queued jobs can be edited' });
-    res.json({ ok: true, id: rows[0].id });
-  } catch (err) {
-    console.error('Publish edit error:', err);
-    res.status(500).json({ error: 'Failed to update job' });
-  }
-});
-
-// ── Caption templates + hashtag groups (composer helpers) ────────────
-app.get('/api/social/content-templates', async (req, res) => {
-  try {
-    const { rows } = await pool.query(`SELECT id, name, body, created_at AS "createdAt" FROM content_templates ORDER BY created_at DESC`);
-    res.json(rows);
-  } catch { res.status(500).json({ error: 'Failed to load templates' }); }
-});
-app.post('/api/social/content-templates', adminOnly, async (req, res) => {
-  try {
-    const { name, body } = req.body || {};
-    if (!name || !String(name).trim()) return res.status(400).json({ error: 'Name is required' });
-    const { rows } = await pool.query(
-      `INSERT INTO content_templates (name, body) VALUES ($1,$2) RETURNING id, name, body, created_at AS "createdAt"`,
-      [String(name).trim(), String(body || '')]);
-    res.status(201).json(rows[0]);
-  } catch { res.status(500).json({ error: 'Failed to create template' }); }
-});
-app.put('/api/social/content-templates/:id', adminOnly, async (req, res) => {
-  try {
-    const { name, body } = req.body || {};
-    const { rows } = await pool.query(
-      `UPDATE content_templates SET name=COALESCE($2,name), body=COALESCE($3,body) WHERE id=$1
-       RETURNING id, name, body, created_at AS "createdAt"`,
-      [req.params.id, name != null ? String(name).trim() : null, body != null ? String(body) : null]);
-    if (!rows[0]) return res.status(404).json({ error: 'Template not found' });
-    res.json(rows[0]);
-  } catch { res.status(500).json({ error: 'Failed to update template' }); }
-});
-app.delete('/api/social/content-templates/:id', adminOnly, async (req, res) => {
-  try { await pool.query('DELETE FROM content_templates WHERE id=$1', [req.params.id]); res.json({ ok: true }); }
-  catch { res.status(500).json({ error: 'Failed to delete template' }); }
-});
-
-app.get('/api/social/hashtag-groups', async (req, res) => {
-  try {
-    const { rows } = await pool.query(`SELECT id, name, tags, created_at AS "createdAt" FROM hashtag_groups ORDER BY created_at DESC`);
-    res.json(rows);
-  } catch { res.status(500).json({ error: 'Failed to load hashtag groups' }); }
-});
-app.post('/api/social/hashtag-groups', adminOnly, async (req, res) => {
-  try {
-    const { name, tags } = req.body || {};
-    if (!name || !String(name).trim()) return res.status(400).json({ error: 'Name is required' });
-    const clean = Array.isArray(tags) ? tags.map(t => String(t).replace(/^#/, '').trim()).filter(Boolean) : [];
-    const { rows } = await pool.query(
-      `INSERT INTO hashtag_groups (name, tags) VALUES ($1,$2) RETURNING id, name, tags, created_at AS "createdAt"`,
-      [String(name).trim(), JSON.stringify(clean)]);
-    res.status(201).json(rows[0]);
-  } catch { res.status(500).json({ error: 'Failed to create hashtag group' }); }
-});
-app.put('/api/social/hashtag-groups/:id', adminOnly, async (req, res) => {
-  try {
-    const { name, tags } = req.body || {};
-    const clean = Array.isArray(tags) ? tags.map(t => String(t).replace(/^#/, '').trim()).filter(Boolean) : null;
-    const { rows } = await pool.query(
-      `UPDATE hashtag_groups SET name=COALESCE($2,name), tags=COALESCE($3,tags) WHERE id=$1
-       RETURNING id, name, tags, created_at AS "createdAt"`,
-      [req.params.id, name != null ? String(name).trim() : null, clean ? JSON.stringify(clean) : null]);
-    if (!rows[0]) return res.status(404).json({ error: 'Hashtag group not found' });
-    res.json(rows[0]);
-  } catch { res.status(500).json({ error: 'Failed to update hashtag group' }); }
-});
-app.delete('/api/social/hashtag-groups/:id', adminOnly, async (req, res) => {
-  try { await pool.query('DELETE FROM hashtag_groups WHERE id=$1', [req.params.id]); res.json({ ok: true }); }
-  catch { res.status(500).json({ error: 'Failed to delete hashtag group' }); }
-});
-
-// Cancel a queued job
-app.post('/api/social/publish/jobs/:id/cancel', adminOnly, async (req, res) => {
-  try {
-    const { rows } = await pool.query(
-      `UPDATE publish_jobs SET status='canceled'
-        WHERE id=$1 AND status='queued' RETURNING id`,
-      [req.params.id]
-    );
-    if (!rows[0]) return res.status(409).json({ error: 'Only queued jobs can be canceled' });
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('Publish cancel error:', err);
-    res.status(500).json({ error: 'Failed to cancel job' });
-  }
-});
-
-// Delete a publish-log row. For a LIVE published post this also removes the
-// matching Content Library entry and attempts a platform-side delete (Instagram
-// has no media-delete API, so that part is reported honestly, not silently failed).
-app.delete('/api/social/publish/jobs/:id', adminOnly, async (req, res) => {
-  try {
-    const { rows } = await pool.query('SELECT * FROM publish_jobs WHERE id=$1', [req.params.id]);
-    const job = rows[0];
-    if (!job) return res.status(404).json({ error: 'Job not found' });
-
-    let postRemoved = false, platformDeleted = false, reason = null, permalink = null, alreadyGone = false;
-    const isLivePost = job.status === 'published' && job.external_post_id && job.simulated !== true;
-
-    if (isLivePost && job.platform !== 'instagram') {
-      // Delete on the platform FIRST; only remove our rows if it actually worked
-      // (or the post is already gone) — otherwise the Content Library row would
-      // resync and the delete would look broken.
-      const r = await publishService.deletePublishedPost(job).catch(e => ({ platformDeleted: false, reason: e.message }));
-      platformDeleted = r.platformDeleted === true;
-      reason = r.reason || null;
-      alreadyGone = !platformDeleted && _isAlreadyGone(reason);
-      if (!platformDeleted && !alreadyGone)
-        return res.status(400).json({ error: _friendlyDeleteReason(job.platform, reason) });
-    } else if (isLivePost) {
-      // Instagram: no media-delete API — remove our records only, honestly.
-      const r = await publishService.deletePublishedPost(job).catch(e => ({ platformDeleted: false, reason: e.message }));
-      reason = r.reason || null;
-    }
-
-    if (isLivePost) {
-      const { rows: pr } = await pool.query('SELECT id FROM platforms WHERE key=$1', [job.platform]);
-      const platformId = pr[0]?.id;
-      if (platformId) {
-        const { rows: prows } = await pool.query(
-          'SELECT permalink FROM posts WHERE platform_id=$1 AND external_id=$2', [platformId, job.external_post_id]);
-        permalink = prows[0]?.permalink || null;
-        const del = await pool.query('DELETE FROM posts WHERE platform_id=$1 AND external_id=$2', [platformId, job.external_post_id]);
-        postRemoved = del.rowCount > 0;
-      }
-    }
-
-    await pool.query('DELETE FROM publish_jobs WHERE id=$1', [req.params.id]);
-    res.json({ ok: true, postRemoved, platformDeleted, alreadyGone, reason, permalink });
-  } catch (err) {
-    console.error('Publish delete error:', err);
-    res.status(500).json({ error: 'Failed to delete job' });
   }
 });
 
@@ -2422,10 +1855,10 @@ app.get('/api/social/reports', async (req, res) => {
     const { rows: weeklyRows } = await pool.query(`
       SELECT platform, data, fetched_at
       FROM sync_snapshots
-      WHERE period = '30D'
+      WHERE period = '30D' AND platform = ANY($1)
       ORDER BY fetched_at DESC
       LIMIT 20
-    `);
+    `, [accounts.PLATFORMS]);
 
     // Simple weekly grouping by taking the most recent snapshot per week
     const weekly = [];
@@ -2457,10 +1890,10 @@ app.get('/api/social/reports', async (req, res) => {
     const { rows: monthlyRows } = await pool.query(`
       SELECT platform, data, fetched_at
       FROM sync_snapshots
-      WHERE period = '30D'
+      WHERE period = '30D' AND platform = ANY($1)
       ORDER BY fetched_at DESC
       LIMIT 50
-    `);
+    `, [accounts.PLATFORMS]);
 
     const monthly = [];
     const seenMonths = new Set();
@@ -2646,37 +2079,6 @@ app.post('/api/social/instagram/reply', async (req, res) => {
   }
 });
 
-// ── Facebook Messenger inbox (Social → Messenger) ───────────
-// Polls the Page conversations at most every 20s (page opens, the Refresh
-// button) on top of the 2-minute background poll and the webhook.
-app.get('/api/social/messenger/inbox', async (req, res) => {
-  try {
-    if (req.query.sync !== '0') await messenger.syncAll().catch(() => {});
-    res.json(await messenger.inbox({ pageId: req.query.page || null }));
-  } catch (err) {
-    console.error('messenger inbox error:', err.message);
-    res.status(500).json({ error: 'Could not load Messenger conversations.' });
-  }
-});
-app.get('/api/social/messenger/thread', async (req, res) => {
-  try { res.json({ messages: await messenger.thread({ pageId: req.query.pageId, peerId: req.query.peerId, limit: req.query.limit }) }); }
-  catch (err) { res.status(400).json({ error: err.message }); }
-});
-app.post('/api/social/messenger/sync', async (req, res) => {
-  try { res.json(await messenger.syncAll({ force: true })); }
-  catch (err) { res.status(500).json({ error: messenger.friendlyError(err) }); }
-});
-app.post('/api/social/messenger/read', async (req, res) => {
-  try { res.json(await messenger.markRead(req.body || {})); }
-  catch (err) { res.status(400).json({ error: err.message }); }
-});
-app.post('/api/social/messenger/reply', async (req, res) => {
-  try {
-    const { pageId, peerId, text } = req.body || {};
-    res.json(await messenger.reply({ pageId, peerId, text, userId: req.user?.id }));
-  } catch (err) { res.status(400).json({ error: err.message }); }
-});
-
 // Reply to an Instagram comment from the Inbox Comments tab
 app.post('/api/social/instagram/comments/:id/reply', async (req, res) => {
   try {
@@ -2737,344 +2139,6 @@ app.post('/api/social/instagram/refresh-token', adminOnly, async (req, res) => {
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ error: err.message });
-  }
-});
-
-// ── Facebook credential management ──────────────────────────
-app.get('/api/social/facebook/oauth/init', (req, res) => {
-  try {
-    const url = facebook.getConsentUrl(req.query.mode === 'add' ? 'fb_add' : undefined);
-    res.json({ url });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Save a Business Manager system-user token (or an already page-scoped token) directly.
-// The escape hatch for when the OAuth dialog can't attach a Page asset. Admin-only; the
-// token is a credential, so it is never echoed back and never logged.
-app.post('/api/social/facebook/credentials', adminOnly, async (req, res) => {
-  try {
-    const r = await facebook.saveManualToken(req.body?.token);
-    _triggerBackgroundSync('facebook');
-    res.json({ ok: true, pageName: r.pageName });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.get('/api/social/facebook/status', async (req, res) => {
-  try {
-    const status = await facebook.testConnection(req.query.force === '1');
-    res.json(status);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── Threads credential management ───────────────────────────
-app.get('/api/social/threads/oauth/init', (req, res) => {
-  try {
-    const url = threads.getConsentUrl(req.query.mode === 'add' ? 'th_add' : undefined);
-    res.json({ url });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get('/api/social/threads/status', async (req, res) => {
-  try {
-    const status = await threads.testConnection(req.query.force === '1');
-    res.json(status);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/social/threads/credentials', adminOnly, async (req, res) => {
-  try {
-    const { userId, accessToken } = req.body;
-    if (!accessToken) return res.status(400).json({ error: 'accessToken is required' });
-    const result = await threads.saveCredentials({ userId, accessToken });
-    const status = await threads.testConnection(true);
-    _triggerBackgroundSync('threads');
-    res.json({ ok: true, ...result, ...status });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/social/threads/refresh-token', adminOnly, async (req, res) => {
-  try {
-    const result = await threads.refreshToken();
-    res.json({ ok: true, ...result });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── LinkedIn credential management ──────────────────────────
-app.get('/api/social/linkedin/oauth/init', (req, res) => {
-  try {
-    const url = linkedin.getConsentUrl(req.query.mode === 'add' ? 'li_add' : undefined);
-    res.json({ url });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get('/api/social/linkedin/status', async (req, res) => {
-  try {
-    const status = await linkedin.testConnection(req.query.force === '1');
-    res.json(status);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/social/linkedin/credentials', adminOnly, async (req, res) => {
-  try {
-    const { accessToken, orgId } = req.body;
-    if (!accessToken) return res.status(400).json({ error: 'accessToken is required' });
-    const result = await linkedin.saveCredentials({ accessToken, orgId });
-    const status = await linkedin.testConnection(true);
-    _triggerBackgroundSync('linkedin');
-    res.json({ ok: true, ...result, ...status });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/social/linkedin/refresh-token', adminOnly, async (req, res) => {
-  try {
-    const result = await linkedin.refreshToken();
-    res.json({ ok: true, ...result });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── YouTube credential management ───────────────────────────
-app.get('/api/social/youtube/oauth/init', (req, res) => {
-  try {
-    // ?mode=add → carry a state so the callback APPENDS a new channel.
-    const url = youtube.getConsentUrl(req.query.mode === 'add' ? 'yt_add' : undefined);
-    res.json({ url });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get('/api/social/youtube/status', async (req, res) => {
-  try {
-    const status = await youtube.testConnection(req.query.force === '1');
-    res.json(status);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/social/youtube/credentials', adminOnly, async (req, res) => {
-  try {
-    const { refreshToken } = req.body;
-    if (!refreshToken) return res.status(400).json({ error: 'refreshToken is required' });
-    await youtube.saveCredentials({ refreshToken });
-    const status = await youtube.testConnection(true);
-    _triggerBackgroundSync('youtube');
-    res.json({ ok: true, ...status });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── Facebook + YouTube comments (Inbox) ─────────────────────
-// Read endpoints are pure DB reads (the cron / sync triggers populate them).
-// Reply endpoints make the real Graph/Data-API write, then kick a background
-// re-poll so our own reply lands in the store.
-app.get('/api/social/facebook/comments', async (req, res) => {
-  try {
-    const limit = Math.min(parseInt(req.query.limit, 10) || 200, 500);
-    // LEFT JOIN posts so each row carries the parent post's thumbnail/caption/date
-    // (frontend groups by postId and shows a card per post). Zero Graph calls —
-    // posts is already populated by the regular sync.
-    const { rows } = await pool.query(
-      `SELECT c.id, c.comment_id AS "commentId", c.post_id AS "postId", c.parent_id AS "parentId",
-              c.from_id AS "fromId", c.from_name AS "fromName", c.from_pic AS "fromPic",
-              c.message, c.like_count AS "likeCount", c.liked_by_us AS "likedByUs",
-              c.permalink, c.ts, c.created_at AS "createdAt",
-              p.thumbnail_url AS "postThumbnail",
-              COALESCE(NULLIF(p.caption, ''), p.title) AS "postCaption",
-              p.permalink AS "postPermalink",
-              p.date AS "postDate"
-         FROM facebook_comments c
-         LEFT JOIN posts p
-           ON p.external_id = c.post_id
-          AND p.platform_id = (SELECT id FROM platforms WHERE key = 'facebook' LIMIT 1)
-        ORDER BY c.ts DESC NULLS LAST, c.id DESC
-        LIMIT $1`, [limit]);
-    let connected = false, me = null;
-    try {
-      const s = await facebook.testConnection();
-      connected = s.connected === true;
-      if (s.profile) me = { id: s.profile.id, name: s.profile.name, pic: s.profile.pictureUrl };
-    } catch (_) {}
-    res.json({ comments: rows, connected, me });
-  } catch (err) {
-    console.error('fb comments error:', err.message);
-    res.status(500).json({ error: 'Failed to load Facebook comments' });
-  }
-});
-
-app.post('/api/social/facebook/comments/sync', async (req, res) => {
-  try {
-    const count = await facebook.syncComments({ force: true });
-    res.json({ ok: true, count });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.post('/api/social/facebook/comments/:id/reply', async (req, res) => {
-  try {
-    const r = await facebook.replyToComment({ commentId: req.params.id, message: req.body?.message });
-    facebook.syncComments({ force: true }).catch(() => {});
-    res.json(r);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.delete('/api/social/facebook/comments/:id', adminOnly, async (req, res) => {
-  try {
-    res.json(await facebook.deleteComment(req.params.id));
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.post('/api/social/facebook/comments/:id/like', async (req, res) => {
-  try {
-    res.json(await facebook.likeComment(req.params.id, req.body?.like !== false));
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.get('/api/social/youtube/comments', async (req, res) => {
-  try {
-    const limit = Math.min(parseInt(req.query.limit, 10) || 200, 500);
-    const { rows } = await pool.query(
-      `SELECT c.id, c.comment_id AS "commentId", c.video_id AS "videoId", c.parent_id AS "parentId",
-              c.author_name AS "authorName", c.author_channel_id AS "authorChannelId",
-              c.author_pic AS "authorPic", c.text, c.like_count AS "likeCount",
-              c.ts, c.created_at AS "createdAt",
-              p.thumbnail_url AS "postThumbnail",
-              COALESCE(NULLIF(p.title, ''), p.caption) AS "postCaption",
-              p.permalink AS "postPermalink",
-              p.date AS "postDate"
-         FROM youtube_comments c
-         LEFT JOIN posts p
-           ON p.external_id = c.video_id
-          AND p.platform_id = (SELECT id FROM platforms WHERE key = 'youtube' LIMIT 1)
-        ORDER BY c.ts DESC NULLS LAST, c.id DESC
-        LIMIT $1`, [limit]);
-    let connected = false, me = null;
-    try {
-      const s = await youtube.testConnection();
-      connected = s.connected === true;
-      if (s.profile) me = { id: s.profile.channelId, name: s.profile.name, pic: s.profile.thumbnailUrl };
-    } catch (_) {}
-    res.json({ comments: rows, connected, me });
-  } catch (err) {
-    console.error('yt comments error:', err.message);
-    res.status(500).json({ error: 'Failed to load YouTube comments' });
-  }
-});
-
-app.post('/api/social/youtube/comments/sync', async (req, res) => {
-  try {
-    const count = await youtube.syncComments({ force: true });
-    res.json({ ok: true, count });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.post('/api/social/youtube/comments/:id/reply', async (req, res) => {
-  try {
-    // :id is the top-level comment id to reply under.
-    const r = await youtube.replyToComment({ parentId: req.params.id, text: req.body?.text });
-    youtube.syncComments({ force: true }).catch(() => {});
-    res.json(r);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.delete('/api/social/youtube/comments/:id', adminOnly, async (req, res) => {
-  try {
-    res.json(await youtube.deleteComment(req.params.id));
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-// ── Threads comments (Inbox) ────────────────────────────────
-// Same pattern as Facebook/YouTube: DB read for the list, sync to force a poll,
-// real Graph write for reply, DELETE for own / hide for others'.
-app.get('/api/social/threads/comments', async (req, res) => {
-  try {
-    const limit = Math.min(parseInt(req.query.limit, 10) || 200, 500);
-    const { rows } = await pool.query(
-      `SELECT c.id, c.comment_id AS "commentId", c.thread_id AS "threadId", c.parent_id AS "parentId",
-              c.account_key AS "accountKey", c.author_username AS "authorUsername",
-              c.text, c.permalink, c.ts, c.created_at AS "createdAt",
-              p.thumbnail_url AS "postThumbnail",
-              COALESCE(NULLIF(p.caption, ''), p.title) AS "postCaption",
-              p.permalink AS "postPermalink",
-              p.date AS "postDate"
-         FROM threads_comments c
-         LEFT JOIN posts p
-           ON p.external_id = c.thread_id
-          AND p.platform_id = (SELECT id FROM platforms WHERE key = 'threads' LIMIT 1)
-        ORDER BY c.ts DESC NULLS LAST, c.id DESC
-        LIMIT $1`, [limit]);
-    let connected = false, me = null;
-    try {
-      me = await threads.getMe();
-      connected = !!me;
-    } catch (_) {}
-    res.json({ comments: rows, connected, me });
-  } catch (err) {
-    console.error('th comments error:', err.message);
-    res.status(500).json({ error: 'Failed to load Threads comments' });
-  }
-});
-
-app.post('/api/social/threads/comments/sync', async (req, res) => {
-  try {
-    const count = await threads.syncComments({ force: true });
-    res.json({ ok: true, count });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.post('/api/social/threads/comments/:id/reply', async (req, res) => {
-  try {
-    const r = await threads.replyToComment({ commentId: req.params.id, text: req.body?.text });
-    threads.syncComments({ force: true }).catch(() => {});
-    res.json(r);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.delete('/api/social/threads/comments/:id', adminOnly, async (req, res) => {
-  try {
-    res.json(await threads.deleteComment(req.params.id));
-  } catch (err) {
-    res.status(400).json({ error: err.message });
   }
 });
 
@@ -3529,9 +2593,9 @@ function startFollowerSampler() {
 
 // Called once by ForgeGrowth's index.js after the app is listening.
 // Schema setup always runs (it only ever creates/extends the social schema).
-// Background jobs (platform syncs, publishing, automations, token refresh) run
+// Background jobs (platform syncs, automations, token refresh) run
 // only when SOCIAL_JOBS_ENABLED=1, so deploying this code is inert until the
-// new Meta/Google/LinkedIn apps are configured.
+// Meta app is configured.
 async function start() {
   try {
     await ensureTables();
@@ -3552,9 +2616,6 @@ async function start() {
     require('./services/commentAnalyzer').start();
     require('./services/commentAlerts').start();
     require('./services/telegramBot').start();
-    // Messenger inbox poll — read-only, idle until a Page token exists. Not
-    // behind SOCIAL_JOBS_ENABLED for the same reason as the Telegram bot.
-    messenger.start();
     if (socialEnv.JOBS_ENABLED !== '1') {
       console.log('[social] background jobs OFF (set SOCIAL_JOBS_ENABLED=1 to enable)');
       // Follower counts still need refreshing even with jobs off.
@@ -3572,7 +2633,7 @@ async function start() {
       try {
         const results = await syncService.syncAll({ fullSync: false });
         console.log('Scheduled sync completed:', results.map(r => `${r.platform}:${r.success ? 'ok' : 'fail'}`).join(', '));
-        // Poll Facebook + YouTube comments into the Inbox (IG uses webhooks)
+        // Poll Instagram comments into the Inbox (catches anything webhooks missed)
         const cmts = await syncService.syncComments();
         console.log('Comment poll completed:', cmts.map(r => `${r.platform}:${r.success ? r.count : 'fail'}`).join(', '));
         // AI agent auto-reply: sweep freshly-synced comments for active agents.
@@ -3606,7 +2667,7 @@ async function start() {
         .catch(err => console.error('Boot categorization error:', err.message));
     }, 60000);
 
-    // One-shot comments backfill at boot (IG/FB/YT/Threads). Webhook ingest covers
+    // One-shot Instagram comments backfill at boot. Webhook ingest covers
     // future deltas; this catches up anything that pre-dates the webhook or was
     // missed during downtime. Delayed so the DB schema check + first auto-sync
     // settle first; runs in the background so it never blocks the listen.
@@ -3663,35 +2724,6 @@ async function start() {
     });
     console.log('Daily full historical sync scheduled for 3:00 AM');
 
-    // Publish scheduler — fire due posting jobs every 60s (stub mode: no real API calls).
-    await publishService.reapStalePublishing().catch(() => {});
-    cron.schedule('* * * * *', () => {
-      publishService.runDueJobs().catch(err =>
-        console.error('Publish worker error:', err.message));
-    });
-    console.log('Publish scheduler running every 60s');
-
-    // Fast lane — comment + new-post freshness every few minutes. Cheap by
-    // design: FB = ONE Graph call (comments stream + post upsert, ~12/hr vs
-    // 180/hr budget), YT = 1-page commentThreads (1 quota unit, ~288/day vs
-    // 10k), Threads = 1 call/account. Instagram is skipped — its webhooks are
-    // already realtime. This is what keeps comment response times short; the
-    // 30-min cron remains the deep pass (5-page YT depth + deletion pruning).
-    const fastMin = parseInt(socialEnv.FAST_SYNC_INTERVAL_MINUTES || '15', 10);
-    if (fastMin > 0) {
-      cron.schedule(`*/${fastMin} * * * *`, async () => {
-        try {
-          const rs = await syncService.syncComments({ fast: true });
-          const failed = rs.filter(r => !r.success);
-          if (failed.length) console.warn('Fast comment poll failures:', failed.map(r => `${r.platform}: ${r.error}`).join(' | '));
-          agentDispatch.sweepComments().catch(() => {});
-        } catch (err) {
-          console.error('Fast comment poll error:', err.message);
-        }
-      });
-      console.log(`Fast comment/post poll scheduled every ${fastMin} minutes (FB/YT/Threads; IG via webhooks)`);
-    }
-
     // Proactive token refresh — daily at 02:30 + a boot one-shot (catches up a
     // container that was stopped past a refresh window). Refreshes every token
     // generation (legacy app_settings + per-account OAuth rows) before the
@@ -3705,7 +2737,7 @@ async function start() {
     console.log('Token auto-refresh scheduled daily at 02:30 (+ boot one-shot)');
 
     // Notification checks — token-health + insight anomalies → in-app alerts.
-    // Event notifications (DMs, comments, publish results) emit inline; these are
+    // Event notifications (DMs, comments) emit inline; these are
     // the standing-condition ones, deduped per day. Every 30 min + boot one-shot.
     cron.schedule('*/30 * * * *', () => {
       notificationService.runChecks().catch(err =>

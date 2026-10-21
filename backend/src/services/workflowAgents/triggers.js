@@ -3,9 +3,9 @@
 // runs moving and pending approvals honest.
 //
 // ⚠ NOTHING HERE IS HOOKED INTO THE LIVE WEBHOOK OR SEND PATH. Events are read from
-// the rows those paths already write (chat_history, lead_events, razorpay_events,
-// sales_log) through cursors kept in workflow_agent_settings — the same pattern the
-// CAPI, CLO and funnel-tag dispatchers use. Cursors start at the current maximum, so
+// the rows those paths already write (chat_history, lead_events, sales_log)
+// through cursors kept in workflow_agent_settings — the same pattern the
+// funnel-tag dispatcher uses. Cursors start at the current maximum, so
 // switching an agent on never replays history.
 //
 // Idempotency comes from the database, not from timing: every run a trigger creates
@@ -174,35 +174,25 @@ async function sweepEvents(agents) {
       }
     }
 
-    // payment.created. Razorpay writes several captured rows per payment
-    // (payment.captured, order.paid, payment_link.paid): only the FIRST row of a
-    // payment_id is an event; later rows for the same payment are skipped.
-    const { rows: pays } = await client.query(
-      `SELECT re.id, re.matched_lead_id AS lead_id, re.amount_paise, re.created_at, re.payment_id,
-              EXISTS (SELECT 1 FROM coexistence.razorpay_events p2
-                       WHERE p2.payment_id = re.payment_id AND p2.status = 'captured' AND p2.id < re.id) AS repeat
-         FROM coexistence.razorpay_events re
-        WHERE re.id > $1 AND re.status = 'captured' AND re.created_at <= NOW() - INTERVAL '10 seconds'
-        ORDER BY re.id LIMIT ${EVENT_BATCH}`, [cur.last_razorpay_event_id]);
-    const lastPay = pays.length ? Number(pays[pays.length - 1].id) : Number(cur.last_razorpay_event_id);
+    // payment.created: a new sales_log row.
     const { rows: manual } = await client.query(
       `SELECT id, lead_id, amount_paise, created_at FROM coexistence.sales_log WHERE id > $1 AND created_at <= NOW() - INTERVAL '10 seconds' ORDER BY id LIMIT ${EVENT_BATCH}`, [cur.last_sales_log_id]);
     const lastSale = manual.length ? Number(manual[manual.length - 1].id) : Number(cur.last_sales_log_id);
     const payTriggers = wanted('payment.created');
-    for (const p of [...pays.filter(x => !x.repeat || !x.payment_id).map(x => ({ ...x, source: 'gateway' })), ...manual.map(x => ({ ...x, source: 'manual' }))]) {
+    for (const p of manual.map(x => ({ ...x, source: 'manual' }))) {
       if (!p.lead_id) continue;
       counts.payments += 1;
       for (const { a, t, i } of payTriggers) {
         if (t.filters.min_amount_rupees != null && Number(p.amount_paise) / 100 < t.filters.min_amount_rupees) continue;
         if (!(await inScope(a, p.lead_id))) continue;
-        await bufferEvent(a, i, t, p.lead_id, p.created_at, { event: 'payment.created', lead_id: String(p.lead_id), items: [{ source: p.source, amount_rupees: Number(p.amount_paise) / 100, payment_id: p.payment_id || null }] });
+        await bufferEvent(a, i, t, p.lead_id, p.created_at, { event: 'payment.created', lead_id: String(p.lead_id), items: [{ source: p.source, amount_rupees: Number(p.amount_paise) / 100 }] });
         counts.buffered += 1;
       }
     }
 
     await client.query(
-      `UPDATE coexistence.workflow_agent_settings SET last_chat_history_id = $1, last_lead_event_id = $2, last_razorpay_event_id = $3, last_sales_log_id = $4, updated_at = NOW() WHERE id = 1`,
-      [lastMsg, lastEv, lastPay, lastSale]);
+      `UPDATE coexistence.workflow_agent_settings SET last_chat_history_id = $1, last_lead_event_id = $2, last_sales_log_id = $3, updated_at = NOW() WHERE id = 1`,
+      [lastMsg, lastEv, lastSale]);
     await client.query('COMMIT');
     return counts;
   } catch (e) {

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Send, CheckCircle2, XCircle, UserPlus, UserMinus, Inbox as InboxIcon, Activity } from "lucide-react";
+import { UserPlus, UserMinus, Inbox as InboxIcon, Activity } from "lucide-react";
 import { useApi } from "../hooks/useApi.js";
 import { api } from "../api.js";
 import { C, T, FONT, MONO, relativeTime } from "../constants.js";
@@ -8,15 +8,11 @@ import { SearchableSelect } from "../components/Dropdown.jsx";
 
 // action → friendly verb + icon + colour (status hue on the icon only).
 const ACTIONS = {
-  "publish.create":  { label: "created a post",        Icon: Send,         color: C.textSecondary },
-  "publish.approve": { label: "approved a post",       Icon: CheckCircle2, color: C.green },
-  "publish.reject":  { label: "rejected a post",       Icon: XCircle,      color: C.errText },
   "user.invite":     { label: "added a teammate",      Icon: UserPlus,     color: C.blue },
   "user.remove":     { label: "removed a teammate",    Icon: UserMinus,    color: C.errText },
   "inbox.update":    { label: "updated an inbox item", Icon: InboxIcon,    color: C.amber },
 };
 const FILTERS = [
-  { value: "publish", label: "Publishing" },
   { value: "user",    label: "Team" },
   { value: "inbox",   label: "Inbox" },
 ];
@@ -25,9 +21,7 @@ function describe(a) {
   const base = ACTIONS[a.action] || { label: a.action, Icon: Activity, color: C.textMuted };
   let detail = "";
   const m = a.meta || {};
-  if (a.action === "publish.create") detail = `${m.count > 1 ? `${m.count} posts` : "post"}${m.platform ? ` · ${m.platform}` : ""}${m.status ? ` · ${m.status}` : ""}`;
-  else if (a.action === "publish.reject" && m.reason) detail = m.reason;
-  else if (a.action === "user.invite") detail = `${m.email || ""}${m.role ? ` (${m.role})` : ""}`;
+  if (a.action === "user.invite") detail = `${m.email || ""}${m.role ? ` (${m.role})` : ""}`;
   else if (a.action === "inbox.update") detail = [m.status, m.platform].filter(Boolean).join(" · ");
   return { ...base, detail };
 }

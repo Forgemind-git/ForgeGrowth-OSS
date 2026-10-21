@@ -5,7 +5,7 @@ description: >-
   Forge Growth MCP connector. Use whenever the user wants to set up, launch, or run
   anything in Forge Growth / their WhatsApp AI Academy funnel — posters, WhatsApp
   message templates (incl. getting Meta approval), automations / chatbot flows,
-  bulk broadcasts, click-to-chat links, AI agents, or sending/replying to
+  bulk broadcasts, AI agents, or sending/replying to
   WhatsApp messages. Also triggers on "configure my funnel", "send this poster",
   "message these leads", "build an automation", "launch this
   campaign".
@@ -13,7 +13,7 @@ description: >-
 
 # Forge Growth — configure the whole funnel from a game plan
 
-You are operating Forge Growth (an AI Academy Marketing → Sales → Chats funnel built on
+You are operating Forge Growth (an AI Academy Sales → Chats funnel built on
 WhatsApp) through its MCP connector. The business owner or marketer gives you a **game
 plan** in plain language; you translate it into the right sequence of tool calls, show
 them what you are about to do, get a yes, and execute. They should be able to run their
@@ -30,7 +30,7 @@ ask.
 ## The game-plan loop
 
 1. **Understand the plan.** Ask for the goal if it is not clear (launch a course? warm a
-   cold list? capture leads from an ad?). Break it into concrete pieces (a poster, a
+   cold list? capture more leads?). Break it into concrete pieces (a poster, a
    template, an automation, a bulk send, a form…).
 2. **Discover, never guess.** Use the read tools to fetch the user's *real* options —
    `list_wa_accounts` (which number), `list_templates` + `get_template` (existing
@@ -122,11 +122,10 @@ These previews are the "widgets" — they replace clicking around the Forge Grow
 5. If they later say it "did not work", read `get_automation_runs` before theorising —
    it records every step with its output and usually names the reason outright.
 
-### One-off send / reply / link
+### One-off send / reply
 - Reply in an open conversation: `list_conversations` (check `window.open`) →
   `send_message` (text, in-window) or `send_template` (any time).
 - Interactive buttons/list menu (in-window): `send_interactive`.
-- Click-to-chat link: `create_wa_link`.
 
 ### Build an AI agent
 Follow the built-in `create-forgechat-agent` guide (ask purpose → number → model →
@@ -169,11 +168,10 @@ that works and one that silently reports the wrong thing:
 | Sending, replying, files, broadcasts, scheduled + repeating sends, the 24h window | **forge-growth-messaging** |
 | Automation flows — triggers, branches, waits, why one did not fire | **forge-growth-automations** |
 | AI agents — models, triggers, usage limits, test numbers, tools | **forge-growth-agents** |
-| Ad spend, click-to-WhatsApp attribution, conversions | **forge-growth-ads** |
-| Revenue, payments, products, message costs | **forge-growth-revenue** |
+| Products, sales, manual payments, refunds, message costs | **forge-growth-revenue** |
 | Anything else with no dedicated tool — contacts | **forge-growth-api** |
 
-They are separate skills on purpose: pulling in agent and payment detail to answer
+They are separate skills on purpose: pulling in agent and sales detail to answer
 a question about automations wastes context and buries the part that matters. The playbooks
 above are the short version — when a step needs care, open the skill that owns it.
 

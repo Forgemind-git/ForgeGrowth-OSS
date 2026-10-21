@@ -1,5 +1,5 @@
 // Field manager for one registry entity — the admin UI behind Admin Settings →
-// Fields → "Leads & Sales Log" / "Transactions" (migration 097).
+// Fields → "Leads" (migration 097).
 //
 // System rows (the built-in columns) can be relabelled, have their dropdown
 // options edited, be shown/hidden per table and reordered — never deleted or
@@ -45,15 +45,8 @@ const td = { padding: '9px 8px', fontSize: 15, fontFamily: FONT, verticalAlign: 
 const iconBtn = { background: 'none', border: `1.5px solid ${C.border}`, borderRadius: 7, padding: '4px 6px', cursor: 'pointer', color: C.textSecondary, display: 'inline-flex' };
 
 /**
- * `surface` splits the lead registry into the two TABLES it drives.
- *
- * A sale IS an enrolled lead, so both tables read the same `entity='lead'`
- * rows — but which columns each one shows is two independent flags
- * (`show_in_leads` / `show_in_sales`). They used to share one section with two
- * toggle columns, which made "add a column to the Sales Log" a job of finding
- * the right one of two switches on the right row. Now each table is its own
- * section with ONE switch, and adding a field from inside a section turns that
- * section's flag on by default.
+ * `surface` names the table this section drives (the Leads list), and adding a
+ * field from inside a section turns that section's flag on by default.
  *
  * The list is deliberately NOT filtered to the fields already shown — you
  * cannot switch on a column you cannot see.
@@ -103,9 +96,7 @@ export default function EntityFieldsManager({ entity, surface = null }) {
         <div style={{ fontSize: 14, color: C.textSecondary, fontFamily: FONT, maxWidth: 560 }}>
           {!isLead
             ? 'Fields of one transaction (installment) — shown in the sale detail’s transactions table and the Add Transaction form.'
-            : surface === 'leads'
-              ? 'Columns of the Leads list. A sale is an enrolled lead, so these are the same underlying fields the Sales Log uses — the switch here only controls what the Leads list shows. Built-in fields can be renamed and hidden, never deleted.'
-              : 'Columns of the Sales Log. Same underlying fields as the Leads list; the switch here only controls what the Sales Log shows. Built-in fields can be renamed and hidden, never deleted.'}
+            : 'Columns of the Leads list — the switch here controls what the Leads list shows. Built-in fields can be renamed and hidden, never deleted.'}
         </div>
         <Button variant="primary" icon={Plus} onClick={() => setModal({})}>Add field</Button>
       </div>
@@ -267,9 +258,11 @@ function FieldModal({ entity, field, isLead, surface, onClose, onSaved }) {
             <Toggle checked={showInLeads} onChange={setShowInLeads} /> Show on Leads
           </label>
         )}
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, fontFamily: FONT, color: C.text }}>
-          <Toggle checked={showInSales} onChange={setShowInSales} /> {isLead ? 'Show on Sales Log' : 'Show in transactions table'}
-        </label>
+        {!isLead && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, fontFamily: FONT, color: C.text }}>
+            <Toggle checked={showInSales} onChange={setShowInSales} /> Show in transactions table
+          </label>
+        )}
         {!system && (
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, fontFamily: FONT, color: C.text }}>
             <Toggle checked={required} onChange={setRequired} /> Required

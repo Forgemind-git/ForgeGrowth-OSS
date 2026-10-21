@@ -179,7 +179,7 @@ describe('message shaping', () => {
 describe('tool registry', () => {
   const reg = require('../src/services/workflowAgents/tools');
   test('every tool is complete and its schema is usable', () => {
-    assert.ok(reg.TOOLS.length >= 28);
+    assert.ok(reg.TOOLS.length >= 27);
     for (const t of reg.TOOLS) {
       assert.match(t.key, /^[a-z_]+$/, t.key);
       assert.ok(['read', 'draft', 'write'].includes(t.kind), t.key);
@@ -191,7 +191,7 @@ describe('tool registry', () => {
   });
   test('the brief\'s tools all exist with the right kind', () => {
     const expected = {
-      read: ['get_workspace_context', 'list_leads', 'get_lead_profile', 'get_conversation', 'search_messages', 'get_active_conversations', 'get_engagement_metrics', 'get_funnel_summary', 'get_stage_history', 'get_sales', 'get_outstanding_balances', 'get_ad_performance', 'get_flow_runs', 'get_broadcast_results', 'get_rep_directory', 'get_previous_outputs', 'get_feedback', 'read_memory'],
+      read: ['get_workspace_context', 'list_leads', 'get_lead_profile', 'get_conversation', 'search_messages', 'get_active_conversations', 'get_engagement_metrics', 'get_funnel_summary', 'get_stage_history', 'get_sales', 'get_outstanding_balances', 'get_flow_runs', 'get_broadcast_results', 'get_rep_directory', 'get_previous_outputs', 'get_feedback', 'read_memory'],
       draft: ['draft_whatsapp_reply', 'propose_memory'],
       write: ['tag_contact', 'set_funnel_stage', 'assign_owner', 'add_internal_note', 'create_follow_up_task', 'send_whatsapp_message', 'trigger_automation', 'notify_rep'],
     };

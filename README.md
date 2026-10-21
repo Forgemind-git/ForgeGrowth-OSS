@@ -1,11 +1,10 @@
 # Forge Growth
 
-**A WhatsApp-native growth stack: the ad someone tapped, the conversation that followed, and the
-payment at the end — joined by one key, in one self-hosted app.**
+**A WhatsApp-native growth stack: the conversation, the lead it became, the stage it reached and
+the sale at the end — in one self-hosted app, with an Instagram workspace beside it.**
 
-Most CRMs can tell you a lead exists. Forge Growth can tell you which ad creative they saw, what they
-said in the chat, which stage they're stuck at, and how much they've actually paid — because the click
-id Meta attaches to the inbound WhatsApp message is carried all the way through to the payment record.
+Most CRMs can tell you a lead exists. Forge Growth can tell you what they said in the chat, which stage
+they're stuck at and what they've paid — and runs the automations and AI agents that move them along.
 
 **MIT licensed · self-hosted · single-tenant · no SaaS tier · no telemetry**
 
@@ -14,18 +13,16 @@ id Meta attaches to the inbound WhatsApp message is carried all the way through 
 ## How it works
 
 ```
- Meta ad  ──tap──►  WhatsApp conversation  ──►  lead  ──►  stage moves  ──►  payment
-    │                        │                    │             │               │
-    │ Marketing API          │ referral block     │ funnel      │ lead_events   │ Razorpay
-    │ (spend, creatives)     │ (ctwa_clid, ad id) │ stages      │ cursor        │ (webhook + pull)
-    ▼                        ▼                    ▼             ▼               ▼
- campaigns/          ctwa_referrals          leads +        funnel tags     razorpay_events
- campaign_ads                                funnel_stages                  razorpay_payments
+ WhatsApp conversation  ──►  lead  ──►  stage moves  ──►  sale
+          │                   │             │              │
+          │ webhook           │ funnel      │ lead_events  │ manual payments
+          ▼                   ▼             ▼              ▼
+     chat_history        leads +        funnel tags     sales_log
+                         funnel_stages
 ```
 
-Every arrow is real data, not a diagram of intent. Because Meta puts the click id on the inbound
-message itself, **ad → conversation → lead → stage → revenue all resolve with local joins** and no
-further calls to Meta.
+Every arrow is real data, not a diagram of intent: a conversation, its lead, the stage it reached and
+what was paid all resolve with local joins.
 
 ---
 
@@ -218,12 +215,7 @@ Nothing else. No Node, Postgres, Redis or MinIO on the host — it all runs in c
 
 | Area | |
 |---|---|
-| **Campaigns** | Real spend from the Meta Marketing API, arranged Campaign → Ad Set → Ad |
-| **Click-to-WhatsApp** | Per-ad CPL and ROAS, placement breakdown, and the exact creative each person saw |
-| **Conversions API & CLO** | Funnel stages sent back to Meta with the click id, so the optimiser learns who pays — off by default |
 | **Leads** | Pipeline, funnel and list views of one model, with tags, custom fields and CSV/XLSX import |
-| **Payments** | Razorpay links stamped with the lead id, so a payment attributes itself, plus a payments dashboard |
-| **Sales Log** | Gateway payments deduped and unioned with manually logged sales |
 | **Inbox** | 3-pane WhatsApp client with media, transcribed voice notes and 24-hour window enforcement |
 | **Chat Analyzer** | Summary, intent, suggested stage and ready-to-send follow-ups for any conversation |
 | **Follow-ups** | Pinned lead chats and a follow-up calendar, optionally mirrored to Google Calendar |
@@ -233,7 +225,7 @@ Nothing else. No Node, Postgres, Redis or MinIO on the host — it all runs in c
 | **Automations** | A visual flow builder — 20 block types, every branch visibly wired |
 | **AI Agents** | A no-code LLM agent per number, with tools, memory, handoff and spend limits |
 | **Workflow Agents** | Scheduled or triggered agents that work across leads, chats and sales, behind an approvals queue |
-| **Social** | Instagram, Facebook, Threads, YouTube and LinkedIn — analytics, one inbox, comment automations |
+| **Social** | Instagram — analytics, content library, one inbox, comment-to-DM automations and AI agents |
 | **Google** | Sheets, Calendar and Gmail, with discovery browsers and automation actions |
 | **MCP** | Drive the whole app from Claude — every capability off by default |
 | **Users & RBAC** | Roles are rows, not an enum, so adding one needs no migration |

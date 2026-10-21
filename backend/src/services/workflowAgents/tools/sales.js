@@ -1,7 +1,5 @@
-// Sales tools. Money comes from the SAME union the Sales Log uses: deduped captured
-// Razorpay webhook payments matched to a lead (RZP_CAPTURED semantics) plus manual
-// sales_log rows. razorpay_payments (the ledger) is never merged in — its lead
-// match is only a hint (DATA_MAP §2.4).
+// Sales tools. Money comes from the manual sales store: sales_log rows matched
+// to a lead (the same rows GET /students reads).
 
 const { toIst } = require('../format');
 const { OWNER_SQL } = require('../sql');
@@ -15,16 +13,8 @@ const TYPES = ['new_admission', 'full', 'partial', 'balance'];
 /** Every payment for in-scope leads, with its ordinal per lead (for payment_type). */
 const ALL_PAYMENTS_CTE = `
   pay AS (
-    SELECT rz.lead_id, rz.amount_paise, rz.created_at AS paid_at, rz.method, 'gateway' AS kind, rz.payment_id AS reference,
-           NULL::bigint AS course_id
-      FROM (
-        SELECT DISTINCT ON (COALESCE(payment_id, 'evt'||id::text)) matched_lead_id AS lead_id, amount_paise, created_at, method, payment_id
-          FROM coexistence.razorpay_events
-         WHERE status = 'captured' AND matched_lead_id IS NOT NULL
-         ORDER BY COALESCE(payment_id, 'evt'||id::text), (event_type = 'payment.captured') DESC, id
-      ) rz
-    UNION ALL
-    SELECT sl.lead_id, sl.amount_paise, (sl.payment_date::timestamp AT TIME ZONE 'Asia/Kolkata'), sl.method, 'manual', 'sales_log:'||sl.id, sl.course_id
+    SELECT sl.lead_id, sl.amount_paise, (sl.payment_date::timestamp AT TIME ZONE 'Asia/Kolkata') AS paid_at, sl.method,
+           'manual' AS kind, 'sales_log:'||sl.id AS reference, sl.course_id
       FROM coexistence.sales_log sl WHERE sl.lead_id IS NOT NULL
   ),
   ordered AS (
@@ -48,7 +38,7 @@ const getSales = {
   category: 'Sales',
   kind: 'read',
   title: 'Sales',
-  description: 'Payments received from in-scope leads in a window (gateway + manual Sales Log), with product, amount, method and a derived payment_type: new_admission (first payment, below full price), full (first payment covering the price), partial (a later payment still short of the price) or balance (the payment that completed it). Summary counts admissions as DISTINCT customers, never transactions. GST and closed-by rep are NOT recorded in this workspace: gst and closed_by_rep_id are null, and revenue cannot be attributed to a rep.',
+  description: 'Payments received from in-scope leads in a window (the manual sales store), with product, amount, method and a derived payment_type: new_admission (first payment, below full price), full (first payment covering the price), partial (a later payment still short of the price) or balance (the payment that completed it). Summary counts admissions as DISTINCT customers, never transactions. GST and closed-by rep are NOT recorded in this workspace: gst and closed_by_rep_id are null, and revenue cannot be attributed to a rep.',
   input_schema: {
     type: 'object',
     properties: {
@@ -101,8 +91,9 @@ const getSales = {
     const sliced = typed.slice(page.offset, page.offset + page.limit + 1);
     const { rows: pageRows, next_cursor } = paginate(sliced, page);
     const { rows: [refunds] } = await pool.query(
-      `SELECT COUNT(*)::int AS n, COALESCE(SUM(amount_refunded_paise), 0) AS paise FROM coexistence.razorpay_payments
-        WHERE amount_refunded_paise > 0 AND paid_at >= $1 AND paid_at < $2`, [win.since, win.until]);
+      `SELECT COUNT(*)::int AS n, COALESCE(SUM(amount_paise), 0) AS paise FROM coexistence.sale_refunds
+        WHERE refunded_on >= ($1::timestamptz AT TIME ZONE 'Asia/Kolkata')::date
+          AND refunded_on <  ($2::timestamptz AT TIME ZONE 'Asia/Kolkata')::date`, [win.since, win.until]);
     return {
       window: { from: toIst(win.since), to: toIst(win.until), clamped_to_lookback: win.clamped },
       summary: {
@@ -111,7 +102,7 @@ const getSales = {
         admissions_distinct_customers: admissions.size,
         paying_customers_distinct: new Set(typed.map(r => r.lead_id)).size,
         by_product: Object.values(byProduct).map(p => ({ product: p.product, transactions: p.transactions, customers: p.customers.size, collected: money(p.paise) })),
-        refunds_ledger: { count: refunds.n, amount: money(refunds.paise), note: 'From the Razorpay ledger; its lead match is a hint, so refunds are not netted against in-scope sales.' },
+        refunds: { count: refunds.n, amount: money(refunds.paise), note: 'Every refund recorded in the window, workspace-wide; not netted against in-scope sales.' },
         gst: null,
         closed_by_rep: null,
       },
@@ -131,7 +122,7 @@ const getOutstandingBalances = {
   category: 'Sales',
   kind: 'read',
   title: 'Outstanding balances',
-  description: 'In-scope customers at a won stage who still owe money: product price minus everything paid (gateway + manual), honouring a manual payment-status override. Includes last payment date and owner rep. Products with no price cannot produce a balance and are listed under price_unknown.',
+  description: 'In-scope customers at a won stage who still owe money: product price minus everything paid, honouring a manual payment-status override. Includes last payment date and owner rep. Products with no price cannot produce a balance and are listed under price_unknown.',
   input_schema: {
     type: 'object',
     properties: {

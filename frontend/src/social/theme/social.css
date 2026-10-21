@@ -35,7 +35,6 @@
   --fc-pink-soft:      #FBE8F2;
   --fc-plate:          rgba(17, 17, 19, 0.92);
   --fc-plate-text:     #ffffff;
-  --fc-brand-threads:  #111111;
   --fc-header:         #000000;
   --fc-header-surface: rgba(255, 255, 255, 0.08);
   --fc-header-text:    #ffffff;
@@ -60,7 +59,6 @@
   --fc-purple-soft:    rgba(167, 139, 250, 0.16);
   --fc-pink:           #f472b6;
   --fc-pink-soft:      rgba(244, 114, 182, 0.16);
-  --fc-brand-threads:  #E8E8E5;
 }
 
 /* ── 2. The page area: what ForgeSocial's .fc-main did ─────────────────────

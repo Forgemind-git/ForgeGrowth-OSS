@@ -42,26 +42,20 @@ export default function PrivacyPolicyPage({ standalone = false }) {
 
       <Section title="2. Information We Collect">
         <P><strong>Account information:</strong> Username and hashed password for dashboard login. We do not store plaintext passwords.</P>
-        <P><strong>Social platform credentials:</strong> OAuth access tokens for connected platforms (Instagram, Facebook, Threads, YouTube, LinkedIn). Tokens are stored encrypted in our database and are never shared with third parties.</P>
+        <P><strong>Social platform credentials:</strong> OAuth access tokens for connected Instagram accounts. Tokens are stored encrypted in our database and are never shared with third parties.</P>
         <P><strong>Analytics data:</strong> Metrics pulled from connected social platforms — including follower counts, impressions, reach, engagement, post performance, and audience data. This data is read-only and used solely for display inside the dashboard.</P>
         <P><strong>Session data:</strong> An httpOnly JWT cookie is set when you sign in. It is used only to authenticate your session and expires automatically.</P>
       </Section>
 
       <Section title="3. Connected Social Platforms">
-        <P>When you connect a social account, ForgeGrowth requests read-only access to analytics data. We access the following platforms via their official APIs:</P>
+        <P>When you connect a social account, ForgeGrowth requests read-only access to analytics data. We access the following platform via its official API:</P>
         <Ul items={[
           'Instagram — via Instagram Graph API (Meta)',
-          'Facebook — via Facebook Graph API (Meta)',
-          'Threads — via Threads API (Meta)',
-          'YouTube — via YouTube Data API v3 (Google)',
-          'LinkedIn — via LinkedIn API',
         ]} />
         <P>We only request the minimum permissions required to retrieve analytics. We do not post content, send messages, or modify any social account data on your behalf without your explicit action.</P>
-        <P>Each platform's own privacy policy applies to how they handle your data before it reaches us:</P>
+        <P>The platform's own privacy policy applies to how it handles your data before it reaches us:</P>
         <Ul items={[
-          'Meta (Instagram, Facebook, Threads): https://www.facebook.com/privacy/policy',
-          'Google (YouTube): https://policies.google.com/privacy',
-          'LinkedIn: https://www.linkedin.com/legal/privacy-policy',
+          'Meta (Instagram): https://www.facebook.com/privacy/policy',
         ]} />
       </Section>
 

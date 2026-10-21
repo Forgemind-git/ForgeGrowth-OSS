@@ -102,7 +102,7 @@ between older and newer files, and following the local style beats imposing one.
 - Logic needed by both the UI and MCP goes in `services/` and is called from both. `agentService.js`
   and `mcpService.js` are the model.
 - **Webhook handlers must never throw.** Meta retries on any non-2xx and times out at 20 seconds, so
-  attribution, analytics and agent work are best-effort around message ingestion: catch, log,
+  analytics and agent work are best-effort around message ingestion: catch, log,
   continue. Anything slow goes on a queue.
 
 **Frontend**

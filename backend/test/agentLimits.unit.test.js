@@ -10,7 +10,7 @@
 // would read the flag while it is still false and skip the whole suite on a
 // machine that HAS a database.
 //
-// ⚠ paymentFlow and agentHandoff are replaced in require.cache before anything
+// ⚠ threadSender and agentHandoff are replaced in require.cache before anything
 // loads them. Both are lazily required inside agentLimits, so this is enough to
 // keep the send queue's Redis connection out of the process — which otherwise
 // holds the event loop open and hangs `npm test` for the whole repo with no
@@ -26,7 +26,7 @@ function stubModule(relPath, exports) {
   const p = require.resolve(relPath);
   require.cache[p] = { id: p, filename: p, loaded: true, exports, children: [], paths: [] };
 }
-stubModule('../src/services/paymentFlow', {
+stubModule('../src/services/threadSender', {
   sendOnThread: async ({ waNumber, contactNumber, body }) => {
     sends.push({ waNumber, contactNumber, body });
     return { sent: true, localMessageId: 'stub' };

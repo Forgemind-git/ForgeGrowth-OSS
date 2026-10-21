@@ -170,6 +170,6 @@ export const igMissingAnswers = (t, answers) => (t?.fields || []).filter(f => f.
 
 // Customer-facing quick agents get NO business-data tools: an Instagram
 // follower must never be able to ask the agent for follower counts, other
-// people's DMs or to publish a post. (Defaults would otherwise switch
+// people's DMs. (Defaults would otherwise switch
 // analytics/content/inbox on.)
-export const IG_AGENT_CAPABILITIES = { analytics: false, content: false, inbox: false, contacts: false, engage: false, publish: false };
+export const IG_AGENT_CAPABILITIES = { analytics: false, content: false, inbox: false, contacts: false, engage: false };

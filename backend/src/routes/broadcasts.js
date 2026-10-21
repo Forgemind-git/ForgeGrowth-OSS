@@ -106,13 +106,12 @@ function urlButtonFallbackValue(b) {
 /**
  * Build Meta template `components` array from variable_mapping + recipient ctx.
  * variable_mapping is { "1": "<field-key>" } chosen in the builder dropdown.
- * `buttonToken` (if given) fills any dynamic URL button with the real
- * per-recipient value (a payment link's public token); otherwise a placeholder is used (see
- * urlButtonFallbackValue) so the send doesn't hard-fail. Meta rejects the
+ * A dynamic URL button gets a placeholder value (see urlButtonFallbackValue)
+ * so the send doesn't hard-fail. Meta rejects the
  * send outright if a URL button has a {{n}} variable and no button component
  * is supplied at all.
  */
-function buildTemplateComponents(template, variableMapping, recipient, headerMediaId, buttonToken) {
+function buildTemplateComponents(template, variableMapping, recipient, headerMediaId) {
   const components = [];
 
   // Header component. Media headers (IMAGE/VIDEO/DOCUMENT) require the header
@@ -150,7 +149,7 @@ function buildTemplateComponents(template, variableMapping, recipient, headerMed
   // payload in routes/templates.js, a completely different transform).
   (Array.isArray(template.buttons) ? template.buttons : []).forEach((b, idx) => {
     if (b.type === 'URL' && /\{\{\s*\d+\s*\}\}/.test(b.value || '')) {
-      const text = buttonToken || urlButtonFallbackValue(b);
+      const text = urlButtonFallbackValue(b);
       components.push({ type: 'button', sub_type: 'url', index: idx, parameters: [{ type: 'text', text }] });
     }
   });
@@ -163,36 +162,8 @@ async function enqueueBroadcastRecipient({ broadcast, template, account, recipie
 
   // ── Template ──────────────────────────────────────────────────────────
   if (msgType === 'template') {
-    let buttonToken = null;
-
-    // ── Payment templates: one LIVE link per recipient ───────────────────────
-    // Only when the button actually points at /pay/, so an ordinary dynamic-URL template is completely unaffected.
-    //
-    // ⚠ This is the one place in the app that mints real payment links in a
-    // loop. `payment_amount_paise` is required on the broadcast — without it we
-    // refuse the recipient rather than guess an amount, because a guessed figure
-    // multiplied by a recipient list is the worst failure this feature has.
-    const paymentFlow = require('../services/paymentFlow');
-    if (paymentFlow.templateHasPaymentButton(template)) {
-      if (!broadcast.payment_amount_paise) {
-        throw new Error('This template carries a payment button but the broadcast has no amount set. Set the product or amount before sending.');
-      }
-      const created = await paymentFlow.createPaymentForChat({
-        waNumber: account.displayPhoneNumber || broadcast.wa_number,
-        contactNumber: recipient.contact_number,
-        contactName: recipient.name || null,
-        amountPaise: Number(broadcast.payment_amount_paise),
-        courseId: broadcast.payment_course_id || null,
-        purpose: broadcast.payment_purpose || broadcast.name || null,
-        kind: 'fixed',
-        source: 'broadcast',
-        createdBy: `broadcast:${broadcast.id}`,
-      });
-      if (created.error) throw new Error(`Could not raise a payment link: ${created.error}`);
-      buttonToken = await paymentFlow.ensurePublicToken(created.request.id);
-    }
     // resolvedMediaId doubles as the header image for media-header templates.
-    const components = buildTemplateComponents(template, broadcast.variable_mapping, recipient, resolvedMediaId, buttonToken);
+    const components = buildTemplateComponents(template, broadcast.variable_mapping, recipient, resolvedMediaId);
     // CAROUSEL templates: append the prebuilt carousel component (resolved once
     // per broadcast — cards are static, identical for every recipient).
     if (template && String(template.template_type || '').toUpperCase() === 'CAROUSEL' && resolvedCarouselComponent) {
@@ -470,7 +441,6 @@ router.post('/broadcasts', async (req, res) => {
       from_number, recipient_numbers, template_id, status, test_number,
       name, variable_mapping, message_type, body, url, media_library_id, caption,
       scheduled_at, recipient_filter,
-      payment_course_id, payment_amount, payment_purpose,
     } = req.body;
 
     if (!from_number || !recipient_numbers) {
@@ -504,9 +474,8 @@ router.post('/broadcasts', async (req, res) => {
         `INSERT INTO coexistence.broadcasts
          (from_number, recipient_numbers, template_id, status, test_number, name,
           variable_mapping, message_type, body, url, media_library_id, caption,
-          scheduled_at, recipient_filter,
-          payment_course_id, payment_amount_paise, payment_purpose, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW())
+          scheduled_at, recipient_filter, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
          RETURNING *`,
         [
           from_number,
@@ -523,11 +492,6 @@ router.post('/broadcasts', async (req, res) => {
           caption || null,
           schedAt ? schedAt.toISOString() : null,
           recipient_filter ? JSON.stringify(recipient_filter) : null,
-          payment_course_id || null,
-          // Rupees at the API boundary, paise in storage — the same convention
-          // as payment_requests and courses.default_price_paise.
-          payment_amount != null && payment_amount !== '' ? Math.round(Number(payment_amount) * 100) : null,
-          payment_purpose || null,
         ]
       );
       const broadcast = rows[0];
@@ -588,7 +552,6 @@ router.put('/broadcasts/:id', async (req, res) => {
       from_number, recipient_numbers, template_id, test_number, name,
       variable_mapping, message_type, body, url, media_library_id, caption,
       scheduled_at, recipient_filter,
-      payment_course_id, payment_amount, payment_purpose,
     } = req.body;
 
     // Same future-instant rule as POST. `null` deliberately means "unschedule
@@ -628,11 +591,8 @@ router.put('/broadcasts/:id', async (req, res) => {
         scheduled_at = CASE WHEN $13 THEN $12::timestamptz ELSE scheduled_at END,
         status = COALESCE($14, status),
         recipient_filter = CASE WHEN $16 THEN $15::jsonb ELSE recipient_filter END,
-        payment_course_id = COALESCE($17, payment_course_id),
-        payment_amount_paise = COALESCE($18, payment_amount_paise),
-        payment_purpose = COALESCE($19, payment_purpose),
         updated_at = NOW()
-       WHERE id = $20 AND status = ANY($21::text[])
+       WHERE id = $17 AND status = ANY($18::text[])
        RETURNING *`,
       [
         from_number || null,
@@ -651,9 +611,6 @@ router.put('/broadcasts/:id', async (req, res) => {
         nextStatus,
         recipient_filter !== undefined && recipient_filter !== null ? JSON.stringify(recipient_filter) : null,
         recipient_filter !== undefined,
-        payment_course_id || null,
-        payment_amount != null && payment_amount !== '' ? Math.round(Number(payment_amount) * 100) : null,
-        payment_purpose || null,
         req.params.id,
         EDITABLE_STATUSES,
       ]

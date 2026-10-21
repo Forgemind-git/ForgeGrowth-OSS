@@ -16,18 +16,15 @@
 
 const PAGES = [
   'home', 'chats', 'bulk-message', 'template-builder',
-  'chatbot-builder', 'media-library', 'wa-links', 'pipelines', 'ai-agent-builder',
+  'chatbot-builder', 'media-library', 'pipelines', 'ai-agent-builder',
   // Chats — additive AI Academy surfaces.
-  // 'wa-links' is the route key for what the UI now calls Message Formats. The
-  // key is deliberately unchanged: renaming a page key silently drops any
-  // stored per-user override that granted it.
   // 'follow-up-sequence' and 'team-members' removed 2026-08-12 with their pages.
   // Both were safe to drop: 0 users had a stored override.
   // 'lead-forms' and 'projects' removed 2026-10-16 with the Forms and Projects
   // features (code and data).
-  // Marketing section — Lead Sources folded into mkt-overview; Content Library,
-  // Webinars and Organic/Social removed along with the ForgeSocial integration.
-  'mkt-overview', 'campaigns', 'ctwa-ads', 'conversion-api', 'clo',
+  // The Marketing section ('mkt-overview', 'campaigns', 'ctwa-ads',
+  // 'conversion-api', 'clo', 'campaign-roi', 'wa-links') was removed
+  // 2026-10-21 with its pages and backend.
   // Sales section
   // 'products' was removed 2026-08-12 — the editor moved into Admin Settings →
   // Funnel → Products. Safe to drop: 0 users had a stored override.
@@ -35,14 +32,14 @@ const PAGES = [
   // same day: the Contacts PAGE is gone (Leads is the one people-table) while the
   // contacts TABLE stays — it is the chat thread, the RBAC scope and the funnel
   // tag mirror. Both keys were safe to drop: 0 users had a stored override.
-  'sales-pipeline', 'leads', 'onboarding',
+  // 'onboarding' (the Sales Log page), 'sales-log' and 'payments' (Razorpay)
+  // were removed 2026-10-21 with their pages.
+  'sales-pipeline', 'leads',
   // Chat Analyzer — reads conversations (1:1 and groups) and produces a verdict.
   // Non-admins are scoped to their own leads and never see groups, which carry
   // other customers' messages; enforced in routes/chatAnalyser.js canAccess().
   'chat-analyzer',
-  'sales-funnel', 'sales-log',
-  // Payments — create + track Razorpay links raised from ForgeGrowth.
-  'payments',
+  'sales-funnel',
   // Message costs — billing data. Lives in the Chats section; admin-only by
   // default (deliberately absent from every other role's defaults below).
   'message-costs',

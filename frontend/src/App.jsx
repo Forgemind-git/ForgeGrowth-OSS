@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { Megaphone, Kanban, Radio } from 'lucide-react';
 import { api } from './api.js';
 import { C, FONT } from './constants.js';
 import { useHashRoute } from './hooks/useHashRoute.js';
@@ -18,20 +17,11 @@ import TemplateBuilderPage from './pages/TemplateBuilderPage.jsx';
 import BulkMessagePage from './pages/BulkMessagePage.jsx';
 import AdminSettingsPage from './pages/AdminSettingsPage.jsx';
 import MediaLibraryPage from './pages/MediaLibraryPage.jsx';
-import MessageFormatsPage from './pages/MessageFormatsPage.jsx';
 import PipelinesPage from './pages/PipelinesPage.jsx';
 import AiAgentBuilderPage from './pages/AiAgentBuilderPage.jsx';
-// AI Academy — Marketing
-import MarketingOverviewPage from './pages/marketing/OverviewPage.jsx';
-import CampaignsPage from './pages/marketing/CampaignsPage.jsx';
-import CtwaPage from './pages/marketing/CtwaPage.jsx';
-import ConversionApiPage from './pages/marketing/ConversionApiPage.jsx';
-import CloPage from './pages/marketing/CloPage.jsx';
 import MessageCostsPage from './pages/MessageCostsPage.jsx';
 // AI Academy — Sales
 import LeadsHubPage from './pages/sales/LeadsHubPage.jsx';
-import PaymentsPage from './pages/sales/PaymentsPage.jsx';
-import OnboardingPage from './pages/sales/OnboardingPage.jsx';
 import ChatAnalyzerPage from './pages/sales/ChatAnalyzerPage.jsx';
 // Workflow agents (migration 121) — Claude agents over the CRM's data.
 import WorkflowAgentsPage from './pages/workflowAgents/WorkflowAgentsPage.jsx';
@@ -44,14 +34,12 @@ import SocialSection, { socialNavId, socialPublicPage } from './social/SocialSec
 
 const VALID_PAGES = new Set([
   'home', 'chatbot-builder', 'template-builder', 'chats',
-  'bulk-message', 'admin-settings', 'media-library', 'wa-links',
+  'bulk-message', 'admin-settings', 'media-library',
   'pipelines', 'ai-agent-builder',
-  // Marketing
-  'mkt-overview', 'campaigns', 'ctwa-ads', 'conversion-api', 'clo',
   // Sales — 'sales-pipeline' and 'sales-funnel' are legacy keys kept so old
   // links and any stored permission override keep resolving; both land on the
   // Leads hub. 'bda-performance' and 'contacts' were removed with their pages.
-  'sales-pipeline', 'leads', 'payments', 'onboarding', 'chat-analyzer',
+  'sales-pipeline', 'leads', 'chat-analyzer',
   'sales-funnel',
   // Message costs — a full-width dashboard; its configuration lives in
   // Admin Settings -> Message Costs.
@@ -62,28 +50,16 @@ const VALID_PAGES = new Set([
   'social',
 ]);
 
-// Which header section (Marketing / Sales) owns each page. The hash is the
+// Which header section (Social / Sales) owns each page. The hash is the
 // single source of truth — section is DERIVED, so a refresh keeps you in the
-// right workspace.
-//
-// Only the Marketing pages need listing now that Chats has been folded into
-// Sales: everything else IS Sales, so the fallback below does the work and a new
-// Sales page cannot be forgotten here and land in the wrong workspace.
-const MARKETING_PAGES = new Set([
-  'mkt-overview', 'campaigns', 'ctwa-ads', 'conversion-api', 'clo',
-  // Moved from Sales 2026-10-16: where leads come from, not the sales flow.
-  'wa-links',
-]);
-const sectionOf = (page) => {
-  if (MARKETING_PAGES.has(page)) return 'marketing';
-  if (page === 'social') return 'social';
-  return 'sales';
-};
+// right workspace. Everything that is not Social IS Sales, so a new Sales page
+// cannot be forgotten here and land in the wrong workspace.
+const sectionOf = (page) => (page === 'social' ? 'social' : 'sales');
 
 // The landing page when a section tab is clicked. Sales opens on the Leads hub,
 // which itself opens on the Funnel; Home stays the login landing page and is
 // reachable from the pinned item above the groups.
-const SECTION_FIRST_PAGE = { marketing: 'mkt-overview', sales: 'leads', social: 'social' };
+const SECTION_FIRST_PAGE = { sales: 'leads', social: 'social' };
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -218,31 +194,6 @@ export default function App() {
     return (<><LoginGate onLogin={setUser} /><FeedbackModal /></>);
   }
 
-  // Placeholder main area for the not-yet-built Marketing / Sales workspaces.
-  // Admin Settings stays reachable from any section (it isn't section-specific).
-  const renderSectionPlaceholder = () => {
-    const Icon = section === 'sales' ? Kanban : Megaphone;
-    const title = section === 'sales' ? 'Sales' : 'Marketing';
-    return (
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 14,
-      }}>
-        <Icon size={44} strokeWidth={1.5} color={C.textMuted} style={{ opacity: 0.45 }} />
-        <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: FONT }}>
-          {title}
-        </div>
-        <div style={{ fontSize: 15, color: C.textMuted, fontFamily: FONT }}>
-          This workspace is empty for now — its pages are coming soon.
-        </div>
-      </div>
-    );
-  };
-
   const renderPage = () => {
     switch (page) {
       case 'home': return <HomePage user={user} onPageChange={setPage} />;
@@ -253,14 +204,7 @@ export default function App() {
       case 'chatbot-builder': return <ChatbotBuilderPage subParts={subParts} navigate={navigate} />;
       case 'ai-agent-builder': return <AiAgentBuilderPage user={user} navigate={navigate} />;
       case 'admin-settings': return <AdminSettingsPage onLogout={handleLogout} onNavigate={setPage} subParts={subParts} navigate={navigate} user={user} />;
-      case 'wa-links': return <MessageFormatsPage subParts={subParts} navigate={navigate} />;
       case 'pipelines': return <PipelinesPage user={user} />;
-      // Marketing
-      case 'mkt-overview': return <MarketingOverviewPage user={user} navigate={navigate} />;
-      case 'campaigns': return <CampaignsPage user={user} />;
-      case 'ctwa-ads': return <CtwaPage user={user} navigate={navigate} />;
-      case 'conversion-api': return <ConversionApiPage user={user} subParts={subParts} navigate={navigate} />;
-      case 'clo': return <CloPage user={user} subParts={subParts} navigate={navigate} />;
       // Sales — one unified Leads tab. `sales-pipeline` / `sales-funnel` are
       // legacy hashes kept so old links and permission grants keep resolving;
       // they open the hub on the matching view. Pipeline is no longer a tab of
@@ -269,8 +213,6 @@ export default function App() {
       case 'sales-pipeline': return <LeadsHubPage user={user} navigate={navigate} subParts={['list', 'board']} />;
       case 'sales-funnel': return <LeadsHubPage user={user} navigate={navigate} subParts={[]} />;
       case 'leads': return <LeadsHubPage user={user} navigate={navigate} subParts={subParts} />;
-      case 'payments': return <PaymentsPage user={user} navigate={navigate} subParts={subParts} />;
-      case 'onboarding': return <OnboardingPage user={user} navigate={navigate} subParts={subParts} />;
       case 'message-costs': return <MessageCostsPage user={user} navigate={navigate} subParts={subParts} />;
       // subParts route the view AND the open conversation:
       //   #/chat-analyzer/cost, #/chat-analyzer/c/<source>/<key>

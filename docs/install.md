@@ -493,7 +493,7 @@ re-running the script later to change your domain cannot silently move you onto 
 
 - `POSTGRES_PASSWORD` is applied **only** when Postgres first creates its data directory.
 - `FORGECRM_ENCRYPTION_KEY` is the **only** thing that decrypts stored Meta, Google and
-  payment-gateway credentials. Losing it means re-entering all of them; changing it turns the
+  Instagram credentials. Losing it means re-entering all of them; changing it turns the
   existing rows into garbage rather than re-encrypting them.
 
 A restored database with a regenerated `.env` cannot be opened, **and the failure names the wrong

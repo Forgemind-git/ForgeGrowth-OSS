@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Bell, LogOut, Settings, AlertTriangle, Megaphone, MessageSquare, CheckCheck, Sun, Moon, AtSign, TrendingUp } from 'lucide-react';
+import { Bell, LogOut, Settings, AlertTriangle, MessageSquare, CheckCheck, Sun, Moon, AtSign, TrendingUp } from 'lucide-react';
 import { C, FONT, MONO, relativeTime, maskPhone } from '../constants.js';
 import { api } from '../api.js';
 import { showError } from '../lib/feedback.js';
@@ -9,13 +9,12 @@ import { HeaderSegmented } from './PillStrip.jsx';
 
 // Two modes, one switch. The icon shows the mode you are IN; clicking flips it.
 
-// Two workspaces, not three. Chats used to be its own tab, which split one job
+// The workspaces: Social and Sales. Chats used to be its own tab, which split one job
 // across two places: the funnel and the conversation are the same people seen
 // from opposite ends, and moving between them meant changing workspace. The
 // inbox, automations and agents now live inside Sales.
 const SECTIONS = [
   { id: 'social', label: 'Social', Icon: AtSign },
-  { id: 'marketing', label: 'Marketing', Icon: Megaphone },
   { id: 'sales', label: 'Sales', Icon: TrendingUp },
 ];
 
@@ -182,7 +181,7 @@ export default function Topbar({ user, onLogout, onNavigate, navigate, section, 
           was never actually on the bar's centre line. */}
       {!hideSections && (
         <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}>
-          {/* ONE accent pill that SLIDES between Marketing and Sales — never a
+          {/* ONE accent pill that SLIDES between Social and Sales — never a
               per-item background, which is what makes the selection pop. */}
           <HeaderSegmented items={SECTIONS} value={section} onChange={onSectionChange} />
         </div>

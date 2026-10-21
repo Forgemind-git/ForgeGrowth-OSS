@@ -8,9 +8,7 @@ const { markPending, MEDIA_TYPES } = require('../services/mediaDownloader');
 const { enqueueMediaDownload } = require('../queue/mediaQueue');
 const bus = require('../events');
 const { ensureLeadForContact, deriveLeadSource } = require('./leads');
-const messageFormats = require('../services/messageFormats');
 const landingLeads = require('../services/landingLeads');
-const { recordCtwaReferral, linkReferralsToLead } = require('./ctwa');
 const { matchByHash } = require('../util/wamid');
 const { forgeCommandNotify } = require('../forgeCommandNotify');
 // The ingestion contract — pure, and covered by test/metaPayload.unit.test.js.
@@ -389,50 +387,14 @@ router.post('/webhook/whatsapp', async (req, res) => {
       for (const rec of incomingRecords) {
         if (!rec.contact_number || seenLeadNums.has(rec.contact_number)) continue;
         seenLeadNums.add(rec.contact_number);
-        // Click-to-WhatsApp attribution runs in the SAME chain as the lead
-        // upsert, not as an independent promise. Ordering matters: the referral
-        // INSERT resolves lead_id with an inline subquery at statement time, so
-        // if it raced ahead of the lead's commit AND landed after
-        // linkReferralsToLead had already run, the row would keep lead_id NULL
-        // with nothing left to fix it — and that ad would show clicks but no
-        // leads. Referral first, then the lead, then the link.
-        // Non-blocking + swallows its own errors: attribution must never be able
-        // to delay or break message ingestion.
-        const refRecords = incomingRecords.filter(
-          r => r.referral && r.contact_number === rec.contact_number
-        );
-        // Message-format attribution (migration 093). Scans EVERY message this
-        // contact sent in the batch, not just the first: the pre-filled opener
-        // can arrive behind a sticker or a bare "hi". Reads an in-process cache,
-        // so it costs no query and cannot slow ingestion.
-        let fmtHit = null, fmtRecord = null;
-        for (const r of incomingRecords) {
-          if (r.contact_number !== rec.contact_number) continue;
-          const m = messageFormats.matchInbound({ body: r.message_body, waNumber: r.wa_number });
-          if (m) { fmtHit = m; fmtRecord = r; break; }
-        }
-        (async () => {
-          for (const r of refRecords) await recordCtwaReferral(r);
-          // A matched format is a MORE specific answer than Meta's referral
-          // ("IG Reel 12" vs just "Instagram") and it is one we deliberately
-          // placed, so it wins when both are present. ensureLeadForContact
-          // applies `source` on INSERT only — an existing lead never has its
-          // source rewritten by a later click.
-          const lead = await ensureLeadForContact({
-            contactNumber: rec.contact_number, name: rec.contact_name,
-            source: fmtHit ? fmtHit.label : deriveLeadSource(rec.referral),
-          });
-          if (lead?.id) await linkReferralsToLead(rec.contact_number, lead.id);
-          if (fmtHit) {
-            await messageFormats.recordHit({
-              formatId: fmtHit.formatId, targetId: fmtHit.targetId,
-              waNumber: fmtRecord.wa_number, contactNumber: fmtRecord.contact_number,
-              messageId: fmtRecord.message_id,
-              leadId: lead?.id || null, isNewLead: !!lead?.inserted,
-              matchKind: fmtHit.matchKind,
-            });
-          }
-        })().catch(e => console.error('[webhook] lead/CTWA attribution error:', e.message));
+        // Non-blocking + swallows its own errors: lead creation must never be
+        // able to delay or break message ingestion. ensureLeadForContact applies
+        // `source` on INSERT only — an existing lead never has its source
+        // rewritten by a later message.
+        ensureLeadForContact({
+          contactNumber: rec.contact_number, name: rec.contact_name,
+          source: deriveLeadSource(rec.referral),
+        }).catch(e => console.error('[webhook] lead upsert error:', e.message));
       }
     }
 
