@@ -1115,7 +1115,7 @@ function UnderstandingConfig({ form, setForm }) {
         subtitle={form.transcribeAudio
           ? 'Transcribed with MAI-Transcribe 2 (via OpenRouter) and handled like a typed message.'
           : 'Off — a voice note gets no reply.'}
-        info="Incoming WhatsApp voice notes are transcribed to text with Microsoft MAI-Transcribe 2 through OpenRouter (multilingual, including mixed Tamil/English) and handled like a typed message. Each note is transcribed once and the transcript is shared with the Chat Analyzer, so it is never paid for twice."
+        info="Incoming WhatsApp voice notes are transcribed to text with Microsoft MAI-Transcribe 2 through OpenRouter (multilingual, including mixed Tamil/English) and handled like a typed message. Each note is transcribed once and the transcript is reused everywhere (including the Transcribe button in Chats), so it is never paid for twice."
         checked={form.transcribeAudio}
         onChange={(next) => setForm(f => ({ ...f, transcribeAudio: next }))}
       >

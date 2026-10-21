@@ -8,7 +8,7 @@
 // is long), check-marked rows, accent-soft selected / surface hover states.
 //
 //   <SearchableSelect label="Platform" value={v} onChange={fn}
-//       options={["Instagram","Telegram"]} allLabel="All" />   // filter pill
+//       options={["Instagram"]} allLabel="All" />   // filter pill
 //   <SearchableSelect value={v} onChange={fn} fullWidth        // form field
 //       options={[{value,label,sublabel}]} placeholder="Choose…" />
 //   <MultiSelect label="Accounts" values={arr} onChange={fn}

@@ -1,9 +1,9 @@
 // Speech-to-text for WhatsApp voice notes, via OpenRouter's Speech-to-Text API
 // running microsoft/mai-transcribe-2.
 //
-// ONE implementation for every caller: the Chat Analyzer (which caches the
-// result per message in chat_message_artifacts), the AI agent engine and the
-// agent test chat. OpenAI Whisper was removed on 2026-09-23 — MAI-Transcribe 2
+// ONE implementation for every caller: the per-bubble Transcribe button in
+// Chats (services/voiceNotes.js, which caches the result per message in
+// chat_message_artifacts), the AI agent engine and the agent test chat. OpenAI Whisper was removed on 2026-09-23 — MAI-Transcribe 2
 // is multilingual (Tamil/English code-switching, which Whisper garbled) and
 // cheaper.
 //
@@ -79,7 +79,7 @@ function transcodeToMp3(src) {
  *  - mime:     optional stored mime type, used to pick the wire format
  *
  * Returns { text, seconds, costUsd, model, provider }. Throws on an API error so
- * callers can record WHY (the analyser caches it as 'failed' and retries later).
+ * callers can record WHY (mediaExtract caches it as 'failed' and retries later).
  */
 async function transcribeAudio({ filePath, apiKey, model, mime } = {}) {
   const key = (apiKey || await openRouterKey()).trim();

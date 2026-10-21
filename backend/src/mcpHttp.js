@@ -259,6 +259,7 @@ function buildServer({ capabilities, categories }) {
     title: 'Read a conversation',
     description:
       'Read the message history of one conversation (oldest→newest), plus a `window` object showing whether the 24-hour window is open. ' +
+      'A voice note that has already been transcribed carries its `transcript` (nothing is transcribed by this call). ' +
       'Pass the waNumber + contactNumber from list_conversations.',
     inputSchema: {
       waNumber: z.string().describe('Business WhatsApp number (from list_conversations).'),
@@ -483,56 +484,7 @@ function buildServer({ capabilities, categories }) {
 
 
   /* courses + payments */
-  // ── Chat Analyzer ──
-  // No bulk tool: a bulk run costs money per conversation and nobody is
-  // watching when a chat message triggers it. It stays a click in the tab.
-  server.registerTool('list_analysed_chats', {
-    title: 'List conversations and their analysis',
-    description: 'Conversations the Chat Analyzer can read — 1:1 chats and WhatsApp groups — with whatever it has already found. `readSoFar` says which of text/audio/image/document the standing summary actually covers, so "analysed" is never mistaken for "read everything". Filter: all | never | stale | analysed | errors.',
-    inputSchema: {
-      source: z.enum(['all', 'chat', 'community']).optional().describe('chat = 1:1 conversations, community = WhatsApp groups.'),
-      filter: z.enum(['all', 'never', 'stale', 'analysed', 'errors']).optional(),
-      search: z.string().optional().describe('Match a name or phone number.'),
-      limit: z.number().optional(),
-    },
-  }, run((a) => mcpService.listAnalysedChats(a)));
-
-  server.registerTool('get_chat_analysis', {
-    title: 'Read one conversation\'s analysis',
-    description: 'The stored analysis for one conversation, plus `coverage` — how far each modality has been read. Does not analyse anything and costs nothing.',
-    inputSchema: {
-      source: z.enum(['chat', 'community']).optional(),
-      key: z.string().describe('The conversation key from list_analysed_chats.'),
-    },
-  }, run((a) => mcpService.getChatAnalysis(a)));
-
-  server.registerTool('analyze_chat', {
-    title: 'Analyse one conversation',
-    description: 'Analyse ONE conversation now and return the verdict. COSTS MONEY: the analysis call is billed by tokens, and each voice note, image or PDF is billed per item the first time it is read (cached and free afterwards). Defaults to text only — add modalities deliberately. A date range or keyword makes the run a one-off that is saved but does NOT replace the conversation\'s standing summary. Use list_analysed_chats first to get the key.',
-    inputSchema: {
-      source: z.enum(['chat', 'community']).optional(),
-      key: z.string().describe('The conversation key from list_analysed_chats.'),
-      modalities: z.array(z.enum(['text', 'audio', 'image', 'document'])).optional()
-        .describe('What to read. Omit for the workspace default (usually text only). Audio and image cost money per item.'),
-      from: z.string().optional().describe('ISO date. Makes this a filtered one-off run.'),
-      to: z.string().optional().describe('ISO date.'),
-      keyword: z.string().optional().describe('Only messages containing this word. Makes this a filtered one-off run.'),
-      incremental: z.boolean().optional().describe('Default true — read only what is new since last time. False re-reads the whole conversation and costs more.'),
-    },
-  }, run((a) => mcpService.analyzeChat(a)));
-
-  server.registerTool('get_chat_transcript', {
-    title: 'Read a conversation word for word',
-    description: 'The timestamped transcript of one conversation: text messages as sent, and voice notes as their exact transcript. This is what was SAID — use get_chat_analysis for what it MEANT. Reading costs nothing; voice notes already transcribed are returned free, and any that are not yet appear with notTranscribedYet so you can tell silence from an untranscribed note. Images and documents are listed by timestamp and caption only — their contents are NOT returned.',
-    inputSchema: {
-      source: z.enum(['chat', 'community']).optional(),
-      key: z.string().describe('The conversation key from list_analysed_chats.'),
-      from: z.string().optional().describe('ISO date — only messages on or after this.'),
-      to: z.string().optional().describe('ISO date — only messages on or before this.'),
-      audioOnly: z.boolean().optional().describe('Return only the voice notes, skipping typed messages.'),
-    },
-  }, run((a) => mcpService.getChatTranscript(a)));
-
+  // ── Follow-up calendar ──
   server.registerTool('list_follow_ups', {
     title: 'Read the follow-up calendar',
     description: 'The follow-ups on the sales calendar (Sales → Follow-up): who we plan to contact on which day, with the note, owner, lead stage and whether it is mirrored to Google Calendar. Defaults to OPEN follow-ups; pass status "done", "cancelled" or "any". Dates are IST calendar days (YYYY-MM-DD).',
@@ -573,63 +525,12 @@ function buildServer({ capabilities, categories }) {
 
   server.registerTool('suggest_follow_up_date', {
     title: 'Ask the AI for the next follow-up date',
-    description: 'The AI-recommended day (and time, if it matters) for the next follow-up with a customer, with a one-line reason. Reuses the Chat Analyzer\'s suggestion when nothing new has arrived since the last analysis (free); otherwise makes ONE small AI call (costs a little). Does not change the calendar — call set_follow_up to apply it.',
+    description: 'The AI-recommended day (and time, if it matters) for the next follow-up with a customer, with a one-line reason. Makes ONE small AI call over the chat\'s timing and recent messages (costs a little). Does not change the calendar — call set_follow_up to apply it.',
     inputSchema: {
       contactNumber: z.string().describe('The customer\'s WhatsApp number (any format).'),
       waNumber: z.string().optional(),
     },
   }, run((a) => mcpService.suggestFollowUpMcp(a)));
-
-  server.registerTool('transcribe_chat', {
-    title: 'Transcribe a conversation\'s voice notes',
-    description: 'Transcribe the voice notes in ONE conversation and return every voice note as text. Uses microsoft/mai-transcribe-2 via OpenRouter (multilingual — Tamil, Hindi, English and mixed speech). COSTS MONEY per new note, but each note is transcribed ONCE, ever: notes that already have a transcript are returned free and never re-sent. Call it again if `remaining` is above zero. Use list_analysed_chats first to get the key; use get_chat_transcript afterwards to read the full conversation with these transcripts in place.',
-    inputSchema: {
-      source: z.enum(['chat', 'community']).optional(),
-      key: z.string().describe('The conversation key from list_analysed_chats.'),
-      from: z.string().optional().describe('ISO date — only voice notes on or after this.'),
-      to: z.string().optional().describe('ISO date — only voice notes on or before this.'),
-    },
-  }, run((a) => mcpService.transcribeChat(a)));
-
-  // ⚠ NOT wrapped in run(): that formats every result as a JSON text block, which
-  // would hand the model a wall of base64 instead of a picture. An image must be
-  // returned as a real MCP image block or it is not an image to the model.
-  server.registerTool('get_chat_image', {
-    title: 'Look at images from a conversation',
-    description: 'Returns the actual images a customer sent, so you can see them yourself. FREE — this is a disk read, not a vision model; prefer it over analysing images when you just need to know what one shows. Get the messageId of an image from get_chat_transcript first. Up to 5 per call, images only (video and PDFs are not returned).',
-    inputSchema: {
-      source: z.enum(['chat', 'community']).optional(),
-      key: z.string().describe('The conversation key from list_analysed_chats.'),
-      messageIds: z.array(z.string()).describe('messageId values of image entries from get_chat_transcript.'),
-    },
-  }, async (args) => {
-    try {
-      const r = await mcpService.getChatImages(args || {});
-      const content = [];
-      for (const img of r.images) {
-        // Context first, then the picture: a bare image with no timestamp or
-        // sender cannot be placed in the conversation it came from.
-        content.push({ type: 'text', text: `${img.from} · ${new Date(img.at).toISOString()}${img.caption ? ` · caption: ${img.caption}` : ''}` });
-        content.push({ type: 'image', data: img.base64, mimeType: img.mimeType });
-      }
-      if (r.skipped.length) {
-        content.push({ type: 'text', text: `Not returned:\n${r.skipped.map(x => `- ${x.messageId || '(extra)'}: ${x.reason}`).join('\n')}` });
-      }
-      if (!content.length) content.push({ type: 'text', text: 'No images were returned.' });
-      return { content };
-    } catch (err) {
-      return fail(err.message || 'Could not read those images');
-    }
-  });
-
-  server.registerTool('get_chat_analysis_costs', {
-    title: 'What analysis has cost',
-    description: 'Estimated spend on chat analysis, split by media type, with run counts. Figures are ESTIMATES computed from the workspace rate card — OpenAI reports tokens, never a price.',
-    inputSchema: {
-      from: z.string().optional().describe('ISO date.'),
-      to: z.string().optional().describe('ISO date.'),
-    },
-  }, run((a) => mcpService.getChatAnalysisCosts(a)));
 
   server.registerTool('list_products', {
     title: 'List products',

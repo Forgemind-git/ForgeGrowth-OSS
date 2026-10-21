@@ -50,8 +50,8 @@ The sellable catalogue, with optional default prices.
 
 ### Follow-ups
 
-Pin a lead's chat and give it a follow-up date; the calendar view lists who is due today and who is
-overdue. With Google connected, each follow-up is mirrored as a calendar event that links straight
+Pin a lead's chat and give it a follow-up date — or let the AI suggest one from the chat's timing and
+recent messages; the calendar view lists who is due today and who is overdue. With Google connected, each follow-up is mirrored as a calendar event that links straight
 back to the chat.
 
 ---
@@ -68,13 +68,6 @@ A 3-pane WhatsApp-style client:
 - 24-hour customer-service-window enforcement
 - optimistic-UI sends and mic recording in the composer
 - voice notes transcribed to text (OpenRouter, multilingual)
-
-### Chat Analyzer
-
-Reads a conversation — text, transcribed voice notes, images and documents — and returns a summary,
-the customer's intent and sentiment, a suggested funnel stage, risks and ready-to-send follow-up
-messages. Results are cached per message, so re-analysing a long chat only pays for what is new.
-Tell it about your business once and every analysis takes that into account.
 
 ---
 

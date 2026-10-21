@@ -36,10 +36,10 @@ const funnelTags = require('./services/funnelTags');
 const productTags = require('./services/productTags');
 const { router: entityFieldsRouter, ensureEntityFieldTables } = require('./routes/entityFields');
 const { router: resourcesRouter } = require('./routes/resources');
-const { router: chatAnalyserRouter } = require('./routes/chatAnalyser');
+const { router: voiceNotesRouter } = require('./routes/voiceNotes');
 const { router: leadFollowUpsRouter } = require('./routes/leadFollowUps');
 const { ensureFollowUpTables } = require('./services/followUps');
-const { ensureChatAnalyserTables } = require('./services/chatAnalyser');
+const { ensureMessageArtifactTables } = require('./services/mediaExtract');
 // Per-template message costs — what we owe Meta for every message sent.
 const { router: messageCostsRouter, ensureCostTables } = require('./routes/messageCosts');
 const { router: integrationsRouter, publicRouter: integrationsPublicRouter } = require('./routes/integrations');
@@ -256,7 +256,7 @@ app.use('/api', authMiddleware, dashboardRouter);
 app.use('/api', authMiddleware, pipelinesRouter);
 // AI Academy Dashboard (leads funnel + marketing + BDA)
 app.use('/api', authMiddleware, leadsRouter);
-app.use('/api', authMiddleware, chatAnalyserRouter);
+app.use('/api', authMiddleware, voiceNotesRouter);
 app.use('/api', authMiddleware, leadFollowUpsRouter);
 app.use('/api', authMiddleware, funnelRouter);
 app.use('/api', authMiddleware, entityFieldsRouter);
@@ -330,11 +330,12 @@ async function start() {
   await ensureEntityFieldTables().catch(err =>
     console.error('[entity-fields] table ensure failed (apply migration 097):', err.message)
   );
-  await ensureChatAnalyserTables().catch(err =>
-    console.error('[chat-analyzer] table ensure failed (apply migration 110):', err.message)
+  // The per-message media text cache (voice-note transcripts, Media Library
+  // matches). Workflow Agents ALTER it below, so it runs before them.
+  await ensureMessageArtifactTables().catch(err =>
+    console.error('[media-cache] table ensure failed (apply migration 110):', err.message)
   );
-  // My list + follow-up calendar (migration 128). After the analyser's ensure:
-  // it adds chat_analysis.next_follow_up.
+  // My list + follow-up calendar (migration 128).
   await ensureFollowUpTables().catch(err =>
     console.error('[follow-ups] table ensure failed (apply migration 128):', err.message)
   );

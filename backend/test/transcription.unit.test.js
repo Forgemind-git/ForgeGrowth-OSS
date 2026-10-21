@@ -63,7 +63,7 @@ describe('transcribeAudio', () => {
     assert.equal(r.provider, 'openrouter');
   });
 
-  test('an API error THROWS with OpenRouter\'s reason (so the analyser records it as failed and retries)', async () => {
+  test('an API error THROWS with OpenRouter\'s reason (so the cache records it as failed and retries)', async () => {
     reply = jsonReply(402, { error: { code: 402, message: 'Insufficient credits' } });
     const f = tmpFile('mp3');
     await assert.rejects(stt.transcribeAudio({ filePath: f, apiKey: 'k' }), /402.*Insufficient credits/);

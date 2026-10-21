@@ -4,8 +4,8 @@
 //   • a PIN — "keep this chat on my list" (per user, so each rep has their own)
 //   • a FOLLOW-UP — "contact this person on <date>", optionally at a time, with a
 //     note. These fill the calendar grid on Leads → My list, can be set from
-//     any chat, from the Chat Analyzer's suggested date, and over MCP, and can
-//     be mirrored into the connected Google Calendar.
+//     any chat (with an optional AI-suggested date) and over MCP, and can be
+//     mirrored into the connected Google Calendar.
 //
 // A person is keyed by the LAST 10 DIGITS of their number (contact_key) — the
 // rule every other lead lookup here uses — so a lead who writes to two of our
@@ -77,8 +77,6 @@ async function ensureFollowUpTables() {
       updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`);
   await pool.query(`INSERT INTO coexistence.follow_up_settings (id) VALUES (1) ON CONFLICT DO NOTHING`);
-  await pool.query(`ALTER TABLE coexistence.chat_analysis ADD COLUMN IF NOT EXISTS next_follow_up JSONB`)
-    .catch(() => {});                  // chat_analysis is created by the analyser's own ensure
 }
 
 // ── who can see what ──────────────────────────────────────────────────────────
@@ -204,7 +202,7 @@ async function listFollowUps(user, { from = null, to = null, scope = 'all', stat
 async function setFollowUp(user, { waNumber, contactNumber, dueDate, dueTime = null, note = '', source = 'manual', aiReason = null, ownerUserId, pin = true } = {}) {
   if (!contactNumber) throw err(400, 'Which chat? contactNumber is required');
   await assertCanReach(user, waNumber, contactNumber);
-  // No business number given (the analyser tab, MCP): use the thread the
+  // No business number given (MCP): use the thread the
   // customer last WROTE on — that is where the follow-up will be sent from.
   if (!waNumber) {
     const { rows: [t] } = await pool.query(
@@ -362,7 +360,7 @@ async function myList(user) {
   }));
 }
 
-/** Everything the chat header needs about one chat: pinned? open follow-up? AI suggestion? */
+/** Everything the chat header needs about one chat: pinned? open follow-up? */
 async function chatState(user, { waNumber, contactNumber }) {
   const key = key10(contactNumber);
   const pinned = user?.id
@@ -374,61 +372,199 @@ async function chatState(user, { waNumber, contactNumber }) {
   const { rows } = await pool.query(
     `${FOLLOW_UP_SELECT} WHERE ${vis} AND f.contact_key = $${params.length} AND f.status = 'open'
       ORDER BY (f.owner_user_id = ${user?.id ? Number(user.id) : -1}) DESC, f.due_date LIMIT 1`, params);
-  const { rows: [a] } = await pool.query(
-    `SELECT next_follow_up, last_message_at, updated_at FROM coexistence.chat_analysis
-      WHERE source = 'chat' AND conversation_key = $1`, [key]);
+  // The Chat Analyzer's stored next-follow-up date (chat_analysis.next_follow_up)
+  // is no longer read: that feature was removed on 2026-10-21 and nothing keeps
+  // the column current. The AI date is asked for on demand (suggestFollowUp).
   return {
     pinned,
     followUp: shapeFollowUp(rows[0]) || null,
-    suggestion: a?.next_follow_up ? { ...a.next_follow_up, analysedAt: a.updated_at } : null,
   };
 }
 
 // ── AI suggestion ─────────────────────────────────────────────────────────────
 
-/**
- * The AI's recommended next follow-up for a chat. Reuses the Chat Analyzer's
- * stored suggestion when no message has arrived since it; otherwise asks the
- * analyser's model once, from the timing, the analysis (if any) and the recent
- * messages — a small call, not a full analysis.
- */
-async function suggestFollowUp({ waNumber, contactNumber }) {
-  const ca = require('./chatAnalyser');
-  const key = key10(contactNumber);
-  const { rows: [a] } = await pool.query(
-    `SELECT * FROM coexistence.chat_analysis WHERE source = 'chat' AND conversation_key = $1`, [key]);
-  const { rows: [last] } = await pool.query(
-    `SELECT MAX(timestamp) AS at FROM coexistence.chat_history
-      WHERE ${KEY10('contact_number')} = $1 AND message_type NOT IN ('status','reaction','revoke','edit')`, [key]);
-  if (a?.next_follow_up && (!last?.at || (a.last_message_at && new Date(a.last_message_at) >= new Date(last.at)))) {
-    const s = ca.cleanNextFollowUp(a.next_follow_up);
-    if (s) return { ...s, from: 'analysis' };
-  }
+/** Today in IST as YYYY-MM-DD. */
+function istToday(now = new Date()) {
+  return new Date(now.getTime() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+}
 
-  const conf = await ca.loadConfig();
-  const { cred, modelId } = await ca.resolveModel(conf);
+/**
+ * {date, time, reason} or null. A date in the past is moved to today (the model
+ * sometimes answers "yesterday's" plan) and one more than 90 days out is
+ * refused — a calendar entry nobody will reach is noise.
+ */
+function cleanNextFollowUp(v, now = new Date()) {
+  if (!v || typeof v !== 'object') return null;
+  const date = String(v.date || '').trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) return null;
+  const today = istToday(now);
+  const max = istToday(new Date(now.getTime() + 90 * 86400000));
+  if (date > max) return null;
+  const time = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(v.time || '').trim()) ? String(v.time).trim() : null;
+  return {
+    date: date < today ? today : date,
+    time,
+    reason: typeof v.reason === 'string' ? v.reason.trim().slice(0, 300) : null,
+  };
+}
+
+function istStamp(ts) {
+  try {
+    // ⚠ hourCycle, not hour12:false — en-IN with hour12:false renders a message
+    // sent at 00:17 as "24:17", which reads as the END of the day, not the start.
+    return new Date(ts).toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata', weekday: 'short', day: '2-digit', month: 'short',
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    });
+  } catch { return ''; }
+}
+
+function durationText(ms) {
+  const m = Math.max(0, Math.round(ms / 60000));
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60), rm = m % 60;
+  if (h < 48) return rm ? `${h}h ${rm}m` : `${h}h`;
+  const d = Math.floor(h / 24), rh = h % 24;
+  return rh ? `${d} days ${rh}h` : `${d} days`;
+}
+
+/**
+ * Who is waiting on whom, and for how long — the thing a follow-up date most
+ * depends on, and invisible in a list of timestamps unless it is spelled out.
+ * `rows` are oldest-first with {direction, timestamp}.
+ */
+function timingText(rows, now = new Date()) {
+  if (!rows.length) return '';
+  const ago = (ts) => durationText(now - new Date(ts));
+  const last = rows[rows.length - 1];
+  const lastIn = [...rows].reverse().find(r => r.direction === 'incoming');
+  const lines = [`Now: ${istStamp(now)} IST.`];
+  if (last.direction === 'incoming') {
+    let i = rows.length - 1;
+    while (i > 0 && rows[i - 1].direction === 'incoming') i -= 1;
+    lines.push(`The CUSTOMER wrote last (${istStamp(last.timestamp)}). They have been waiting for OUR reply for ${ago(rows[i].timestamp)}.`);
+  } else {
+    let n = 0;
+    for (let i = rows.length - 1; i >= 0 && rows[i].direction !== 'incoming'; i -= 1) n += 1;
+    lines.push(lastIn
+      ? `WE wrote last (${istStamp(last.timestamp)}, ${ago(last.timestamp)} ago). The customer has not replied to our last ${n} message${n === 1 ? '' : 's'}; their last message was ${ago(lastIn.timestamp)} ago (${istStamp(lastIn.timestamp)}).`
+      : 'Only WE have written so far; the customer has never replied.');
+  }
+  // How long each customer message (or burst of them) waited for us.
+  const waits = [];
+  for (let i = 0; i < rows.length; i += 1) {
+    if (rows[i].direction !== 'incoming' || (i > 0 && rows[i - 1].direction === 'incoming')) continue;
+    const reply = rows.slice(i + 1).find(r => r.direction === 'outgoing');
+    if (reply) waits.push(new Date(reply.timestamp) - new Date(rows[i].timestamp));
+  }
+  if (waits.length) {
+    lines.push(`Our reply times to the customer's messages (oldest → newest): ${waits.slice(-5).map(durationText).join(', ')}.`);
+  }
+  if (lastIn) {
+    const closes = new Date(new Date(lastIn.timestamp).getTime() + 24 * 3600 * 1000);
+    lines.push(closes > now
+      ? `WhatsApp 24h reply window: OPEN for another ${durationText(closes - now)} (free-form messages allowed until ${istStamp(closes)}).`
+      : `WhatsApp 24h reply window: CLOSED since ${istStamp(closes)} — only an approved template can reach them now.`);
+  }
+  return lines.join('\n');
+}
+
+// Empty message_body is common for media. Without a placeholder the model reads
+// a blank line as nothing having been sent.
+const TYPE_PLACEHOLDER = {
+  image: '[image]', video: '[video]', audio: '[voice note]', voice: '[voice note]',
+  document: '[document]', sticker: '[sticker]', location: '[location]',
+  contacts: '[contact card]', template: '[template message sent]',
+  interactive: '[interactive message]', button: '[button tap]', order: '[order]',
+  unsupported: '[unsupported message]',
+};
+
+/**
+ * The last 30 messages of a chat as prompt lines, oldest first. A voice note,
+ * image or PDF whose text is already cached (chat_message_artifacts) is shown
+ * as that text — free; nothing is transcribed or read here.
+ */
+async function recentChatLines(key) {
+  const { rows } = await pool.query(
+    `SELECT ch.message_id, ch.direction, ch.message_type, ch.message_body, ch.timestamp,
+            (SELECT a.text FROM coexistence.chat_message_artifacts a
+              WHERE a.source = 'chat' AND a.message_key = ch.message_id AND a.status = 'ok'
+                AND a.kind IN ('transcript','vision','document') AND a.text <> ''
+              LIMIT 1) AS extracted
+       FROM coexistence.chat_history ch
+      WHERE ${KEY10('ch.contact_number')} = $1
+        AND ch.message_type NOT IN ('status','reaction','revoke','edit')
+      ORDER BY ch.timestamp DESC, ch.id DESC
+      LIMIT 30`, [key]);
+  rows.reverse();
+  const { libraryMatches, libraryLabel } = require('./libraryMedia');
+  const library = await libraryMatches('chat', rows).catch(() => new Map());
+  const lines = [];
+  for (const r of rows) {
+    let body = (r.message_body || '').trim();
+    const lib = library.get(r.message_id);
+    if (lib && lib.description) {
+      body = libraryLabel(lib, r.message_type);
+    } else if (r.extracted) {
+      const label = (r.message_type === 'audio' || r.message_type === 'voice') ? 'voice note'
+        : r.message_type === 'image' ? 'image' : 'document';
+      body = body && label !== 'voice note' ? `${body}\n  [${label}] ${r.extracted}` : `[${label}] ${r.extracted}`;
+    } else if (lib) {
+      body = libraryLabel(lib, r.message_type);
+    }
+    if (!body) body = TYPE_PLACEHOLDER[r.message_type] || '';
+    if (!body) continue;
+    if (body.length > 600) body = `${body.slice(0, 600)}…`;
+    lines.push(`[${istStamp(r.timestamp)}] ${r.direction === 'incoming' ? 'CUSTOMER' : 'US'}: ${body}`);
+  }
+  return lines;
+}
+
+/**
+ * An OpenAI-compatible credential and a model for the one small call below.
+ * ⚠ Only OpenAI-compatible credentials work: runChatCompletion speaks the
+ * OpenAI wire format, so an Anthropic or Gemini key would 404.
+ */
+async function resolveSuggestModel() {
+  const { isOpenAiCompatible } = require('../llm/chatCompletion');
+  const { rows } = await pool.query(
+    `SELECT * FROM coexistence.ai_models ORDER BY (provider = 'openai') DESC, id ASC`);
+  const cred = rows.find(r => isOpenAiCompatible(r));
+  if (!cred) return { cred: null, modelId: null };
+  const enabled = Array.isArray(cred.enabled_models) ? cred.enabled_models : [];
+  const modelId = enabled.find(m => /mini|flash|haiku|turbo/i.test(m)) || enabled[0] || 'gpt-4o-mini';
+  return { cred, modelId };
+}
+
+/**
+ * The AI's recommended next follow-up for a chat: ONE small call over the
+ * timing and the recent messages. Never writes anything — the caller decides
+ * whether to put it on the calendar.
+ */
+async function suggestFollowUp({ contactNumber }) {
+  const key = key10(contactNumber);
+  const { rows: timing } = await pool.query(
+    `SELECT direction, timestamp FROM coexistence.chat_history
+      WHERE ${KEY10('contact_number')} = $1 AND message_type NOT IN ('status','reaction','revoke','edit')
+      ORDER BY timestamp, id`, [key]);
+  if (!timing.length) throw err(400, 'This chat has no messages yet');
+
+  const { cred, modelId } = await resolveSuggestModel();
   if (!cred) throw err(400, 'No AI model is connected (Admin Settings → AI Models)');
-  const rows = await ca.fetchChatMessages({ conversationKey: key });
-  if (!rows.length) throw err(400, 'This chat has no messages yet');
-  await ca.annotateCached('chat', rows);
-  const recent = rows.slice(-30);
-  const rendered = await ca.renderTranscript({ source: 'chat', conversationKey: key, rows: recent, modalities: [], conf, cred, apiKey: null });
-  const facts = await ca.conversationFacts({ source: 'chat', conversationKey: key });
-  const analysis = a?.summary ? ca.priorSummaryText(a) : '';
-  const system = `You plan a salesperson's next WhatsApp follow-up with a lead. Today is ${ca.istToday()} (IST).
+  const lines = await recentChatLines(key);
+  const system = `You plan a salesperson's next WhatsApp follow-up with a lead. Today is ${istToday()} (IST).
 Pick the best DAY for our next message: honour anything promised in the chat ("I'll check and tell you tomorrow", "call me Friday", a payment or batch date), otherwise judge from how long they have been quiet and how warm they are. Never a date in the past. Prefer a time of day only when the chat implies one.
 Respond with ONLY JSON: {"date":"YYYY-MM-DD","time":"HH:MM or null","reason":"one short plain sentence why this day","note":"one short line: what to say or do on that day"}`;
   const user = [
-    facts.timing && `TIMING:\n${facts.timing}`,
-    analysis && `LATEST ANALYSIS:\n${analysis}`,
-    `RECENT MESSAGES:\n${rendered.lines.map(l => (l.line.length > 600 ? `${l.line.slice(0, 600)}…` : l.line)).join('\n')}`,
-  ].filter(Boolean).join('\n\n');
+    `TIMING:\n${timingText(timing)}`,
+    `RECENT MESSAGES:\n${lines.join('\n')}`,
+  ].join('\n\n');
   const { runChatCompletion } = require('../llm/chatCompletion');
   const res = await runChatCompletion(cred, modelId, [{ role: 'system', content: system }, { role: 'user', content: user }],
     { maxTokens: 1500, json: true });
   let parsed = null;
   try { parsed = JSON.parse(String(res).replace(/^```(?:json)?|```$/g, '').trim()); } catch { /* handled below */ }
-  const s = ca.cleanNextFollowUp(parsed);
+  const s = cleanNextFollowUp(parsed);
   if (!s) throw err(502, 'The AI did not return a usable date — pick one yourself');
   return { ...s, note: typeof parsed?.note === 'string' ? parsed.note.trim().slice(0, 300) : null, from: 'ai' };
 }
@@ -575,6 +711,7 @@ module.exports = {
   ensureFollowUpTables,
   listFollowUps, setFollowUp, updateFollowUp, deleteFollowUp,
   pinChat, unpinChat, myList, chatState, suggestFollowUp,
+  cleanNextFollowUp, istToday, istStamp, durationText, timingText,
   googleStatus, syncToGoogle, eventFor,
   assertCanReach, key10,
 };

@@ -17,7 +17,6 @@ const DEST_WORDS = {
   results_inbox: 'this agent’s Results page',
   rep_worklist: 'each rep’s “My leads today” list',
   whatsapp_template: 'a WhatsApp summary',
-  telegram: 'Telegram',
   email: 'email',
   webhook: 'a webhook',
 };

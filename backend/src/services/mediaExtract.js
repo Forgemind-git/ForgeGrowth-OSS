@@ -1,23 +1,24 @@
 // Turning one WhatsApp media message into text, exactly once.
 //
-// The Chat Analyzer reads voice notes, images and PDFs. All three are billed per
-// item — speech-to-text (OpenRouter, microsoft/mai-transcribe-2) by the second
-// of audio, vision by the token — and none of their answers
-// can ever change, because the message is immutable. So every result is cached
-// in coexistence.chat_message_artifacts, UNIQUE on (source, message_key, kind).
+// Voice notes are transcribed from the Chats window, by AI agents and by
+// Workflow Agents. Speech-to-text (OpenRouter, microsoft/mai-transcribe-2) is
+// billed by the second of audio, and the answer can never change, because the
+// message is immutable. So every result is cached in
+// coexistence.chat_message_artifacts, UNIQUE on (source, message_key, kind).
 //
-// ⚠ THIS IS THE COST SAVING. A later run with a different date range, keyword or
-// modality set re-reads the cache and pays nothing. Do not add a "force refresh"
-// that bypasses it without a very good reason and a visible cost warning.
+// ⚠ THIS IS THE COST SAVING. A note transcribed anywhere is reused everywhere
+// and never paid for twice. Do not add a "force refresh" that bypasses it
+// without a very good reason and a visible cost warning.
 //
-// It also closes a live gap outside the analyser: agentEngine's
-// transcribeInboundIfAudio used to re-pay for the same voice note on every agent
-// run; it now reads and writes this cache too, so a voice note is transcribed
-// once whether the agent or the analyser meets it first.
+// agentEngine's transcribeInboundIfAudio reads and writes this cache too, so a
+// voice note is transcribed once whichever caller meets it first.
 //
-// Nothing here throws. A conversation with one unreadable PDF must still produce
-// an analysis of everything else — a failed extraction is a recorded status, not
-// an exception.
+// The image (vision) and PDF (document) extractors predate the removal of the
+// Chat Analyzer (2026-10-21); rows of those kinds already in the cache are
+// still read by Workflow Agents.
+//
+// Nothing here throws. A failed extraction is a recorded status, not an
+// exception.
 
 const fs = require('fs');
 const os = require('os');
@@ -167,6 +168,34 @@ async function resolveFile(source, messageKey) {
   };
 }
 
+// ── schema self-heal (mirrors supabase/migrations/110 + 124) ─────────────────
+//
+// Formerly part of the Chat Analyzer's ensure. The cache outlived that feature:
+// voice-note transcripts, Media Library matches ('library') and the Workflow
+// Agents' language column (workflowAgents/schema.js) all live here.
+async function ensureMessageArtifactTables() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS coexistence.chat_message_artifacts (
+      id BIGSERIAL PRIMARY KEY,
+      source TEXT NOT NULL, message_key TEXT NOT NULL, kind TEXT NOT NULL,
+      conversation_key TEXT, text TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'ok', error TEXT,
+      provider TEXT, model TEXT, prompt_tokens INT, completion_tokens INT,
+      audio_seconds NUMERIC(10,2), bytes BIGINT,
+      cost_micros BIGINT NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_chat_message_artifacts
+                      ON coexistence.chat_message_artifacts (source, message_key, kind)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_cma_conversation
+                      ON coexistence.chat_message_artifacts (source, conversation_key, kind)`);
+  // Migration 124 mirror: 'library' = this message's file is a Media Library item.
+  await pool.query(`ALTER TABLE coexistence.chat_message_artifacts DROP CONSTRAINT IF EXISTS chat_message_artifacts_kind_check`);
+  await pool.query(`ALTER TABLE coexistence.chat_message_artifacts ADD CONSTRAINT chat_message_artifacts_kind_check
+                      CHECK (kind IN ('transcript','vision','document','library'))`);
+}
+
 // ── cache ─────────────────────────────────────────────────────────────────────
 
 async function readCached(source, messageKey, kind) {
@@ -213,14 +242,14 @@ function reusable(cached) {
   return !!cached && cached.status !== 'failed';
 }
 
-/** A chat's conversation key: the contact's last 10 digits (same rule as chatAnalyser's KEY10). */
+/** A chat's conversation key: the contact's last 10 digits (the rule every lead lookup uses). */
 function chatConversationKey(contactNumber) {
   return String(contactNumber || '').replace(/\D/g, '').slice(-10) || null;
 }
 
 /**
  * A usable cached transcript for one message, or null. Only 'ok' rows count —
- * callers outside the analyser (the agent engine) want words, not statuses.
+ * callers (the agent engine) want words, not statuses.
  */
 async function cachedTranscript(source, messageKey) {
   const c = await readCached(source, messageKey, 'transcript');
@@ -230,7 +259,7 @@ async function cachedTranscript(source, messageKey) {
 /**
  * Store a transcription made OUTSIDE extractArtifact (the agent engine applies
  * its own per-agent length cap, so it transcribes itself) in the same cache the
- * analyser reads — so the analyser, the MCP and later agent runs reuse it.
+ * Chats window reads — so later views and agent runs reuse it.
  * `result` is what transcription.transcribeAudio returned.
  */
 async function storeTranscript({ source = 'chat', messageKey, conversationKey, result, measuredSeconds, bytes, rateCard }) {
@@ -459,8 +488,7 @@ function isLegacyTranscript(row, conf) {
  *
  * ⚠ COSTS NOTHING. This is a disk read, not an API call — the whole point is
  * that a model which accepts images does the seeing itself, instead of paying a
- * vision model to write a description and then reading that. The vision
- * modality still exists for the STORED analysis, which has to be text.
+ * vision model to write a description and then reading that.
  *
  * Uses the same resolveFile as extraction, so it inherits the stored-file-first
  * rule that makes outbound media (most documents and half the voice notes on
@@ -492,6 +520,7 @@ async function resolveTranscriptionKey() {
 }
 
 module.exports = {
+  ensureMessageArtifactTables,
   extractArtifact, loadMediaBase64,
   resolveTranscriptionKey,
   cachedTranscript,

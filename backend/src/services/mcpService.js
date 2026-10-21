@@ -83,10 +83,6 @@ const PROXY_AREAS = [
   // admin-tier: changing field labels/visibility moves no money and leaks no
   // credentials).
   { cap: 'area_leads',      label: 'Leads & funnel',      test: /^\/(leads|funnel|entity-fields|follow-ups|my-list)(\/|$|\?)/ },
-  // Reading an analysis is harmless; PRODUCING one bills the AI provider, which
-  // is why the catalog puts these tools in the 'spend' tier. Bulk analysis is
-  // deliberately not reachable from here at all — no route serves it to MCP.
-  { cap: 'area_chat_analysis', label: 'Chat Analyzer', test: /^\/(chat-analysis)(\/|$|\?)/ },
   { cap: 'area_resources',  label: 'Resources & triggers', test: /^\/(resources|trigger-library|trigger-test)(\/|$|\?)/ },
   // `/products` is the canonical path since the Courses -> Products rename;
   // `/courses` stays matched because the backend still answers on it, and a
@@ -96,7 +92,7 @@ const PROXY_AREAS = [
   // Social (the ported ForgeSocial sub-app, mounted at /api/social). Its
   // credential, settings, user and MCP-key surfaces are carved out FIRST so the
   // broad /social rule below can never reach them — first-match-wins.
-  { cap: 'area_admin',      label: 'Admin (users, WA accounts, integrations)', test: /^\/social\/(credentials|settings|integrations|users|mcp|openrouter|telegram|backfill|sync)(\/|$|\?)/ },
+  { cap: 'area_admin',      label: 'Admin (users, WA accounts, integrations)', test: /^\/social\/(credentials|settings|integrations|users|mcp|openrouter|backfill|sync)(\/|$|\?)/ },
   { cap: 'area_social',     label: 'Social (Instagram)', test: /^\/social(\/|$|\?)/ },
 ];
 
@@ -387,7 +383,13 @@ async function getChatHistory({ waNumber, contactNumber, limit, before } = {}) {
   if (before) { params.push(before); beforeClause = `AND ch.timestamp < $${params.length}`; }
   params.push(cap);
   const { rows } = await pool.query(
-    `SELECT message_id, direction, message_type, message_body, status, timestamp, media_filename
+    `SELECT message_id, direction, message_type, message_body, status, timestamp, media_filename,
+            -- A voice note's stored transcript (transcribed in Chats or by an
+            -- agent). Read from the shared cache only: nothing is transcribed here.
+            (SELECT a.text FROM coexistence.chat_message_artifacts a
+              WHERE a.source = 'chat' AND a.message_key = ch.message_id
+                AND a.kind = 'transcript' AND a.status = 'ok' AND a.text <> ''
+              LIMIT 1) AS transcript
        FROM coexistence.chat_history ch
       WHERE ch.wa_number = $1 AND ch.contact_number = $2
         AND ch.message_type NOT IN ('status','reaction') ${beforeClause}
@@ -406,6 +408,7 @@ async function getChatHistory({ waNumber, contactNumber, limit, before } = {}) {
     direction: r.direction,
     type: r.message_type,
     text: r.message_body || (r.media_filename ? `[${r.message_type}: ${r.media_filename}]` : `[${r.message_type}]`),
+    transcript: r.transcript || undefined,
     status: r.status,
     at: r.timestamp,
   }));
@@ -864,13 +867,6 @@ const ENDPOINT_CATALOG = {
     'GET /social/ig-automations/flows · GET /social/ig-automations/flows/:id · POST/PUT/DELETE /social/ig-automations/flows/:id — Instagram flows',
     'GET /social/agents · GET /social/agents/:id · POST/PUT/DELETE /social/agents/:id · POST /social/agents/:id/tools — Social AI agents',
     'Credentials, settings, users, integrations and the Social MCP keys are NOT reachable here — they sit in the admin area.',
-  ],
-  area_chat_analysis: [
-    'GET  /chat-analysis                 conversations and what the analyser found',
-    'GET  /chat-analysis/conversation    one conversation: verdict + what has been read, per modality',
-    'GET  /chat-analysis/runs            run history',
-    'GET  /chat-analysis/summary         estimated spend, split by media type',
-    'POST /chat-analysis/run             analyse ONE conversation (costs money)',
   ],
   area_resources: ['GET /resources · GET /trigger-library · POST /trigger-test'],
   area_courses: [
@@ -1590,208 +1586,6 @@ async function getAutomationRuns({ automationId, executionId, status, limit } = 
   });
 }
 
-/* ------------------------- chat analyzer -------------------------------- */
-//
-// Required lazily: chatAnalyser pulls in the media pipeline (ffprobe, the PDF
-// parser, MinIO), and none of that should load just because something imported
-// mcpService.
-//
-// ⚠ There is no bulk entry point here on purpose. Analysing one conversation
-// that a person just named is a bounded, intended cost; analysing a hundred
-// because a sentence was ambiguous is not.
-
-function _ca() { return require('./chatAnalyser'); }
-
-async function listAnalysedChats({ source = 'all', filter = 'all', search = '', limit = 50 } = {}) {
-  const d = await _ca().listConversations({
-    source, filter, search, limit: Math.min(parseInt(limit, 10) || 50, 200),
-  });
-  return {
-    conversations: d.conversations.map(c => ({
-      source: c.source, key: c.conversationKey, name: c.name,
-      messages: c.messageCount, media: c.media,
-      analysed: c.analysed, newMessagesSinceAnalysis: c.newMessages,
-      // Which modalities the standing summary covers. Without this an assistant
-      // reads "analysed" and assumes the voice notes were included.
-      readSoFar: c.modalities,
-      summary: c.summary, intent: c.intent, sentiment: c.sentiment,
-      suggestedStage: c.suggestedStage, nextAction: c.nextAction,
-      lastAnalysedAt: c.lastRunAt,
-    })),
-    total: d.total,
-  };
-}
-
-async function getChatAnalysis({ source = 'chat', key } = {}) {
-  if (!key) throw svcErr(400, 'Which conversation? Pass the key from list_analysed_chats.');
-  const ca = _ca();
-  const convo = await ca.resolveConversation(source, key);
-  if (!convo) throw svcErr(404, 'That conversation could not be found.');
-  const [analysis, coverage, runs] = await Promise.all([
-    ca.loadAnalysis(source, key),
-    ca.loadCoverage(source, key),
-    ca.listRuns({ source, conversationKey: key, limit: 10 }),
-  ]);
-  if (!analysis) {
-    return {
-      conversation: { source, key, name: convo.displayName },
-      analysed: false,
-      note: 'This conversation has not been analysed yet. Call analyze_chat to analyse it.',
-      coverage,
-    };
-  }
-  return {
-    conversation: { source, key, name: convo.displayName, leadId: convo.leadId },
-    analysed: true,
-    summary: analysis.summary,
-    // In the order a salesperson reads it: problems → things to note → what to do.
-    problems: analysis.problems || [], notes: analysis.notes || [],
-    recommendations: analysis.recommendations || [],
-    interestedProducts: analysis.interested_products || [],
-    followUpMessages: analysis.follow_ups || [],
-    ourRepliesReview: analysis.reply_review || null, weMissed: analysis.missed || [],
-    intent: analysis.intent, sentiment: analysis.sentiment,
-    confidence: analysis.confidence == null ? null : Number(analysis.confidence),
-    suggestedStage: analysis.suggested_stage, stageReason: analysis.stage_reason,
-    nextAction: analysis.next_action, risk: analysis.risk,
-    objections: analysis.objections || [], buyingSignals: analysis.buying_signals || [],
-    topics: analysis.topics || [], openQuestions: analysis.open_questions || [],
-    participants: analysis.participants || [],
-    readSoFar: analysis.modalities || [],
-    coverage, lastAnalysedAt: analysis.last_run_at, runs,
-  };
-}
-
-async function analyzeChat({ source = 'chat', key, modalities = null, from = null, to = null, keyword = null, incremental = true } = {}) {
-  if (!key) throw svcErr(400, 'Which conversation? Pass the key from list_analysed_chats.');
-  const scope = (from || to || keyword) ? { from: from || null, to: to || null, keyword: keyword || null } : null;
-  const r = await _ca().analyseConversation({
-    source, conversationKey: key, modalities,
-    scope, incremental: scope ? false : incremental !== false,
-    trigger: 'mcp', actor: 'mcp',
-  });
-  if (r.skipped) {
-    return { ok: true, alreadyUpToDate: true, note: 'Nothing new since the last analysis; nothing was charged.' };
-  }
-  return {
-    ok: true,
-    scoped: r.scoped,
-    note: r.scoped
-      ? 'A filtered run. Saved in the run history, but it does NOT replace the standing summary for this conversation.'
-      : undefined,
-    conversation: { source, key, name: r.conversation.displayName },
-    ...r.verdict,
-    messagesRead: r.messagesAnalysed,
-    newMessages: r.newMessages,
-    readThisRun: r.modalities,
-    mediaSkipped: r.skippedMedia,
-    // Rupees, so the caller can report what it just spent.
-    estimatedCostInr: Number(r.cost.inr.toFixed(4)),
-    mediaReusedFree: r.cost.reusedArtifacts,
-    mediaNewlyRead: r.cost.newArtifacts,
-  };
-}
-
-async function getChatTranscript({ source = 'chat', key, from = null, to = null, audioOnly = false } = {}) {
-  if (!key) throw svcErr(400, 'Which conversation? Pass the key from list_analysed_chats.');
-  const ca = _ca();
-  const scope = (from || to) ? { from: from || null, to: to || null, keyword: null } : null;
-  const t = await ca.buildFullTranscript({ source, conversationKey: key, scope });
-  const entries = (audioOnly ? t.entries.filter(e => e.isTranscript || e.pending) : t.entries)
-    .map(e => ({
-      // The handle get_chat_image needs. Omitting it made every listed
-      // image unreachable, which is the whole point of listing them.
-      messageId: e.messageId,
-      at: e.at, from: e.speaker, direction: e.direction, type: e.type,
-      text: e.text || null,
-      // Flagged rather than dropped: a caller must be able to tell "nobody
-      // spoke" from "nobody has transcribed this yet".
-      voiceNote: !!e.isTranscript || undefined,
-      notTranscribedYet: e.pending || undefined,
-      caption: e.caption || undefined,
-      filename: e.filename || undefined,
-      note: e.note || undefined,
-      // One of OUR prepared files (brochure, course video, voice note) — its
-      // Media Library name + description say what the customer was given.
-      fromMediaLibrary: e.library || undefined,
-    }));
-  return {
-    conversation: { source, key, name: t.conversation.displayName },
-    counts: t.counts,
-    entries,
-    text: ca.transcriptToText(t),
-    // ⚠ Images are listed with their timestamp and caption but NOT their
-    // contents: nothing here returns image bytes, and vision is not run for a
-    // transcript. Say so, or the absence reads as "there was nothing in it".
-    note: t.counts.images
-      ? `${t.counts.images} image(s) are listed by timestamp only — this tool does not return image contents.`
-      : undefined,
-    pendingVoiceNotes: t.counts.audioPending || undefined,
-  };
-}
-
-/**
- * Transcribe the voice notes in one conversation that have no transcript yet,
- * then return every voice note's transcript.
- *
- * ⚠ ONCE PER NOTE, FOREVER. Transcripts live in chat_message_artifacts keyed by
- * the message id, so a note that already has one (from the app, an agent, an
- * earlier MCP call) is returned free and never re-sent to the model. Only notes
- * without a usable transcript are paid for. Capped per call by the analyser's
- * max_media_per_run; `remaining` says how many are left for another call.
- */
-async function transcribeChat({ source = 'chat', key, from = null, to = null } = {}) {
-  if (!key) throw svcErr(400, 'Which conversation? Pass the key from list_analysed_chats.');
-  const ca = _ca();
-  const scope = (from || to) ? { from: from || null, to: to || null, keyword: null } : null;
-  const r = await ca.transcribeConversation({ source, conversationKey: key, scope, actor: 'mcp' });
-  const t = await ca.buildFullTranscript({ source, conversationKey: key, scope });
-  return {
-    conversation: { source, key, name: t.conversation.displayName },
-    transcribedNow: r.transcribed,
-    alreadyTranscribed: r.alreadyDone,
-    remaining: r.remaining || 0,
-    failed: r.failed,
-    costInr: Number((r.costInr || 0).toFixed(4)),
-    model: 'microsoft/mai-transcribe-2 (via OpenRouter)',
-    voiceNotes: t.entries.filter(e => e.isTranscript || e.pending).map(e => ({
-      messageId: e.messageId, at: e.at, from: e.speaker, direction: e.direction,
-      transcript: e.isTranscript ? (e.text || '') : null,
-      notTranscribedYet: e.pending || undefined,
-      note: e.note || undefined,
-    })),
-    note: r.remaining
-      ? `${r.remaining} voice note(s) are still untranscribed (per-call cap). Call transcribe_chat again to continue.`
-      : undefined,
-  };
-}
-
-/**
- * Images from a conversation, as MCP image content blocks.
- *
- * ⚠ COSTS NOTHING — it is a disk read. A model that can see does the seeing,
- * instead of paying a vision model to write a description and then reading that.
- * The vision modality still exists for the STORED analysis, which has to be text.
- */
-async function getChatImages({ source = 'chat', key, messageIds = [] } = {}) {
-  if (!key) throw svcErr(400, 'Which conversation? Pass the key from list_analysed_chats.');
-  const r = await _ca().getConversationImages({ source, conversationKey: key, messageIds });
-  return {
-    conversation: { source, key, name: r.conversation.displayName },
-    images: r.images,
-    skipped: r.skipped,
-    totalBytes: r.totalBytes,
-  };
-}
-
-async function getChatAnalysisCosts({ from = null, to = null } = {}) {
-  const d = await _ca().costSummary({ from, to });
-  return {
-    ...d,
-    note: 'Voice-note transcription costs are the real amounts OpenRouter reported. Analysis, image and older figures are ESTIMATES: OpenAI returns token counts and never a price, so rupees are computed from the rate card in the Chat Analyzer settings.',
-  };
-}
-
 // ── follow-up calendar (Leads → My list) ────────────────────────────────────
 // Same functions the app routes call (services/followUps.js), so a follow-up
 // set from Claude lands on exactly the calendar a rep sees.
@@ -1860,7 +1654,6 @@ module.exports = {
   // one implementation rather than importing it in three places and drifting.
   catalog: mcpCatalog,
   isToolAllowed: mcpCatalog.isToolAllowed,
-  listAnalysedChats, getChatAnalysis, analyzeChat, getChatAnalysisCosts, getChatTranscript, getChatImages, transcribeChat,
   listFollowUpsMcp, setFollowUpMcp, updateFollowUpMcp, suggestFollowUpMcp,
   toolDeniedMessage: mcpCatalog.toolDeniedMessage,
   listWaAccounts, listModels, searchSpreadsheets, listSheetTabs, readSheetValues, listMedia, listTemplates, getTemplate,

@@ -22,7 +22,6 @@ import AiAgentBuilderPage from './pages/AiAgentBuilderPage.jsx';
 import MessageCostsPage from './pages/MessageCostsPage.jsx';
 // AI Academy — Sales
 import LeadsHubPage from './pages/sales/LeadsHubPage.jsx';
-import ChatAnalyzerPage from './pages/sales/ChatAnalyzerPage.jsx';
 // Workflow agents (migration 121) — Claude agents over the CRM's data.
 import WorkflowAgentsPage from './pages/workflowAgents/WorkflowAgentsPage.jsx';
 import WorkflowApprovalsPage from './pages/workflowAgents/ApprovalsPage.jsx';
@@ -38,8 +37,9 @@ const VALID_PAGES = new Set([
   'pipelines', 'ai-agent-builder',
   // Sales — 'sales-pipeline' and 'sales-funnel' are legacy keys kept so old
   // links and any stored permission override keep resolving; both land on the
-  // Leads hub. 'bda-performance' and 'contacts' were removed with their pages.
-  'sales-pipeline', 'leads', 'chat-analyzer',
+  // Leads hub. 'bda-performance' and 'contacts' were removed with their pages,
+  // and 'chat-analyzer' with the Chat Analyzer (2026-10-21).
+  'sales-pipeline', 'leads',
   'sales-funnel',
   // Message costs — a full-width dashboard; its configuration lives in
   // Admin Settings -> Message Costs.
@@ -214,9 +214,6 @@ export default function App() {
       case 'sales-funnel': return <LeadsHubPage user={user} navigate={navigate} subParts={[]} />;
       case 'leads': return <LeadsHubPage user={user} navigate={navigate} subParts={subParts} />;
       case 'message-costs': return <MessageCostsPage user={user} navigate={navigate} subParts={subParts} />;
-      // subParts route the view AND the open conversation:
-      //   #/chat-analyzer/cost, #/chat-analyzer/c/<source>/<key>
-      case 'chat-analyzer': return <ChatAnalyzerPage user={user} navigate={navigate} subParts={subParts} />;
       // subParts: [] list · ['settings'] · [agentId, tab, runId?]
       case 'workflow-agents': return <WorkflowAgentsPage user={user} navigate={navigate} subParts={subParts} />;
       case 'workflow-agent-approvals': return <WorkflowApprovalsPage user={user} navigate={navigate} />;

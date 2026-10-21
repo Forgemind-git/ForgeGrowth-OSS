@@ -17,6 +17,25 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
 
 ## [Unreleased]
 
+### Removed
+
+- **Chat Analyzer** — the tab, the slide-over in Chats, its settings and business context, and its
+  MCP tools (`list_analysed_chats`, `get_chat_analysis`, `analyze_chat`, `get_chat_analysis_costs`,
+  `get_chat_transcript`, `transcribe_chat`, `get_chat_image`) and the `area_chat_analysis` API area.
+  Voice-note transcription in Chats is unchanged (now served from `/api/voice-notes/…`), and
+  `read_messages` returns any stored voice-note transcript. The AI follow-up date stays, now in the
+  Leads & Funnel MCP category. Its tables are left in place and no longer written.
+- **Telegram** — the Social Telegram bot (Integrations → Telegram, its chat viewer and approvals)
+  and the workflow-agent Telegram output with its bot token. A Telegram output on an existing
+  workflow agent is dropped when the agent is next saved. Its tables are left in place.
+
+### Changed
+
+- **Settings** — every tab now opens with its title, with the Sales & Chats | Social switch beside
+  it; the menu is grouped (Workspace, Contacts & funnel, Connections, Social); all tabs share one
+  content margin; "Back to home" goes home. Social MCP capability text no longer mentions other
+  platforms.
+
 ## [2.0.0] — 2026-10-18
 
 Published as multi-architecture images tagged `2.0.0`, `2.0` and `2`.

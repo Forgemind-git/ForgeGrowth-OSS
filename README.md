@@ -217,7 +217,6 @@ Nothing else. No Node, Postgres, Redis or MinIO on the host — it all runs in c
 |---|---|
 | **Leads** | Pipeline, funnel and list views of one model, with tags, custom fields and CSV/XLSX import |
 | **Inbox** | 3-pane WhatsApp client with media, transcribed voice notes and 24-hour window enforcement |
-| **Chat Analyzer** | Summary, intent, suggested stage and ready-to-send follow-ups for any conversation |
 | **Follow-ups** | Pinned lead chats and a follow-up calendar, optionally mirrored to Google Calendar |
 | **Templates** | The full Meta lifecycle — submit, sync, edit, quality score, carousels |
 | **Broadcasts** | 7 message types, scheduling, per-recipient status, stage and tag filters |

@@ -287,8 +287,6 @@ app.use('/api/social/ig-automations', require('./commentAutomationRoutes'));
 app.use('/api/social/crm', require('./contactsCrm'));
 // Per-user "My accounts" preset used as every page's default platform/account filter (userScope.js)
 app.use('/api/social/me/scope', require('./userScope'));
-// Telegram bot: token, who may contact it, chat viewer (telegramRoutes.js)
-app.use('/api/social/telegram', require('./telegramRoutes').telegramRouter);
 // OpenRouter key / ₹ rate / spend for the Social AI features (openRouterRoutes.js)
 app.use('/api/social/openrouter', require('./openRouterRoutes').openRouterRouter);
 // App credentials (Meta app / Instagram keys) entered
@@ -2603,10 +2601,6 @@ async function start() {
     // while background jobs are off.
     await require('./services/commentAutomation').ensureSchema().catch(err => console.error('[social] automations schema:', err.message));
     await require('./contactsCrm').ensureSchema().catch(err => console.error('[social] crm schema:', err.message));
-    // Telegram bot poller. Started even with background jobs OFF: the bot has
-    // nothing to do with the Meta apps, and an admin must be able to connect it
-    // and approve chats first (idle until configured).
-    require('./services/telegramBot').start();
     if (socialEnv.JOBS_ENABLED !== '1') {
       console.log('[social] background jobs OFF (set SOCIAL_JOBS_ENABLED=1 to enable)');
       // Follower counts still need refreshing even with jobs off.

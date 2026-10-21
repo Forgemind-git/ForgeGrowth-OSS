@@ -1,9 +1,8 @@
-// Module settings and team setup: business name, costs, Telegram, and the rep model
+// Module settings and team setup: business name, costs, and the rep model
 // the data map found missing (teams, team leads, employee ids, working hours, and
 // which rep holds which WhatsApp number, with history).
 
 const pool = require('../../db');
-const { encrypt } = require('../../util/crypto');
 const { toIst } = require('./format');
 const { modelCatalog } = require('./modelClient');
 const { ServiceError, audit } = require('./service');
@@ -28,7 +27,6 @@ async function getSettings() {
     default_working_hours: s?.default_working_hours || null,
     usd_to_inr: Number(s?.usd_to_inr || 88),
     rate_card: s?.rate_card || {},
-    telegram_configured: !!s?.telegram_bot_token_encrypted,
     anthropic_credentials: creds.map(c => ({ id: c.id, label: c.label || `Anthropic #${c.id}` })),
     anthropic_env_key: !!process.env.ANTHROPIC_API_KEY,
     models: modelCatalog(),
@@ -55,14 +53,9 @@ async function updateSettings(patch, userId) {
     }
     add('rate_card', JSON.stringify(card));
   }
-  if (patch.telegram_bot_token !== undefined) {
-    const t = String(patch.telegram_bot_token || '').trim();
-    if (t && !/^\d+:[A-Za-z0-9_-]{20,}$/.test(t)) throw new ServiceError(400, 'That does not look like a Telegram bot token (123456:ABC…).');
-    add('telegram_bot_token_encrypted', t ? encrypt(t) : null);
-  }
   if (sets.length) {
     await pool.query(`UPDATE coexistence.workflow_agent_settings SET ${sets.join(', ')}, updated_at = NOW() WHERE id = 1`, params);
-    await audit({ agentId: null, entity: 'settings', action: 'update', after: { ...patch, telegram_bot_token: patch.telegram_bot_token ? '(set)' : undefined }, userId });
+    await audit({ agentId: null, entity: 'settings', action: 'update', after: patch, userId });
   }
   return getSettings();
 }

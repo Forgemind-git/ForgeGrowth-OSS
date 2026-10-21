@@ -182,18 +182,6 @@ export const api = {
     updateTag:    (id, body) => req('/crm/tags/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify(body) }),
     deleteTag:    (id) => req('/crm/tags/' + encodeURIComponent(id), { method: 'DELETE' }),
   },
-  // Telegram bot (admin) — Settings → Integrations → Telegram (backend telegramRoutes.js)
-  telegram: {
-    status:     () => req('/telegram'),
-    connect:    (token) => req('/telegram/connect', { method: 'POST', body: JSON.stringify({ token }) }),
-    disconnect: () => req('/telegram/disconnect', { method: 'POST' }),
-    saveAccess: (body) => req('/telegram/access', { method: 'PUT', body: JSON.stringify(body) }),
-    chats:      () => req('/telegram/chats'),
-    messages:   (id, params = {}) => req('/telegram/chats/' + encodeURIComponent(id) + '/messages' + qs(params)),
-    send:       (id, text) => req('/telegram/chats/' + encodeURIComponent(id) + '/messages', { method: 'POST', body: JSON.stringify({ text }) }),
-    setChat:    (id, body) => req('/telegram/chats/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify(body) }),
-    deleteChat: (id) => req('/telegram/chats/' + encodeURIComponent(id), { method: 'DELETE' }),
-  },
   // OpenRouter key + spend (admin) — Settings → OpenRouter
   openRouter: {
     status:    () => req('/openrouter'),

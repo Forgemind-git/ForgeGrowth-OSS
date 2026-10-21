@@ -1,7 +1,7 @@
 // Set / reschedule / finish ONE follow-up for a chat.
 //
 // One component for every place a follow-up is set — the chat header, the My
-// list lead pane, the calendar and the Chat Analyzer's "add to calendar" — so
+// list lead pane and the calendar — so
 // the rules (one open follow-up per person, quick picks, AI suggestion) look and
 // behave the same everywhere.
 import { useState, useEffect } from 'react';

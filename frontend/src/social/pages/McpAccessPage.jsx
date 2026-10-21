@@ -7,10 +7,10 @@ import { useConfirm } from "../ConfirmDialog.jsx";
 import { showToast } from "../Toast.jsx";
 
 const MCP_CAPABILITIES = [
-  { key: "analytics",      label: "Analytics & stats",    desc: "Overview KPIs, per-platform stats, followers trend, audience demographics, connected accounts and token health." },
-  { key: "insights",       label: "Insights & decisions", desc: "Cross-platform executive scorecard, content-theme ROI, and trends/anomaly alerts for managerial decisions." },
+  { key: "analytics",      label: "Analytics & stats",    desc: "Overview KPIs, Instagram stats, followers trend, audience demographics, connected accounts and token health." },
+  { key: "insights",       label: "Insights & decisions", desc: "Executive scorecard, content-theme ROI, and trends/anomaly alerts for managerial decisions." },
   { key: "content",        label: "Content",              desc: "Content library posts with per-post metrics and scores, plus the media library." },
-  { key: "reports",        label: "Reports & forecast",   desc: "Generate per-platform performance reports for any date range, plus a forward-looking forecast of what to post next week." },
+  { key: "reports",        label: "Reports & forecast",   desc: "Generate Instagram performance reports for any date range, plus a forward-looking forecast of what to post next week." },
   { key: "inbox",          label: "Inbox",                desc: "Instagram DMs and comments." },
   { key: "contacts",       label: "Contacts & tags",      desc: "CRM contacts built from DM history, notes, and the tag taxonomy." },
   { key: "engage",         label: "Reply & DM (write)",   desc: "Reply to comments and send Instagram DMs — posts on the REAL platform.", write: true },

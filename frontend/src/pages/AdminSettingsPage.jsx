@@ -24,21 +24,29 @@ import { FunnelSettingsContent } from './sales/FunnelSettingsPage.jsx';
 import EntityFieldsManager from '../components/EntityFieldsManager.jsx';
 import SocialSettingsPart from '../social/SocialSettingsPart.jsx';
 
+// The sidebar groups (in order). A tab's `group` decides which heading it sits
+// under; the order of TABS is the order inside each group.
+const TAB_GROUPS = [
+  { key: 'workspace', label: 'Workspace' },
+  { key: 'crm', label: 'Contacts & funnel' },
+  { key: 'connections', label: 'Connections' },
+  { key: 'social', label: 'Social' },
+];
 const TABS = [
-  { key: 'general', label: 'General', icon: Settings },
-  { key: 'tags', label: 'Tags', icon: Tag },
-  { key: 'category', label: 'Category', icon: FolderOpen },
-  { key: 'fields', label: 'Fields', icon: LayoutList },
-  { key: 'funnel', label: 'Funnel', icon: SlidersHorizontal },
-  { key: 'whatsapp-accounts', label: 'WhatsApp Accounts', icon: MessageSquare },
-  { key: 'ai-models', label: 'AI Models', icon: Bot },
-  { key: 'integrations', label: 'Integrations', icon: Plug },
-  { key: 'mcp', label: 'MCP Tools', icon: PlugZap },
-  { key: 'users', label: 'Users', icon: User },
-  { key: 'webhooks', label: 'Webhooks', icon: Webhook },
+  { key: 'general', label: 'General', icon: Settings, group: 'workspace' },
+  { key: 'users', label: 'Users', icon: User, group: 'workspace' },
+  { key: 'tags', label: 'Tags', icon: Tag, group: 'crm' },
+  { key: 'category', label: 'Category', icon: FolderOpen, group: 'crm' },
+  { key: 'fields', label: 'Fields', icon: LayoutList, group: 'crm' },
+  { key: 'funnel', label: 'Funnel', icon: SlidersHorizontal, group: 'crm' },
+  { key: 'whatsapp-accounts', label: 'WhatsApp Accounts', icon: MessageSquare, group: 'connections' },
+  { key: 'ai-models', label: 'AI Models', icon: Bot, group: 'connections' },
+  { key: 'integrations', label: 'Integrations', icon: Plug, group: 'connections' },
+  { key: 'webhooks', label: 'Webhooks', icon: Webhook, group: 'connections' },
+  { key: 'mcp', label: 'MCP Tools', icon: PlugZap, group: 'connections' },
   // Social-only tabs (were under Social → Settings). No "Sales & Chats" half.
-  { key: 'activity', label: 'Activity log', icon: ScrollTextIcon, socialOnly: true },
-  { key: 'privacy', label: 'Privacy policy', icon: ShieldIcon, socialOnly: true },
+  { key: 'activity', label: 'Activity log', icon: ScrollTextIcon, socialOnly: true, group: 'social' },
+  { key: 'privacy', label: 'Privacy policy', icon: ShieldIcon, socialOnly: true, group: 'social' },
 ];
 
 // Main tabs that also hold a Social half (social/SocialSettingsPart.jsx), shown
@@ -113,7 +121,7 @@ function GeneralTab({ onLogout, user }) {
   };
 
   return (
-    <div style={{ flex: 1, padding: '32px 40px', overflowY: 'auto', fontFamily: FONT }}>
+    <div style={{ flex: 1, padding: '16px 28px 28px', overflowY: 'auto', fontFamily: FONT }}>
       <div style={{ maxWidth: '100%' }}>
         <div style={{ marginBottom: 28 }}>
           <p style={{ fontSize: 14, color: C.textMuted, margin: '4px 0 0', fontFamily: FONT }}>Manage your account preferences and settings</p>
@@ -215,18 +223,20 @@ function FieldsTab() {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{
-        padding: '20px 32px',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        borderBottom: `1px solid ${C.border}`,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-          <PillStrip value={sectionId(activeSection)} onChange={setSection}
-            items={FIELD_SECTIONS.map(s => ({ id: sectionId(s), label: s.label }))} />
+      {FIELD_SECTIONS.length > 1 && (
+        <div style={{
+          padding: '20px 32px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          borderBottom: `1px solid ${C.border}`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+            <PillStrip value={sectionId(activeSection)} onChange={setSection}
+              items={FIELD_SECTIONS.map(s => ({ id: sectionId(s), label: s.label }))} />
+          </div>
         </div>
-      </div>
+      )}
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 32px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 28px 28px' }}>
         <EntityFieldsManager entity={activeSection.key} surface={activeSection.surface} />
       </div>
     </div>
@@ -314,7 +324,7 @@ function TagsTab({ categories, tags, onRefresh }) {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <div style={{
-        padding: '20px 32px',
+        padding: '16px 28px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         borderBottom: `1px solid ${C.border}`,
       }}>
@@ -341,7 +351,7 @@ function TagsTab({ categories, tags, onRefresh }) {
         </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 32px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 28px 28px' }}>
         {tags.length === 0 ? (
           <div style={{ textAlign: 'center', color: C.textMuted, fontSize: 15, marginTop: 60 }}>
             No tags yet. Click "Add tag" to create one.
@@ -512,7 +522,7 @@ function CategoryDetail({ category, tags, onBack, onDeleteTag, onRefresh }) {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{ padding: '20px 32px', borderBottom: `1px solid ${C.border}` }}>
+      <div style={{ padding: '16px 28px', borderBottom: `1px solid ${C.border}` }}>
         <button onClick={onBack} style={{
           display: 'flex', alignItems: 'center', gap: 6,
           border: 'none', background: 'transparent', cursor: 'pointer',
@@ -529,7 +539,7 @@ function CategoryDetail({ category, tags, onBack, onDeleteTag, onRefresh }) {
         </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 32px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 28px 28px' }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: C.textSecondary, marginBottom: 12, fontFamily: FONT }}>
           Tags under this category ({categoryTags.length})
         </div>
@@ -660,7 +670,7 @@ function CategoryTab({ categories, tags, onRefresh, detailId, onViewDetail, onBa
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <div style={{
-        padding: '20px 32px',
+        padding: '16px 28px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         borderBottom: `1px solid ${C.border}`,
       }}>
@@ -678,7 +688,7 @@ function CategoryTab({ categories, tags, onRefresh, detailId, onViewDetail, onBa
         </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 32px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 28px 28px' }}>
         {categories.length === 0 ? (
           <div style={{ textAlign: 'center', color: C.textMuted, fontSize: 15, marginTop: 60 }}>
             No categories yet. Click "Add category" to create one.
@@ -930,7 +940,7 @@ function WhatsappAccountsTab() {
   const labelStyle = { display: 'block', fontSize: 13, fontWeight: 600, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6, fontFamily: FONT };
 
   return (
-    <div style={{ flex: 1, padding: 24, overflow: 'auto', fontFamily: FONT }}>
+    <div style={{ flex: 1, padding: '16px 28px 28px', overflow: 'auto', fontFamily: FONT }}>
       <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}.spin{animation:spin 1s linear infinite}`}</style>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
         <div>
@@ -1230,32 +1240,35 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
     setActiveTab('category');
   };
 
+  // Every tab opens with the same header: its title, and — when the tab has a
+  // Social half — the "Sales & Chats | Social" switch beside it, so the switch
+  // reads as part of this tab rather than as a page of its own.
   const renderTab = () => {
-    const switcher = canMain && canSocial ? (
-      <div style={{ padding: '20px 28px 0', flexShrink: 0 }}>
-        <PillStrip size="sm" value={side} onChange={setSide}
-          items={[{ id: 'main', label: 'Sales & Chats' }, { id: 'social', label: 'Social' }]} />
+    const header = (
+      <div style={{ padding: '24px 28px 4px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+        <h1 style={{ margin: 0, fontSize: 24, fontWeight: 780, letterSpacing: '-0.02em', color: C.text, fontFamily: FONT }}>{activeDef.label}</h1>
+        {canMain && canSocial && (
+          <PillStrip size="sm" value={side} onChange={setSide}
+            items={[{ id: 'main', label: 'Sales & Chats' }, { id: 'social', label: 'Social' }]} />
+        )}
       </div>
-    ) : null;
+    );
     if (side === 'social') {
       return (
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
-          {switcher}
+          {header}
           <div style={{ padding: '0 28px 28px' }}>
             <SocialSettingsPart part={activeTab} platform={socialPlatform} user={user} />
           </div>
         </div>
       );
     }
-    if (switcher) {
-      return (
-        <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          {switcher}
-          <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>{renderMainTab()}</div>
-        </div>
-      );
-    }
-    return renderMainTab();
+    return (
+      <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        {header}
+        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>{renderMainTab()}</div>
+      </div>
+    );
   };
 
   const renderMainTab = () => {
@@ -1307,7 +1320,7 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
         padding: 12,
       }}>
         <button
-          onClick={() => onNavigate('chats')}
+          onClick={() => onNavigate('home')}
           style={{
             display: 'flex', alignItems: 'center', gap: 8,
             padding: '12px 14px', marginBottom: 10, borderRadius: 999,
@@ -1320,10 +1333,13 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
         >
           <ArrowLeft size={16} /> Back to home
         </button>
-        <div style={{ fontSize: 12, fontWeight: 650, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10, paddingLeft: 14 }}>
-          Settings
-        </div>
-        {visibleTabs.map(tab => {
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        {TAB_GROUPS.map(g => ({ ...g, tabs: visibleTabs.filter(t => t.group === g.key) })).filter(g => g.tabs.length).map(g => (
+          <div key={g.key} style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 650, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.04em', margin: '6px 0 6px', paddingLeft: 14 }}>
+              {g.label}
+            </div>
+        {g.tabs.map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.key;
           return (
@@ -1332,9 +1348,9 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
               onClick={() => handleTabChange(tab.key)}
               style={{
                 width: '100%', display: 'flex', alignItems: 'center', gap: 12,
-                padding: '12px 14px', borderRadius: 999, border: 'none',
+                padding: '9px 14px', borderRadius: 999, border: 'none',
                 background: isActive ? C.primary : 'transparent',
-                cursor: 'pointer', fontFamily: FONT, fontSize: 16,
+                cursor: 'pointer', fontFamily: FONT, fontSize: 15,
                 fontWeight: isActive ? 780 : 550,
                 color: isActive ? '#fff' : C.textSecondary,
                 textAlign: 'left', marginBottom: 2, transition: 'background .15s',
@@ -1347,6 +1363,9 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
             </button>
           );
         })}
+          </div>
+        ))}
+        </div>
       </div>
 
       {renderTab()}
@@ -1359,10 +1378,9 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
 // Content lives in pages/sales/FunnelSettingsPage.jsx (also usable standalone).
 function FunnelSettingsTab({ navigate }) {
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 28, overflow: 'auto', fontFamily: FONT }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '16px 28px 28px', overflow: 'auto', fontFamily: FONT }}>
       <div style={{ marginBottom: 18 }}>
-        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: C.text }}>Funnel</h2>
-        <div style={{ fontSize: 15, color: C.textSecondary, marginTop: 4 }}>
+        <div style={{ fontSize: 15, color: C.textSecondary }}>
           Configure your funnel stages, lead sources, and products. These drive the Sales → Funnel chart and sales entry.
         </div>
       </div>
@@ -1729,7 +1747,7 @@ function AIModelsTab({ navigate }) {
   const labelStyle = { display: 'block', fontSize: 13, fontWeight: 600, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6, fontFamily: FONT };
 
   return (
-    <div style={{ flex: 1, padding: 24, overflow: 'auto', fontFamily: FONT }}>
+    <div style={{ flex: 1, padding: '16px 28px 28px', overflow: 'auto', fontFamily: FONT }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
         <div>
           <p style={{ fontSize: 14, color: C.textMuted, margin: '4px 0 0' }}>
@@ -1891,7 +1909,7 @@ function AIModelsTab({ navigate }) {
                           {syncingId === row.id ? <Loader2 size={12} className="spin"/> : <RefreshCw size={12}/>}
                           {syncingId === row.id ? 'Syncing' : 'Sync'}
                         </button>
-                        <button onClick={() => { setDeleteTarget(row); setDeleteConfirmText(''); }} title="Delete" style={{ ...btnSecondary, color: 'var(--c-dangerText, #A32D2D)', borderColor: '#F3D4D4', whiteSpace: 'nowrap' }}>
+                        <button onClick={() => { setDeleteTarget(row); setDeleteConfirmText(''); }} title="Delete" style={{ ...btnSecondary, color: 'var(--c-dangerText, #A32D2D)', whiteSpace: 'nowrap' }}>
                           <Trash2 size={12}/> Delete
                         </button>
                       </div>
@@ -1927,7 +1945,7 @@ function AIModelsTab({ navigate }) {
 
             {form.provider === 'openrouter' && (
               <div style={{ marginBottom: 14, padding: '10px 12px', borderRadius: 10, background: 'var(--c-infoBg, #EEF2FF)', fontSize: 13, color: C.text, lineHeight: 1.45 }}>
-                This key transcribes every WhatsApp voice note — in Chat Analyzer, AI agents, MCP and the
+                This key transcribes every WhatsApp voice note — for AI agents and the
                 Transcribe button on voice notes in Chats — with <strong>Microsoft MAI-Transcribe 2</strong> (multilingual).
                 Each note is transcribed once and reused. OpenRouter's chat models start switched off; enable any under Manage to use them elsewhere.
               </div>
@@ -2584,7 +2602,7 @@ function UsersTab() {
   };
 
   return (
-    <div style={{ flex: 1, padding: 24, overflow: 'auto', fontFamily: FONT }}>
+    <div style={{ flex: 1, padding: '16px 28px 28px', overflow: 'auto', fontFamily: FONT }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
         <div>
           <p style={{ fontSize: 14, color: C.textMuted, margin: '4px 0 0' }}>
@@ -2647,7 +2665,7 @@ function UsersTab() {
                   <td style={{ padding: '12px 16px', verticalAlign: 'top', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button onClick={() => openEdit(u)} style={{ ...btnSecondary, marginRight: 4 }}>Edit</button>
                     <button onClick={() => { setResetting(u); setResetPwInput(''); }} style={{ ...btnSecondary, marginRight: 4 }} title="Reset password"><Key size={12}/></button>
-                    <button onClick={() => { setDeleteTarget(u); setDeleteText(''); }} style={{ ...btnSecondary, color: 'var(--c-dangerText, #A32D2D)', borderColor: '#F3D4D4' }} title="Delete"><Trash2 size={12}/></button>
+                    <button onClick={() => { setDeleteTarget(u); setDeleteText(''); }} style={{ ...btnSecondary, color: 'var(--c-dangerText, #A32D2D)' }} title="Delete"><Trash2 size={12}/></button>
                   </td>
                 </tr>
               ))}
@@ -3219,7 +3237,7 @@ function McpToolsTab() {
   ];
 
   return (
-    <div style={{ flex: 1, padding: 24, overflow: 'auto', fontFamily: FONT, maxWidth: 1180 }}>
+    <div style={{ flex: 1, padding: '16px 28px 28px', overflow: 'auto', fontFamily: FONT, maxWidth: 1180 }}>
       {/* Status — answers "is Claude connected, and how much can it do?" before anything else. */}
       <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
         <div style={{
@@ -4039,7 +4057,6 @@ function IntegrationsTab() {
           <li><b>Append to Google Sheet</b> — pick a sheet + tab.</li>
           <li><b>Create Calendar Event</b> — on the connected calendar.</li>
         </ul>
-        More apps (Slack, Notion, custom webhooks) coming soon.
       </div>
     </div>
   );
@@ -4230,7 +4247,7 @@ function IntegrationsTab() {
   // ─── Master render ─────────────────────────────────────────────────
 
   return (
-    <div style={{ flex: 1, padding: '28px 32px', fontFamily: FONT, overflowY: 'auto' }}>
+    <div style={{ flex: 1, padding: '16px 28px 28px', fontFamily: FONT, overflowY: 'auto' }}>
       <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
 
       {error && (
@@ -4686,7 +4703,7 @@ function WebhooksTab() {
   const [open, setOpen] = useState(null);   // null | 'whatsapp'
   if (open === 'whatsapp') return <WhatsAppWebhookPanel mode="detail" onBack={() => setOpen(null)} />;
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 28, overflow: 'auto', fontFamily: FONT }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '16px 28px 28px', overflow: 'auto', fontFamily: FONT }}>
       <div style={{ marginBottom: 18 }}>
         <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 4 }}>
           Inbound webhook endpoints. Open a provider to edit its configuration and view recent activity.

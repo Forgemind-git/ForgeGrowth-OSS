@@ -9,7 +9,6 @@ import { Card, SectionHead, PageHeader, Badge, TokenBadge, StatusDot, PlatformBa
 import { showToast } from '../Toast.jsx';
 import { useConfirm } from '../ConfirmDialog.jsx';
 import AppCredentialsCard from "../components/AppCredentialsCard.jsx";
-import TelegramPage from "./TelegramPage.jsx";
 
 // Format time since a timestamp into human-readable text
 function timeSince(isoString) {
@@ -503,7 +502,6 @@ function PlatformDetail({ platform }) {
 
 // ── Page ─────────────────────────────────────────────────────
 export default function IntegrationsPage({ platform = null, isAdmin = false }) {
-  if (platform === 'telegram') return isAdmin ? <TelegramPage /> : <EmptyState title="Admins only" body="Only an admin can manage the Telegram bot." />;
   if (platform && PLATFORMS[platform]) return <PlatformDetail platform={platform} />;
   return <IntegrationsOverview isAdmin={isAdmin} />;
 }
@@ -612,8 +610,6 @@ function IntegrationsOverview({ isAdmin }) {
         ))}
       </div>
 
-      {isAdmin && <TelegramCard />}
-
       {configuringInstagram && (
         <InstagramCredentialsModal
           onClose={() => setConfiguringInstagram(false)}
@@ -625,38 +621,5 @@ function IntegrationsOverview({ isAdmin }) {
         ForgeGrowth uses the official Instagram API. Stored platform data is kept current via scheduled syncs. Users can disconnect any account here at any time, and Meta data-deletion requests are honored automatically.
       </div>
     </div>
-  );
-}
-
-// Messaging: the Telegram bot. Admin only.
-function TelegramCard() {
-  const [st, setSt] = useState(null);
-  useEffect(() => { api.telegram.status().then(setSt).catch(() => setSt({ configured: false })); }, []);
-  const ok = st?.configured && st.status === 'connected';
-  const open = () => { window.location.hash = '#/social/integrations/telegram'; };
-  return (
-    <>
-      <SectionHead>Messaging</SectionHead>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12, marginBottom: 22 }}>
-        <div role="button" tabIndex={0} onClick={open} onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), open())}
-          style={{ background: C.raised, borderRadius: 16, padding: 16, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: '#229ED92e', color: '#229ED9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14 }}>TG</div>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ ...T.h3, color: C.text }}>Telegram</div>
-              <div style={{ fontSize: 12.5, color: C.textMuted, fontWeight: 500, marginTop: 2 }}>{st?.bot?.username ? '@' + st.bot.username : 'Instant alerts bot'}</div>
-            </div>
-            <ChevronRight size={16} color={C.textMuted} />
-          </div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {!st ? <Chip>Loading…</Chip>
-              : !st.configured ? <Chip>Not connected</Chip>
-              : <><Chip tone={ok ? 'ok' : 'err'}>{ok ? 'Connected' : 'Needs attention'}</Chip>
-                  <Chip>{st.chats?.approved || 0} approved chat{st.chats?.approved === 1 ? '' : 's'}</Chip>
-                  {st.chats?.pending > 0 && <Chip tone="warn">{st.chats.pending} waiting</Chip>}</>}
-          </div>
-        </div>
-      </div>
-    </>
   );
 }

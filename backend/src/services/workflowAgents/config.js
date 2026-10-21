@@ -10,7 +10,9 @@ const { parseCron } = require('./cron');
 const { MODELS, DEFAULT_MODEL } = require('./modelClient');
 
 const EVENTS = ['message.inbound', 'lead.stage_changed', 'lead.quiet', 'payment.created'];
-const DESTINATION_TYPES = ['results_inbox', 'rep_worklist', 'whatsapp_template', 'telegram', 'email', 'webhook'];
+const DESTINATION_TYPES = ['results_inbox', 'rep_worklist', 'whatsapp_template', 'email', 'webhook'];
+// Retired (Telegram output removed): still found in stored agents, dropped quietly.
+const RETIRED_DESTINATION_TYPES = ['telegram'];
 const APPROVERS = ['admin', 'team_lead', 'owner_rep'];
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const INSTRUCTIONS_MAX = 60000;
@@ -65,7 +67,7 @@ function normalizeDestinations(raw) {
   const errors = [];
   const out = [{ type: 'results_inbox' }];
   (Array.isArray(raw) ? raw : []).forEach((d, i) => {
-    if (!d || typeof d !== 'object' || d.type === 'results_inbox') return;
+    if (!d || typeof d !== 'object' || d.type === 'results_inbox' || RETIRED_DESTINATION_TYPES.includes(d.type)) return;
     if (!DESTINATION_TYPES.includes(d.type)) { errors.push(`Destination ${i + 1}: unknown type "${d.type}".`); return; }
     const enabled = d.enabled !== false;
     if (d.type === 'rep_worklist') out.push({ type: 'rep_worklist', split_by: 'owner_rep', enabled });
@@ -78,9 +80,6 @@ function normalizeDestinations(raw) {
       const numbers = strList(d.numbers).map(n => n.replace(/\D/g, '')).filter(n => n.length >= 10);
       if (to === 'numbers' && !numbers.length && enabled) errors.push(`Destination ${i + 1}: add at least one number with its country code.`);
       out.push({ type: 'whatsapp_template', to, numbers, template, send_at: sendAt, enabled });
-    }
-    if (d.type === 'telegram') {
-      out.push({ type: 'telegram', chat_id: String(d.chat_id || '').trim(), format: d.format === 'full' ? 'full' : 'summary', enabled: enabled && !!String(d.chat_id || '').trim() });
     }
     if (d.type === 'email') {
       const to = strList(d.to).filter(e => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));

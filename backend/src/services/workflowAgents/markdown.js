@@ -1,4 +1,4 @@
-// Output → Markdown, for the Results inbox, Telegram, email and webhooks.
+// Output → Markdown, for the Results inbox, email and webhooks.
 // A Lead Signal output gets a purpose-built layout; anything else gets a generic,
 // schema-agnostic rendering so a custom agent's output is still readable.
 
@@ -73,22 +73,4 @@ function renderMarkdown(output, { agentName } = {}) {
   return isLeadSignal(output) ? renderLeadSignal(output) : renderGeneric(output, agentName);
 }
 
-/** A short summary for chat destinations (Telegram / WhatsApp). */
-function renderSummary(output, { agentName } = {}) {
-  if (isLeadSignal(output)) {
-    const s = output.team_summary || {};
-    const top = (output.reps || []).flatMap(r => (r.leads || []).map(l => ({ ...l, rep: r.rep_name }))).filter(l => l.label === 'hot').slice(0, 5);
-    const reasons = (s.top_reasons_not_buying || []).slice(0, 3).map(r => `${titleCase(r.reason)} (${r.count ?? 0})`).join(', ');
-    return [
-      `Lead signals ${output.run_date || ''}`.trim(),
-      `${s.hot ?? 0} hot · ${s.warm ?? 0} warm · ${s.watch ?? 0} watch · ${s.slipping ?? 0} slipping`,
-      ...top.map((l, i) => `${i + 1}. ${l.name_masked} (${l.rep}) — ${l.reason}`),
-      reasons ? `Not buying: ${reasons}` : '',
-      (s.reps_with_unanswered_hot_leads || []).length ? `Unanswered hot leads: ${s.reps_with_unanswered_hot_leads.join(', ')}` : '',
-    ].filter(Boolean).join('\n');
-  }
-  const md = renderGeneric(output, agentName);
-  return md.length > 3500 ? `${md.slice(0, 3500)}…` : md;
-}
-
-module.exports = { renderMarkdown, renderSummary, isLeadSignal };
+module.exports = { renderMarkdown, isLeadSignal };

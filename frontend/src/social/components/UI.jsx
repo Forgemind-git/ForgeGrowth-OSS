@@ -212,7 +212,7 @@ export const PageHeader = ({ cycle, title, sub, right }) => {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 16, flexWrap: "wrap", minHeight: 36 }}>
       <div style={{ minWidth: 0, display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-        {label && <div style={{ ...T.label, color: C.textMuted, fontFamily: MONO }}>{label}</div>}
+        {label && <div className="fs-page-label" style={{ ...T.label, color: C.textMuted, fontFamily: MONO }}>{label}</div>}
         {sub && <div style={{ fontSize: 13.5, color: C.textSecondary, minWidth: 0 }}>{sub}</div>}
       </div>
       {right && <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginLeft: "auto" }}>{right}</div>}
