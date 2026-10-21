@@ -7,9 +7,10 @@ import { useConfirm } from "../ConfirmDialog.jsx";
 import { PageHeader } from "../components/UI.jsx";
 
 // Settings → OpenRouter (admin): the API key used by OpenRouter-powered features
-// (Comment Analyzer / Jev), the account balance and key limit read live from
+// (Instagram AI agents, the Automations AI Step), the account balance and key limit read live from
 // OpenRouter, and what ForgeGrowth itself spent per feature — all in rupees.
-const FEATURE_LABEL = { comment_analyzer: "Comment Analyzer", flow_ai_step: "Automations · AI Step", flow_ai_test: "Automations · AI Step tests" };
+// comment_analyzer: spend logged before the Comment Analyzer was removed.
+const FEATURE_LABEL = { comment_analyzer: "Comment Analyzer (removed)", flow_ai_step: "Automations · AI Step", flow_ai_test: "Automations · AI Step tests" };
 
 export default function OpenRouterTab() {
   const [st, setSt] = useState(null);
@@ -33,7 +34,7 @@ export default function OpenRouterTab() {
     finally { setBusy(""); }
   }
   async function removeKey() {
-    if (!await confirm({ title: "Remove the OpenRouter key?", body: "The Comment Analyzer and AI Steps in automations stop until a key is added again. Past results and spend history stay.", confirmLabel: "Remove", danger: true })) return;
+    if (!await confirm({ title: "Remove the OpenRouter key?", body: "Instagram AI agents and AI Steps in automations stop until a key is added again. Past results and spend history stay.", confirmLabel: "Remove", danger: true })) return;
     await api.openRouter.removeKey().catch(e => showToast(e.message, "error"));
     load();
   }
@@ -56,7 +57,7 @@ export default function OpenRouterTab() {
   return (
     <div style={{ fontFamily: FONT }}>
       {ConfirmDialog}
-      <PageHeader title="OpenRouter" sub="The one AI connection for ForgeGrowth — Comment Analyzer and the Automations AI Step. Balance and spend come from OpenRouter, shown in rupees."
+      <PageHeader title="OpenRouter" sub="The one AI connection for ForgeGrowth Social — Instagram AI agents and the Automations AI Step. Balance and spend come from OpenRouter, shown in rupees."
         right={<button onClick={load} style={BTN.icon} title="Refresh" aria-label="Refresh"><RefreshCw size={15} /></button>} />
 
       {/* connection */}

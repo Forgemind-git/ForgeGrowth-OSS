@@ -182,21 +182,6 @@ export const api = {
     updateTag:    (id, body) => req('/crm/tags/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify(body) }),
     deleteTag:    (id) => req('/crm/tags/' + encodeURIComponent(id), { method: 'DELETE' }),
   },
-  // Comment Analyzer (TypeSafe Jev via OpenRouter) — backend commentAnalyzerRoutes.js
-  commentAnalyzer: {
-    summary:      (params = {}) => req('/comment-analyzer/summary' + qs(params)),
-    results:      (params = {}) => req('/comment-analyzer/results' + qs(params)),
-    accounts:     () => req('/comment-analyzer/accounts'),
-    dmLabels:     () => req('/comment-analyzer/dm-labels'),
-    labels:       (platform) => req('/comment-analyzer/labels?platform=' + platform),
-    view:         () => req('/comment-analyzer/view'),
-    saveView:     (body) => req('/comment-analyzer/view', { method: 'PUT', body: JSON.stringify(body) }),
-    settings:     () => req('/comment-analyzer/settings'),
-    saveSettings: (body) => req('/comment-analyzer/settings', { method: 'PUT', body: JSON.stringify(body) }),
-    preview:      (body) => req('/comment-analyzer/preview', { method: 'POST', body: JSON.stringify(body || {}) }),
-    run:          () => req('/comment-analyzer/run', { method: 'POST' }),
-    reset:        (scope) => req('/comment-analyzer/reset', { method: 'POST', body: JSON.stringify({ scope }) }),
-  },
   // Telegram bot (admin) — Settings → Integrations → Telegram (backend telegramRoutes.js)
   telegram: {
     status:     () => req('/telegram'),
@@ -208,14 +193,6 @@ export const api = {
     send:       (id, text) => req('/telegram/chats/' + encodeURIComponent(id) + '/messages', { method: 'POST', body: JSON.stringify({ text }) }),
     setChat:    (id, body) => req('/telegram/chats/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify(body) }),
     deleteChat: (id) => req('/telegram/chats/' + encodeURIComponent(id), { method: 'DELETE' }),
-  },
-  // Negative-comment alerts → Telegram (admin) — Comment Analyzer → Telegram alerts
-  commentAlerts: {
-    get:      () => req('/comment-analyzer/alerts'),
-    save:     (body) => req('/comment-analyzer/alerts', { method: 'PUT', body: JSON.stringify(body) }),
-    test:     (chatIds) => req('/comment-analyzer/alerts/test', { method: 'POST', body: JSON.stringify({ chatIds }) }),
-    dispatch: () => req('/comment-analyzer/alerts/dispatch', { method: 'POST' }),
-    log:      (limit) => req('/comment-analyzer/alerts/log' + qs({ limit })),
   },
   // OpenRouter key + spend (admin) — Settings → OpenRouter
   openRouter: {

@@ -52,7 +52,7 @@ export default function ScopePicker({ buttonStyle }) {
           <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 200 }} />
           <div style={{ position: "absolute", top: "calc(100% + 10px)", right: 0, width: 320, maxWidth: "calc(calc(100vw / var(--fg-zoom, 1)) - 32px)", background: C.raised, borderRadius: 16, boxShadow: C.shadowLg, zIndex: 201, padding: 12, fontFamily: FONT, animation: "fc-pop-in .18s ease-out both" }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>My accounts</div>
-            <div style={{ fontSize: 12.5, color: C.textMuted, margin: "3px 0 10px", lineHeight: 1.4 }}>Overview, Inbox, Contacts, Content Library, Automations and Comment Analyzer open with only these. You can still switch on any page.</div>
+            <div style={{ fontSize: 12.5, color: C.textMuted, margin: "3px 0 10px", lineHeight: 1.4 }}>Overview, Inbox, Contacts, Content Library and Automations open with only these. You can still switch on any page.</div>
             <div style={{ maxHeight: 340, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
               {!scope.loaded && <Loader2 size={15} color={C.textMuted} style={{ animation: "spin 1s linear infinite", margin: 12 }} />}
               {rows.map(r => {

@@ -192,5 +192,4 @@ export const NAV = [
   { id: "contacts",    label: "Contacts" },
   { id: "library",     label: "Content Library" },
   { id: "automations", label: "Automations" },
-  { id: "comment-analyzer", label: "Comment Analyzer" },
 ];

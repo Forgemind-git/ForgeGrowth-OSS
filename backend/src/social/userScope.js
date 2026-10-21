@@ -1,6 +1,6 @@
 // /api/me/scope — each user's "My accounts" preset: the platforms + Instagram
 // accounts every page opens with (Overview, Inbox, Contacts, Content Library,
-// Automations, Comment Analyzer). Tokens: 'instagram|<ig account id>' per
+// Automations). Tokens: 'instagram|<ig account id>' per
 // account, or the bare 'instagram' for every account. Empty = everything.
 const express = require('express');
 const pool = require('./db');

@@ -992,8 +992,6 @@ async function handleWebhook(payload, meta = {}) {
         }
         // Comment → public reply + private-reply DM automations (services/commentAutomation.js)
         try { require('./services/commentAutomation').onInstagramComment({ accountId, comment: v }).catch(e => console.error('[automation]', e.message)); } catch (_) {}
-        // Negative-comment Telegram alerts: classify this comment within seconds, not at the next 10-min run.
-        try { require('./services/commentAlerts').onNewComment(); } catch (_) {}
       }
       result.comments++;
     }

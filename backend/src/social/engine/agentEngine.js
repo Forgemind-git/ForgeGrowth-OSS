@@ -34,8 +34,7 @@ async function loadRunnableAgent(agentId) {
   const agent = rows[0];
   if (!agent) throw new Error(`Agent id=${agentId} not found`);
   // No AI Models row → the agent runs on Social's OpenRouter key (Settings →
-  // OpenRouter), the same key the Flow Builder's AI step and the Comment
-  // Analyzer use. That is the only AI connection a ForgeGrowth Social has, so a
+  // OpenRouter), the same key the Flow Builder's AI step uses. That is the only AI connection a ForgeGrowth Social has, so a
   // Quick Instagram AI agent stores just the OpenRouter model id in llm_model.
   if (!agent.ai_model_id) {
     if (!agent.llm_model) throw new Error('This agent has no model selected.');
