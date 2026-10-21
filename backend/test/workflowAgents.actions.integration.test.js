@@ -220,6 +220,10 @@ describe('destinations', () => {
     try {
       const { rows: [run] } = await pool.query(`SELECT * FROM coexistence.workflow_agent_runs WHERE id = $1`, [runId]);
       const { rows: [agent] } = await pool.query(`SELECT * FROM coexistence.workflow_agents WHERE id = $1`, [agentId]);
+      // send_at is a time TODAY (IST), so "two hours from now" only schedules
+      // while it is still today: after 22:00 IST it wraps past midnight, reads
+      // as already gone and is sent at once — so the case is left out then.
+      const nowIst = new Date(Date.now() + 5.5 * 36e5).toISOString().slice(11, 16);
       const later = new Date(Date.now() + 5.5 * 36e5 + 2 * 36e5).toISOString().slice(11, 16);
       const config = {
         destinations: [
@@ -227,7 +231,7 @@ describe('destinations', () => {
           { type: 'rep_worklist' },
           { type: 'webhook', url: `http://127.0.0.1:${server.address().port}/hook`, secret: 's3cret', enabled: true },
           { type: 'whatsapp_template', template: 'no_such_template', enabled: true },
-          ...(later > '00:10' ? [{ type: 'whatsapp_template', template: 'no_such_template', send_at: later, enabled: true }] : []),
+          ...(later > nowIst ? [{ type: 'whatsapp_template', template: 'no_such_template', send_at: later, enabled: true }] : []),
         ],
       };
       await destinations.deliverRun({ ...run, output_markdown: '# md' }, agent, config);
