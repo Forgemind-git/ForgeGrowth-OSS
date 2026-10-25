@@ -45,10 +45,13 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
 
 ### Fixed
 
-- **Voice messages from Chats play on iPhone.** OGG/Opus sent through the Cloud API — as a voice
-  note or as plain audio — is delivered and then shows "This audio is no longer available" on
-  iPhone. Recordings, attached audio and forwarded voice notes now go out as AAC in M4A (mono,
-  64 kbps) as an ordinary audio message; AAC, M4A, MP3 and AMR files are sent unchanged.
+- **Voice messages from Chats arrive as real voice notes and play on iPhone.** A recording (and a
+  forwarded voice note) is sent with `voice: true` in WhatsApp's own file layout — 48 kHz mono Opus,
+  120 ms packets, the audio on one Ogg page, vendor "WhatsApp" — copied from a voice note recorded on
+  an iPhone. ffmpeg's default OGG/Opus was delivered and then "This audio is no longer available" on
+  iPhone at 16 and 48 kHz, with either vendor tag. A recording over the 512 KB voice-note limit goes
+  out as an ordinary M4A audio message. Attached MP3/M4A/AAC/AMR files are sent unchanged; other
+  attached audio becomes M4A.
 - **Media library audio plays on iPhone.** Automations, AI agents and Chats send library audio
   through one upload to Meta, which now converts it to AAC/M4A the same way (the library keeps the
   original file). Automations no longer send OGG library files as voice notes: four OGG/Opus voice
