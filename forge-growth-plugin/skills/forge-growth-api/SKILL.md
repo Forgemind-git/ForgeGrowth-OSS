@@ -43,7 +43,7 @@ means the area is off, not that the path is wrong.
 | Sales | `/students` |
 | Dashboard & logs | `/dashboard` `/webhook-history` `/message-costs` |
 | Social | `/social/*` — but prefer the `social_*` tools (see **forge-growth-social**) |
-| **Admin (sensitive)** | `/users` `/whatsapp-accounts` `/integrations` `/ai-models` `/social/credentials` `/social/settings` `/social/integrations` `/social/users` `/social/mcp` |
+| **Admin (sensitive)** | `/users` `/whatsapp-accounts` `/integrations` `/ai-models` `/social/credentials` `/social/settings` `/social/integrations` `/social/users` |
 
 **Admin is deliberately the highest tier.** It holds user management, WhatsApp account
 credentials, integrations and AI model keys. Never treat a task as blocked-by-a-toggle and

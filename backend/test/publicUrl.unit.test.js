@@ -13,7 +13,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { publicHost, publicOrigin, mcpUrl } = require('../src/util/publicUrl');
+const { publicHost, publicOrigin, mcpUrl, isPinned } = require('../src/util/publicUrl');
 
 const req = (headers) => ({ headers });
 
@@ -31,6 +31,24 @@ function withEnv(vars, fn) {
     }
   }
 }
+
+describe('publicUrl — PUBLIC_URL', () => {
+  test('pins scheme and host over whatever the request says', () => {
+    withEnv({ PUBLIC_URL: 'https://crm.example.com/' }, () => {
+      const r = req({ host: 'internal:3013', 'x-forwarded-proto': 'http' });
+      assert.equal(publicOrigin(r), 'https://crm.example.com');
+      assert.equal(mcpUrl(r), 'https://crm.example.com/api/mcp');
+      assert.equal(isPinned(), true);
+    });
+  });
+
+  test('a value that is not an http(s) origin is ignored', () => {
+    withEnv({ PUBLIC_URL: 'javascript:alert(1)', TLS_DOMAIN: undefined, CORS_ORIGIN: undefined }, () => {
+      assert.equal(publicOrigin(req({ host: 'crm.example.com' })), 'https://crm.example.com');
+      assert.equal(isPinned(), false);
+    });
+  });
+});
 
 describe('publicUrl — host', () => {
   test('takes the left-most entry of a forwarded chain', () => {

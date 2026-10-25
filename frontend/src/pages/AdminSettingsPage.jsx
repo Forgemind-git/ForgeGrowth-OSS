@@ -39,7 +39,7 @@ const TABS = [
 // may open it: 'social' = anyone with the Social page, 'admin' = admins only.
 const SOCIAL_PARTS = {
   general: 'social', integrations: 'social', privacy: 'social',
-  'ai-models': 'admin', tags: 'admin', category: 'admin', fields: 'admin', mcp: 'admin', activity: 'admin',
+  'ai-models': 'admin', tags: 'admin', category: 'admin', fields: 'admin', activity: 'admin',
 };
 
 // The sidebar: one page per thing you set up, grouped, each split into
@@ -82,10 +82,7 @@ const PAGES = [
     { id: 'openrouter', label: 'Instagram AI (OpenRouter)', pane: 'ai-models', ig: true },
   ] },
   { key: 'google', label: 'Google', icon: Plug, group: 'connections', sections: [{ id: 'google', pane: 'integrations' }] },
-  { key: 'mcp', label: 'Claude & MCP', icon: PlugZap, group: 'connections', sections: [
-    { id: 'connector', label: 'Claude connector', pane: 'mcp' },
-    { id: 'instagram-keys', label: 'Instagram API keys', pane: 'mcp', ig: true },
-  ] },
+  { key: 'mcp', label: 'Claude & MCP', icon: PlugZap, group: 'connections', sections: [{ id: 'connector', pane: 'mcp' }] },
 ];
 
 // Links from before the sidebar was regrouped: #/admin-settings/<old tab>[/social[/<platform>]].
@@ -100,7 +97,7 @@ const LEGACY_TABS = {
   webhooks: [['whatsapp', 'webhook']],
   'ai-models': [['ai-models', 'providers'], ['ai-models', 'openrouter']],
   integrations: [['google'], ['instagram', 'connection']],
-  mcp: [['mcp', 'connector'], ['mcp', 'instagram-keys']],
+  mcp: [['mcp', 'connector'], ['mcp', 'connector']],
   activity: [['activity'], ['activity']],
   privacy: [['instagram', 'privacy'], ['instagram', 'privacy']],
 };
@@ -3232,7 +3229,9 @@ function McpToolsTab() {
   // backend older than this bundle, which sent only the legacy url — deriving
   // the OAuth one from the page origin rather than by string-surgery on it,
   // because that surgery is what let the legacy form reach the OAuth box.
-  const oauthUrl = install?.oauthUrl || (install ? `${window.location.origin}/api/mcp` : '');
+  // Served by the backend (util/publicUrl.js), never rebuilt from window.location:
+  // the browser's address is not necessarily the one Claude can reach.
+  const oauthUrl = install?.oauthUrl || '';
   const legacyUrl = install?.legacyUrl || install?.remoteUrl || '';
 
   // Everything an admin needs on one screen, split into the order they need
@@ -3250,6 +3249,17 @@ function McpToolsTab() {
     ...keys.filter(k => k.isEnabled && k.lastUsedAt && Date.now() - new Date(k.lastUsedAt).getTime() < 30 * DAY).map(k => ({ id: 'k' + k.id, name: k.label, how: 'API key', detail: 'Last used ' + new Date(k.lastUsedAt).toLocaleString() })),
   ];
   const claudeCodeCmd = oauthUrl ? `claude mcp add --transport http forge-growth ${oauthUrl}` : '';
+  // Every install has its own address, so say where this one came from and how to change it.
+  const urlNote = install && (
+    <div style={{ fontSize: 13, color: C.textSecondary, marginTop: 8, lineHeight: 1.55 }}>
+      {install.localOnly
+        ? <><b style={{ color: C.text }}>Only this computer can reach this address.</b> Claude on the web and mobile cannot — use Claude Code here, or serve Forge Growth on a public domain. </>
+        : null}
+      {install.urlSource === 'pinned'
+        ? <>Set by <code style={{ fontFamily: MONO, fontSize: 12 }}>PUBLIC_URL</code> in your <code style={{ fontFamily: MONO, fontSize: 12 }}>.env</code>.</>
+        : <>Taken from the address you opened Forge Growth on. If Claude cannot reach it (a proxy in front changes the address), set <code style={{ fontFamily: MONO, fontSize: 12 }}>PUBLIC_URL=https://your-domain</code> in <code style={{ fontFamily: MONO, fontSize: 12 }}>.env</code> and restart.</>}
+    </div>
+  );
   const goPermissions = (areaKey) => { if (areaKey) setMcpArea(areaKey); setMcpTab('permissions'); };
   const btnGhost = { display: 'inline-flex', alignItems: 'center', gap: 6, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px', fontSize: 14, fontWeight: 600, cursor: 'pointer', color: C.text, fontFamily: FONT };
   const CopyRow = ({ value, tag, muted }) => (
@@ -3357,6 +3367,7 @@ function McpToolsTab() {
                 <>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Server URL</div>
                   {oauthUrl && <CopyRow value={oauthUrl} tag="oauthurl" />}
+                  {urlNote}
                   <ol style={{ fontSize: 15, color: C.text, lineHeight: 1.8, paddingLeft: 20, margin: '12px 0 0' }}>
                     <li>In Claude, open <b>Settings → Connectors</b> and choose <b>Add custom connector</b>.</li>
                     <li>Name it <b>Forge Growth</b> and paste the server URL above. Leave the OAuth fields empty.</li>
@@ -3375,6 +3386,7 @@ function McpToolsTab() {
                 <>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Run in your terminal</div>
                   {claudeCodeCmd && <CopyRow value={claudeCodeCmd} tag="cccmd" />}
+                  {urlNote}
                   <ol style={{ fontSize: 15, color: C.text, lineHeight: 1.8, paddingLeft: 20, margin: '12px 0 0' }}>
                     <li>Run the command above.</li>
                     <li>In Claude Code, type <code style={{ fontFamily: MONO, fontSize: 14 }}>/mcp</code>, pick <b>forge-growth</b> and sign in.</li>
@@ -3802,9 +3814,9 @@ function McpToolsTab() {
               <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.textMuted, marginBottom: 5 }}>Remote MCP server URL</div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <code style={{ flex: 1, ...codeBox, whiteSpace: 'nowrap', overflowX: 'auto', padding: '11px 13px' }}>
-                  {`${window.location.origin}/api/mcp`}
+                  {oauthUrl}
                 </code>
-                <button onClick={() => copy(`${window.location.origin}/api/mcp`, 'curl')}
+                <button onClick={() => copy(oauthUrl, 'curl')}
                   style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, padding: '0 14px', fontSize: 15, cursor: 'pointer', color: C.text, fontFamily: FONT }}>
                   {copied === 'curl' ? <Check size={14} /> : <Copy size={14} />}
                 </button>
@@ -3871,10 +3883,10 @@ function McpToolsTab() {
             </div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
               <code style={{ flex: 1, ...codeBox, whiteSpace: 'nowrap', overflowX: 'auto', padding: '12px 14px', color: C.textSecondary }}>
-                {`${window.location.origin}/api/mcp/http/${freshKey.key}`}
+                {(install?.legacyUrl || '').replace('<YOUR_KEY>', freshKey.key)}
               </code>
               <button
-                onClick={() => copy(`${window.location.origin}/api/mcp/http/${freshKey.key}`, 'freshurl')}
+                onClick={() => copy((install?.legacyUrl || '').replace('<YOUR_KEY>', freshKey.key), 'freshurl')}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: `1px solid ${C.border}`, borderRadius: 8, padding: '0 14px', fontSize: 15, fontWeight: 600, cursor: 'pointer', color: C.textSecondary, fontFamily: FONT }}
               >
                 {copied === 'freshurl' ? <Check size={14} /> : <Copy size={14} />}

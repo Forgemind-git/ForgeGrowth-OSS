@@ -32,9 +32,27 @@ function isLoopback(host) {
   return name === 'localhost' || name === '::1' || /^127\./.test(name);
 }
 
+// PUBLIC_URL pins the address outright (scheme + host, e.g.
+// https://crm.example.com). An open-source install can sit behind any proxy,
+// and one that rewrites Host or hides the scheme would otherwise hand Claude a
+// URL it cannot reach. Unset — the normal case — everything below derives the
+// address from the request. Anything that is not a plain http(s) origin is
+// ignored rather than trusted.
+function pinnedOrigin() {
+  const raw = String(process.env.PUBLIC_URL || '').trim();
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+    return { scheme: u.protocol.slice(0, -1), host: u.host };
+  } catch { return null; }
+}
+
 // Host[:port]. The request wins over configuration: it is how the browser
 // reached us, and a stale FORGECRM_DOMAIN must not override a working address.
 function publicHost(req) {
+  const pinned = pinnedOrigin();
+  if (pinned) return pinned.host;
   const forwarded = firstHeader(req?.headers?.['x-forwarded-host']);
   if (forwarded) return forwarded;
   const host = firstHeader(req?.headers?.host);
@@ -55,6 +73,8 @@ function publicHost(req) {
 // hostname terminates TLS somewhere. Loopback is the exception where http is
 // both true and accepted, so it is the one case allowed through.
 function publicScheme(req, host = publicHost(req)) {
+  const pinned = pinnedOrigin();
+  if (pinned) return pinned.scheme;
   const forwarded = firstHeader(req?.headers?.['x-forwarded-proto']).toLowerCase();
   if (forwarded === 'https') return 'https';
   if (isLoopback(host)) {
@@ -79,4 +99,9 @@ function mcpUrl(req) {
   return origin ? `${origin}/api/mcp` : '';
 }
 
-module.exports = { publicHost, publicScheme, publicOrigin, mcpUrl, isLoopback };
+// Whether PUBLIC_URL is pinning the address, so Settings can say where it came from.
+function isPinned() {
+  return !!pinnedOrigin();
+}
+
+module.exports = { publicHost, publicScheme, publicOrigin, mcpUrl, isLoopback, isPinned };

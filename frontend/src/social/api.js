@@ -153,16 +153,6 @@ export const api = {
   createHashtagGroup:   (body) => req('/hashtag-groups', { method: 'POST', body: JSON.stringify(body) }),
   deleteHashtagGroup:   (id) => req('/hashtag-groups/' + id, { method: 'DELETE' }),
 
-  // MCP access (admin — Settings → MCP Access)
-  getMcpSettings:    () => req('/mcp/settings'),
-  updateMcpSettings: (patch) => req('/mcp/settings', { method: 'PUT', body: JSON.stringify(patch) }),
-  getMcpKeys:        () => req('/mcp/keys'),
-  getMcpAccounts:    () => req('/mcp/accounts'),
-  createMcpKey:      (label, scope) => req('/mcp/keys', { method: 'POST', body: JSON.stringify({ label, ...(scope || {}) }) }),
-  updateMcpKey:      (id, body) => req('/mcp/keys/' + id, { method: 'PUT', body: JSON.stringify(body) }),
-  deleteMcpKey:      (id) => req('/mcp/keys/' + id, { method: 'DELETE' }),
-  getMcpInstall:     () => req('/mcp/install'),
-
   // ManyChat-style contacts (backend contactsCrm.js)
   crm: {
     contacts:     (account) => req('/crm/contacts' + qs({ account })),

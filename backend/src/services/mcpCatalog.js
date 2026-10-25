@@ -263,7 +263,7 @@ const CATEGORIES = [
     key: 'social_automations',
     area: 'social',
     label: 'Instagram automations & flows',
-    description: 'Build, edit and read Instagram automations (comment-to-DM and keyword rules) and multi-step flows, and see how each one performed. Switching one ON makes it answer real people on its own. Deleting is a separate switch.',
+    description: 'Draft, edit and read Instagram automations (comment-to-DM and keyword rules) and multi-step flows, and see how each one performed. Anything Claude creates is saved switched off; switching one ON makes it answer real people on its own. Deleting is a separate switch.',
     tier: 'build',
     // area_social is new, so no existing instance holds it: these seed OFF.
     legacyCaps: ['area_social'],
