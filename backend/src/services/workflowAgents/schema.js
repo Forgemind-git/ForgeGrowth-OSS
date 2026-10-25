@@ -388,8 +388,26 @@ CREATE TABLE IF NOT EXISTS coexistence.workflow_agent_audit (
 CREATE INDEX IF NOT EXISTS idx_workflow_agent_audit_agent ON coexistence.workflow_agent_audit (agent_id, created_at DESC);
 `;
 
+// One run at a time, across processes. The DDL takes locks on several shared
+// tables (leads, forgecrm_users, whatsapp_accounts…) in its own order, so two
+// runs at once — two backends booting, or the test files that each call this —
+// can deadlock each other ('deadlock detected'). A transaction-scoped advisory
+// lock queues the second run behind the first; it releases on COMMIT/ROLLBACK.
+const DDL_LOCK_KEY = 0x57414744; // 'WAGD'
+
 async function ensureWorkflowAgentTables() {
-  await pool.query(DDL);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1)', [DDL_LOCK_KEY]);
+    await client.query(DDL);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 module.exports = { DDL, ensureWorkflowAgentTables };

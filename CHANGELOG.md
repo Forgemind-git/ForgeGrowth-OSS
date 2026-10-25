@@ -52,11 +52,11 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
   iPhone at 16 and 48 kHz, with either vendor tag. A recording over the 512 KB voice-note limit goes
   out as an ordinary M4A audio message. Attached MP3/M4A/AAC/AMR files are sent unchanged; other
   attached audio becomes M4A.
-- **Media library audio plays on iPhone.** Automations, AI agents and Chats send library audio
-  through one upload to Meta, which now converts it to AAC/M4A the same way (the library keeps the
-  original file). Automations no longer send OGG library files as voice notes: four OGG/Opus voice
-  note encodings (16 and 48 kHz, ffmpeg or "WhatsApp" vendor tag) were all "no longer available" on
-  iPhone.
+- **Media library audio goes out as voice notes.** Automations, AI agents, broadcasts, Chats and MCP
+  send library audio through one upload to Meta, which now makes it a voice note in the layout
+  iPhone plays (or ordinary M4A when over the 512 KB voice-note limit); the library keeps the
+  original file. Migration 135 adds `media_meta_sync.is_voice_note`, and the send queue adds
+  `voice: true` for exactly those copies, whichever feature sent them.
 - **Instagram automation link buttons open for the person tapping them.** They were built as
   `/api/ig-automations/r/<token>`, missing `/social`, and answered `{"error":"Unauthorized"}`. Links
   in DMs already sent now redirect to the right address.
