@@ -8,6 +8,7 @@ const path = require('path');
 const pool = require('../db');
 const minio = require('../util/minioClient');
 const { uploadMedia: metaUploadMedia } = require('../integrations/metaSend');
+const { prepareOutboundAudio } = require('../services/outboundAudio');
 const { getAccountWithToken } = require('./whatsappAccounts');
 const { contentDisposition } = require('../util/contentDisposition');
 
@@ -372,13 +373,24 @@ async function syncMediaToAccount(mediaId, accountId, _retried = false) {
   `, [mediaId, accountId]);
 
   try {
-    const buf = await minio.getObjectBuffer(media.minio_object_key);
+    let buf = await minio.getObjectBuffer(media.minio_object_key);
+    let mimeType = media.mime_type;
+    let filename = media.original_name;
+    // Audio goes to Meta in a format iPhone can play (services/outboundAudio.js):
+    // an OGG/Opus file is delivered and then "no longer available" there. The
+    // library keeps the original; only the copy Meta holds is converted.
+    if (media.media_type === 'audio') {
+      const prepared = await prepareOutboundAudio(buf, mimeType);
+      buf = prepared.buffer;
+      mimeType = prepared.mime;
+      filename = `${(filename || 'audio').replace(/\.[^.]+$/, '')}.${prepared.ext}`;
+    }
     const { id: metaId } = await metaUploadMedia({
       accessToken: account.accessToken,
       phoneNumberId: account.phoneNumberId,
       buffer: buf,
-      mimeType: media.mime_type,
-      filename: media.original_name,
+      mimeType,
+      filename,
     });
     const { rows } = await pool.query(`
       UPDATE coexistence.media_meta_sync
