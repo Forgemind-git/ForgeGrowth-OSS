@@ -9,7 +9,7 @@ import {
   ChevronRight, ExternalLink, Sheet, Table2, Inbox, PlugZap, Terminal,
   IndianRupee, CreditCard, Link as LinkIcon, SlidersHorizontal,
   ChevronDown, Wrench, ShieldAlert, Package, Download, Shield, Mic,
-  ScrollText as ScrollTextIcon, Shield as ShieldIcon, Pencil,
+  ScrollText as ScrollTextIcon, Shield as ShieldIcon, Pencil, Instagram as InstagramIcon,
 } from 'lucide-react';
 import { api } from '../api.js';
 import { C, FONT, MONO, maskPhone } from '../constants.js';
@@ -24,40 +24,86 @@ import { FunnelSettingsContent } from './sales/FunnelSettingsPage.jsx';
 import EntityFieldsManager from '../components/EntityFieldsManager.jsx';
 import SocialSettingsPart from '../social/SocialSettingsPart.jsx';
 
-// The sidebar groups (in order). A tab's `group` decides which heading it sits
-// under; the order of TABS is the order inside each group.
-const TAB_GROUPS = [
-  { key: 'workspace', label: 'Workspace' },
-  { key: 'crm', label: 'Contacts & funnel' },
-  { key: 'connections', label: 'Connections' },
-  { key: 'social', label: 'Social' },
-];
+// Permission units. `admin-settings:<key>` in a user's pages array grants the
+// key's Sales & Chats pane; SOCIAL_PARTS says who may open its Instagram pane.
+// These keys are stored per user, so they never change; the sidebar below
+// arranges them into pages without touching them.
 const TABS = [
-  { key: 'general', label: 'General', icon: Settings, group: 'workspace' },
-  { key: 'users', label: 'Users', icon: User, group: 'workspace' },
-  { key: 'tags', label: 'Tags', icon: Tag, group: 'crm' },
-  { key: 'category', label: 'Category', icon: FolderOpen, group: 'crm' },
-  { key: 'fields', label: 'Fields', icon: LayoutList, group: 'crm' },
-  { key: 'funnel', label: 'Funnel', icon: SlidersHorizontal, group: 'crm' },
-  { key: 'whatsapp-accounts', label: 'WhatsApp Accounts', icon: MessageSquare, group: 'connections' },
-  { key: 'ai-models', label: 'AI Models', icon: Bot, group: 'connections' },
-  { key: 'integrations', label: 'Integrations', icon: Plug, group: 'connections' },
-  { key: 'webhooks', label: 'Webhooks', icon: Webhook, group: 'connections' },
-  { key: 'mcp', label: 'MCP Tools', icon: PlugZap, group: 'connections' },
-  // Social-only tabs (were under Social → Settings). No "Sales & Chats" half.
-  { key: 'activity', label: 'Activity log', icon: ScrollTextIcon, socialOnly: true, group: 'social' },
-  { key: 'privacy', label: 'Privacy policy', icon: ShieldIcon, socialOnly: true, group: 'social' },
+  { key: 'general' }, { key: 'users' }, { key: 'tags' }, { key: 'category' },
+  { key: 'fields' }, { key: 'funnel' }, { key: 'whatsapp-accounts' }, { key: 'ai-models' },
+  { key: 'integrations' }, { key: 'webhooks' }, { key: 'mcp' },
+  { key: 'activity', socialOnly: true }, { key: 'privacy', socialOnly: true },
 ];
 
-// Main tabs that also hold a Social half (social/SocialSettingsPart.jsx), shown
-// behind a "Sales & Chats | Social" switch at the top of the tab. The value says
-// who may open that Social half: 'social' = anyone with the Social page,
-// 'admin' = admins only (it was admin-only under Social → Settings too).
+// Which panes have an Instagram half (social/SocialSettingsPart.jsx), and who
+// may open it: 'social' = anyone with the Social page, 'admin' = admins only.
 const SOCIAL_PARTS = {
   general: 'social', integrations: 'social', privacy: 'social',
   'ai-models': 'admin', tags: 'admin', category: 'admin', fields: 'admin', mcp: 'admin', activity: 'admin',
 };
 
+// The sidebar: one page per thing you set up, grouped, each split into
+// sections shown as pills under its title. A section is one pane, either its
+// Sales & Chats half or (ig: true) its Instagram half. Sections a user may not
+// open are hidden; a page with none left is hidden.
+const NAV_GROUPS = [
+  { key: 'workspace', label: 'Workspace' },
+  { key: 'contacts', label: 'Contacts' },
+  { key: 'connections', label: 'Connections' },
+];
+const PAGES = [
+  { key: 'general', label: 'General', icon: Settings, group: 'workspace', sections: [
+    { id: 'preferences', label: 'Preferences', pane: 'general' },
+    { id: 'notifications', label: 'Instagram notifications', pane: 'general', ig: true },
+  ] },
+  { key: 'users', label: 'Team', icon: User, group: 'workspace', sections: [{ id: 'users', pane: 'users' }] },
+  { key: 'activity', label: 'Activity log', icon: ScrollTextIcon, group: 'workspace', sections: [{ id: 'activity', pane: 'activity', ig: true }] },
+  { key: 'tags', label: 'Tags', icon: Tag, group: 'contacts', sections: [
+    { id: 'tags', label: 'WhatsApp tags', pane: 'tags' },
+    { id: 'categories', label: 'WhatsApp categories', pane: 'category' },
+    { id: 'ig-tags', label: 'Instagram tags', pane: 'tags', ig: true },
+    { id: 'ig-categories', label: 'Instagram categories', pane: 'category', ig: true },
+  ] },
+  { key: 'fields', label: 'Fields', icon: LayoutList, group: 'contacts', sections: [
+    { id: 'whatsapp', label: 'WhatsApp leads', pane: 'fields' },
+    { id: 'instagram', label: 'Instagram contacts', pane: 'fields', ig: true },
+  ] },
+  { key: 'funnel', label: 'Funnel', icon: SlidersHorizontal, group: 'contacts', sections: [{ id: 'funnel', pane: 'funnel' }] },
+  { key: 'whatsapp', label: 'WhatsApp', icon: MessageSquare, group: 'connections', sections: [
+    { id: 'accounts', label: 'Accounts', pane: 'whatsapp-accounts' },
+    { id: 'webhook', label: 'Webhook', pane: 'webhooks' },
+  ] },
+  { key: 'instagram', label: 'Instagram', icon: InstagramIcon, group: 'connections', sections: [
+    { id: 'connection', label: 'Connection', pane: 'integrations', ig: true },
+    { id: 'privacy', label: 'Privacy policy', pane: 'privacy', ig: true },
+  ] },
+  { key: 'ai-models', label: 'AI models', icon: Bot, group: 'connections', sections: [
+    { id: 'providers', label: 'AI providers', pane: 'ai-models' },
+    { id: 'openrouter', label: 'Instagram AI (OpenRouter)', pane: 'ai-models', ig: true },
+  ] },
+  { key: 'google', label: 'Google', icon: Plug, group: 'connections', sections: [{ id: 'google', pane: 'integrations' }] },
+  { key: 'mcp', label: 'Claude & MCP', icon: PlugZap, group: 'connections', sections: [
+    { id: 'connector', label: 'Claude connector', pane: 'mcp' },
+    { id: 'instagram-keys', label: 'Instagram API keys', pane: 'mcp', ig: true },
+  ] },
+];
+
+// Links from before the sidebar was regrouped: #/admin-settings/<old tab>[/social[/<platform>]].
+// [page, section] for the Sales & Chats half, then for the Social half.
+const LEGACY_TABS = {
+  general: [['general', 'preferences'], ['general', 'notifications']],
+  users: [['users']],
+  tags: [['tags', 'tags'], ['tags', 'ig-tags']],
+  category: [['tags', 'categories'], ['tags', 'ig-categories']],
+  fields: [['fields', 'whatsapp'], ['fields', 'instagram']],
+  'whatsapp-accounts': [['whatsapp', 'accounts']],
+  webhooks: [['whatsapp', 'webhook']],
+  'ai-models': [['ai-models', 'providers'], ['ai-models', 'openrouter']],
+  integrations: [['google'], ['instagram', 'connection']],
+  mcp: [['mcp', 'connector'], ['mcp', 'instagram-keys']],
+  activity: [['activity'], ['activity']],
+  privacy: [['instagram', 'privacy'], ['instagram', 'privacy']],
+};
 
 const TIMEZONES = [
   'Asia/Calcutta',
@@ -123,10 +169,6 @@ function GeneralTab({ onLogout, user }) {
   return (
     <div style={{ flex: 1, padding: '16px 28px 28px', overflowY: 'auto', fontFamily: FONT }}>
       <div style={{ maxWidth: '100%' }}>
-        <div style={{ marginBottom: 28 }}>
-          <p style={{ fontSize: 14, color: C.textMuted, margin: '4px 0 0', fontFamily: FONT }}>Manage your account preferences and settings</p>
-        </div>
-
         <div style={{ marginBottom: 32 }}>
           <div style={{ fontSize: 15, fontWeight: 600, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
             Appearance
@@ -1180,31 +1222,38 @@ const iconBtnStyle = { background: 'transparent', border: 'none', cursor: 'point
 /*  Main Page                                                          */
 /* ------------------------------------------------------------------ */
 export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [], navigate, user }) {
-  // DERIVED from TABS, never restated. A hand-maintained copy silently drifts:
-  // a tab missing from this list still RENDERS its button, and clicking it
-  // falls through to visibleTabs[0] — so the tab appears to exist and does
-  // nothing. That is exactly how the Message Costs tab shipped broken.
-  const VALID_TABS = TABS.map(t => t.key);
-  // Filter tabs to those this user is allowed to see. Admin sees everything;
-  // non-admins must have 'admin-settings:<tab>' in their pages array.
+  // Filter to what this user may open. Admin sees everything; non-admins need
+  // 'admin-settings:<pane>' in their pages array (or the Social page, for the
+  // Instagram halves SOCIAL_PARTS opens to everyone with it).
   const isAdmin = user?.role === 'admin';
   const userPages = new Set(user?.pages || []);
   const hasSocial = isAdmin || userPages.has('social');
-  const mainAllowed = (t) => !t.socialOnly && (isAdmin || userPages.has(`admin-settings:${t.key}`));
-  const socialAllowed = (t) => !!SOCIAL_PARTS[t.key] && hasSocial && (SOCIAL_PARTS[t.key] === 'social' || isAdmin);
-  const visibleTabs = TABS.filter(t => mainAllowed(t) || socialAllowed(t));
-  const allowedTabKeys = new Set(visibleTabs.map(t => t.key));
-  const activeTab = VALID_TABS.includes(subParts[0]) && allowedTabKeys.has(subParts[0])
-    ? subParts[0]
-    : (visibleTabs[0]?.key || 'general');
-  const activeDef = TABS.find(t => t.key === activeTab) || TABS[0];
-  const canMain = mainAllowed(activeDef);
-  const canSocial = socialAllowed(activeDef);
-  // Which half of the tab is open: #/admin-settings/<tab>/social[/<platform>].
-  const side = !canMain ? 'social' : (canSocial && subParts[1] === 'social' ? 'social' : 'main');
-  const socialPlatform = side === 'social' ? (subParts[2] || null) : null;
-  const setActiveTab = (t) => navigate ? navigate('admin-settings', t) : null;
-  const setSide = (v) => navigate ? (v === 'social' ? navigate('admin-settings', activeTab, 'social') : navigate('admin-settings', activeTab)) : null;
+  const paneDef = (key) => TABS.find(t => t.key === key);
+  const sectionAllowed = (sec) => sec.ig
+    ? !!SOCIAL_PARTS[sec.pane] && hasSocial && (SOCIAL_PARTS[sec.pane] === 'social' || isAdmin)
+    : !paneDef(sec.pane)?.socialOnly && (isAdmin || userPages.has(`admin-settings:${sec.pane}`));
+  const visiblePages = PAGES
+    .map(p => ({ ...p, sections: p.sections.filter(sectionAllowed) }))
+    .filter(p => p.sections.length);
+
+  // #/admin-settings/<page>/<section>[/<platform>]; an old tab key redirects.
+  const legacy = !PAGES.some(p => p.key === subParts[0]) || subParts[1] === 'social'
+    ? LEGACY_TABS[subParts[0]]?.[subParts[1] === 'social' ? 1 : 0] || LEGACY_TABS[subParts[0]]?.[0]
+    : null;
+  const [reqPage, reqSection, reqPlatform] = legacy
+    ? [legacy[0], legacy[1], subParts[1] === 'social' ? subParts[2] : undefined]
+    : subParts;
+  const activePage = visiblePages.find(p => p.key === reqPage) || visiblePages[0] || null;
+  const activeSection = activePage
+    ? activePage.sections.find(s => s.id === reqSection) || activePage.sections[0]
+    : null;
+  const socialPlatform = activeSection?.ig ? (reqPlatform || null) : null;
+  useEffect(() => {
+    if (legacy && navigate && activePage) {
+      navigate('admin-settings', activePage.key, activeSection.id, ...(socialPlatform ? [socialPlatform] : []));
+    }
+  }, [legacy?.[0], legacy?.[1]]); // eslint-disable-line react-hooks/exhaustive-deps
+  const goTo = (page, section) => navigate ? navigate('admin-settings', page, ...(section ? [section] : [])) : null;
   const [categories, setCategories] = useState([]);
   const [tags, setTags] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1231,34 +1280,30 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
   }, []);
 
   const handleTabChange = (key) => {
-    setActiveTab(key);
+    goTo(key);
     setCategoryDetailId(null);
   };
 
-  const handleRequestAddCategory = () => {
-    setShowCategoryAddForm(true);
-    setActiveTab('category');
-  };
-
-  // Every tab opens with the same header: its title, and — when the tab has a
-  // Social half — the "Sales & Chats | Social" switch beside it, so the switch
-  // reads as part of this tab rather than as a page of its own.
+  // Every page opens with the same header: its title, then — when it has more
+  // than one section — the sections as pills, so everything the page holds is
+  // named up front rather than hidden behind a switch.
   const renderTab = () => {
+    if (!activePage) return null;
     const header = (
-      <div style={{ padding: '24px 28px 4px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-        <h1 style={{ margin: 0, fontSize: 24, fontWeight: 780, letterSpacing: '-0.02em', color: C.text, fontFamily: FONT }}>{activeDef.label}</h1>
-        {canMain && canSocial && (
-          <PillStrip size="sm" value={side} onChange={setSide}
-            items={[{ id: 'main', label: 'Sales & Chats' }, { id: 'social', label: 'Social' }]} />
+      <div style={{ padding: '24px 28px 6px', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 14 }}>
+        <h1 style={{ margin: 0, fontSize: 24, fontWeight: 780, letterSpacing: '-0.02em', color: C.text, fontFamily: FONT }}>{activePage.label}</h1>
+        {activePage.sections.length > 1 && (
+          <PillStrip size="sm" value={activeSection.id} onChange={id => { setCategoryDetailId(null); goTo(activePage.key, id); }}
+            items={activePage.sections.map(sec => ({ id: sec.id, label: sec.label }))} />
         )}
       </div>
     );
-    if (side === 'social') {
+    if (activeSection.ig) {
       return (
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
           {header}
           <div style={{ padding: '0 28px 28px' }}>
-            <SocialSettingsPart part={activeTab} platform={socialPlatform} user={user} />
+            <SocialSettingsPart part={activeSection.pane} platform={socialPlatform} user={user} />
           </div>
         </div>
       );
@@ -1266,12 +1311,12 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
     return (
       <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {header}
-        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>{renderMainTab()}</div>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>{renderMainTab(activeSection.pane)}</div>
       </div>
     );
   };
 
-  const renderMainTab = () => {
+  const renderMainTab = (pane) => {
     if (loading) {
       return (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textMuted, fontSize: 15 }}>
@@ -1279,7 +1324,7 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
         </div>
       );
     }
-    switch (activeTab) {
+    switch (pane) {
       case 'general': return <GeneralTab onLogout={onLogout} user={user} />;
       case 'tags': return (
         <TagsTab
@@ -1334,14 +1379,14 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
           <ArrowLeft size={16} /> Back to home
         </button>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        {TAB_GROUPS.map(g => ({ ...g, tabs: visibleTabs.filter(t => t.group === g.key) })).filter(g => g.tabs.length).map(g => (
+        {NAV_GROUPS.map(g => ({ ...g, tabs: visiblePages.filter(t => t.group === g.key) })).filter(g => g.tabs.length).map(g => (
           <div key={g.key} style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 12, fontWeight: 650, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.04em', margin: '6px 0 6px', paddingLeft: 14 }}>
               {g.label}
             </div>
         {g.tabs.map(tab => {
           const Icon = tab.icon;
-          const isActive = activeTab === tab.key;
+          const isActive = activePage?.key === tab.key;
           return (
             <button
               key={tab.key}
@@ -2720,7 +2765,7 @@ function UsersTab() {
               <div style={{ marginBottom: 14 }}>
                 <label style={labelStyle}>Assigned WhatsApp numbers</label>
                 {waAccounts.length === 0 ? (
-                  <div style={{ fontSize: 14, color: C.textMuted, fontStyle: 'italic' }}>No WhatsApp accounts connected yet. Add some in the WhatsApp Accounts tab first.</div>
+                  <div style={{ fontSize: 14, color: C.textMuted, fontStyle: 'italic' }}>No WhatsApp accounts connected yet. Add one under Settings → WhatsApp first.</div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflow: 'auto', border: `1px solid ${C.border}`, borderRadius: 8, padding: 8 }}>
                     {waAccounts.map(a => {
@@ -4695,7 +4740,7 @@ function igBtnDanger() {
   };
 }
 
-// The Webhooks tab lists one CARD per webhook provider (WhatsApp).
+// Settings → WhatsApp → Webhook lists one CARD per webhook provider (WhatsApp).
 // Clicking a card opens that provider's DETAIL view: config fields on top, a
 // 10-per-page event-history table below. Each provider is a self-contained panel
 // rendered in mode="card" (just the tile) or mode="detail" (the full page).

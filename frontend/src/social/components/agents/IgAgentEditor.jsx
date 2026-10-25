@@ -240,7 +240,7 @@ export default function IgAgentEditor({ template, agent, accounts, defaultAccoun
           ) : !ai.connected ? (
             <div data-testid="ig-agent-no-ai" style={{ fontSize: 13, color: C.errText, background: C.errBg, borderRadius: 10, padding: "10px 12px", lineHeight: 1.45 }}>
               <AlertCircle size={13} style={{ verticalAlign: "text-bottom" }} /> OpenRouter isn’t connected, so this agent can be saved but not switched on.{" "}
-              <a href="#/social/settings/openrouter" style={{ color: "inherit", fontWeight: 700 }}>Connect it in Settings → OpenRouter</a>
+              <a href="#/admin-settings/ai-models/openrouter" style={{ color: "inherit", fontWeight: 700 }}>Connect it in Settings → AI models</a>
             </div>
           ) : (
             <SearchableSelect fullWidth value={model} onChange={setModel} options={modelOptions} placeholder="Pick a model" searchPlaceholder="Search models…" />

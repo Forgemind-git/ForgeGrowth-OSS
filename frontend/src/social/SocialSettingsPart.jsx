@@ -1,17 +1,10 @@
 // Social's settings, shown INSIDE ForgeGrowth's one Settings page (2026-10-16).
 //
-// There used to be a second Settings screen under Social. Its pieces now live in
-// the matching main tab, behind a "Sales & Chats | Social" switch at the top of
-// that tab (pages/AdminSettingsPage.jsx SOCIAL_PARTS):
-//
-//   General      → Social notifications (its Workspace card held placeholder
-//                  values and its Team card repeated Settings → Users, so both
-//                  are gone)
-//   Integrations → Instagram
-//   AI Models    → Social's OpenRouter key and spend
-//   Tags / Category / Fields → the Social contacts' own lists
-//   MCP Tools    → Social MCP access
-//   Activity log, Privacy policy → their own tabs
+// There used to be a second Settings screen under Social. Its pieces are now
+// the Instagram sections of the matching Settings pages (PAGES in
+// pages/AdminSettingsPage.jsx): General → Instagram notifications, Tags and
+// Fields → the Instagram lists, Instagram → Connection and Privacy policy,
+// AI models → OpenRouter, Claude & MCP → Instagram API keys, Activity log.
 //
 // The data stores stay separate (Social contacts and WhatsApp contacts are
 // different tables), so the lists are not merged — only the place you set them.
