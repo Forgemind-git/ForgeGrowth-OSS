@@ -6,7 +6,7 @@ const pool = require('../db');
 const { resolveAccount, insertPendingRow, secondsSinceLastIncoming } = require('../services/messageSender');
 const { enqueueSend } = require('../queue/sendQueue');
 const { uploadMedia } = require('../integrations/metaSend');
-const { prepareOutboundAudio } = require('../services/outboundAudio');
+const { prepareOutboundAudio, prepareVoiceNote } = require('../services/outboundAudio');
 const { markAccountHealth, classifyMetaError } = require('../services/accountHealth');
 const minio = require('../util/minioClient');
 const { syncMediaToAccount } = require('./mediaLibrary');
@@ -1250,13 +1250,14 @@ router.post('/messages/send-audio', mediaUpload.single('file'), async (req, res)
       return res.status(409).json({ error: 'Outside 24-hour customer service window.', code: 'OUTSIDE_WINDOW' });
     }
 
-    // Audio every phone can play, iPhone included (services/outboundAudio.js).
-    let audioBuffer, audioMime, audioExt;
+    // A voice note in the layout iPhone plays (services/outboundAudio.js).
+    let audioBuffer, audioMime, audioExt, audioVoice;
     try {
-      const prepared = await prepareOutboundAudio(req.file.buffer, req.file.mimetype);
+      const prepared = await prepareVoiceNote(req.file.buffer, req.file.mimetype);
       audioBuffer = prepared.buffer;
       audioMime = prepared.mime;
       audioExt = prepared.ext;
+      audioVoice = prepared.voice;
     } catch (err) {
       return res.status(400).json({ error: `Audio transcode failed: ${err.message}` });
     }
@@ -1303,7 +1304,7 @@ router.post('/messages/send-audio', mediaUpload.single('file'), async (req, res)
       to: String(toNumber).replace(/\D/g, ''),
       localMessageId: localId,
       originRef: { kind: 'chat_reply' },  // human chat reply → eligible for outbound triggers
-      payload: { type: 'audio', mediaId, contextMessageId: ctxId },
+      payload: { type: 'audio', mediaId, voice: audioVoice, contextMessageId: ctxId },
     });
 
     res.status(202).json({ ok: true, messageId: localId, status: 'sending', mediaId });
@@ -1447,6 +1448,16 @@ router.post('/messages/send-library-media', async (req, res) => {
  * the exact pipeline /messages/send-media uses (so ticks, the bubble thumbnail
  * and outbound triggers all behave identically).
  */
+// Whether a chat message being forwarded is a voice note: stored as type
+// 'voice', an OGG/Opus file (our own recordings), or an inbound message Meta
+// marked voice:true (stored on disk as MP3 by the media downloader).
+function isVoiceNoteSource(src) {
+  if (String(src.message_type || '').toLowerCase() === 'voice') return true;
+  if (/ogg|opus/i.test(src.media_mime_type || '')) return true;
+  const msgs = src.raw_payload?.entry?.[0]?.changes?.[0]?.value?.messages;
+  return !!(Array.isArray(msgs) && msgs[0]?.audio?.voice === true);
+}
+
 const FORWARD_MEDIA_KINDS = {
   image: 'image', video: 'video', document: 'document',
   audio: 'audio', voice: 'audio',   // voice notes go out as an audio message
@@ -1554,13 +1565,16 @@ router.post('/messages/forward', async (req, res) => {
       return res.status(400).json({ error: 'That file could not be read for forwarding.' });
     }
 
-    // A forwarded voice note is OGG/Opus, which iPhone cannot play when it
-    // comes through the API (services/outboundAudio.js).
+    // A forwarded voice note goes out as a voice note, anything else as an
+    // ordinary audio message — each in a form iPhone plays (services/outboundAudio.js).
     let sendExt = ext;
+    let voice = false;
     if (mediaKind === 'audio') {
       try {
-        const prepared = await prepareOutboundAudio(buffer, mime);
-        buffer = prepared.buffer; mime = prepared.mime; sendExt = prepared.ext;
+        const prepared = isVoiceNoteSource(src)
+          ? await prepareVoiceNote(buffer, mime)
+          : await prepareOutboundAudio(buffer, mime);
+        buffer = prepared.buffer; mime = prepared.mime; sendExt = prepared.ext; voice = prepared.voice;
         filename = `${(filename || 'audio').replace(/\.[^.]+$/, '')}.${sendExt}`;
       } catch (err) {
         return res.status(400).json({ error: `Audio transcode failed: ${err.message}` });
@@ -1617,6 +1631,7 @@ router.post('/messages/forward', async (req, res) => {
         mediaId,
         caption: caption || undefined,
         filename: mediaKind === 'document' ? filename : undefined,
+        voice,
       },
     });
 
