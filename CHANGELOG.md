@@ -49,6 +49,11 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
   note or as plain audio — is delivered and then shows "This audio is no longer available" on
   iPhone. Recordings, attached audio and forwarded voice notes now go out as AAC in M4A (mono,
   64 kbps) as an ordinary audio message; AAC, M4A, MP3 and AMR files are sent unchanged.
+- **Media library audio plays on iPhone.** Automations, AI agents and Chats send library audio
+  through one upload to Meta, which now converts it to AAC/M4A the same way (the library keeps the
+  original file). Automations no longer send OGG library files as voice notes: four OGG/Opus voice
+  note encodings (16 and 48 kHz, ffmpeg or "WhatsApp" vendor tag) were all "no longer available" on
+  iPhone.
 - **Instagram automation link buttons open for the person tapping them.** They were built as
   `/api/ig-automations/r/<token>`, missing `/social`, and answered `{"error":"Unauthorized"}`. Links
   in DMs already sent now redirect to the right address.

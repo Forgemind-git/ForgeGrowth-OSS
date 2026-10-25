@@ -852,9 +852,6 @@ async function executeMessageNode(client, executionId, node, context) {
             mediaId: sync.meta_media_id,
             caption: resolveVariables(dd.caption, context),
             filename: resolveVariables(dd.filename, context),
-            // An OGG/Opus library file is sent as a VOICE NOTE; anything else
-            // (mp3, m4a) stays a plain audio file, which is what it is.
-            ...(directType === 'audio' && /ogg|opus/i.test(media.mime_type || '') ? { voice: true } : {}),
           };
           // Mirror the library file to local disk so the chat bubble can
           // play/preview it via /api/media/:messageId — otherwise outbound
