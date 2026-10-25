@@ -43,6 +43,18 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
   and the workflow-agent Telegram output with its bot token. A Telegram output on an existing
   workflow agent is dropped when the agent is next saved. Its tables are left in place.
 
+### Fixed
+
+- **Voice messages from Chats can now be played by the person receiving them.** A recording was
+  uploaded as OGG/Opus but sent as a plain audio file, which WhatsApp on iPhone (and some Android
+  builds) delivers and then cannot play. Recordings, attached audio and forwarded voice notes now go
+  out as real voice notes (mono OGG/Opus, `voice: true`); one too long for a 512 KB voice note goes out
+  as MP3. AAC, MP4, MP3 and AMR files are sent unchanged.
+- **The Instagram automation post picker shows the account's posts.** Posts saved by the full-history
+  and revalidate syncs had no account, so an account whose posts were all older than 90 days showed
+  "No synced posts for this account yet" while the Content library listed them. Every synced post now
+  records its account; existing posts are tagged on the next sync.
+
 ### Changed
 
 - **MCP: Instagram rules and flows are always created as drafts.** `social_create_automation` and

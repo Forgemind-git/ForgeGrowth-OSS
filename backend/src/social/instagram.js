@@ -591,6 +591,7 @@ async function getStats(period = '30D', account = null) {
       type:     normalizeMediaType(m),
       media_type: m.media_type,
       timestamp: m.timestamp,
+      accountId,                      // whose post — syncService tags posts.account_key with it
     };
   };
 
@@ -727,6 +728,7 @@ async function getAllPosts(arg = null) {
       type: normalizeMediaType(m),
       media_type: m.media_type,
       timestamp: m.timestamp,
+      accountId,                 // whose post — syncService tags posts.account_key with it
     };
   });
 }
