@@ -155,7 +155,7 @@ function ensureSchema() {
       );
 
       -- Tracked link buttons: each web_url button in a sent DM points at
-      -- /api/ig-automations/r/<token>, which records the click and redirects.
+      -- /api/social/ig-automations/r/<token>, which records the click and redirects.
       -- send_id groups the buttons of one delivered message (CTR = sends clicked / sends).
       CREATE TABLE IF NOT EXISTS ig_automation_links (
         token       text PRIMARY KEY,
@@ -275,7 +275,7 @@ async function trackLinks(rule, message, peerId) {
       await pool.query(
         `INSERT INTO ig_automation_links (token, send_id, rule_id, account_id, peer_id, url) VALUES ($1,$2,$3,$4,$5,$6)`,
         [token, sendId, rule.id, rule.account_id, peerId || null, t.url]);
-      t.url = `${PUBLIC_BASE}/api/ig-automations/r/${token}`;
+      t.url = `${PUBLIC_BASE}/api/social/ig-automations/r/${token}`;
     }
     return out;
   } catch (e) {

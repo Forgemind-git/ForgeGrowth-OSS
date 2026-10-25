@@ -45,11 +45,13 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
 
 ### Fixed
 
-- **Voice messages from Chats can now be played by the person receiving them.** A recording was
-  uploaded as OGG/Opus but sent as a plain audio file, which WhatsApp on iPhone (and some Android
-  builds) delivers and then cannot play. Recordings, attached audio and forwarded voice notes now go
-  out as real voice notes (mono OGG/Opus, `voice: true`); one too long for a 512 KB voice note goes out
-  as MP3. AAC, MP4, MP3 and AMR files are sent unchanged.
+- **Voice messages from Chats play on iPhone.** OGG/Opus sent through the Cloud API — as a voice
+  note or as plain audio — is delivered and then shows "This audio is no longer available" on
+  iPhone. Recordings, attached audio and forwarded voice notes now go out as AAC in M4A (mono,
+  64 kbps) as an ordinary audio message; AAC, M4A, MP3 and AMR files are sent unchanged.
+- **Instagram automation link buttons open for the person tapping them.** They were built as
+  `/api/ig-automations/r/<token>`, missing `/social`, and answered `{"error":"Unauthorized"}`. Links
+  in DMs already sent now redirect to the right address.
 - **The Instagram automation post picker shows the account's posts.** Posts saved by the full-history
   and revalidate syncs had no account, so an account whose posts were all older than 90 days showed
   "No synced posts for this account yet" while the Content library listed them. Every synced post now

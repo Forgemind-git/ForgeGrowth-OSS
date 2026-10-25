@@ -20,6 +20,9 @@ const SHARED = new Set([
 // The install's own address, the same inputs util/publicUrl.js reads when no
 // request is in hand (a background job, an OAuth redirect built at boot).
 function installOrigin() {
+  // PUBLIC_URL pins the install's address (util/publicUrl.js); it wins here too.
+  const pinned = String(process.env.PUBLIC_URL || '').trim().replace(/\/+$/, '');
+  if (/^https?:\/\/[^/]+$/i.test(pinned)) return pinned;
   const tls = String(process.env.TLS_DOMAIN || '').trim();
   if (tls) return `https://${tls}`;
   const cors = String(process.env.CORS_ORIGIN || '').split(',')[0].trim().replace(/\/+$/, '');
