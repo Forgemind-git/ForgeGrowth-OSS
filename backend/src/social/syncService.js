@@ -116,6 +116,10 @@ async function _upsertPosts(platformKey, posts, accountKey = null) {
   for (const post of posts) {
     if (post.thumbnail) post.thumbnail = await _localizeThumbnail(platformKey, post.id, post.thumbnail);
     const row = _mapPostToDb(post, platformId);
+    // The caller's account, else the one the platform module stamped on the post.
+    // The full-history and revalidate syncs pass none, and posts stored without an
+    // account were invisible to every per-account view (e.g. the automation post picker).
+    const postAccountKey = accountKey || post.accountId || null;
     await pool.query(
       `INSERT INTO posts (
         platform_id, external_id, title, caption, type, media_type, topic,
@@ -149,7 +153,7 @@ async function _upsertPosts(platformKey, posts, accountKey = null) {
         row.platform_id, row.external_id, row.title, row.caption, row.type,
         row.media_type, row.topic, row.date, row.views, row.engagements,
         row.likes, row.comments, row.shares, row.saves, row.clicks, row.score,
-        row.permalink, row.thumbnail_url, row.raw_data, row.fetched_at, accountKey,
+        row.permalink, row.thumbnail_url, row.raw_data, row.fetched_at, postAccountKey,
       ]
     );
     inserted++;

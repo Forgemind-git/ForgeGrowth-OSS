@@ -2,12 +2,11 @@ const { Router } = require('express');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
-const { promisify } = require('util');
 const pool = require('../db');
 const { resolveAccount, insertPendingRow, secondsSinceLastIncoming } = require('../services/messageSender');
 const { enqueueSend } = require('../queue/sendQueue');
 const { uploadMedia } = require('../integrations/metaSend');
+const { prepareOutboundAudio } = require('../services/outboundAudio');
 const { markAccountHealth, classifyMetaError } = require('../services/accountHealth');
 const minio = require('../util/minioClient');
 const { syncMediaToAccount } = require('./mediaLibrary');
@@ -16,7 +15,6 @@ const { isAdmin } = require('../permissions');
 const bus = require('../events');
 const XLSX = require('xlsx');
 
-const pexecFile = promisify(execFile);
 const MEDIA_DIR = process.env.MEDIA_DIR || '/app/media';
 
 /**
@@ -30,35 +28,6 @@ function sanitizeContextId(id) {
   if (id.startsWith('local-') || id.startsWith('tmp-')) return null;
   return id;
 }
-const META_AUDIO_TYPES = new Set(['audio/aac', 'audio/mp4', 'audio/amr', 'audio/mpeg', 'audio/ogg']);
-
-/**
- * Transcode browser audio (typically webm/opus) to Meta-accepted ogg/opus.
- * Returns { buffer, mime, ext }.
- */
-async function transcodeAudioForMeta(srcBuffer, srcMime) {
-  if (META_AUDIO_TYPES.has(srcMime)) {
-    return { buffer: srcBuffer, mime: srcMime, ext: srcMime.split('/')[1] };
-  }
-  // Write source to a temp file, transcode to ogg/opus
-  const tmpIn = `/tmp/audio-in-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
-  const tmpOut = `${tmpIn}.ogg`;
-  fs.writeFileSync(tmpIn, srcBuffer);
-  try {
-    await pexecFile('ffmpeg', [
-      '-y', '-loglevel', 'error',
-      '-i', tmpIn,
-      '-vn', '-c:a', 'libopus', '-b:a', '64k',
-      tmpOut,
-    ], { timeout: 30_000 });
-    const buf = fs.readFileSync(tmpOut);
-    return { buffer: buf, mime: 'audio/ogg', ext: 'ogg' };
-  } finally {
-    try { fs.unlinkSync(tmpIn); } catch {}
-    try { fs.unlinkSync(tmpOut); } catch {}
-  }
-}
-
 /**
  * Mirror an outbound media file to /app/media so the chat bubble can render
  * the thumbnail/playback via the existing /api/media/:messageId proxy.
@@ -1184,15 +1153,28 @@ router.post('/messages/send-media', mediaUpload.single('file'), async (req, res)
     const kind = classifyChatMediaKind(req.file.mimetype);
     if (!kind) return res.status(400).json({ error: 'Unsupported file type' });
 
+    // An attached audio file is made playable on every phone the same way a
+    // recorded one is; everything else goes up as it is.
+    let fileBuffer = req.file.buffer, fileMime = req.file.mimetype, fileName = req.file.originalname, voice = false;
+    if (kind === 'audio') {
+      try {
+        const prepared = await prepareOutboundAudio(fileBuffer, fileMime);
+        fileBuffer = prepared.buffer; fileMime = prepared.mime; voice = prepared.voice;
+        fileName = `${(fileName || 'audio').replace(/\.[^.]+$/, '')}.${prepared.ext}`;
+      } catch (err) {
+        return res.status(400).json({ error: `Audio transcode failed: ${err.message}` });
+      }
+    }
+
     // Step 1: upload binary to Meta to get media_id
     let mediaId;
     try {
       const uploaded = await uploadMedia({
         accessToken: account.accessToken,
         phoneNumberId: account.phoneNumberId,
-        buffer: req.file.buffer,
-        mimeType: req.file.mimetype,
-        filename: req.file.originalname,
+        buffer: fileBuffer,
+        mimeType: fileMime,
+        filename: fileName,
       });
       mediaId = uploaded?.id;
       if (!mediaId) throw new Error('Meta upload returned no id');
@@ -1208,15 +1190,15 @@ router.post('/messages/send-media', mediaUpload.single('file'), async (req, res)
     const ctxId = sanitizeContextId(contextMessageId);
     const localId = await insertPendingRow({
       account, toNumber, messageType: kind,
-      messageBody: caption || req.file.originalname,
-      mediaMime: req.file.mimetype,
+      messageBody: caption || fileName,
+      mediaMime: fileMime,
       contextMessageId: ctxId,
     });
-    const ext = req.file.originalname.split('.').pop()?.toLowerCase() || req.file.mimetype.split('/')[1] || 'bin';
+    const ext = fileName.split('.').pop()?.toLowerCase() || fileMime.split('/')[1] || 'bin';
     const accountDigits = (account.displayPhoneNumber || '').replace(/\D/g, '');
     const { absPath, size } = persistOutboundMedia({
       accountPhoneDigits: accountDigits, messageId: localId,
-      buffer: req.file.buffer, ext,
+      buffer: fileBuffer, ext,
     });
     await pool.query(
       `UPDATE coexistence.chat_history
@@ -1224,7 +1206,7 @@ router.post('/messages/send-media', mediaUpload.single('file'), async (req, res)
               media_size_bytes = $2, media_filename = $3,
               media_downloaded_at = NOW()
         WHERE message_id = $4`,
-      [absPath, size, req.file.originalname, localId]
+      [absPath, size, fileName, localId]
     );
 
     // Step 3: enqueue send to Meta
@@ -1236,7 +1218,8 @@ router.post('/messages/send-media', mediaUpload.single('file'), async (req, res)
       originRef: { kind: 'chat_reply' },  // human chat reply → eligible for outbound triggers
       payload: {
         type: kind, mediaId, caption: caption || undefined,
-        filename: kind === 'document' ? req.file.originalname : undefined,
+        filename: kind === 'document' ? fileName : undefined,
+        voice,
         contextMessageId: ctxId,
       },
     });
@@ -1268,13 +1251,14 @@ router.post('/messages/send-audio', mediaUpload.single('file'), async (req, res)
       return res.status(409).json({ error: 'Outside 24-hour customer service window.', code: 'OUTSIDE_WINDOW' });
     }
 
-    // Transcode to Meta-accepted format if needed
-    let audioBuffer, audioMime, audioExt;
+    // A voice note WhatsApp can play everywhere (services/outboundAudio.js).
+    let audioBuffer, audioMime, audioExt, audioVoice;
     try {
-      const transcoded = await transcodeAudioForMeta(req.file.buffer, req.file.mimetype);
-      audioBuffer = transcoded.buffer;
-      audioMime = transcoded.mime;
-      audioExt = transcoded.ext;
+      const prepared = await prepareOutboundAudio(req.file.buffer, req.file.mimetype);
+      audioBuffer = prepared.buffer;
+      audioMime = prepared.mime;
+      audioExt = prepared.ext;
+      audioVoice = prepared.voice;
     } catch (err) {
       return res.status(400).json({ error: `Audio transcode failed: ${err.message}` });
     }
@@ -1321,7 +1305,7 @@ router.post('/messages/send-audio', mediaUpload.single('file'), async (req, res)
       to: String(toNumber).replace(/\D/g, ''),
       localMessageId: localId,
       originRef: { kind: 'chat_reply' },  // human chat reply → eligible for outbound triggers
-      payload: { type: 'audio', mediaId, contextMessageId: ctxId },
+      payload: { type: 'audio', mediaId, voice: audioVoice, contextMessageId: ctxId },
     });
 
     res.status(202).json({ ok: true, messageId: localId, status: 'sending', mediaId });
@@ -1572,6 +1556,20 @@ router.post('/messages/forward', async (req, res) => {
       return res.status(400).json({ error: 'That file could not be read for forwarding.' });
     }
 
+    // A forwarded voice note must go out AS a voice note, or it cannot be
+    // played on the other end (services/outboundAudio.js).
+    let voice = false;
+    let sendExt = ext;
+    if (mediaKind === 'audio') {
+      try {
+        const prepared = await prepareOutboundAudio(buffer, mime);
+        buffer = prepared.buffer; mime = prepared.mime; voice = prepared.voice; sendExt = prepared.ext;
+        filename = `${(filename || 'audio').replace(/\.[^.]+$/, '')}.${sendExt}`;
+      } catch (err) {
+        return res.status(400).json({ error: `Audio transcode failed: ${err.message}` });
+      }
+    }
+
     // Upload to Meta for a media_id this account can send.
     let mediaId;
     try {
@@ -1600,7 +1598,7 @@ router.post('/messages/forward', async (req, res) => {
     });
     const accountDigits = (account.displayPhoneNumber || '').replace(/\D/g, '');
     const { absPath, size } = persistOutboundMedia({
-      accountPhoneDigits: accountDigits, messageId: localId, buffer, ext,
+      accountPhoneDigits: accountDigits, messageId: localId, buffer, ext: sendExt,
     });
     await pool.query(
       `UPDATE coexistence.chat_history
@@ -1622,6 +1620,7 @@ router.post('/messages/forward', async (req, res) => {
         mediaId,
         caption: caption || undefined,
         filename: mediaKind === 'document' ? filename : undefined,
+        voice,
       },
     });
 
