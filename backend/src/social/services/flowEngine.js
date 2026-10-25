@@ -212,7 +212,7 @@ async function trackUrl(run, url) {
     await pool.query(
       `INSERT INTO ig_automation_links (token, send_id, rule_id, flow_id, account_id, peer_id, url) VALUES ($1,$2,NULL,$3,$4,$5,$6)`,
       [token, `run${run.id}`, run.flow_id, run.account_id, run.peer_id, url]);
-    return `${shared().PUBLIC_BASE}/api/ig-automations/r/${token}`;
+    return `${shared().PUBLIC_BASE}/api/social/ig-automations/r/${token}`;
   } catch (_) { return url; }
 }
 

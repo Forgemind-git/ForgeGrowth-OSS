@@ -154,6 +154,12 @@ app.use(cookieParser());
 // and before the API rate limiter (it has its own per-platform budget).
 const social = require('./social');
 app.use('/api/social', (req, res, next) => { req.url = req.originalUrl; social.app(req, res, next); });
+// Instagram automation link buttons were once built as /api/ig-automations/r/<token>
+// (missing /social), which fell through to the login check and showed the person
+// tapping it {"error":"Unauthorized"}. DMs already sent still carry that address.
+app.get('/api/ig-automations/r/:token', (req, res) => {
+  res.redirect(302, `/api/social/ig-automations/r/${encodeURIComponent(req.params.token)}`);
+});
 // MCP transports accept inline file uploads (base64) for send_media — those
 // bodies blow past the default 1mb. Mount a larger parser for the MCP paths
 // BEFORE the global parser; express.json no-ops once req._body is set, so the

@@ -1155,11 +1155,11 @@ router.post('/messages/send-media', mediaUpload.single('file'), async (req, res)
 
     // An attached audio file is made playable on every phone the same way a
     // recorded one is; everything else goes up as it is.
-    let fileBuffer = req.file.buffer, fileMime = req.file.mimetype, fileName = req.file.originalname, voice = false;
+    let fileBuffer = req.file.buffer, fileMime = req.file.mimetype, fileName = req.file.originalname;
     if (kind === 'audio') {
       try {
         const prepared = await prepareOutboundAudio(fileBuffer, fileMime);
-        fileBuffer = prepared.buffer; fileMime = prepared.mime; voice = prepared.voice;
+        fileBuffer = prepared.buffer; fileMime = prepared.mime;
         fileName = `${(fileName || 'audio').replace(/\.[^.]+$/, '')}.${prepared.ext}`;
       } catch (err) {
         return res.status(400).json({ error: `Audio transcode failed: ${err.message}` });
@@ -1219,7 +1219,6 @@ router.post('/messages/send-media', mediaUpload.single('file'), async (req, res)
       payload: {
         type: kind, mediaId, caption: caption || undefined,
         filename: kind === 'document' ? fileName : undefined,
-        voice,
         contextMessageId: ctxId,
       },
     });
@@ -1251,14 +1250,13 @@ router.post('/messages/send-audio', mediaUpload.single('file'), async (req, res)
       return res.status(409).json({ error: 'Outside 24-hour customer service window.', code: 'OUTSIDE_WINDOW' });
     }
 
-    // A voice note WhatsApp can play everywhere (services/outboundAudio.js).
-    let audioBuffer, audioMime, audioExt, audioVoice;
+    // Audio every phone can play, iPhone included (services/outboundAudio.js).
+    let audioBuffer, audioMime, audioExt;
     try {
       const prepared = await prepareOutboundAudio(req.file.buffer, req.file.mimetype);
       audioBuffer = prepared.buffer;
       audioMime = prepared.mime;
       audioExt = prepared.ext;
-      audioVoice = prepared.voice;
     } catch (err) {
       return res.status(400).json({ error: `Audio transcode failed: ${err.message}` });
     }
@@ -1305,7 +1303,7 @@ router.post('/messages/send-audio', mediaUpload.single('file'), async (req, res)
       to: String(toNumber).replace(/\D/g, ''),
       localMessageId: localId,
       originRef: { kind: 'chat_reply' },  // human chat reply → eligible for outbound triggers
-      payload: { type: 'audio', mediaId, voice: audioVoice, contextMessageId: ctxId },
+      payload: { type: 'audio', mediaId, contextMessageId: ctxId },
     });
 
     res.status(202).json({ ok: true, messageId: localId, status: 'sending', mediaId });
@@ -1556,14 +1554,13 @@ router.post('/messages/forward', async (req, res) => {
       return res.status(400).json({ error: 'That file could not be read for forwarding.' });
     }
 
-    // A forwarded voice note must go out AS a voice note, or it cannot be
-    // played on the other end (services/outboundAudio.js).
-    let voice = false;
+    // A forwarded voice note is OGG/Opus, which iPhone cannot play when it
+    // comes through the API (services/outboundAudio.js).
     let sendExt = ext;
     if (mediaKind === 'audio') {
       try {
         const prepared = await prepareOutboundAudio(buffer, mime);
-        buffer = prepared.buffer; mime = prepared.mime; voice = prepared.voice; sendExt = prepared.ext;
+        buffer = prepared.buffer; mime = prepared.mime; sendExt = prepared.ext;
         filename = `${(filename || 'audio').replace(/\.[^.]+$/, '')}.${sendExt}`;
       } catch (err) {
         return res.status(400).json({ error: `Audio transcode failed: ${err.message}` });
@@ -1620,7 +1617,6 @@ router.post('/messages/forward', async (req, res) => {
         mediaId,
         caption: caption || undefined,
         filename: mediaKind === 'document' ? filename : undefined,
-        voice,
       },
     });
 

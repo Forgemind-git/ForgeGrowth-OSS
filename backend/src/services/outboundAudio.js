@@ -1,16 +1,17 @@
 // Audio a person sends from Chats (recorded, attached or forwarded), made into
 // something every WhatsApp client can play.
 //
-// WhatsApp plays OGG/Opus ONLY as a voice note: the message must carry
-// `voice: true` and the file must be mono and at most 512 KB. Sent as a plain
-// audio message instead, an OGG/Opus file is delivered — ticks go blue — and
-// then cannot be played on iPhone and on some Android builds. That is how a
-// recorded reply used to arrive.
+// OGG/Opus does NOT work for this, with or without `voice: true`: Meta accepts
+// it, the message is delivered and read, and then WhatsApp on iPhone says
+// "This audio is no longer available" (Android and WhatsApp Web play it). Both
+// variants were tried on the live install; the same failure, and AAC/M4A
+// playing where OGG does not, is reported independently in
+// evolution-foundation/evo-crm-community#190.
 //
-// So: anything that is not already a format WhatsApp plays as an ordinary audio
-// file (AAC, MP4, MP3, AMR) becomes a voice note — OGG/Opus, mono, at voice-note
-// bitrate. A recording too long to fit in 512 KB even then (over two minutes or
-// so) goes out as MP3, which plays everywhere as an audio file.
+// So anything that is not already a format WhatsApp plays as an ordinary audio
+// file (AAC, MP4/M4A, MP3, AMR) becomes AAC-LC in an M4A container — mono,
+// 48 kHz, 64 kbps — and goes out as an ordinary audio message, never as a
+// voice note.
 
 const fs = require('fs');
 const os = require('os');
@@ -21,12 +22,11 @@ const { promisify } = require('util');
 
 const pexecFile = promisify(execFile);
 
-const VOICE_NOTE_MAX_BYTES = 512 * 1024;
-
 // Sent as they are; the value is the file extension to store them under.
 const PLAYABLE_AS_FILE = {
   'audio/aac': 'aac',
   'audio/mp4': 'm4a',
+  'audio/x-m4a': 'm4a',
   'audio/mpeg': 'mp3',
   'audio/amr': 'amr',
 };
@@ -46,20 +46,16 @@ async function transcode(srcBuffer, outExt, args) {
 }
 
 /**
- * @returns {Promise<{ buffer: Buffer, mime: string, ext: string, voice: boolean }>}
- *   `voice` is what the send must pass as `voice` — true only for a voice note.
+ * @returns {Promise<{ buffer: Buffer, mime: string, ext: string }>}
  */
 async function prepareOutboundAudio(srcBuffer, srcMime) {
   const base = String(srcMime || '').split(';')[0].trim().toLowerCase();
   if (PLAYABLE_AS_FILE[base]) {
-    return { buffer: srcBuffer, mime: base, ext: PLAYABLE_AS_FILE[base], voice: false };
+    // audio/x-m4a is what some browsers call it; Meta only knows audio/mp4.
+    return { buffer: srcBuffer, mime: base === 'audio/x-m4a' ? 'audio/mp4' : base, ext: PLAYABLE_AS_FILE[base] };
   }
-  const ogg = await transcode(srcBuffer, 'ogg', ['-ac', '1', '-ar', '48000', '-c:a', 'libopus', '-b:a', '32k', '-application', 'voip']);
-  if (ogg.length <= VOICE_NOTE_MAX_BYTES) {
-    return { buffer: ogg, mime: 'audio/ogg', ext: 'ogg', voice: true };
-  }
-  const mp3 = await transcode(srcBuffer, 'mp3', ['-ac', '1', '-c:a', 'libmp3lame', '-b:a', '64k']);
-  return { buffer: mp3, mime: 'audio/mpeg', ext: 'mp3', voice: false };
+  const m4a = await transcode(srcBuffer, 'm4a', ['-ac', '1', '-ar', '48000', '-c:a', 'aac', '-b:a', '64k', '-movflags', '+faststart']);
+  return { buffer: m4a, mime: 'audio/mp4', ext: 'm4a' };
 }
 
-module.exports = { prepareOutboundAudio, VOICE_NOTE_MAX_BYTES };
+module.exports = { prepareOutboundAudio };
