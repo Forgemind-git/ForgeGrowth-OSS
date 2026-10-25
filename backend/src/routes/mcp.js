@@ -19,7 +19,7 @@ const pool = require('../db');
 const { makeZip } = require('../util/zip');
 const { adminOnly } = require('../middleware/access');
 const { hashApiKey } = require('../util/crypto');
-const { publicOrigin, publicHost, mcpUrl } = require('../util/publicUrl');
+const { publicOrigin, publicHost, mcpUrl, isLoopback, isPinned } = require('../util/publicUrl');
 const agentService = require('../services/agentService');
 const mcpService = require('../services/mcpService');
 
@@ -251,6 +251,11 @@ adminRouter.get('/mcp/install', adminOnly, (req, res) => {
     // cannot show an address the server would not have written.
     mcpUrl: oauthUrl,
     oauthUrl,
+    // Where the address came from — 'pinned' (PUBLIC_URL in .env) or 'request'
+    // (how this page was reached) — and whether only this machine can reach it,
+    // so the panel can tell a self-hoster what to change when Claude cannot connect.
+    urlSource: isPinned() ? 'pinned' : 'request',
+    localOnly: isLoopback(publicHost(req)),
     // Deprecated key-in-URL scheme. Still served so existing connectors keep
     // working, but it is not what anyone should be setting up now.
     legacyUrl,

@@ -15,10 +15,10 @@ Settings → MCP Tools → **Social**), plus deletes, which live in **Admin → 
 
 | Group | What it lets you do |
 |---|---|
-| Social analytics | `social_get_overview`, `social_get_platform_stats`, `social_get_followers_trend`, `social_get_audience`, `social_get_executive_summary`, `social_get_content_themes`, `social_list_posts` (content library), `social_list_accounts`, `social_get_token_health` |
+| Social analytics | `social_get_overview`, `social_get_platform_stats`, `social_get_followers_trend`, `social_get_audience`, `social_get_executive_summary`, `social_get_content_themes`, `social_get_trends_anomalies`, `social_list_posts` (content library), `social_list_accounts`, `social_get_token_health` |
 | Social inbox & contacts | `social_list_messages` (Instagram DMs), `social_list_comments`, `social_list_contacts` |
 | Social replies | `social_reply_to_comment`, `social_send_dm` — **seen by real people** |
-| Instagram automations & flows | rules: `social_get_automation_options`, `social_list_automations`, `social_list_instagram_posts`, `social_create_automation`, `social_update_automation`, `social_get_automation_results`, `social_list_automation_leads`; flows: `social_list_flows`, `social_get_flow`, `social_create_flow`, `social_update_flow`, `social_get_flow_results` |
+| Instagram automations & flows | rules: `social_get_automation_options`, `social_list_automations`, `social_list_instagram_posts`, `social_create_comment_dm_draft`, `social_create_automation`, `social_update_automation`, `social_get_automation_results`, `social_list_automation_leads`; flows: `social_list_flows`, `social_get_flow`, `social_create_flow`, `social_update_flow`, `social_get_flow_results` |
 | Social AI agents | `social_list_agents`, `social_get_agent`, `social_list_agent_models`, `social_create_agent`, `social_update_agent`, `social_add_agent_tool`, `social_update_agent_tool`, `social_get_agent_runs` |
 | Delete & remove (Admin) | `social_delete_automation`, `social_delete_flow`, `social_delete_agent`, `social_delete_agent_tool` |
 
@@ -46,7 +46,10 @@ first", collect name/email/phone, log to a Google Sheet and send one follow-up.
 2. `social_get_automation_options` → allowed triggers and field types.
 3. For "only on this post", `social_list_instagram_posts` → `media_id`.
 4. Summarise the rule in plain words and get a yes.
-5. `social_create_automation` with **`active: false`**, show it, then
+5. Create it. For "comment a keyword → reply under the comment and DM a link" use
+   `social_create_comment_dm_draft` (account_id, dm_text, link_url, optional keywords,
+   media_id, reply_texts, link_title). Anything else: `social_create_automation`.
+   Both always save a **draft** (off) — show it, then
    `social_update_automation {changes:{active:true}}` once the user agrees.
 
 An active rule sends real DMs on its own, capped per hour. Turning it off
@@ -57,7 +60,7 @@ An active rule sends real DMs on its own, capped per hour. Turning it off
 A flow is a multi-step DM conversation drawn on a canvas: a graph of steps joined by
 edges, with **exactly one `trigger` step**. Step types and their `data` are specific to
 the builder — **read an existing flow with `social_get_flow` and copy its shapes**;
-never invent a step type. Create with `active:false`, confirm, then switch on with
+never invent a step type. `social_create_flow` always saves a draft; confirm, then switch on with
 `social_update_flow`. Switching a flow off also stops every run still waiting on a reply.
 
 ## Social AI agents

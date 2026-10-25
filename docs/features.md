@@ -191,11 +191,14 @@ already-connected client.
   request with this instance's own address already written into `.mcp.json`, so there is nothing to
   edit — including on a plain-HTTP install, where the URL is `http://`.
 - **OAuth 2.1** at `https://<your-domain>/api/mcp` — the recommended transport. Create a client in
-  **Admin Settings → MCP Tools**, paste the Client ID and Secret into the connector's advanced
+  **Settings → Claude & MCP**, paste the Client ID and Secret into the connector's advanced
   settings, and approve the consent screen. Use the address you **sign in at**: where one install
   answers on two domains, the token is issued for the host the request arrived on, and a connector
   pointed at the other one fails as though the credentials were wrong.
 - A legacy key-in-URL transport at `/api/mcp/http/<key>` is still supported.
+- **The address is worked out per request**, so the same build works on any domain. Behind a proxy
+  that rewrites the Host header or hides https, set `PUBLIC_URL=https://<your-domain>` in `.env`
+  and restart; Settings → Claude & MCP shows which address is in use and where it came from.
 
 #### Three requirements that fail silently
 

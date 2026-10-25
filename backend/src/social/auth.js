@@ -326,39 +326,10 @@ async function ensureTables() {
       ON contacts(platform, account_id, peer_id);
     CREATE INDEX IF NOT EXISTS idx_contacts_last_seen ON contacts(last_seen_at DESC);
     CREATE INDEX IF NOT EXISTS idx_contacts_account   ON contacts(account_id);
-
-    -- MCP access (Settings → MCP Access): bearer API keys are stored as
-    -- SHA-256 hashes only (plaintext shown once at creation); mcp_settings is
-    -- a single row holding the master switch + per-capability toggles.
-    CREATE TABLE IF NOT EXISTS mcp_api_keys (
-      id           BIGSERIAL PRIMARY KEY,
-      label        TEXT NOT NULL,
-      key_prefix   TEXT NOT NULL,
-      key_last4    TEXT NOT NULL,
-      key_hash     TEXT NOT NULL UNIQUE,
-      is_enabled   BOOLEAN NOT NULL DEFAULT TRUE,
-      last_used_at TIMESTAMPTZ,
-      created_by   BIGINT,
-      created_at   TIMESTAMPTZ DEFAULT now(),
-      -- Account scope: NULL/NULL = the key sees every account (the default).
-      -- When both are set the key is locked to exactly ONE account on ONE
-      -- platform — every MCP tool it calls is filtered to that account.
-      scope_platform   TEXT,
-      scope_account_id TEXT
-    );
-    CREATE TABLE IF NOT EXISTS mcp_settings (
-      id             INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
-      master_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-      capabilities   JSONB NOT NULL DEFAULT '{"analytics":true,"content":true,"inbox":true,"contacts":true,"engage":false}'::jsonb,
-      updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
   `);
-  await pool.query(`INSERT INTO mcp_settings (id) VALUES (1) ON CONFLICT DO NOTHING`);
 
   // ── Migrations: add columns/constraints that may be missing on existing tables ──
   const migrationQueries = [
-    `DO $$ BEGIN ALTER TABLE mcp_api_keys ADD COLUMN scope_platform TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
-    `DO $$ BEGIN ALTER TABLE mcp_api_keys ADD COLUMN scope_account_id TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
     `DO $$ BEGIN ALTER TABLE instagram_messages ADD COLUMN account_id TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
     `DO $$ BEGIN ALTER TABLE instagram_messages ADD COLUMN seen BOOLEAN DEFAULT false; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,
     `DO $$ BEGIN ALTER TABLE instagram_messages ADD COLUMN seen_at TIMESTAMPTZ; EXCEPTION WHEN duplicate_column THEN NULL; END $$`,

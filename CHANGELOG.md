@@ -17,8 +17,22 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
 
 ## [Unreleased]
 
+### Added
+
+- **MCP: `social_create_comment_dm_draft`** — the app's "Auto-DM links from comments" preset in one
+  call (reply under the comment, DM a link button), saved as a draft.
+- **MCP: `social_get_trends_anomalies`** — week-on-week / month-on-month changes and flagged
+  anomalies, previously only on the separate Social MCP server.
+- **`PUBLIC_URL`** in `.env` pins the address Claude and the plugin are given, for installs behind a
+  proxy that rewrites the Host header or hides https. Settings → Claude & MCP says where the address
+  came from and warns when only the server itself can reach it.
+
 ### Removed
 
+- **The separate Social MCP server** (`/api/social/mcp/http/<key>`, Settings → Claude & MCP →
+  Instagram API keys). The URL it handed out pointed at the main server, which does not know those
+  keys, so no connector built from it could connect. Every Instagram tool is on the one MCP server
+  at `/api/mcp`. Its tables are left in place.
 - **Chat Analyzer** — the tab, the slide-over in Chats, its settings and business context, and its
   MCP tools (`list_analysed_chats`, `get_chat_analysis`, `analyze_chat`, `get_chat_analysis_costs`,
   `get_chat_transcript`, `transcribe_chat`, `get_chat_image`) and the `area_chat_analysis` API area.
@@ -31,6 +45,10 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
 
 ### Changed
 
+- **MCP: Instagram rules and flows are always created as drafts.** `social_create_automation` and
+  `social_create_flow` force `active:false`, matching WhatsApp's `create_automation`.
+- **MCP connector URLs come from the server**, not the browser's address bar, so the page cannot
+  show an address the OAuth metadata would not issue tokens for.
 - **Settings** — regrouped into 11 pages under Workspace (General, Team, Activity log), Contacts
   (Tags, Fields, Funnel) and Connections (WhatsApp, Instagram, AI models, Google, Claude & MCP).
   The hidden Sales & Chats | Social switch is gone: each page lists its sections as pills under

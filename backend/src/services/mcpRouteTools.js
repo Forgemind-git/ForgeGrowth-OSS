@@ -94,6 +94,14 @@ const ROUTE_TOOLS = [
     service: 'social.getExecutiveSummary',
   },
   {
+    name: 'social_get_trends_anomalies', category: 'social_insights', kind: 'read',
+    summary: 'Unusual spikes and drops worth a look.',
+    title: 'Social trends and anomalies',
+    description: 'Week-on-week and month-on-month changes per platform, plus flagged anomalies (unusual spikes or drops). Use for "anything unusual lately?".',
+    params: { period: { type: 'string', enum: PERIODS, desc: 'Default 30D.' } },
+    service: 'social.getTrendsAnomalies',
+  },
+  {
     name: 'social_get_content_themes', category: 'social_insights', kind: 'read',
     summary: 'Which content themes perform best.',
     title: 'Social content themes',
@@ -241,10 +249,33 @@ const ROUTE_TOOLS = [
       'media_id (one post, or null for every post), keywords (array), match_type (contains | exact | starts_with), reply_texts (array of public comment replies, one picked at random), ' +
       'dm_message (text, or an object), dm_fallback_text, once_per_user, include_replies, tags (array), follow_gate + gate_text/gate_button/follow_gate_text, ' +
       'collect (array of {key,type,label,prompt} — type name|email|phone|text), collect_done_text, sheet_id + sheet_tab, opening_dm, ' +
-      'followup_enabled + followup_delay_min (15-1380) + followup_text + followup_link, active. ' +
-      'It starts sending real DMs as soon as active is true, so create it with active:false, show the user, then turn it on with social_update_automation.',
+      'followup_enabled + followup_delay_min (15-1380) + followup_text + followup_link. ' +
+      'It is always saved as a DRAFT (off) — show the user, then switch it on with social_update_automation changes:{active:true}. ' +
+      'For the common "comment a keyword, get a link in DM" rule, social_create_comment_dm_draft is simpler.',
     params: { rule: { type: 'object', required: true, desc: 'The rule fields listed above.' } },
-    route: { method: 'POST', path: '/social/ig-automations', body: { from: 'rule' } },
+    route: { method: 'POST', path: '/social/ig-automations', body: { from: 'rule', force: { active: false } } },
+  },
+  {
+    name: 'social_create_comment_dm_draft', category: 'social_automations', kind: 'change',
+    summary: 'Draft an "auto-DM a link to people who comment" Instagram rule.',
+    title: 'Draft an auto-DM-link-for-comments rule',
+    description:
+      'The app\'s "Auto-DM links from comments" preset in one call: when someone comments (optionally a keyword, optionally on one post) ' +
+      'the account replies under the comment and DMs them a message with a link button. Saved as a DRAFT (off) — show the user, then switch it on with ' +
+      'social_update_automation changes:{active:true}. account_id from social_list_accounts; media_id from social_list_instagram_posts (omit for every post); ' +
+      'keywords empty = any comment; reply_texts omitted = three friendly defaults.',
+    params: {
+      account_id: { type: 'string', required: true, desc: 'Instagram account id (social_list_accounts).' },
+      dm_text: { type: 'string', required: true, desc: 'The DM text shown above the link button.' },
+      link_url: { type: 'string', required: true, desc: 'Full https:// link the button opens.' },
+      link_title: { type: 'string', desc: 'Button label (default "Open link").' },
+      name: { type: 'string', desc: 'Rule name.' },
+      media_id: { type: 'string', desc: 'Only this post; omit for every post.' },
+      keywords: { type: 'array', items: 'string', desc: 'Words that trigger it; empty = any comment.' },
+      reply_texts: { type: 'array', items: 'string', desc: 'Public replies under the comment, one picked at random.' },
+      once_per_user: { type: 'boolean', desc: 'DM each person once per post (default true).' },
+    },
+    route: { method: 'POST', path: '/social/ig-automations', body: { build: 'commentDmDraft', force: { active: false } } },
   },
   {
     name: 'social_update_automation', category: 'social_automations', kind: 'change',
@@ -305,11 +336,11 @@ const ROUTE_TOOLS = [
     summary: 'Create an Instagram flow.',
     title: 'Create an Instagram flow',
     description:
-      'Create an Instagram flow. flow = { name, account_id (from social_list_accounts), active (default false), graph: { nodes:[{id, type, position:{x,y}, data}], edges:[{source, sourceHandle, target}] } }. ' +
+      'Create an Instagram flow. flow = { name, account_id (from social_list_accounts), graph: { nodes:[{id, type, position:{x,y}, data}], edges:[{source, sourceHandle, target}] } }. ' +
       'The graph needs EXACTLY ONE node of type "trigger" (its data.triggers lists comment / dm / story_reply / story_mention triggers with keywords). ' +
-      'Copy node types and data shapes from an existing flow (social_get_flow) — do not invent them. Keep active:false until the user has seen it.',
+      'Copy node types and data shapes from an existing flow (social_get_flow) — do not invent them. Always saved as a DRAFT (off); switch it on with social_update_flow changes:{active:true} once the user has seen it.',
     params: { flow: { type: 'object', required: true } },
-    route: { method: 'POST', path: '/social/ig-automations/flows', body: { from: 'flow' } },
+    route: { method: 'POST', path: '/social/ig-automations/flows', body: { from: 'flow', force: { active: false } } },
   },
   {
     name: 'social_update_flow', category: 'social_automations', kind: 'change',

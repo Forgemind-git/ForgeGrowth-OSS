@@ -4,7 +4,8 @@
 // the Instagram sections of the matching Settings pages (PAGES in
 // pages/AdminSettingsPage.jsx): General → Instagram notifications, Tags and
 // Fields → the Instagram lists, Instagram → Connection and Privacy policy,
-// AI models → OpenRouter, Claude & MCP → Instagram API keys, Activity log.
+// AI models → OpenRouter, Activity log. Instagram's MCP tools are part of
+// the one MCP server under Claude & MCP.
 //
 // The data stores stay separate (Social contacts and WhatsApp contacts are
 // different tables), so the lists are not merged — only the place you set them.
@@ -14,7 +15,6 @@ import IntegrationsPage from './pages/IntegrationsPage.jsx';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage.jsx';
 import { CategoryTab, TagsTab } from './pages/TagsAndCategoriesPage.jsx';
 import { FieldsTab } from './pages/ContactFieldsPage.jsx';
-import McpAccessTab from './pages/McpAccessPage.jsx';
 import ActivityLogTab from './pages/ActivityLogPage.jsx';
 import OpenRouterTab from './pages/OpenRouterPage.jsx';
 
@@ -28,7 +28,6 @@ export default function SocialSettingsPart({ part, platform = null, user }) {
     : part === 'tags' ? <TagsTab />
     : part === 'category' ? <CategoryTab />
     : part === 'fields' ? <FieldsTab />
-    : part === 'mcp' ? <McpAccessTab />
     : part === 'activity' ? <ActivityLogTab />
     : part === 'privacy' ? <PrivacyPolicyPage />
     : null;

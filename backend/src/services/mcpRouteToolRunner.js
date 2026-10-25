@@ -28,6 +28,7 @@ const SERVICES = {
   'social.getAudienceInsights': (a) => social().getAudienceInsights(a.platform || null, null),
   'social.getExecutiveSummary': (a) => social().getExecutiveSummary(a.period || undefined, null),
   'social.getContentThemes': (a) => social().getContentThemes(clean(a), null),
+  'social.getTrendsAnomalies': (a) => social().getTrendsAnomalies(a.period || undefined, null),
   'social.listPosts': (a) => social().listPosts(clean(a), null),
   'social.listConnectedAccounts': () => social().listConnectedAccounts(null),
   'social.getTokenHealth': () => social().getTokenHealth(null),
@@ -36,6 +37,34 @@ const SERVICES = {
   'social.listContacts': (a) => social().listContacts(clean(a), null),
   'social.replyToComment': (a) => social().replyToComment(clean(a), null),
   'social.sendInstagramDm': (a) => social().sendInstagramDm(clean(a), null),
+};
+
+// Request bodies built from a tool's flat params. Shape only — the route still
+// validates everything.
+const BUILDERS = {
+  // The "Auto-DM links from comments" preset (frontend automations/shared.jsx
+  // comment_link): reply under the comment, then DM a message with a link button.
+  commentDmDraft: (a) => {
+    const url = String(a.link_url || '').trim();
+    if (!/^https?:\/\//i.test(url)) throw svcErr(400, 'link_url must be a full link starting with https://');
+    const text = String(a.dm_text || '').trim();
+    if (!text) throw svcErr(400, 'dm_text is required.');
+    const keywords = Array.isArray(a.keywords) ? a.keywords.map(k => String(k).trim()).filter(Boolean) : [];
+    const replies = Array.isArray(a.reply_texts) ? a.reply_texts.map(r => String(r).trim()).filter(Boolean) : null;
+    return {
+      name: String(a.name || '').trim() || 'Auto-DM links from comments',
+      account_id: a.account_id,
+      trigger: 'comment',
+      media_id: a.media_id || null,
+      keywords,
+      reply_texts: replies && replies.length ? replies : ['Thanks! Please see DMs.', 'Sent you a message! Check it out!', 'Nice! Check your DMs!'],
+      dm_message: { attachment: { type: 'template', payload: {
+        template_type: 'button', text,
+        buttons: [{ type: 'web_url', title: String(a.link_title || '').trim() || 'Open link', url }],
+      } } },
+      once_per_user: a.once_per_user !== false,
+    };
+  },
 };
 
 // Drop null/undefined so a service sees "not given" rather than an explicit null.
@@ -70,7 +99,14 @@ function buildCall(spec, args) {
   } else if (b && typeof b === 'object' && b.from) {
     body = a[b.from];
     if (!body || typeof body !== 'object' || Array.isArray(body)) throw svcErr(400, `${b.from} must be an object.`);
+  } else if (b && typeof b === 'object' && b.build) {
+    const fn = BUILDERS[b.build];
+    if (!fn) throw svcErr(500, `Tool '${spec.name}' points at a missing body builder.`);
+    body = fn(a);
   }
+  // Fields the tool always sets, whatever the caller sent: an MCP-created
+  // Instagram rule or flow is a draft until someone switches it on.
+  if (body && b && b.force) body = { ...body, ...b.force };
   return { method: spec.route.method, path, query, body };
 }
 

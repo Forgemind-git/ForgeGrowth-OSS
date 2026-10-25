@@ -65,8 +65,7 @@ Optional: `SOCIAL_REDIS_URL` (defaults to ForgeGrowth's), `SOCIAL_SYNC_INTERVAL_
 
 - Social has no separate users: people are Forge Growth users (Settings → Team
   lists everyone with Social access).
-- No MCP **OAuth** flow for Social: Forge Growth's own MCP owns `/.well-known/*`.
-  Social MCP keys work with the key-in-URL transport,
-  `/api/social/mcp/http/<key>`.
+- Social has no MCP server of its own: its `social_*` tools are on Forge Growth's
+  one MCP server (`/api/mcp`), switched on under Settings → Claude & MCP.
 - Social's AI features use their own OpenRouter key, set under
-  Social → Settings → OpenRouter.
+  Settings → AI models → Instagram AI (OpenRouter).

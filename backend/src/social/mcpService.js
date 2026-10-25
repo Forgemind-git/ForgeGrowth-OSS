@@ -1,14 +1,11 @@
-// mcpService.js — shared MCP logic: settings + API-key validation + the data
-// reads every MCP tool calls. Used by mcpHttp.js (the Streamable HTTP transport)
-// and the admin routes in index.js, so the two can't drift.
+// mcpService.js — the Instagram data reads (and the two engage writes) behind
+// the social_* tools of ForgeGrowth's one MCP server (services/mcpRouteToolRunner.js).
 //
 // HARD RULE: every read here is a pure DB query — ZERO outbound Graph/API calls
 // (no revalidate kicks, no testConnection), so an external MCP client can never
-// burn the platforms' rate budgets. The only outbound calls live behind the
-// write capability (engage), which is OFF by default and goes
-// through the same rate-gated module functions the UI uses.
+// burn the platforms' rate budgets. The only outbound calls are the engage
+// writes, which go through the same rate-gated module functions the UI uses.
 
-const crypto = require('crypto');
 const pool = require('./db');
 const syncService = require('./syncService');
 const accounts = require('./accounts');
@@ -17,48 +14,6 @@ const tokenService = require('./tokenService');
 const instagram = require('./instagram');
 const reportData = require('./reportData');
 const insightsService = require('./insightsService');
-
-const CAPABILITY_KEYS = ['analytics', 'insights', 'content', 'reports', 'inbox', 'contacts', 'engage'];
-// Reads default ON, writes default OFF — admin flips them in Settings → MCP Access.
-const DEFAULT_CAPABILITIES = {
-  analytics: true, insights: true, content: true, reports: true, inbox: true, contacts: true,
-  engage: false,
-};
-
-/* --------------------------- tables + settings --------------------------- */
-
-// SHA-256 hex of an API key — keys are HASHED (never stored in plaintext);
-// the full key is shown exactly once at creation.
-function hashApiKey(plain) {
-  return crypto.createHash('sha256').update(String(plain)).digest('hex');
-}
-
-async function loadSettings() {
-  const { rows } = await pool.query('SELECT master_enabled, capabilities FROM mcp_settings WHERE id = 1');
-  const r = rows[0] || { master_enabled: false, capabilities: {} };
-  // Only known keys survive: a stored toggle for a removed capability
-  // (publishing / publish_create) must not reappear in the settings.
-  const capabilities = { ...DEFAULT_CAPABILITIES };
-  for (const k of CAPABILITY_KEYS) {
-    if (r.capabilities && r.capabilities[k] !== undefined) capabilities[k] = r.capabilities[k];
-  }
-  return { masterEnabled: !!r.master_enabled, capabilities };
-}
-
-// Validate a raw bearer key. Returns { keyId, capabilities } or throws
-// { status, message } so callers map to HTTP codes.
-async function validateKey(rawKey) {
-  const key = String(rawKey || '').trim();
-  if (!key) { const e = new Error('Missing API key'); e.status = 401; throw e; }
-  const { rows } = await pool.query('SELECT * FROM mcp_api_keys WHERE key_hash = $1', [hashApiKey(key)]);
-  const row = rows[0];
-  if (!row || !row.is_enabled) { const e = new Error('Invalid or disabled API key'); e.status = 401; throw e; }
-  const settings = await loadSettings();
-  if (!settings.masterEnabled) { const e = new Error('MCP access is disabled'); e.status = 403; throw e; }
-  pool.query('UPDATE mcp_api_keys SET last_used_at = NOW() WHERE id = $1', [row.id]).catch(() => {});
-  const scope = await resolveScope(row.scope_platform, row.scope_account_id);
-  return { keyId: row.id, capabilities: settings.capabilities, scope };
-}
 
 /* ------------------------------ account scope ---------------------------- */
 // A key may be locked to ONE account on ONE platform. `scope` is either null
@@ -575,8 +530,7 @@ async function getTrendsAnomalies(period, scope = null) {
 }
 
 module.exports = {
-  CAPABILITY_KEYS, DEFAULT_CAPABILITIES,
-  hashApiKey, loadSettings, validateKey, resolveScope, scopeLabel,
+  resolveScope, scopeLabel,
   getOverview, getPlatformStats, getFollowersTrend, getAudienceInsights,
   getExecutiveSummary, getContentThemes, getTrendsAnomalies,
   generateReport,

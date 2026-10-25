@@ -21,7 +21,6 @@ const reportData = require('./reportData');
 const categorize = require('./categorize');
 const insightsService = require('./insightsService');
 const notificationService = require('./notificationService');
-const { mcpHttpHandler } = require('./mcpHttp');
 const agentService = require('./services/agentService');
 const agentEngine = require('./engine/agentEngine');
 const agentDispatch = require('./services/agentDispatch');
@@ -130,16 +129,6 @@ app.get('/api/social/settings', async (req, res) => {
 });
 
 app.use('/api/social/auth', authRouter);
-
-// ── MCP remote transport (public — the API key in the path IS the auth) ─
-// Streamable HTTP endpoint external MCP clients (Claude web/desktop/mobile)
-// connect to. Key is validated + capability-gated per request in mcpHttp.js;
-// the master switch in Settings → MCP Access rejects everything when off.
-app.all('/api/social/mcp/http/:key', mcpHttpHandler);
-
-// The OAuth shim for this MCP endpoint is NOT mounted here: its discovery
-// documents live at the protocol-fixed /.well-known/* paths, which ForgeGrowth's
-// own MCP already owns. The key-in-URL transport above needs no OAuth.
 
 // ── Public shared report (the token in the path IS the auth) ─────────
 // A read-only report snapshot anyone with the link can open. DB-only assembly
@@ -321,154 +310,6 @@ app.put('/api/social/credentials', adminOnly, async (req, res) => {
   } catch (err) {
     res.status(err.status || 500).json({ error: err.status ? err.message : 'Could not save the app credentials' });
   }
-});
-
-// ── MCP access management (admin) ────────────────────────────
-// Settings (master switch + capability toggles), bearer API keys (plaintext
-// shown once — only the SHA-256 hash is stored), and connector install info.
-app.get('/api/social/mcp/settings', adminOnly, async (req, res) => {
-  try { res.json(await mcpService.loadSettings()); }
-  catch (err) {
-    console.error('[mcp] settings get error:', err.message);
-    res.status(500).json({ error: 'Failed to load MCP settings' });
-  }
-});
-
-app.put('/api/social/mcp/settings', adminOnly, async (req, res) => {
-  try {
-    const b = req.body || {};
-    const cur = await mcpService.loadSettings();
-    const masterEnabled = b.masterEnabled !== undefined ? !!b.masterEnabled : cur.masterEnabled;
-    const caps = { ...cur.capabilities };
-    if (b.capabilities && typeof b.capabilities === 'object') {
-      for (const k of mcpService.CAPABILITY_KEYS) {
-        if (b.capabilities[k] !== undefined) caps[k] = !!b.capabilities[k];
-      }
-    }
-    await pool.query(
-      `UPDATE mcp_settings SET master_enabled = $1, capabilities = $2, updated_at = NOW() WHERE id = 1`,
-      [masterEnabled, JSON.stringify(caps)]);
-    res.json(await mcpService.loadSettings());
-  } catch (err) {
-    console.error('[mcp] settings put error:', err.message);
-    res.status(500).json({ error: 'Failed to update MCP settings' });
-  }
-});
-
-function mcpKeyShape(r) {
-  return {
-    id: r.id, label: r.label, keyPrefix: r.key_prefix, keyLast4: r.key_last4,
-    isEnabled: r.is_enabled, lastUsedAt: r.last_used_at, createdAt: r.created_at,
-    // null/null = the key sees every account; both set = locked to that one.
-    scopePlatform: r.scope_platform || null,
-    scopeAccountId: r.scope_account_id || null,
-  };
-}
-
-// Accounts an MCP key can be locked to (the scope picker's options).
-app.get('/api/social/mcp/accounts', adminOnly, async (req, res) => {
-  try {
-    res.json(await mcpService.listConnectedAccounts());
-  } catch (err) {
-    console.error('[mcp] scope accounts error:', err.message);
-    res.status(500).json({ error: 'Failed to load accounts' });
-  }
-});
-
-// Validate a requested scope. Returns [platform, accountId] — [null, null] for
-// "all accounts". Throws a 400-shaped error when the account isn't connected, so
-// a key can never be locked to an account that doesn't exist.
-async function resolveKeyScope(body) {
-  const platform = body?.scopePlatform ? String(body.scopePlatform).trim().toLowerCase() : null;
-  const accountId = body?.scopeAccountId ? String(body.scopeAccountId).trim() : null;
-  if (!platform || !accountId) return [null, null];
-  const { accounts: list } = await mcpService.listConnectedAccounts();
-  const hit = list.find(a => a.platform === platform && String(a.accountId) === accountId);
-  if (!hit) { const e = new Error('That account is not connected — pick one from the list.'); e.status = 400; throw e; }
-  return [platform, accountId];
-}
-
-app.get('/api/social/mcp/keys', adminOnly, async (req, res) => {
-  try {
-    const { rows } = await pool.query('SELECT * FROM mcp_api_keys ORDER BY created_at DESC');
-    res.json(rows.map(mcpKeyShape));
-  } catch (err) {
-    console.error('[mcp] keys list error:', err.message);
-    res.status(500).json({ error: 'Failed to list keys' });
-  }
-});
-
-app.post('/api/social/mcp/keys', adminOnly, async (req, res) => {
-  try {
-    const label = String(req.body?.label || '').trim();
-    if (!label) return res.status(400).json({ error: 'A label is required' });
-    const [scopePlatform, scopeAccountId] = await resolveKeyScope(req.body);
-    const plain = 'fsk_live_' + require('crypto').randomBytes(24).toString('base64url');
-    const { rows } = await pool.query(
-      `INSERT INTO mcp_api_keys (label, key_prefix, key_last4, key_hash, created_by, scope_platform, scope_account_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [label, plain.slice(0, 13), plain.slice(-4), mcpService.hashApiKey(plain), req.user?.id || null,
-       scopePlatform, scopeAccountId]);
-    res.status(201).json({ ...mcpKeyShape(rows[0]), key: plain });
-  } catch (err) {
-    if (err.status === 400) return res.status(400).json({ error: err.message });
-    console.error('[mcp] key create error:', err.message);
-    res.status(500).json({ error: 'Failed to create key' });
-  }
-});
-
-app.put('/api/social/mcp/keys/:id', adminOnly, async (req, res) => {
-  try {
-    const b = req.body || {};
-    const sets = [], params = [];
-    if (b.label !== undefined) { params.push(String(b.label).trim()); sets.push(`label = $${params.length}`); }
-    if (b.isEnabled !== undefined) { params.push(!!b.isEnabled); sets.push(`is_enabled = $${params.length}`); }
-    // Scope is re-pointed as a pair — sending scopePlatform:null clears it back
-    // to "all accounts". Takes effect on the connector's very next request.
-    if (b.scopePlatform !== undefined || b.scopeAccountId !== undefined) {
-      const [sp, sa] = await resolveKeyScope(b);
-      params.push(sp); sets.push(`scope_platform = $${params.length}`);
-      params.push(sa); sets.push(`scope_account_id = $${params.length}`);
-    }
-    if (!sets.length) return res.status(400).json({ error: 'No updatable fields provided' });
-    params.push(req.params.id);
-    const { rows } = await pool.query(
-      `UPDATE mcp_api_keys SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING *`, params);
-    if (!rows[0]) return res.status(404).json({ error: 'Not found' });
-    res.json(mcpKeyShape(rows[0]));
-  } catch (err) {
-    if (err.status === 400) return res.status(400).json({ error: err.message });
-    console.error('[mcp] key update error:', err.message);
-    res.status(500).json({ error: 'Failed to update key' });
-  }
-});
-
-app.delete('/api/social/mcp/keys/:id', adminOnly, async (req, res) => {
-  try {
-    const { rowCount } = await pool.query('DELETE FROM mcp_api_keys WHERE id = $1', [req.params.id]);
-    if (!rowCount) return res.status(404).json({ error: 'Not found' });
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('[mcp] key delete error:', err.message);
-    res.status(500).json({ error: 'Failed to delete key' });
-  }
-});
-
-app.get('/api/social/mcp/install', adminOnly, (req, res) => {
-  // Rule 9: hand out the DIRECT (non-Cloudflare) host only. The request may
-  // well have arrived on the Cloudflare-fronted domain — echoing that back
-  // would have the admin paste a connector URL whose post-OAuth call gets
-  // dropped, which surfaces as "couldn't connect to the server".
-  const reqHost = req.headers['x-forwarded-host'] || req.headers.host || '';
-  const host = socialEnv.MCP_DIRECT_HOST || reqHost;
-  res.json({
-    remoteUrl: `https://${host}/api/mcp/http/<YOUR_KEY>`,
-    directHost: host,
-    proxiedHost: socialEnv.MCP_DIRECT_HOST && reqHost !== host ? reqHost : null,
-    note: socialEnv.MCP_DIRECT_HOST
-      ? `Use ${host} for connectors — it bypasses the CDN in front of the dashboard domain, which drops the request Claude makes after authorizing.`
-      : null,
-  });
 });
 
 // Start the Instagram Login OAuth flow (any signed-in user, so the reviewer can connect)

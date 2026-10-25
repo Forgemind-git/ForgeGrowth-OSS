@@ -66,6 +66,34 @@ describe('buildCall', () => {
     assert.deepStrictEqual(c.query, { source: 'ig' });
   });
 
+  test('Instagram rules and flows created over MCP are always drafts', () => {
+    const r = buildCall(spec('social_create_automation'), { rule: { name: 'x', account_id: '1', active: true } });
+    assert.strictEqual(r.body.active, false);
+    const f = buildCall(spec('social_create_flow'), { flow: { name: 'x', active: true, graph: {} } });
+    assert.strictEqual(f.body.active, false);
+  });
+
+  test('the comment → DM link draft builds the app preset, switched off', () => {
+    const c = buildCall(spec('social_create_comment_dm_draft'), {
+      account_id: '17841', dm_text: 'Here you go', link_url: 'https://example.com/x', keywords: [' AI ', ''],
+    });
+    assert.strictEqual(c.method, 'POST');
+    assert.strictEqual(c.path, '/social/ig-automations');
+    assert.strictEqual(c.body.trigger, 'comment');
+    assert.strictEqual(c.body.active, false);
+    assert.strictEqual(c.body.once_per_user, true);
+    assert.deepStrictEqual(c.body.keywords, ['AI']);
+    assert.strictEqual(c.body.reply_texts.length, 3);
+    const p = c.body.dm_message.attachment.payload;
+    assert.strictEqual(p.text, 'Here you go');
+    assert.deepStrictEqual(p.buttons, [{ type: 'web_url', title: 'Open link', url: 'https://example.com/x' }]);
+  });
+
+  test('the comment → DM link draft refuses a link that is not https', () => {
+    assert.throws(() => buildCall(spec('social_create_comment_dm_draft'), { account_id: '1', dm_text: 'x', link_url: 'example.com' }), /https/);
+    assert.throws(() => buildCall(spec('social_create_comment_dm_draft'), { account_id: '1', dm_text: ' ', link_url: 'https://e.com' }), /dm_text/);
+  });
+
   test('a body "from" arg must be an object', () => {
     assert.throws(() => buildCall(spec('social_create_flow'), { flow: [1] }), /must be an object/);
   });
@@ -91,7 +119,6 @@ describe('nothing here reaches a credential or moves money', () => {
 
   test('Social credentials and settings resolve to the admin area, not Social', () => {
     assert.strictEqual(resolveArea('/social/credentials'), 'area_admin');
-    assert.strictEqual(resolveArea('/social/mcp/keys'), 'area_admin');
     assert.strictEqual(resolveArea('/social/settings'), 'area_admin');
     assert.strictEqual(resolveArea('/social/agents/3'), 'area_social');
     assert.strictEqual(resolveArea('/social/ig-automations/flows'), 'area_social');
