@@ -6,7 +6,7 @@
 
 const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert');
-const { pool, SEED, probe, skipNoDb, teardown } = require('./helpers/db');
+const { pool, SEED, probe, skipNoDb } = require('./helpers/db');
 
 const { isVoiceNoteCopy } = require('../src/routes/mediaLibrary');
 
@@ -33,12 +33,17 @@ before(async () => {
     [mediaId, accountId, otherAccountId]);
 });
 
+// Removes only the rows this file made. The shared cleanup() sweeps leads,
+// events and accounts across the schema while other files run concurrently,
+// and an extra sweeper there is a deadlock waiting to happen.
 after(async () => {
   if (mediaId) {
     await pool.query('DELETE FROM coexistence.media_meta_sync WHERE media_id = $1', [mediaId]).catch(() => {});
     await pool.query('DELETE FROM coexistence.media_library WHERE id = $1', [mediaId]).catch(() => {});
   }
-  await teardown();
+  const ids = [accountId, otherAccountId].filter(Boolean);
+  if (ids.length) await pool.query('DELETE FROM coexistence.whatsapp_accounts WHERE id = ANY($1::int[])', [ids]).catch(() => {});
+  await pool.end().catch(() => {});
 });
 
 describe('isVoiceNoteCopy', () => {
