@@ -172,7 +172,7 @@ export default function RuleEditor({ rule, seed, accounts, defaultAccount, meta,
         {/* Name · account · trigger */}
         <div style={{ background: C.raised, borderRadius: 16, padding: "14px 16px 16px", marginBottom: 14 }}>
           <input value={f.name} disabled={ro} onChange={e => set({ name: e.target.value })} placeholder="Name this automation"
-            style={{ ...INPUT, background: "transparent", padding: "2px 0 10px", fontSize: 19, fontWeight: 750, letterSpacing: "-0.02em" }} />
+            style={{ ...INPUT, padding: "10px 14px", marginBottom: 12, fontSize: 18, fontWeight: 750, letterSpacing: "-0.02em" }} />
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap: 10 }}>
             <SearchableSelect fullWidth value={f.account_id} options={accountOptions} onChange={v => set({ account_id: v, media_id: "" })} disabled={ro} placeholder="Instagram account" />
             <SearchableSelect fullWidth value={f.trigger} options={triggerOptions} disabled={ro}
@@ -345,8 +345,9 @@ export default function RuleEditor({ rule, seed, accounts, defaultAccount, meta,
           </div>
         )}
 
-        {/* Actions */}
-        <div style={{ position: "sticky", bottom: 0, zIndex: 2, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", padding: "12px 0 16px", background: C.card }}>
+        {/* Actions. bottom is minus .social-root's 40px bottom padding: sticky offsets are measured inside
+            that padding, so at 0 the bar floated 40px up and the form scrolled past underneath it. */}
+        <div style={{ position: "sticky", bottom: -40, zIndex: 2, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", padding: "12px 0 16px", background: C.card }}>
           {isAdmin && rule?.id && <button type="button" onClick={remove} style={{ ...BTN.ghost, color: C.errText, padding: "10px 8px" }}><Trash2 size={15} /> Delete</button>}
           <span style={{ flex: 1 }} />
           <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13.5, fontWeight: 650, color: f.active ? C.green : C.textMuted }}>
