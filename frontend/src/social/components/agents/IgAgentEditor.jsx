@@ -249,7 +249,7 @@ export default function IgAgentEditor({ template, agent, accounts, defaultAccoun
         </div>
 
         {/* Actions */}
-        <div style={{ position: "sticky", bottom: 0, zIndex: 2, padding: "10px 0 16px", background: C.card }}>
+        <div style={{ position: "sticky", bottom: -40, /* minus .social-root's bottom padding; see RuleEditor */ zIndex: 2, padding: "10px 0 16px", background: C.card }}>
           <div data-testid="ig-agent-missing" style={{ fontSize: 12.5, color: canGoLive ? C.green : C.textMuted, marginBottom: 8, lineHeight: 1.4 }}>
             {canGoLive ? <><CheckCircle2 size={13} style={{ verticalAlign: "text-bottom" }} /> Ready to go live</> : <>To go live: add {missing.join(", ")}.</>}
           </div>

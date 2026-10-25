@@ -85,7 +85,9 @@ const skip = (t) => {
 describe('schedules', () => {
   test('a slot fires once however many ticks see it; a paused agent does not fire', async (t) => {
     if (skip(t)) return;
+    // Mid-minute, so the +1s second tick cannot cross into the next '* * * * *' slot.
     const now = new Date();
+    now.setSeconds(30, 0);
     const agents = await agentsForTest();
     assert.equal(agents.length, 1);
     const first = await triggers.tickSchedules(agents, now);
