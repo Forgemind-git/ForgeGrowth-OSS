@@ -13,7 +13,7 @@ const OPS = [
 
 /**
  * Sheets tool config for an agent. Uses the existing workspace-wide Google
- * integration (Admin Settings → Integrations) — there's no per-agent OAuth
+ * integration (Settings → Google) — there's no per-agent OAuth
  * account to pick, so the picker starts straight at the spreadsheet step.
  *
  * Spreadsheet + tab pickers call the existing
@@ -160,12 +160,12 @@ export default function GoogleSheetsToolConfig({ agentId, ensureAgentId, existin
           <AlertCircle size={14} /> Google Sheets isn't connected yet
         </div>
         <div style={{ color: C.textSecondary, lineHeight: 1.5, marginBottom: 10 }}>
-          Connect Google Sheets in <strong>Admin Settings → Integrations</strong> first, then come back here.
+          Connect Google Sheets in <strong>Settings → Google</strong> first, then come back here.
         </div>
-        <a href="#/admin-settings/integrations" style={{
+        <a href="#/admin-settings/google" style={{
           display: 'inline-flex', alignItems: 'center', gap: 4,
           color: C.primary, textDecoration: 'none', fontWeight: 600,
-        }}>Open Integrations <ExternalLink size={11} /></a>
+        }}>Open Google settings <ExternalLink size={11} /></a>
         <button onClick={onCancel} style={{ ...cancelBtn, marginLeft: 8 }}>Close</button>
       </div>
     );

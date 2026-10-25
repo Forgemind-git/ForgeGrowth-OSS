@@ -31,10 +31,13 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
 
 ### Changed
 
-- **Settings** — every tab now opens with its title, with the Sales & Chats | Social switch beside
-  it; the menu is grouped (Workspace, Contacts & funnel, Connections, Social); all tabs share one
-  content margin; "Back to home" goes home. Social MCP capability text no longer mentions other
-  platforms.
+- **Settings** — regrouped into 11 pages under Workspace (General, Team, Activity log), Contacts
+  (Tags, Fields, Funnel) and Connections (WhatsApp, Instagram, AI models, Google, Claude & MCP).
+  The hidden Sales & Chats | Social switch is gone: each page lists its sections as pills under
+  its title (WhatsApp → Accounts · Webhook, Instagram → Connection · Privacy policy, Tags → tags
+  and categories for both platforms, …). Old Settings links redirect to the matching section, and
+  per-user tab permissions are unchanged. "Back to home" goes home. Social MCP capability text no
+  longer mentions other platforms.
 
 ## [2.0.0] — 2026-10-18
 

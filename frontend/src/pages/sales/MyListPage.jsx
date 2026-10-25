@@ -546,11 +546,11 @@ function GoogleSync({ scope, isAdmin, onSynced }) {
               <b>{st.needsReconnect ? 'Google Calendar needs reconnecting' : 'Google Calendar is not connected'}</b>
               <div style={{ color: C.textSecondary, marginTop: 6 }}>
                 {st.needsReconnect
-                  ? <>Google stopped accepting the saved sign-in for <b>{st.account}</b>. {isAdmin ? 'Reconnect it' : 'An admin can reconnect it'} in Admin Settings → Integrations → Google → Calendar.</>
-                  : 'An admin can connect it in Admin Settings → Integrations → Google → Calendar.'}
+                  ? <>Google stopped accepting the saved sign-in for <b>{st.account}</b>. {isAdmin ? 'Reconnect it' : 'An admin can reconnect it'} in Settings → Google → Calendar.</>
+                  : 'An admin can connect it in Settings → Google → Calendar.'}
               </div>
               {isAdmin && (
-                <a href="#/admin-settings/integrations" style={{ ...pill(true), marginTop: 12, textDecoration: 'none' }}>Open Integrations <ExternalLink size={12} /></a>
+                <a href="#/admin-settings/google" style={{ ...pill(true), marginTop: 12, textDecoration: 'none' }}>Open Google settings <ExternalLink size={12} /></a>
               )}
             </div>
           ) : (

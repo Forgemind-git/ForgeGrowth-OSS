@@ -21,17 +21,13 @@ const tagChipStyle = (color) => ({
 });
 
 // ── Shared mini helpers ────────────────────────────────────────
-function SectionHeader({ icon: Icon, title, count, actionLabel, onAction }) {
+// The Settings page above already names the section, so this row only counts
+// what is listed and holds the add button.
+function SectionHeader({ title, count, actionLabel, onAction }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, gap: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <span style={{ width: 40, height: 40, borderRadius: 12, background: C.primarySoft, color: C.primary, display: "inline-flex", alignItems: "center", justifyContent: "center" }}><Icon size={19} strokeWidth={2.2} /></span>
-        <div>
-          <div style={{ ...T.h2, color: C.text }}>{title}</div>
-          {typeof count === "number" && (
-            <div style={{ ...T.small, color: C.textMuted, marginTop: 2 }}>{count} {count === 1 ? "item" : "items"}</div>
-          )}
-        </div>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, gap: 12, minHeight: 38 }}>
+      <div style={{ ...T.small, color: C.textMuted }}>
+        {typeof count === "number" ? `${count} ${count === 1 ? title.toLowerCase().replace(/ies$/, "y").replace(/s$/, "") : title.toLowerCase()}` : null}
       </div>
       {actionLabel && (
         <button onClick={onAction} style={BTN.primary}>
@@ -249,7 +245,7 @@ export function TagsTab() {
 
       {!canAdd && (
         <div style={{ padding: "12px 16px", borderRadius: 12, marginBottom: 14, background: C.amberSoft, color: C.amber, ...T.small, fontWeight: 550 }}>
-          You need at least one category before you can create tags. Go to the <strong>Category</strong> tab first.
+          You need at least one category before you can create tags. Add one under <strong>Instagram categories</strong> first.
         </div>
       )}
 
