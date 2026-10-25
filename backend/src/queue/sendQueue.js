@@ -109,7 +109,11 @@ async function processJob(job, token) {
     } else if (kind === 'template') {
       result = await sendTemplate({ ...args, templateName: payload.name, languageCode: payload.languageCode, components: payload.components });
     } else if (kind === 'media') {
-      result = await sendMedia({ ...args, type: payload.type, mediaId: payload.mediaId, link: payload.link, caption: payload.caption, filename: payload.filename, voice: payload.voice === true, contextMessageId: payload.contextMessageId });
+      // Every Media library sender — automations, AI agents, broadcasts, Chats,
+      // MCP — ends here, so a library voice-note copy gets voice:true whoever sent it.
+      const voice = payload.voice === true
+        || (payload.type === 'audio' && await require('../routes/mediaLibrary').isVoiceNoteCopy(payload.mediaId, account.id));
+      result = await sendMedia({ ...args, type: payload.type, mediaId: payload.mediaId, link: payload.link, caption: payload.caption, filename: payload.filename, voice, contextMessageId: payload.contextMessageId });
     } else if (kind === 'interactive') {
       result = await sendInteractive({ ...args, interactive: payload.interactive });
     } else if (kind === 'location') {

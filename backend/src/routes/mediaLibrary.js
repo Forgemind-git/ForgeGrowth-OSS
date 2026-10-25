@@ -8,7 +8,7 @@ const path = require('path');
 const pool = require('../db');
 const minio = require('../util/minioClient');
 const { uploadMedia: metaUploadMedia } = require('../integrations/metaSend');
-const { prepareOutboundAudio } = require('../services/outboundAudio');
+const { prepareVoiceNote } = require('../services/outboundAudio');
 const { getAccountWithToken } = require('./whatsappAccounts');
 const { contentDisposition } = require('../util/contentDisposition');
 
@@ -54,6 +54,7 @@ function rowToSync(r) {
     mediaId: r.media_id,
     accountId: r.account_id,
     metaMediaId: r.meta_media_id,
+    isVoiceNote: !!r.is_voice_note,
     syncedAt: r.synced_at,
     expiresAt: r.expires_at,
     status: r.status,
@@ -376,13 +377,16 @@ async function syncMediaToAccount(mediaId, accountId, _retried = false) {
     let buf = await minio.getObjectBuffer(media.minio_object_key);
     let mimeType = media.mime_type;
     let filename = media.original_name;
-    // Audio goes to Meta in a format iPhone can play (services/outboundAudio.js):
-    // an OGG/Opus file is delivered and then "no longer available" there. The
-    // library keeps the original; only the copy Meta holds is converted.
+    // Audio goes to Meta as a voice note in the layout iPhone plays, or as
+    // ordinary M4A when too long for one (services/outboundAudio.js). The library
+    // keeps the original; only the copy Meta holds is converted. is_voice_note
+    // tells the send queue whether to send it with voice:true.
+    let isVoiceNote = false;
     if (media.media_type === 'audio') {
-      const prepared = await prepareOutboundAudio(buf, mimeType);
+      const prepared = await prepareVoiceNote(buf, mimeType);
       buf = prepared.buffer;
       mimeType = prepared.mime;
+      isVoiceNote = prepared.voice;
       filename = `${(filename || 'audio').replace(/\.[^.]+$/, '')}.${prepared.ext}`;
     }
     const { id: metaId } = await metaUploadMedia({
@@ -395,7 +399,7 @@ async function syncMediaToAccount(mediaId, accountId, _retried = false) {
     const { rows } = await pool.query(`
       UPDATE coexistence.media_meta_sync
          SET meta_media_id=$1, status='synced', synced_at=NOW(),
-             expires_at = NOW() + INTERVAL '28 days',
+             expires_at = NOW() + INTERVAL '28 days', is_voice_note = $5,
              last_error=NULL, updated_at=NOW()
        WHERE media_id=$2 AND account_id=$3
          -- ⚠ Only if the file is still the one we uploaded. A replace that
@@ -404,7 +408,7 @@ async function syncMediaToAccount(mediaId, accountId, _retried = false) {
          AND EXISTS (SELECT 1 FROM coexistence.media_library
                       WHERE id = $2 AND minio_object_key = $4)
        RETURNING *
-    `, [metaId, mediaId, accountId, media.minio_object_key]);
+    `, [metaId, mediaId, accountId, media.minio_object_key, isVoiceNote]);
     if (!rows.length) {
       if (_retried) throw new Error('The file was replaced while it was syncing. Sync again.');
       return syncMediaToAccount(mediaId, accountId, true);
@@ -505,4 +509,19 @@ async function buildCarouselComponent(template, accountId) {
   return { type: 'carousel', cards: outCards };
 }
 
-module.exports = { router, syncMediaToAccount, resolveMetaMediaId, buildCarouselComponent, ingestMediaFromSource };
+/**
+ * Whether a Meta media id is a library copy uploaded as a voice note for this
+ * account (syncMediaToAccount sets is_voice_note). The send queue asks this for
+ * every audio send: a voice-note file sent without voice:true does not play on
+ * iPhone, and an M4A sent with it is not a voice note.
+ */
+async function isVoiceNoteCopy(metaMediaId, accountId) {
+  if (!metaMediaId) return false;
+  const { rows } = await pool.query(
+    `SELECT is_voice_note FROM coexistence.media_meta_sync
+      WHERE meta_media_id = $1 AND account_id = $2 LIMIT 1`,
+    [String(metaMediaId), accountId]);
+  return rows[0]?.is_voice_note === true;
+}
+
+module.exports = { router, syncMediaToAccount, resolveMetaMediaId, buildCarouselComponent, ingestMediaFromSource, isVoiceNoteCopy };
