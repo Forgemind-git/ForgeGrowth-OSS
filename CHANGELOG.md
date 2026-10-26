@@ -17,6 +17,13 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
 
 ## [Unreleased]
 
+## [3.1.0] — 2026-10-26
+
+**Fresh installs work again.** Every new install of 3.0.0 stopped while pulling images, because the
+official MinIO image has been removed from Docker Hub. Also in: a phone layout, and a way to reach
+Forgemind from inside the app. **Upgrading needs no manual step** — re-run `./install.sh`; your
+Media Library carries over.
+
 ### Fixed
 
 - **Fresh installs failed while pulling images** with `pull access denied for minio/minio`. MinIO,
@@ -24,12 +31,9 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
   object store now runs `pgsty/minio`, a maintained build of the same server, pinned to a release.
   Existing installs keep their Media Library: the data volume is read as it is. Re-run
   `./install.sh` to switch.
-
-### Added
-
-- **Contact Forgemind.** A "Want it customised?" card above the sidebar's Collapse control, and a
-  matching button beside the avatar in the top bar (the way to it on a phone), open the Forgemind
-  contact details: WhatsApp with a pre-filled message, and email with a pre-filled subject and body.
+- No page scrolls sideways on a 390 px phone any more: pill strips and wide tables scroll inside
+  their own box, modals fit the screen, and the agent and template editors stack the form above
+  the preview instead of squeezing both side by side.
 
 ### Added
 
@@ -39,12 +43,9 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
 - Chats, Follow-up and the Instagram inbox show one pane at a time on a phone — numbers, then
   contacts, then the conversation — with a back button at each step.
 - Settings on a phone is a section picker instead of the side menu.
-
-### Fixed
-
-- No page scrolls sideways on a 390 px phone any more: pill strips and wide tables scroll inside
-  their own box, modals fit the screen, and the agent and template editors stack the form above
-  the preview instead of squeezing both side by side.
+- **Contact Forgemind.** A "Want it customised?" card above the sidebar's Collapse control, and a
+  matching button beside the avatar in the top bar (the way to it on a phone), open the Forgemind
+  contact details: WhatsApp with a pre-filled message, and email with a pre-filled subject and body.
 
 ## [3.0.0] — 2026-10-26
 
@@ -399,7 +400,9 @@ Published as multi-architecture images (`linux/amd64` and `linux/arm64`) at
 - Playwright end-to-end tests are not run in CI — they need the full stack and browser binaries, so
   run them locally against a live install.
 
-[Unreleased]: https://github.com/Forgemind-git/ForgeGrowth-OSS/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/Forgemind-git/ForgeGrowth-OSS/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/Forgemind-git/ForgeGrowth-OSS/compare/v3.0.0...v3.1.0
+[3.0.0]: https://github.com/Forgemind-git/ForgeGrowth-OSS/compare/v1.0.1...v3.0.0
 [2.0.0]: https://github.com/Forgemind-git/ForgeGrowth-OSS/compare/v1.0.1...v2.0.0
 [1.0.1]: https://github.com/Forgemind-git/ForgeGrowth-OSS/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Forgemind-git/ForgeGrowth-OSS/releases/tag/v1.0.0
