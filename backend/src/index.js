@@ -1,6 +1,10 @@
 require('dotenv').config();
 
 const express = require('express');
+// Before anything builds a route: async handlers' rejections reach the error
+// handler instead of crashing the process (util/expressErrors.js).
+const { installAsyncErrorForwarding, errorHandler } = require('./util/expressErrors');
+installAsyncErrorForwarding();
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -275,10 +279,13 @@ app.use('/api', authMiddleware, workflowAgentsRouter);
 app.use('/api', authMiddleware, mcpAdminRouter);
 app.use('/api', authMiddleware, mcpOAuthAdminRouter);
 
-// Error handler
-app.use((err, req, res, next) => {
-  console.error('[Error]', err.message);
-  res.status(500).json({ error: 'Internal server error' });
+// Error handler — the one shape every route error leaves in (util/expressErrors.js).
+app.use(errorHandler);
+
+// A stray rejection outside a request (a timer, a fire-and-forget promise) is
+// logged rather than taking every open request down with the process.
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason && reason.stack ? reason.stack : reason);
 });
 
 // Start server
