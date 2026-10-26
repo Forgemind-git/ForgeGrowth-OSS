@@ -1094,6 +1094,11 @@ gen_if_needed FORGECRM_ENCRYPTION_KEY "openssl rand -hex 32"                  'e
 gen_if_needed META_WEBHOOK_VERIFY_TOKEN "openssl rand -hex 16"                'paste into Meta webhook setup'
 gen_if_needed POSTGRES_PASSWORD     "openssl rand -base64 24 | tr -d '\n=+/'" 'database'
 gen_if_needed MINIO_ROOT_PASSWORD   "openssl rand -base64 24 | tr -d '\n=+/'" 'object storage'
+# The Social section refuses to save Instagram credentials until this is set,
+# and nothing else ever set it — so Instagram failed on every fresh install
+# until somebody edited .env by hand. Only filled in when empty: changing it
+# later turns every stored Instagram secret into garbage.
+gen_if_needed SOCIAL_ENCRYPTION_KEY "openssl rand -hex 32"                  'encrypts Instagram credentials'
 
 # The backend prefers MINIO_SECRET_KEY over MINIO_ROOT_PASSWORD. If one is set
 # and the other is not, the server and client disagree and every upload fails
@@ -1389,9 +1394,10 @@ fi
 cat <<EOF
 
   ${DIM}Next steps${N}
-    Connect a WhatsApp number   Admin Settings → WhatsApp Accounts
+    Connect a WhatsApp number   Settings → WhatsApp → Accounts
     Point Meta's webhook at     ${PUBLIC_URL}/api/webhook/whatsapp
     with the verify token in    .env → META_WEBHOOK_VERIFY_TOKEN
+    Connect Instagram           Settings → Instagram → Connection
 
   ${DIM}Managing the stack${N} ${DIM}— run these from ${ROOT}; the directory is what picks the install${N}
     Logs      docker compose logs -f backend

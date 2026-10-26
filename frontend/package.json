@@ -1,6 +1,6 @@
 {
   "name": "forgecrm-frontend",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "license": "MIT",
   "description": "ForgeChat frontend — WhatsApp chat viewer",
   "type": "module",

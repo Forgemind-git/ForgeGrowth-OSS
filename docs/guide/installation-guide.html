@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Forge Growth — Installation Guide</title>
+<!--
+  Source of docs/ForgeGrowth-Installation-Guide.pdf. Edit this file, then run
+  ./scripts/make-guide.sh to regenerate the PDF. The PDF is what people print
+  and hand over, so keep the two in step: a guide that names a screen the app no
+  longer has is worse than no guide.
+-->
+<style>
+  @page {
+    size: A4;
+    margin: 20mm 18mm 22mm;
+    @bottom-left { content: "Forge Growth — Installation Guide · v3.1.1"; font: 8pt sans-serif; color: #888; }
+    @bottom-right { content: "page " counter(page) " of " counter(pages); font: 8pt sans-serif; color: #888; }
+  }
+  @page :first { @bottom-left { content: none; } @bottom-right { content: none; } }
+  :root { --accent: #e5484d; --ink: #1d1d1f; --muted: #5f6368; --fill: #f4f4f5; --code: #111; }
+  html { font-family: "DejaVu Sans", "Helvetica Neue", Arial, sans-serif; font-size: 10pt; color: var(--ink); line-height: 1.45; }
+  h1 { font-size: 30pt; margin: 0; line-height: 1.1; }
+  h2 { font-size: 17pt; margin: 0 0 4mm; page-break-before: always; color: var(--ink); }
+  h2 .n { color: var(--accent); margin-right: 3mm; }
+  h3 { font-size: 11.5pt; margin: 6mm 0 2mm; }
+  p { margin: 0 0 2.5mm; }
+  .lede { color: var(--muted); font-size: 10.5pt; margin-bottom: 5mm; }
+  code { font-family: "DejaVu Sans Mono", Menlo, monospace; font-size: 8.6pt; background: var(--fill); padding: 0 1mm; border-radius: 2px; }
+  pre { font-family: "DejaVu Sans Mono", Menlo, monospace; font-size: 8.4pt; background: var(--code); color: #f2f2f2; padding: 3mm 4mm; border-radius: 3mm; white-space: pre-wrap; word-break: break-all; margin: 0 0 3mm; page-break-inside: avoid; }
+  pre .out { color: #9fe3a5; }
+  table { width: 100%; border-collapse: collapse; margin: 1mm 0 4mm; page-break-inside: avoid; }
+  th, td { text-align: left; vertical-align: top; padding: 1.6mm 2.5mm; font-size: 9pt; }
+  th { background: var(--fill); font-weight: 700; }
+  tr + tr td { border-top: 0.3pt solid #ddd; }
+  .note { background: var(--fill); border-left: 1.2mm solid var(--accent); padding: 2.5mm 4mm; border-radius: 0 2mm 2mm 0; margin: 2mm 0 4mm; page-break-inside: avoid; }
+  .note b:first-child { display: block; margin-bottom: 1mm; }
+  ol, ul { margin: 0 0 3mm; padding-left: 6mm; }
+  li { margin-bottom: 1mm; }
+  .cover { height: 240mm; display: flex; flex-direction: column; justify-content: center; }
+  .brand { letter-spacing: 1.5pt; font-weight: 700; color: var(--accent); font-size: 11pt; margin-bottom: 6mm; }
+  .cover .sub { font-size: 12.5pt; color: var(--muted); max-width: 140mm; margin-top: 8mm; }
+  .meta { margin-top: 14mm; font-size: 9.5pt; }
+  .meta td { padding: 1mm 4mm 1mm 0; font-size: 9.5pt; }
+  .toc td { font-size: 10pt; padding: 1.5mm 2mm; }
+  .toc td:first-child { color: var(--accent); font-weight: 700; width: 9mm; }
+</style>
+</head>
+<body>
+
+<section class="cover">
+  <div class="brand">FORGE GROWTH</div>
+  <h1>Installation<br>Guide</h1>
+  <p class="sub">Every way to install it — a server from published images or the download bundle, a
+  server from source, a Mac or Windows laptop — then attaching a domain and connecting WhatsApp and
+  Instagram. Every command can be copied as-is.</p>
+  <table class="meta">
+    <tr><td>Repository</td><td>github.com/Forgemind-git/ForgeGrowth-OSS</td></tr>
+    <tr><td>Release</td><td>v3.1.1</td></tr>
+  </table>
+</section>
+
+<h2>Contents</h2>
+<table class="toc">
+  <tr><td>0</td><td>Before you start — what the machine needs</td></tr>
+  <tr><td>1</td><td>Server, from published images — the usual route; nothing is compiled</td></tr>
+  <tr><td>2</td><td>Attaching a domain — both kinds of server</td></tr>
+  <tr><td>3</td><td>Connecting WhatsApp — Meta credentials and the webhook</td></tr>
+  <tr><td>4</td><td>Connecting Instagram — the Social section</td></tr>
+  <tr><td>5</td><td>Server, from source — git clone, build locally</td></tr>
+  <tr><td>6</td><td>Local install — macOS</td></tr>
+  <tr><td>7</td><td>Local install — Windows</td></tr>
+  <tr><td>8</td><td>ngrok — WhatsApp against a laptop</td></tr>
+  <tr><td>9</td><td>Upgrading, backup, removal</td></tr>
+  <tr><td>10</td><td>When it goes wrong — real errors and what they mean</td></tr>
+</table>
+
+<h3>Which sections do I need?</h3>
+<table>
+  <tr><th>Situation</th><th>Read</th></tr>
+  <tr><td>Installing on a customer's server</td><td>1 → 2a → 3 and/or 4</td></tr>
+  <tr><td>Server already runs Traefik, nginx or another site</td><td>1 → 2b → 3 and/or 4</td></tr>
+  <tr><td>You intend to change the code</td><td>5</td></tr>
+  <tr><td>Trying it on your own laptop</td><td>6 or 7, then 8</td></tr>
+  <tr><td>Already installed, moving to a newer version</td><td>9</td></tr>
+</table>
+
+<div class="note"><b>One rule that saves the most time</b>
+The directory you are standing in is what selects the install. Every command in this guide is run
+from the install directory, because one machine can hold several installs and they are told apart by
+nothing else.</div>
+
+<!-- ───────────────────────────────────────────────────────────── 0 -->
+<h2><span class="n">0</span>Before you start</h2>
+<p class="lede">Everything runs in containers. You do not install Node, PostgreSQL, Redis or MinIO on the machine.</p>
+<table>
+  <tr><th>Requirement</th><th>Detail</th></tr>
+  <tr><td>Docker</td><td>with the Compose v2 plugin. <code>docker compose version</code> must work — note the space, not <code>docker-compose</code></td></tr>
+  <tr><td>Shell</td><td>Linux, macOS, or Windows through WSL2 / Git Bash. There is no PowerShell installer</td></tr>
+  <tr><td>RAM</td><td>2 GB only if building from source (section 5). The published-image route has no build step</td></tr>
+  <tr><td>Disk</td><td>~3 GB. The first download is about 350 MB</td></tr>
+  <tr><td>Ports</td><td>One for the web UI (8080 by default; the installer moves to the next free one). Ports 80 and 443 as well, if this machine is to obtain its own HTTPS certificate</td></tr>
+</table>
+
+<h3>Check the machine is ready</h3>
+<pre>docker compose version
+docker run --rm hello-world</pre>
+<p>If the second command prints a greeting, Docker works. If either fails, fix that before continuing —
+every failure after this point will otherwise be blamed on the installer.</p>
+
+<h3>What gets created</h3>
+<p>The installer makes one directory — <code>forge-growth</code> — holding a handful of small files and no source code:</p>
+<pre>forge-growth/
+  .env                   your settings and every generated secret
+  .forgegrowth-install   which version this install is pinned to
+  docker-compose.yml     downloaded; overwritten on every upgrade
+  caddy/Caddyfile        only used when this machine handles HTTPS itself
+  up.sh  down.sh         start and stop
+  install.sh             a copy of the installer, for upgrades</pre>
+<p>Your data is not in that folder. It lives in Docker volumes, which is why <code>./down.sh</code> is safe
+and <code>docker compose down -v</code> destroys everything:</p>
+<pre>docker volume ls | grep forgegrowth</pre>
+
+<!-- ───────────────────────────────────────────────────────────── 1 -->
+<h2><span class="n">1</span>Server, from published images</h2>
+<p class="lede">The normal way to install on a customer's machine. Nothing is cloned, nothing is compiled, and every secret is generated for you.</p>
+
+<h3>The machine owns ports 80 and 443, and DNS already points at it</h3>
+<pre>bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v3.1.1/scripts/install.sh)" -- \
+  --version v3.1.1 --domain crm.example.com --yes</pre>
+<p>That is the whole install. It pulls the images, generates every secret, obtains a Let's Encrypt
+certificate, starts the stack, fetches the public URL to prove it answers, and prints the admin
+password once. <code>--yes</code> means it asks nothing.</p>
+<p><b>Both halves of the pin matter:</b> the URL fixes which script runs, and <code>--version</code>
+fixes what that script then downloads and pulls. The choice is remembered, so a later bare re-run
+cannot drift onto a newer build.</p>
+
+<h3>Something else already owns 80 and 443 (Traefik, nginx, another site)</h3>
+<pre>bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v3.1.1/scripts/install.sh)" -- \
+  --version v3.1.1 --url https://crm.example.com --port 8080 --yes</pre>
+<p>Use <code>--url</code>, not <code>--domain</code>. It tells the installer HTTPS is terminated
+elsewhere, so it does not start a second web server to fight over the ports. Then follow section 2b.</p>
+
+<h3>No domain yet — reach it by IP</h3>
+<pre>bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v3.1.1/scripts/install.sh)" -- \
+  --version v3.1.1 --url http://203.0.113.10:8080 --yes</pre>
+<div class="note"><b>A plain-HTTP address is fine to start with, but it cannot connect WhatsApp or Instagram</b>
+Meta refuses any webhook address that is not <code>https://</code>. Add a domain later (section 2) —
+no reinstall is needed.</div>
+
+<h3>Or: the download bundle</h3>
+<p>For handing an install to someone who will not paste a command from the internet. Download
+<code>forge-growth-v3.1.1.zip</code> from the releases page, unzip it, open the folder for the
+operating system (<code>linux</code>, <code>macos</code> or <code>windows</code>), then:</p>
+<pre>chmod +x *.sh
+./install.sh</pre>
+<p>The installer continues in that folder — what you unzipped <i>is</i> the install — and the bundle
+stays on its own version. It still needs the internet the first time, to pull the images.</p>
+
+<h3>All the flags</h3>
+<table>
+  <tr><th>Flag</th><th>Meaning</th></tr>
+  <tr><td><code>--domain &lt;host&gt;</code></td><td>Serve HTTPS here, certificate included. Needs ports 80 + 443 free</td></tr>
+  <tr><td><code>--url &lt;origin&gt;</code></td><td>Public address when something else terminates HTTPS. Include the port if people use one</td></tr>
+  <tr><td><code>--port &lt;n&gt;</code></td><td>Host port for the UI (default 8080, or the next free one)</td></tr>
+  <tr><td><code>--version &lt;ref&gt;</code></td><td>Pin the downloaded files and the image tag together. <code>v3.1.1</code> and <code>3.1.1</code> both work</td></tr>
+  <tr><td><code>--dir &lt;path&gt;</code></td><td>Install here instead of <code>./forge-growth</code></td></tr>
+  <tr><td><code>--admin-email &lt;addr&gt;</code></td><td>First admin account (default <code>admin@&lt;your domain&gt;</code>)</td></tr>
+  <tr><td><code>--admin-password &lt;pw&gt;</code></td><td>First admin password (default: generated and printed)</td></tr>
+  <tr><td><code>--tls-email &lt;addr&gt;</code></td><td>Certificate contact. <code>internal</code> self-signs, for a domain with no public DNS</td></tr>
+  <tr><td><code>--source</code></td><td>Build from a checkout rather than pulling images</td></tr>
+  <tr><td><code>--yes</code>, <code>-y</code></td><td>Never ask. With no address flag: this machine's public address, or localhost</td></tr>
+</table>
+
+<h3>Sign in</h3>
+<p>The installer prints the URL, the admin email and the password. To read the password again:</p>
+<pre>cd forge-growth
+grep '^BOOTSTRAP_ADMIN_PASSWORD=' .env</pre>
+
+<h3>Managing the stack afterwards</h3>
+<table>
+  <tr><th>Command</th><th>Does</th></tr>
+  <tr><td><code>./up.sh</code></td><td>Start, then verify the public URL really answers</td></tr>
+  <tr><td><code>./down.sh</code></td><td>Stop. Keeps all data</td></tr>
+  <tr><td><code>./install.sh</code></td><td>Upgrade in place</td></tr>
+  <tr><td><code>docker compose logs -f backend</code></td><td>Follow the backend log</td></tr>
+  <tr><td><code>docker compose ls</code></td><td>List every install on this machine</td></tr>
+  <tr><td><code>docker compose down -v</code></td><td>Deletes all data. Take a dump first</td></tr>
+</table>
+<div class="note"><b>Use up.sh and down.sh, not docker compose up -d</b>
+They perform the only two checks that catch the failures this software actually suffers: a site that
+returns 404 while every container reports healthy, and a second folder quietly adopting this
+install's database. Raw Compose skips both.</div>
+
+<!-- ───────────────────────────────────────────────────────────── 2 -->
+<h2><span class="n">2</span>Attaching a domain</h2>
+<p class="lede">Which instructions apply depends on one thing: does this install own ports 80 and 443, or does something else? The installer worked it out and recorded the answer.</p>
+<pre>cd forge-growth
+grep '^TLS_MODE=' .env</pre>
+<table>
+  <tr><th>Value</th><th>Meaning</th><th>Follow</th></tr>
+  <tr><td><code>TLS_MODE=caddy</code></td><td>This install owns the ports and obtains its own certificate</td><td>2a</td></tr>
+  <tr><td><code>TLS_MODE=proxy</code></td><td>Something else owns them; that thing must route the domain here</td><td>2b</td></tr>
+</table>
+
+<h3>2a — This install owns ports 80 and 443</h3>
+<ol>
+  <li>Point the domain's A record at the server's IP address, and wait until it resolves.</li>
+  <li>Re-run the installer with the domain. Your data and secrets are kept:
+<pre>cd forge-growth
+./install.sh --domain crm.example.com</pre></li>
+  <li>The bundled Caddy obtains the certificate, and the installer confirms it works before reporting success.</li>
+</ol>
+<div class="note"><b>Behind Cloudflare's orange cloud?</b>
+The certificate challenge stops at the CDN and never reaches this machine. Switch the record to
+"DNS only" while the certificate is issued, or use 2b with the CDN supplying the certificate.</div>
+
+<h3>2b — Something else owns the ports</h3>
+<p>Your existing proxy must accept the hostname and forward it to this install's <code>web</code>
+container on port 80. First tell the install its public address, so the API accepts requests from it:</p>
+<pre>cd forge-growth
+./install.sh --url https://crm.example.com</pre>
+<p><b>Traefik, running in Docker on the same host.</b> Create an overlay file outside the install
+directory — <code>docker-compose.yml</code> is re-downloaded on every upgrade, so labels added there are
+eventually lost:</p>
+<pre>services:
+  web:
+    networks: [default, proxy_default]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy_default
+      # ONE service, named explicitly on every router below.
+      - traefik.http.services.forgegrowth.loadbalancer.server.port=80
+      - "traefik.http.routers.forgegrowth.rule=Host(`crm.example.com`)"
+      - traefik.http.routers.forgegrowth.entrypoints=websecure
+      - traefik.http.routers.forgegrowth.tls=true
+      - traefik.http.routers.forgegrowth.tls.certresolver=myresolver
+      - traefik.http.routers.forgegrowth.service=forgegrowth
+networks:
+  proxy_default:
+    external: true</pre>
+<p>Save it as <code>/opt/forge-growth-proxy.yml</code>, replace <code>proxy_default</code> with the network
+Traefik is on, and <code>myresolver</code> with your certificate resolver. Find the network with:</p>
+<pre>docker inspect &lt;traefik-container&gt; \
+  --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}'</pre>
+<p>Wire it in through <code>.env</code> — never an exported shell variable — then restart:</p>
+<pre>cd forge-growth
+echo 'COMPOSE_FILE=docker-compose.yml:/opt/forge-growth-proxy.yml' &gt;&gt; .env
+./up.sh</pre>
+<div class="note"><b>Two mistakes here cost an afternoon each</b>
+<b>One service per router.</b> Declaring a <code>loadbalancer.server.port</code> for each router makes
+Traefik unable to choose, so it discards every router on that container and each hostname returns 404.
+<b>No certresolver behind a CDN.</b> If the domain is proxied by Cloudflare or similar, the ACME
+challenge can never succeed, and its retries are rate-limited per account — enough to stop every other
+domain on the server from renewing. Use <code>tls=true</code> with no resolver and let the CDN supply the
+certificate.</div>
+
+<p><b>nginx, running outside Docker</b></p>
+<pre>server {
+    listen 443 ssl;
+    server_name crm.example.com;
+    ssl_certificate     /etc/letsencrypt/live/crm.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/crm.example.com/privkey.pem;
+    client_max_body_size 100M;          # media uploads; nginx defaults to 1M
+    location / {
+        proxy_pass http://127.0.0.1:8080;      # WEB_PORT from .env
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 600s;
+    }
+}</pre>
+
+<h3>2c — Prove it actually works</h3>
+<p>A page that loads in your browser shows the interface was served. It does not show the API behind it
+is reachable — and that is the half which breaks sign-in. Check both:</p>
+<pre>curl -s -o /dev/null -w '%{http_code}\n' https://crm.example.com/
+<span class="out">200</span>
+curl -s https://crm.example.com/api/auth/me
+<span class="out">{"error":"Unauthorized"}</span></pre>
+<table>
+  <tr><th>Result</th><th>Meaning</th></tr>
+  <tr><td><code>200</code>, then <code>{"error":"Unauthorized"}</code></td><td>Working. The proxy reaches this install, and the API answers</td></tr>
+  <tr><td>404 on the first command</td><td>The proxy has no route for the domain — usually a typo in the host rule, or <code>COMPOSE_FILE</code> missing from <code>.env</code></td></tr>
+  <tr><td>An HTML page from the second command</td><td>Something else is answering — another app, or another install on this machine</td></tr>
+  <tr><td>A certificate error</td><td>Routing is right; the certificate is missing or still being issued</td></tr>
+  <tr><td><code>Could not resolve host</code></td><td>DNS</td></tr>
+</table>
+<p><code>./up.sh</code> runs the first check for you every time it starts the stack.</p>
+
+<!-- ───────────────────────────────────────────────────────────── 3 -->
+<h2><span class="n">3</span>Connecting WhatsApp</h2>
+<p class="lede">Attach a WhatsApp Business number. This needs an <code>https://</code> address, so finish section 2 first.</p>
+
+<h3>Step 1 — collect the values from Meta</h3>
+<p>At developers.facebook.com → your app → WhatsApp → API Setup:</p>
+<table>
+  <tr><th>Value</th><th>Where</th></tr>
+  <tr><td>Phone number ID</td><td>API Setup, under the number</td></tr>
+  <tr><td>WhatsApp Business Account ID</td><td>Same screen</td></tr>
+  <tr><td>App ID</td><td>App dashboard header</td></tr>
+  <tr><td>Access token</td><td>The one on API Setup expires in 24 hours — create a System User token in Business Settings for anything permanent</td></tr>
+</table>
+
+<h3>Step 2 — add the number in the app</h3>
+<p><b>Settings → WhatsApp → Accounts → Add account.</b> Paste the display number (digits only, no
+<code>+</code> and no spaces), the Phone Number ID, the WABA ID, the App ID and the token. The token is
+encrypted at rest with AES-256-GCM.</p>
+
+<h3>Step 3 — read your webhook verify token</h3>
+<pre>cd forge-growth
+grep '^META_WEBHOOK_VERIFY_TOKEN=' .env</pre>
+
+<h3>Step 4 — test the handshake before touching Meta</h3>
+<p>This is the exact request Meta sends when you press <i>Verify and save</i>. Running it yourself turns a
+slow, silent failure into a one-second answer:</p>
+<pre>cd forge-growth
+TOKEN=$(grep '^META_WEBHOOK_VERIFY_TOKEN=' .env | cut -d= -f2-)
+curl -s "https://crm.example.com/api/webhook/whatsapp?hub.mode=subscribe&amp;hub.verify_token=$TOKEN&amp;hub.challenge=42"
+<span class="out">42</span></pre>
+<p>If it prints <code>42</code>, Meta will verify successfully. Anything else — fix it here first.</p>
+
+<h3>Step 5 — point Meta at it</h3>
+<p>WhatsApp → Configuration → Webhook → Edit:</p>
+<table>
+  <tr><th>Field</th><th>Value</th></tr>
+  <tr><td>Callback URL</td><td><code>https://crm.example.com/api/webhook/whatsapp</code></td></tr>
+  <tr><td>Verify token</td><td>the <code>META_WEBHOOK_VERIFY_TOKEN</code> from step 3</td></tr>
+</table>
+<p>Save, then under Webhook fields → Manage, subscribe to <b>messages</b>. That single field covers
+messages, delivery statuses, echoes and template events.</p>
+<div class="note"><b>The path is /api/webhook/whatsapp</b>
+Not <code>/api/webhook</code>. A mismatch gives a silent 404 at verification time and no useful message from Meta.</div>
+
+<h3>Step 6 — confirm</h3>
+<ul>
+  <li><b>Settings → WhatsApp → Webhook → Send Test Webhook</b> → "Incoming text message". Expect an audit row with <code>processed</code> and <code>records_extracted=1</code>.</li>
+  <li>Send a real WhatsApp message to the number. It should appear in Chats.</li>
+  <li>Send one from the app to confirm the outbound direction.</li>
+</ul>
+<div class="note"><b>One callback address per WhatsApp Business Account</b>
+Every phone number under one WABA shares a single callback URL. Pointing it at a new install takes
+inbound messages away from whatever had it before — instantly and with no warning. If you are moving a
+live number, plan it as a cutover, not a configuration change.</div>
+
+<!-- ───────────────────────────────────────────────────────────── 4 -->
+<h2><span class="n">4</span>Connecting Instagram</h2>
+<p class="lede">The <b>Social</b> tab — Instagram DM automations, AI agents, the inbox and analytics — runs on a Meta app of its own. This also needs an <code>https://</code> address.</p>
+
+<h3>Step 1 — check the encryption key exists</h3>
+<pre>cd forge-growth
+grep -c '^SOCIAL_ENCRYPTION_KEY=.' .env
+<span class="out">1</span></pre>
+<p>The installer generates it. If this prints <code>0</code> — an install made before 3.1.1 — re-run
+<code>./install.sh</code>, which fills it in and keeps everything else. Without it, the app refuses to
+save Instagram credentials.</p>
+
+<h3>Step 2 — register these addresses in your Meta app</h3>
+<table>
+  <tr><th>Setting</th><th>Value</th></tr>
+  <tr><td>Instagram OAuth redirect</td><td><code>https://crm.example.com/api/social/instagram/oauth/callback</code></td></tr>
+  <tr><td>Webhook callback (Instagram)</td><td><code>https://crm.example.com/api/social/instagram/webhook</code></td></tr>
+  <tr><td>Privacy policy URL</td><td>Your own business's privacy policy page</td></tr>
+</table>
+
+<h3>Step 3 — enter the app credentials and connect</h3>
+<p><b>Settings → Instagram → Connection → App credentials.</b> Enter the App ID and secret, the
+Instagram App ID and secret, and a webhook verify token of your choosing — paste the same token into
+the app's webhook setup. Then connect each Instagram account from the same screen.</p>
+
+<h3>Step 4 — turn on syncing</h3>
+<p>Posts, insights and comments sync in the background, which is off until you switch it on:</p>
+<pre>cd forge-growth
+echo 'SOCIAL_JOBS_ENABLED=1' &gt;&gt; .env
+./up.sh</pre>
+
+<h3>Optional</h3>
+<ul>
+  <li>The Social section's AI features use their own OpenRouter key: <b>Settings → AI models → Instagram AI</b>.</li>
+  <li>People other than admins need the Social page granted: <b>Settings → Team</b>.</li>
+</ul>
+
+<!-- ───────────────────────────────────────────────────────────── 5 -->
+<h2><span class="n">5</span>Server, from source</h2>
+<p class="lede">Use this only if you intend to change the code. It builds the images on the machine, which needs about 2 GB of free memory and a few minutes.</p>
+<pre>git clone https://github.com/Forgemind-git/ForgeGrowth-OSS.git
+cd ForgeGrowth-OSS
+./scripts/install.sh --domain crm.example.com</pre>
+<p>The same flags apply as in section 1. Without a domain:</p>
+<pre>./scripts/install.sh --yes</pre>
+<h3>Managing a source install</h3>
+<table>
+  <tr><th>Command</th><th>Does</th></tr>
+  <tr><td><code>./scripts/up.sh</code></td><td>Start and verify the public URL</td></tr>
+  <tr><td><code>./scripts/up.sh --build</code></td><td>Rebuild from the checkout, then start</td></tr>
+  <tr><td><code>./scripts/down.sh</code></td><td>Stop, keeping data</td></tr>
+  <tr><td><code>git pull &amp;&amp; ./scripts/install.sh</code></td><td>Upgrade</td></tr>
+  <tr><td><code>./scripts/uninstall.sh --purge</code></td><td>Remove, including all data</td></tr>
+</table>
+<div class="note"><b>A source install does not upgrade by pulling images</b>
+The images are built locally. Changes reach the running site only when you rebuild. A
+<code>git pull</code> alone moves the files on disk and nothing else, which looks exactly like a feature
+failing to arrive.</div>
+<h3>Running the tests</h3>
+<pre>cd backend  &amp;&amp; REQUIRE_DB=1 npm test &amp;&amp; npm run lint
+cd frontend &amp;&amp; npm run test:unit &amp;&amp; npm run lint</pre>
+<p>Without <code>REQUIRE_DB=1</code>, the database-backed third of the backend tests quietly skip when no database is reachable.</p>
+
+<!-- ───────────────────────────────────────────────────────────── 6 -->
+<h2><span class="n">6</span>Local install — macOS</h2>
+<p class="lede">Works on both Apple Silicon and Intel. The published images carry <code>linux/amd64</code> and <code>linux/arm64</code>, so nothing is emulated.</p>
+<h3>Step 1 — Docker</h3>
+<p>Install Docker Desktop, OrbStack or Colima, start it, then confirm:</p>
+<pre>docker compose version</pre>
+<h3>Step 2 — install</h3>
+<pre>cd ~
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v3.1.1/scripts/install.sh)" -- \
+  --version v3.1.1 --yes</pre>
+<p><code>--yes</code> means "localhost, ask me nothing". It creates <code>~/forge-growth</code> and serves on
+port 8080 — or the next free port, which it tells you.</p>
+<h3>Step 3 — sign in</h3>
+<pre>cd ~/forge-growth
+grep -E '^(BOOTSTRAP_ADMIN_EMAIL|BOOTSTRAP_ADMIN_PASSWORD)=' .env</pre>
+<p>Open the URL it printed and sign in with those.</p>
+<h3>Everyday commands</h3>
+<pre>cd ~/forge-growth
+./up.sh                          # start
+./down.sh                        # stop, keeping data
+docker compose logs -f backend   # follow the log
+open ~/forge-growth              # reveal in Finder (Cmd+Shift+. shows .env)</pre>
+
+<!-- ───────────────────────────────────────────────────────────── 7 -->
+<h2><span class="n">7</span>Local install — Windows</h2>
+<p class="lede">The installer is a shell script, so it runs inside a Unix shell. WSL2 is the recommended route; Git Bash also works.</p>
+<h3>Step 1 — install WSL2</h3>
+<p>In PowerShell as Administrator, then reboot when prompted:</p>
+<pre>wsl --install</pre>
+<p>Open <b>Ubuntu</b> from the Start menu and create your Linux user.</p>
+<h3>Step 2 — Docker Desktop</h3>
+<p>Install Docker Desktop, then enable <i>Settings → Resources → WSL integration</i> for your distro. Confirm from inside the Ubuntu terminal:</p>
+<pre>docker compose version</pre>
+<h3>Step 3 — install, from the Ubuntu terminal</h3>
+<pre>cd ~
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v3.1.1/scripts/install.sh)" -- \
+  --version v3.1.1 --yes</pre>
+<div class="note"><b>Install into the Linux filesystem, not the Windows drive</b>
+Use <code>~/forge-growth</code>. A location under <code>/mnt/c/...</code> is dramatically slower and confuses file-watching. <code>cd ~</code> first, every time.</div>
+<h3>Step 4 — sign in</h3>
+<pre>cd ~/forge-growth
+grep -E '^(BOOTSTRAP_ADMIN_EMAIL|BOOTSTRAP_ADMIN_PASSWORD)=' .env</pre>
+<p>Open the printed URL in your normal Windows browser — WSL2 forwards <code>localhost</code>.</p>
+<h3>Reaching the files from Windows</h3>
+<p>Run <code>explorer.exe .</code> from the Ubuntu terminal, or type this in Explorer's address bar:</p>
+<pre>\\wsl$\Ubuntu\home\&lt;your-user&gt;\forge-growth</pre>
+
+<!-- ───────────────────────────────────────────────────────────── 8 -->
+<h2><span class="n">8</span>ngrok — WhatsApp against a laptop</h2>
+<p class="lede">Meta will not accept a <code>localhost</code> or plain-HTTP callback, so a laptop needs a public HTTPS address borrowed from a tunnel.</p>
+<div class="note"><b>Use a Meta test number, never a live one</b>
+Every Meta app includes a free test number on its own WhatsApp Business Account, so its callback is
+independent of any production number. A laptop also sleeps, and inbound messages arriving then are lost
+rather than queued.</div>
+<h3>Step 1 — install and authenticate</h3>
+<pre>brew install ngrok                       # macOS; on Windows install it inside WSL2
+ngrok config add-authtoken &lt;your-token&gt;  # dashboard.ngrok.com → Your Authtoken</pre>
+<h3>Step 2 — claim a static domain</h3>
+<p>dashboard.ngrok.com → Domains → New Domain. The free tier includes one. Without it the URL changes on
+every restart and the Meta webhook has to be re-pointed each time.</p>
+<h3>Step 3 — start the tunnel</h3>
+<p>Use the port your install actually reported, and leave that terminal running:</p>
+<pre>ngrok http --url=your-name.ngrok-free.app 8080</pre>
+<h3>Step 4 — confirm the tunnel reaches the app</h3>
+<pre>curl -s -o /dev/null -w '%{http_code}\n' https://your-name.ngrok-free.app/
+<span class="out">200</span></pre>
+<h3>Step 5 — run Meta's handshake yourself</h3>
+<pre>cd ~/forge-growth
+TOKEN=$(grep '^META_WEBHOOK_VERIFY_TOKEN=' .env | cut -d= -f2-)
+curl -s "https://your-name.ngrok-free.app/api/webhook/whatsapp?hub.mode=subscribe&amp;hub.verify_token=$TOKEN&amp;hub.challenge=42"
+<span class="out">42</span></pre>
+<p>This works before any WhatsApp account is configured — the check falls back to the token in
+<code>.env</code> — which separates "my tunnel is wrong" from "my credentials are wrong".</p>
+<h3>Step 6 — keep using localhost for the interface</h3>
+<p>The tunnel is for Meta. Keep opening the app at the <code>localhost</code> address the installer printed.</p>
+<h3>Step 7 — configure Meta and test</h3>
+<table>
+  <tr><th>Field</th><th>Value</th></tr>
+  <tr><td>Callback URL</td><td><code>https://your-name.ngrok-free.app/api/webhook/whatsapp</code></td></tr>
+  <tr><td>Verify token</td><td>the value from step 5</td></tr>
+  <tr><td>Subscribe to</td><td><code>messages</code></td></tr>
+</table>
+<p>Add your own phone under API Setup → To → Manage phone number list; a test number only messages
+people on that list. Then watch every delivery arrive in ngrok's inspector at
+<code>http://127.0.0.1:4040</code> — it shows each request Meta makes with the full body, and lets you replay them.</p>
+<div class="note"><b>Things that will bite</b>
+Closing the ngrok terminal kills the tunnel silently. The token on Meta's API Setup screen expires
+after 24 hours — when inbound stops for no apparent reason, this is usually why.</div>
+
+<!-- ───────────────────────────────────────────────────────────── 9 -->
+<h2><span class="n">9</span>Upgrading, backup, removal</h2>
+<h3>Upgrading</h3>
+<p>Re-running the installer is the upgrade. From the install directory:</p>
+<pre>cd forge-growth
+./install.sh                    # stays on the version it is pinned to
+./install.sh --version v3.1.1   # move deliberately, and stay there</pre>
+<p>It re-downloads the compose file and scripts, pulls the images, applies any new database migrations
+at start-up, and restarts. <code>.env</code> is never overwritten, and secrets are kept. For a source
+install: <code>git pull &amp;&amp; ./scripts/install.sh</code>.</p>
+<div class="note"><b>Downgrading is not supported</b>
+Migrations run forward at start-up, so pinning back to an older release runs old code against a newer
+schema. Take a dump first.</div>
+
+<h3>Backup — the things you cannot recreate</h3>
+<pre>cd forge-growth
+grep -E '^(FORGECRM_ENCRYPTION_KEY|SOCIAL_ENCRYPTION_KEY|POSTGRES_PASSWORD)=' .env</pre>
+<div class="note"><b>Store these off the server, with the database</b>
+The two encryption keys are the only things that decrypt stored Meta, Google and Instagram credentials.
+<code>POSTGRES_PASSWORD</code> is applied only when the database is first created, so a regenerated
+<code>.env</code> cannot open an existing database. Lose any of them and the failure names the wrong
+thing — an authentication error that reads like a network problem.</div>
+<h3>Database dump</h3>
+<pre>cd forge-growth
+docker compose exec -T postgres pg_dump -U forgegrowth forgegrowth \
+  | gzip &gt; backup-$(date +%F).sql.gz</pre>
+<h3>Removal</h3>
+<pre>cd forge-growth
+docker compose down -v        # stops and DELETES all data
+cd .. &amp;&amp; rm -rf forge-growth</pre>
+
+<!-- ───────────────────────────────────────────────────────────── 10 -->
+<h2><span class="n">10</span>When it goes wrong</h2>
+
+<h3>"pull access denied for minio/minio"</h3>
+<p>An install from before 3.1.0. The official MinIO image has been removed from Docker Hub; 3.1.0 and
+later use a maintained build of the same server. Move to a current release — the Media Library is kept:</p>
+<pre>./install.sh --version v3.1.1</pre>
+
+<h3>"no matching manifest for linux/arm64/v8"</h3>
+<p>An image with no build for your processor. Compose pulls concurrently and reports one failure against
+every service, so the message names <code>postgres</code>, <code>redis</code>, <code>minio</code> and
+<code>caddy</code> — all innocent. Check the two images this project publishes:</p>
+<pre>docker manifest inspect ghcr.io/forgemind-git/forgegrowth-web:latest | grep architecture</pre>
+<p>To carry on regardless, run everything under emulation: <code>export DOCKER_DEFAULT_PLATFORM=linux/amd64</code>.</p>
+
+<h3>"Secrets cannot be saved yet: the server has no SOCIAL_ENCRYPTION_KEY"</h3>
+<p>Instagram on an install made before 3.1.1. Re-run <code>./install.sh</code>; it generates the key and changes nothing else.</p>
+
+<h3>It logs me out on every refresh, or says Unauthorized when I change tab</h3>
+<p>The login cookie is marked <code>Secure</code> and the site is being served over <code>http://</code>, so
+the browser silently discards it. Reach the site over <code>https://</code>. If HTTPS is terminated by a
+proxy this stack cannot see, set the flag explicitly:</p>
+<pre>cd forge-growth
+echo 'COOKIE_SECURE=true' &gt;&gt; .env
+./up.sh</pre>
+
+<h3>Every container is healthy but the site returns 404</h3>
+<p>Nothing is routing the domain to the install. From inside the stack nothing is wrong, which is why
+container health cannot detect it. Check that <code>COMPOSE_FILE</code> is in <code>.env</code>, then run the checks in section 2c.</p>
+
+<h3>"port 8080 is in use"</h3>
+<p>Not an error — the installer moved to the next free port and told you which. Find what holds a port:</p>
+<pre>lsof -nP -iTCP:8080 -sTCP:LISTEN     # macOS
+ss -lntp | grep 8080                 # Linux</pre>
+
+<h3>A container keeps restarting</h3>
+<p>Usually a memory ceiling set too low — a container that reaches its limit is killed and restarted,
+which looks like a container that never finishes starting.</p>
+<pre>cd forge-growth
+docker compose ps
+docker compose logs --tail 50 backend</pre>
+<p>Raise the ceiling in <code>.env</code> — <code>BACKEND_MEM_LIMIT</code> first; a busy install wants <code>1g</code>.</p>
+
+<h3>A second install adopted the first one's database</h3>
+<p>Installs on one machine are separated by their project name and nothing else. Check which directory owns which:</p>
+<pre>docker compose ls
+grep '^COMPOSE_PROJECT_NAME=' forge-growth/.env</pre>
+<p><code>up.sh</code> refuses to start when another directory already owns this install's name — the reason to use it rather than raw Compose.</p>
+
+<h3>Useful one-liners</h3>
+<pre>cd forge-growth
+grep '^BOOTSTRAP_ADMIN_PASSWORD=' .env    # admin password
+grep '^META_WEBHOOK_VERIFY_TOKEN=' .env   # WhatsApp webhook verify token
+grep '^TLS_MODE=' .env                    # caddy = owns 80/443, proxy = does not
+grep '^WEB_PORT=' .env                    # which port the UI is on
+docker compose ps                         # container states
+docker compose logs -f backend            # follow the backend
+docker compose ls                         # every install on this machine
+docker volume ls | grep forgegrowth       # where the data lives</pre>
+
+</body>
+</html>

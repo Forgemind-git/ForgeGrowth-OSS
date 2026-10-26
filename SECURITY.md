@@ -17,7 +17,7 @@ re-run and leaves `.env` and your database alone:
 
 ```bash
 ./install.sh                  # move to the current release
-./install.sh --version v3.1.0 # or pin to a specific one
+./install.sh --version v3.1.1 # or pin to a specific one
 ```
 
 ## Reporting a vulnerability
