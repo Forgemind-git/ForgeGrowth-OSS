@@ -602,7 +602,12 @@ fi
 port_in_use() {
   if command -v ss >/dev/null 2>&1; then
     ss -ltn 2>/dev/null | grep -qE "[:.]${1}[[:space:]]"
-  elif command -v lsof >/dev/null 2>&1; then
+  # ⚠ Not BusyBox's lsof (Alpine, docker:dind): it ignores every argument and
+  #   exits 0, so every port read as busy and the free-port walk below never
+  #   ended — a silent hang right after "install name". netstat is the one to
+  #   trust there.
+  elif command -v lsof >/dev/null 2>&1 \
+       && ! readlink -f "$(command -v lsof)" 2>/dev/null | grep -q busybox; then
     lsof -nP -iTCP:"${1}" -sTCP:LISTEN >/dev/null 2>&1
   elif command -v netstat >/dev/null 2>&1; then
     netstat -an 2>/dev/null | grep -qE "[:.]${1}[[:space:]].*LISTEN"
@@ -796,7 +801,13 @@ if [ -z "$WEB_PORT" ]; then
     # hand still fails below rather than being changed underneath you.
     if [ "$ours_running" = 0 ] && port_in_use "$WEB_PORT"; then
       busy=$WEB_PORT
-      while port_in_use "$WEB_PORT"; do WEB_PORT=$((WEB_PORT + 1)); done
+      while port_in_use "$WEB_PORT"; do
+        WEB_PORT=$((WEB_PORT + 1))
+        # A port check that answers "busy" for everything would otherwise walk
+        # forever without a word. A hundred taken in a row is not a busy machine.
+        [ $((WEB_PORT - busy)) -lt 100 ] \
+          || die "ports $busy-$WEB_PORT all read as in use, which is not believable. Pass --port <n>."
+      done
       warn "port $busy is in use — using $WEB_PORT instead"
     fi
   fi
