@@ -49,6 +49,13 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
 
 ### Fixed
 
+- **A bad link can no longer crash the backend.** Express 4 ignored the promise an `async` route
+  returns, so a query that failed inside one — `GET /api/chatbots/<not-a-number>` raising Postgres
+  `22P02`, for example — was an unhandled rejection, and Node exits on those: every user lost the app.
+  Rejections now reach the error handler for every route, in the main app and the Social sub-app
+  (`util/expressErrors.js`, applied once). A malformed value in the request answers **400**, a body
+  that is not JSON answers 400 instead of 500, and other failures a logged JSON 500. A stray
+  rejection outside a request is logged rather than fatal.
 - **The chat message box no longer squeezes to a sliver.** With the WhatsApp Numbers list, the
   contact list and a chat all open, the chat got whatever was left — at a 1440 px window the box was
   ~125 px wide and "Type a message…" wrapped a word per line. The chat now keeps a usable width

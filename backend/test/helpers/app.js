@@ -11,6 +11,8 @@
 
 const express = require('express');
 const http = require('http');
+// As in src/index.js: an async handler's rejection reaches the error handler below.
+require('../../src/util/expressErrors').installAsyncErrorForwarding();
 
 // makeApp(router, user) -> { url, close() }
 // user defaults to an admin; pass a role to exercise the permission gates.
