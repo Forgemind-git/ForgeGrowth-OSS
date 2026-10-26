@@ -136,6 +136,12 @@ test('a flow with no trigger cannot go live', () => {
   assert.strictEqual(r.ok, false);
 });
 
+test('a saved flow on the removed wa.me link trigger cannot be switched on', () => {
+  const r = validateFlow(flow([{ id: 't', type: 'trigger', triggerKind: 'link', trackingCode: 'WEB_HERO' }], []));
+  assert.ok(codes(r).includes('TRIGGER_REMOVED'));
+  assert.strictEqual(r.ok, false);
+});
+
 test('a second trigger is refused, because only the first ever fires', () => {
   const r = validateFlow(flow([
     { id: 't1', type: 'trigger', triggerKind: 'keyword', keyword: 'a' },

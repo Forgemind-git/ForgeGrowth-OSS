@@ -469,13 +469,9 @@ export const getTriggerDisplay = (n) => {
     };
   }
   if (tk === 'link') {
-    // Show the CODE, because it is the whole of the configuration and the only
-    // thing that decides whether this trigger can ever fire.
-    const code = (n.trackingCode || '').trim();
-    return {
-      title: 'Trigger: wa.me Link',
-      sub: code ? `When the opening message contains "${code}"` : 'No tracking code set — this can never fire',
-    };
+    // Retired trigger (see TRIGGER_KINDS). Named, not shown as a keyword, so an
+    // old flow that still has one says what it is.
+    return { title: 'Trigger: wa.me Link (removed)', sub: 'This trigger no longer exists — choose another one' };
   }
   if (tk === 'newContact') return { title: 'Trigger: New Contact', sub: 'First-time message from a new contact' };
   if (tk === 'anyMessage') return { title: 'Trigger: Any Message', sub: 'Fires on every inbound message' };
@@ -636,13 +632,16 @@ export const makeNode = (type, x, y, id, templates) => {
 
    That is not hypothetical: until now the panel had no `trigger` branch at all,
    so every trigger fell through to the generic "uses default settings" card and
-   `keyword` / `matchType` / `trackingCode` / `tag` were fixed forever at
-   whatever the library item happened to seed. The keyword trigger shipped
-   hardcoded to "PRICE", and the wa.me-link trigger read a `trackingCode` that
-   nothing on earth could set — so it could never fire.
+   `keyword` / `matchType` / `tag` were fixed forever at whatever the library
+   item happened to seed. The keyword trigger shipped hardcoded to "PRICE".
+
+   The wa.me-link trigger ("link", fired by a tracking code in the pre-filled
+   message) was removed 2026-10-26: nothing in this version generates those
+   links any more. A saved flow that still has one is named as removed in the
+   canvas and settings, and flowValidator refuses to activate it.
 
    Every field listed here is one the ENGINE actually evaluates; see
-   backend/src/engine/automationEngine.js `evaluateTriggers` (keyword / link /
+   backend/src/engine/automationEngine.js `evaluateTriggers` (keyword /
    newContact / anyMessage) and `fireTagAppliedTriggers` (tagApplied). Do not
    add a field here that the engine does not read — that is a control which
    silently does nothing. */
@@ -655,8 +654,6 @@ const TRIGGER_KINDS = [
     // kind clears it (see switchKind) — a stale value would gate a trigger that
     // no longer shows the picker.
     defaults:{ keyword:"", matchType:"exact", caseSensitive:false, triggerDirection:"inbound", landingSource:"" } },
-  { kind:"link", libName:"WhatsApp Link", label:"wa.me Link", icon:IC.link, desc:"wa.me link clicked",
-    defaults:{ trackingCode:"" } },
   { kind:"newContact", libName:"New Contact", label:"New Contact", icon:IC.user, desc:"New contact created",
     defaults:{} },
   { kind:"anyMessage", libName:"Inbound Message", label:"Any Message", icon:IC.msg, desc:"Any new message",
@@ -2752,6 +2749,7 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
       if (next === tk) return;
       const cleared = {};
       TRIGGER_KINDS.forEach(k => Object.keys(k.defaults).forEach(f => { cleared[f] = undefined; }));
+      cleared.trackingCode = undefined;   // the removed wa.me-link trigger's field
       onUpdateNode(node.id, { ...cleared, ...findTriggerKind(next).defaults, triggerKind: next });
     };
 
@@ -2861,18 +2859,9 @@ const SettingsPanel = ({ node, nodes=[], edges=[], onUpdateNode=()=>{}, onDelete
         )}
       </>)}
 
-      {tk === "link" && (<>
-        <Field label="Tracking code" hint="A wa.me link carries no query string, so the ONLY thing that survives into WhatsApp is the pre-filled message. This trigger fires when that message contains this code.">
-          <Input
-            value={node.trackingCode || ""}
-            onChange={(e)=>onUpdateNode(node.id, { trackingCode: e.target.value })}
-            placeholder="e.g. WEB_HOMEPAGE_HERO"
-          />
-        </Field>
-        {(node.trackingCode || "").trim()
-          ? <Alert kind="info">Build the link so its pre-filled text contains <strong>{node.trackingCode.trim()}</strong> — Message Formats generates one for you.</Alert>
-          : <Alert kind="warn">Without a code this trigger has nothing to match on, so it can never fire.</Alert>}
-      </>)}
+      {tk === "link" && (
+        <Alert kind="warn">The wa.me link trigger has been removed and this flow can no longer start from it. Choose another trigger type above.</Alert>
+      )}
 
       {tk === "tagApplied" && (<>
         <Field label="Tag to watch">
@@ -3092,10 +3081,6 @@ const BuilderToolbar = ({ automationName, status, onBack, onSave, isDirty, savin
 const triggerMatches = (trigger, text) => {
   const tk = trigger.triggerKind || "keyword";
   if (tk === "anyMessage" || tk === "newContact") return true;
-  if (tk === "link") {
-    const code = String(trigger.trackingCode || "").trim();
-    return !!code && text.toLowerCase().includes(code.toLowerCase());
-  }
   if (tk === "keyword") {
     const kw = String(trigger.keyword || "").trim();
     if (!kw) return false;
@@ -3109,7 +3094,7 @@ const triggerMatches = (trigger, text) => {
 const triggerAsk = (trigger) => {
   const tk = trigger?.triggerKind || "keyword";
   if (tk === "keyword") return trigger.keyword ? `Send “${trigger.keyword}” like a customer would.` : "The trigger has no keyword yet — click the trigger step to set one.";
-  if (tk === "link") return trigger.trackingCode ? `Send a message that contains the link code “${trigger.trackingCode}”.` : "The wa.me link trigger has no tracking code yet.";
+  if (tk === "link") return "The wa.me link trigger has been removed — choose another trigger.";
   if (tk === "newContact") return "Send anything — a first message from a new contact starts it.";
   if (tk === "anyMessage") return "Send anything — every inbound message starts it.";
   if (tk === "tagApplied") return `Press ▶ to apply the tag “${trigger.tag || "…"}” to the test contact.`;
@@ -3375,12 +3360,6 @@ const SimPanel = ({ onClose, nodes = [], edges = [], templates = [], otherAutoma
       }
       go(); return;
     }
-    if (tk === "link") {
-      const code = trigger.trackingCode || "WEB_HOMEPAGE_HERO";
-      const msg  = trigger.prefilledMsg || "Hi, I'd like to know more";
-      setConv([{ from:"system", text:`Opened your wa.me link · ${trigger.linkSource || "Website"}`, time: now() }, { from:"user", text:`${msg} · ${code}`, time: now() }]);
-      go(); return;
-    }
     if (tk === "newContact") {
       setConv([{ from:"system", text:"First time messaging this number", time: now() }, { from:"user", text:"Hello", time: now() }]);
       go(); return;
@@ -3426,7 +3405,7 @@ const SimPanel = ({ onClose, nodes = [], edges = [], templates = [], otherAutoma
       if (!trigger) { setConv(c => [...c, { from:"system", text:"No active trigger step in this flow.", time: now() }]); finish(); return; }
       if (!triggerMatches(trigger, text)) {
         const kw = trigger.keyword ? `“${trigger.keyword}” (${trigger.matchType || "exact"} match)` : "a different message";
-        setConv(c => [...c, { from:"system", text:`Nothing started — this flow waits for ${tk === "link" ? `a message containing “${trigger.trackingCode || ""}”` : kw}.`, time: now() }]);
+        setConv(c => [...c, { from:"system", text:`Nothing started — this flow waits for ${kw}.`, time: now() }]);
         return;
       }
       setWaiting(null);

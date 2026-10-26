@@ -136,17 +136,16 @@ function validateFlow(config, ctx = {}) {
     // Each of these is a trigger the engine WILL evaluate and which can never
     // match, so they block for the same reason an empty keyword does: the flow
     // would go live looking configured and never fire once. Everything here is
-    // a field the settings panel can now actually set — before it existed,
-    // `trackingCode` had no editor at all, so a wa.me-link trigger was dead on
-    // arrival by construction.
+    // a field the settings panel can actually set.
     const kind = t.triggerKind || 'keyword';
     if (kind === 'keyword' && !txt(t.keyword)) {
       blocking.push(F(t.id, 'TRIGGER_INCOMPLETE', 'The trigger has no keyword, so it can never match.',
         'Type the word customers will send.'));
     }
-    if (kind === 'link' && !txt(t.trackingCode)) {
-      blocking.push(F(t.id, 'TRIGGER_INCOMPLETE', 'The link trigger has no tracking code, so it can never match.',
-        'Set the code carried in the link’s pre-filled message.'));
+    if (kind === 'link') {
+      // Retired 2026-10-26 (the wa.me-link trigger); the engine no longer evaluates it.
+      blocking.push(F(t.id, 'TRIGGER_REMOVED', 'The wa.me link trigger has been removed, so this flow can never start.',
+        'Choose another trigger type.'));
     }
     if (kind === 'tagApplied' && !txt(t.tag)) {
       blocking.push(F(t.id, 'TRIGGER_INCOMPLETE', 'The trigger does not say which tag to watch, so it can never fire.',
