@@ -17,6 +17,14 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
 
 ## [Unreleased]
 
+### Fixed
+
+- **Fresh installs failed while pulling images** with `pull access denied for minio/minio`. MinIO,
+  Inc. no longer publishes community images and the Docker Hub repository has been removed. The
+  object store now runs `pgsty/minio`, a maintained build of the same server, pinned to a release.
+  Existing installs keep their Media Library: the data volume is read as it is. Re-run
+  `./install.sh` to switch.
+
 ### Added
 
 - **Contact Forgemind.** A "Want it customised?" card above the sidebar's Collapse control, and a
