@@ -14,6 +14,8 @@ conversations into sales — one app, on your own server.
 
 **MIT licensed · self-hosted · single-tenant · no SaaS tier · no telemetry**
 
+Want it customised for your business? [Talk to Forgemind](#want-it-customised) — [WhatsApp](https://wa.me/919342245724?text=Hi%20Forgemind%21%20I%27m%20using%20Forge%20Growth%20and%20I%27d%20like%20to%20customise%20it%20for%20my%20business.%20Can%20we%20talk%3F) · [contact@forgemind.in](mailto:contact@forgemind.in?subject=Customising%20Forge%20Growth&body=Hi%20Forgemind%20team%2C%0A%0AI%27m%20using%20the%20open-source%20Forge%20Growth%20and%20I%27d%20like%20to%20customise%20it%20for%20my%20business.%0A%0AWhat%20I%27m%20looking%20for%3A%0A%0A%0AThanks%2C%0A)
+
 </div>
 
 ![Instagram comment-to-DM automation editor, with a live phone preview](./docs/screenshots/ig-dm-automation.png)
@@ -371,6 +373,21 @@ Diagram, invariants and the development workflow: **[`docs/architecture.md`](./d
 
 **Found a vulnerability?** Report it privately to <forgemind.business@gmail.com> rather than opening a
 public issue — [`SECURITY.md`](./SECURITY.md) has the scope and what to expect.
+
+---
+
+## Want it customised?
+
+Need a feature, an integration or a setup built for your own business? The Forgemind team who built
+Forge Growth can do it for you.
+
+| | |
+|---|---|
+| **WhatsApp** | [+91 93422 45724](https://wa.me/919342245724?text=Hi%20Forgemind%21%20I%27m%20using%20Forge%20Growth%20and%20I%27d%20like%20to%20customise%20it%20for%20my%20business.%20Can%20we%20talk%3F) — opens a chat with a message ready to send |
+| **Email** | [contact@forgemind.in](mailto:contact@forgemind.in?subject=Customising%20Forge%20Growth&body=Hi%20Forgemind%20team%2C%0A%0AI%27m%20using%20the%20open-source%20Forge%20Growth%20and%20I%27d%20like%20to%20customise%20it%20for%20my%20business.%0A%0AWhat%20I%27m%20looking%20for%3A%0A%0A%0AThanks%2C%0A) |
+
+The same details are one click away inside the app: the **Want it customised?** card above the
+sidebar's Collapse control, or the ✦ button beside your avatar in the top bar.
 
 ---
 
