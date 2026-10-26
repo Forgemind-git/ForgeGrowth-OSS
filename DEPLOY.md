@@ -174,13 +174,13 @@ unbounded.
 
    Only on the run that creates the account. Miss it and you can delete the user row and restart to
    get another.
-2. **Admin Settings → WhatsApp Accounts → Add**: display phone number (digits only), Phone Number
+2. **Settings → WhatsApp → Accounts → Add account**: display phone number (digits only), Phone Number
    ID, WABA ID, Meta App ID, and a Meta System User access token. The token is encrypted at rest.
 3. **Meta Business Suite → WhatsApp → Configuration**:
    - Callback URL `https://<your-domain>/api/webhook/whatsapp`
    - Verify token: exactly your `META_WEBHOOK_VERIFY_TOKEN`
    - Subscribe to `messages` — that one field covers messages, statuses, echoes and template events
-4. **Test it**: Admin Settings → Webhooks → *Send Test Webhook* → "Incoming text message". A row
+4. **Test it**: Settings → WhatsApp → Webhook → *Send Test Webhook* → "Incoming text message". A row
    should appear with `processed` and `records_extracted=1`.
 5. *(Optional)* Enable Template Insights in Meta Business Suite, or the Analytics drawer's refresh
    returns subcode 4182004 — the UI explains the fix when it happens.
@@ -230,10 +230,10 @@ docker compose exec -T postgres pg_restore -U forgegrowth -d forgegrowth --clean
 
 Send a real WhatsApp message to the connected business number. Within a few seconds:
 
-1. **Admin Settings → Webhooks** shows `MESSAGES · TEXT · processed` with your text
+1. **Settings → WhatsApp → Webhook** shows `MESSAGES · TEXT · processed` with your text
 2. **Chats** shows the conversation, with the bubble rendered
 3. Replying from the composer posts optimistically, then gets the delivered tick when Meta echoes
-4. A `STATUSES · DELIVERED` row lands in the Webhooks tab
+4. A `STATUSES · DELIVERED` row lands in the Webhook list
 
 All four means every layer is working: Meta integration, parser, audit log, insert, automation
 engine, send queue, status callback, and the UI.

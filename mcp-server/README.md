@@ -1,38 +1,38 @@
-# ForgeChat Agent Builder — MCP server
+# Forge Growth — local MCP server (stdio)
 
-An MCP server that lets you build and manage ForgeChat WhatsApp AI agents from
-Claude Desktop (or any MCP client). It talks to the ForgeChat backend's
-bearer-authed MCP API (`/api/mcp/v1`).
+A local MCP server for MCP clients that start a command rather than connect to a URL. It exposes the
+same tools as the hosted connector — WhatsApp flows, templates and AI agents, Instagram automations,
+flows and agents, contacts, follow-ups, Google Sheets and the rest — by calling your install's
+key-authenticated API (`/api/mcp/v1`).
 
-It exposes **discovery** tools (list your real WhatsApp numbers, AI models,
-Google spreadsheets, tabs, media and templates) and **mutation** tools
-(create / update / delete agents and tools), plus a `create-forgechat-agent`
-prompt that walks you through the setup questions.
+> **Most people do not need this.** Claude (web, desktop, mobile) and Claude Code connect directly
+> to `https://<your-domain>/api/mcp` with your Forge Growth login — see **Settings → Claude & MCP**.
+> Use this server only for a client that cannot do remote MCP.
+
+It runs **from a checkout of this repository**: the Instagram and Sales tools are declared once in
+`backend/src/services/mcpRouteTools.js` and loaded from there, so the two transports cannot drift.
 
 ## Install
 
 ```bash
-cd /root/FORGECHAT/mcp-server
+cd forge-growth/mcp-server     # inside your clone of this repository
 npm install
 ```
 
-## Configure Claude Desktop
+## Configure a client
 
-1. In ForgeChat, go to **Admin Settings → MCP Tools**. Turn on the master
-   switch and the capabilities you want, then **Generate key** and copy the
-   `fck_live_…` value (shown once).
-2. Open Claude Desktop → **Settings → Developer → Edit Config** (or edit the
-   file directly):
-   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-   - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-3. Add:
+1. In Forge Growth, go to **Settings → Claude & MCP**. Turn on **Allow access** and the tool
+   categories you want, then under **Access & keys** generate an API key and copy the `fck_live_…`
+   value (shown once).
+2. Add the server to your client's config. For Claude Desktop that is **Settings → Developer → Edit
+   Config**:
 
 ```json
 {
   "mcpServers": {
-    "forgechat-agents": {
+    "forge-growth": {
       "command": "node",
-      "args": ["/root/FORGECHAT/mcp-server/src/index.js"],
+      "args": ["/absolute/path/to/forge-growth/mcp-server/src/index.js"],
       "env": {
         "FORGECHAT_API_URL": "https://crm.example.com/api/mcp/v1",
         "FORGECHAT_API_KEY": "fck_live_PASTE_YOUR_KEY"
@@ -42,41 +42,23 @@ npm install
 }
 ```
 
-4. Fully quit and reopen Claude Desktop. The `forgechat-agents` tools and the
-   `create-forgechat-agent` prompt will appear.
-5. Say *“create a ForgeChat agent”* — it will ask you the setup questions.
+Settings → Claude & MCP → **Advanced** shows this snippet with your install's own `FORGECHAT_API_URL`
+filled in. (The variable names keep the product's earlier name so existing configs keep working.)
 
-> If Claude Desktop runs on a different machine than the server, point
-> `FORGECHAT_API_URL` at the public domain (above). The bearer key works over
-> the internet; the ForgeChat login cookie is not involved.
+3. Restart the client. Ask, for example, *"draft a WhatsApp flow for course enquiries"* or *"draft a
+   comment-to-DM automation on my latest reel"*.
 
-## Claude Desktop Project
+> The client can run on a different machine from the server: point `FORGECHAT_API_URL` at the public
+> address. The API key works over the internet; the login cookie is not involved.
 
-For a dedicated project, use:
+## What it can do
 
-**Name:** `ForgeChat Agent Builder`
-
-**Description:** Build and manage ForgeChat WhatsApp AI agents through
-conversation. I ask what you need, look up your real WhatsApp numbers, AI
-models, Google Sheets, media and templates, then create a fully-configured
-agent for you — no dashboard required.
-
-**Custom instructions:** see the `create-forgechat-agent` prompt (the same
-guided flow), or copy it from the project plan.
+The same tool categories as the hosted connector, gated by the same switches in
+**Settings → Claude & MCP** — a category that is off returns a refusal naming it, which the assistant
+relays. Anything that builds an automation, flow or agent saves it **switched off**.
 
 ## Develop / debug
 
 ```bash
 FORGECHAT_API_URL=… FORGECHAT_API_KEY=… npm run inspect   # MCP Inspector
 ```
-
-## Tools
-
-Discovery: `list_wa_accounts`, `list_models`, `search_spreadsheets`,
-`list_sheet_tabs`, `list_media`, `list_templates`, `list_agents`, `get_agent`.
-
-Mutation: `create_agent`, `update_agent`, `add_google_sheets_tool`, `add_tool`,
-`update_tool`, `delete_tool`, `delete_agent`.
-
-Each capability is gated by the toggles in **Admin Settings → MCP Tools** — a
-disabled capability returns a 403 the assistant will relay.

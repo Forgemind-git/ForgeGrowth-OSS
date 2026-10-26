@@ -27,7 +27,7 @@ Returns `{ status, ok, body }`. A non-2xx `status` is the app refusing, and its
 ## Two switches must both be on
 
 `forgechat_request` needs the **Direct API access** category enabled *and* the
-**API area** covering that path. Both live in Admin Settings → MCP Tools.
+**API area** covering that path. Both live in Settings → Claude & MCP.
 
 Anything matching no area is refused — the gate is default-deny, so a 403 usually
 means the area is off, not that the path is wrong.

@@ -17,6 +17,24 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
 
 ## [Unreleased]
 
+## [3.0.0] — 2026-10-26
+
+Instagram and WhatsApp automation first: the Marketing section, Razorpay, the Sales Log, every
+social platform but Instagram, Telegram and the analysers are gone; Instagram DM automations, voice
+notes that play on iPhone, a regrouped Settings and a draft-first MCP are in.
+
+**Why a major version:** MCP tools and endpoints were removed (the Social MCP server, the Chat
+Analyzer and Marketing tools), which breaks a client built against them. **Upgrading needs no manual
+step** — re-run `./install.sh`; migrations are automatic and removed features' tables are left in
+place. 2.0.0 below was never tagged or published; its changes ship in this release.
+
+### Documentation
+
+- README rewritten around Instagram and WhatsApp automation, with screenshots of the DM automation
+  editor, flow builder, AI agent and template builders, Chats, the follow-up calendar and Claude &
+  MCP (`docs/screenshots/`, made from invented demo data). `docs/features.md` regrouped the same way;
+  stale Settings paths fixed across the docs, the plugin and its skills.
+
 ### Added
 
 - **MCP: `social_create_comment_dm_draft`** — the app's "Auto-DM links from comments" preset in one

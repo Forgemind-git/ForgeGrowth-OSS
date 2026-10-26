@@ -1,9 +1,10 @@
-# Social section
+# Instagram (the Social section)
 
 The **Social** header tab manages your Instagram accounts from inside Forge Growth: Overview,
-Insights, Inbox, Contacts, Content Library (synced posts + media), Instagram
-Automations (Activity) and Settings (Integrations, OpenRouter, tags,
-fields, MCP access, activity log, privacy policy).
+Content Library (synced posts + media), Inbox, Contacts and Automations (DM automations, flows, AI
+agents and their activity). Its settings live in the one Settings page: **Instagram** (connection,
+privacy policy), **AI models → Instagram AI (OpenRouter)**, **Tags** and **Fields** (the Instagram
+sections), **General → Instagram notifications** and the **Activity log**.
 
 ## How it is wired
 
@@ -11,7 +12,7 @@ fields, MCP access, activity log, privacy policy).
 |---|---|
 | Backend | `backend/src/social/` — an Express sub-app, mounted at `/api/social` in `src/index.js` |
 | Database | ForgeGrowth's database, schema **`social`** (created at boot) |
-| Login | ForgeGrowth's session. No separate Social login. Access = page key **`social`** (admins always; grant others in Admin Settings → Users) |
+| Login | ForgeGrowth's session. No separate Social login. Access = page key **`social`** (admins always; grant others in Settings → Team) |
 | Frontend | `frontend/src/social/` — routes `#/social/...`, styles scoped under `.social-root` |
 | Public pages | `#/social-privacy` (privacy policy) and `#/social-share/<token>` (shared report) |
 | Background jobs | **Off** until `SOCIAL_JOBS_ENABLED=1` |
@@ -35,7 +36,7 @@ Required:
 | `SOCIAL_PUBLIC_BASE_URL` | Defaults to this install's own address (`https://$TLS_DOMAIN`, else the first `CORS_ORIGIN`). The OAuth callback is `<base>/api/social/instagram/oauth/callback`. |
 
 The Meta app (Instagram, Webhooks). These can also be entered in
-Social → Settings → Integrations → App credentials instead of `.env`:
+Settings → Instagram → Connection → App credentials instead of `.env`:
 
 | Variable | Value |
 |---|---|
@@ -57,7 +58,7 @@ Optional: `SOCIAL_REDIS_URL` (defaults to ForgeGrowth's), `SOCIAL_SYNC_INTERVAL_
 
 1. Set `SOCIAL_ENCRYPTION_KEY` in `.env` and restart. The `social` schema is
    created on boot.
-2. Social → Settings → Integrations: enter the app credentials and connect each
+2. Settings → Instagram → Connection: enter the app credentials and connect each
    account.
 3. Set `SOCIAL_JOBS_ENABLED=1` and restart the backend to start syncing.
 

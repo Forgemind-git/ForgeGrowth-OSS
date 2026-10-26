@@ -19,7 +19,7 @@ showing you a preview and asking for a yes before anything goes live.
 
 ### 1. Point the connector at your instance
 
-If you downloaded this from **Admin Settings → MCP Tools**, this is already done — the
+If you downloaded this from **Settings → Claude & MCP**, this is already done — the
 server wrote its own address into `.mcp.json` on the way out:
 
 ```
@@ -39,7 +39,7 @@ error.
 
 ### 2. Turn MCP on and choose what Claude may do
 
-In Forge Growth → **Admin Settings → MCP Tools**: switch the master toggle **on**, then
+In Forge Growth → **Settings → Claude & MCP**: switch the master toggle **on**, then
 pick an area (Social / Sales / Chats & Automations / Admin) and enable the switches you want. Each is one switch over one process; open a card to see
 exactly which tools it controls.
 
@@ -70,9 +70,9 @@ first use Claude registers itself with your server and opens a browser window to
 You must already be signed in to Forge Growth in that browser.
 
 **claude.ai** — Settings → Connectors → **Add custom connector**, and paste
-`https://YOUR-FORGE-GROWTH-HOST/api/mcp` (Admin Settings → MCP Tools shows the exact URL
+`https://YOUR-FORGE-GROWTH-HOST/api/mcp` (Settings → Claude & MCP shows the exact URL
 with a copy button). If it asks for credentials, create an OAuth
-client in Admin Settings → MCP Tools (the secret is shown **once**) and paste the Client ID
+client in Settings → Claude & MCP (the secret is shown **once**) and paste the Client ID
 and Secret under *Advanced settings*.
 
 Revoking is immediate: disable or delete the client and every token it issued stops working
@@ -116,5 +116,5 @@ Claude to read its runs — every step is recorded with its input, output and an
   it by name, or give Claude a public `https://` URL.
 - Templates must be **approved by Meta** before they can be sent, and only from the number
   they were approved on.
-- If Claude says a tool category is switched off, flip it in Admin Settings → MCP Tools.
+- If Claude says a tool category is switched off, flip it in Settings → Claude & MCP.
   Claude cannot enable it itself, by design.

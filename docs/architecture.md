@@ -9,12 +9,14 @@ the workflow. [`CLAUDE.md`](../CLAUDE.md) is the exhaustive invariant list.
 ## How it fits together
 
 ```
-Meta WhatsApp Cloud API
-        │
-        ▼ webhook
-   Backend (Express + pg)  ──►  PostgreSQL  (schema `coexistence`)
-        │                       chats · leads · funnel · sales
-        │                       templates · automations · agents
+Meta WhatsApp Cloud API        Instagram Graph API
+        │ webhook                  │ webhook + scheduled sync
+        ▼                          ▼
+   Backend (Express + pg)  ──►  PostgreSQL
+        │                       schema `coexistence` — chats · leads · funnel · sales ·
+        │                         templates · flows · agents
+        │                       schema `social` — Instagram accounts · posts · insights ·
+        │                         DM automations · flows · agents · inbox
         │
         ├──►  BullMQ on Redis  ──►  outbound sends (60/sec) · media downloads · agent runs
         ├──►  MinIO                 media library objects
@@ -126,6 +128,7 @@ backend/
     queue/                BullMQ workers
     routes/               the HTTP surface, one file per area
     services/             shared logic used by both the UI routes and MCP
+    social/               the Instagram (Social) sub-app, mounted at /api/social — schema `social`
   scripts/                cron jobs (template sync, analytics, cleanup)
   test/                   node:test — unit tests run anywhere; DB tests skip without one
 frontend/
@@ -133,6 +136,8 @@ frontend/
     api.js                one fetch wrapper for every endpoint
     components/           chat UI, automation builder, agent editor
     pages/                sales/ · admin · chats
+    social/               the Social section — Instagram overview, library, inbox, automations
+forge-growth-plugin/      the Claude plugin: skills + connector, zipped per install by the backend
 mcp-server/               stdio MCP server (development only — the hosted transport is the real one)
 supabase/migrations/      numbered SQL, applied in order; baked into the backend image
 scripts/                  install.sh · up.sh · down.sh · uninstall.sh · migrate.sh

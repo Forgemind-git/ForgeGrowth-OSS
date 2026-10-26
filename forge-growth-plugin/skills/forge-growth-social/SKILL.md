@@ -11,7 +11,7 @@ description: >-
 # Social
 
 Every tool here starts with `social_`. They are switched on in five groups (Admin
-Settings → MCP Tools → **Social**), plus deletes, which live in **Admin → Delete & remove**:
+Settings → Claude & MCP → **Social**), plus deletes, which live in **Admin → Delete & remove**:
 
 | Group | What it lets you do |
 |---|---|

@@ -1,28 +1,137 @@
+<div align="center">
+
 # Forge Growth
 
-**A WhatsApp-native growth stack: the conversation, the lead it became, the stage it reached and
-the sale at the end — in one self-hosted app, with an Instagram workspace beside it.**
+**Self-hosted Instagram and WhatsApp automation, with the sales CRM behind it.**
 
-Most CRMs can tell you a lead exists. Forge Growth can tell you what they said in the chat, which stage
-they're stuck at and what they've paid — and runs the automations and AI agents that move them along.
+Comment-to-DM automations and AI agents for Instagram · a visual flow builder, AI agents and
+approved templates for WhatsApp · the contacts, funnel and follow-ups that turn those
+conversations into sales — one app, on your own server.
+
+[![Release](https://img.shields.io/github/v/release/Forgemind-git/ForgeGrowth-OSS?label=release)](https://github.com/Forgemind-git/ForgeGrowth-OSS/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
+[![CI](https://github.com/Forgemind-git/ForgeGrowth-OSS/actions/workflows/ci.yml/badge.svg)](https://github.com/Forgemind-git/ForgeGrowth-OSS/actions/workflows/ci.yml)
 
 **MIT licensed · self-hosted · single-tenant · no SaaS tier · no telemetry**
 
+</div>
+
+![Instagram comment-to-DM automation editor, with a live phone preview](./docs/screenshots/ig-dm-automation.png)
+
 ---
 
-## How it works
+## Instagram
 
-```
- WhatsApp conversation  ──►  lead  ──►  stage moves  ──►  sale
-          │                   │             │              │
-          │ webhook           │ funnel      │ lead_events  │ manual payments
-          ▼                   ▼             ▼              ▼
-     chat_history        leads +        funnel tags     sales_log
-                         funnel_stages
-```
+Everything for an Instagram business account, from the numbers to the automations that answer
+people for you. It sits under the **Social** tab.
 
-Every arrow is real data, not a diagram of intent: a conversation, its lead, the stage it reached and
-what was paid all resolve with local joins.
+| | |
+|---|---|
+| **DM automations** | Comment-to-DM, DM keywords, story replies and mentions. Reply under the comment, open with a "tap to get it" message, gate on a follow, send a link card, collect name/email/phone into a Google Sheet, and follow up once if they don't tap — all built step by step with a live phone preview and a **Test it** simulator. |
+| **AI agents** | An agent that answers DMs and/or comments for one account, from a prompt, with a hand-off to a person. |
+| **Overview** | Followers, reach, engagement and top posts over 7, 30 or 90 days. |
+| **Content library** | Every synced post and reel with its numbers and a content score; media in one place. |
+| **Inbox & contacts** | DMs and comments in one inbox, and the contacts they came from. |
+
+<table>
+<tr>
+<td width="50%"><img src="./docs/screenshots/ig-automations.png" alt="Instagram automations list with live status"></td>
+<td width="50%"><img src="./docs/screenshots/social-overview.png" alt="Instagram overview: followers, reach, engagement and top posts"></td>
+</tr>
+<tr>
+<td><sub><b>Automations</b> — live status, runs and link CTR per rule</sub></td>
+<td><sub><b>Overview</b> — the account at a glance</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="./docs/screenshots/ig-ai-agent.png" alt="Instagram AI agent editor with a test chat"></td>
+<td width="50%"><img src="./docs/screenshots/social-library.png" alt="Content library of synced Instagram posts"></td>
+</tr>
+<tr>
+<td><sub><b>AI agent</b> — answers DMs and comments, testable before it goes live</sub></td>
+<td><sub><b>Content library</b> — synced posts with views, engagement and score</sub></td>
+</tr>
+</table>
+
+---
+
+## WhatsApp
+
+Built on Meta's WhatsApp Cloud API, on your own WhatsApp Business number.
+
+| | |
+|---|---|
+| **Flow builder** | A visual, left-to-right automation canvas: keyword, new-contact, any-message and tag triggers; messages with buttons and lists; conditions, actions, delays. Every branch is a visibly wired row, and a flow is checked before it can go live. |
+| **AI agents** | A no-code agent per number — prompt, model, tools (Google Sheets, HTTP, media, CRM write-back), memory, human hand-off, voice-note transcription and spend limits — with a live test chat. |
+| **Templates** | The full Meta lifecycle in a step-by-step builder with a phone preview: submit, sync, quality score, carousels, edit history. |
+| **Chats** | A three-pane WhatsApp inbox with the 24-hour window enforced, media, and voice notes that arrive as real WhatsApp voice notes (and play on iPhone). |
+| **Broadcasts & media** | Send now, once later or on a repeat, filtered by stage and tag; one media library synced to Meta; what every send actually costs. |
+
+<table>
+<tr>
+<td width="50%"><img src="./docs/screenshots/wa-flow-builder.png" alt="WhatsApp automation flow builder canvas"></td>
+<td width="50%"><img src="./docs/screenshots/wa-ai-agent.png" alt="WhatsApp AI agent builder with a test chat"></td>
+</tr>
+<tr>
+<td><sub><b>Flow builder</b> — every reply button is its own wired branch</sub></td>
+<td><sub><b>AI agent builder</b> — setup, model, tools and limits, with a live test chat</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="./docs/screenshots/wa-template-editor.png" alt="WhatsApp template builder with a phone preview"></td>
+<td width="50%"><img src="./docs/screenshots/chats.png" alt="WhatsApp chats with a voice note"></td>
+</tr>
+<tr>
+<td><sub><b>Template builder</b> — five steps, previewed as the customer sees it</sub></td>
+<td><sub><b>Chats</b> — the inbox, voice notes included</sub></td>
+</tr>
+</table>
+
+---
+
+## Sales
+
+The conversations above become contacts, and contacts move through your funnel to a sale.
+
+| | |
+|---|---|
+| **Home** | Came in → reached out → replied → won → paid, for 7, 30 or 90 days, plus where leads came from. |
+| **Contacts & funnel** | One contact model with a funnel view, a table and a board; your own stages, tags and fields; CSV/XLSX import. |
+| **Follow-up calendar** | Pin a lead's chat and give it a date — or let AI suggest one. A month calendar with today's and overdue follow-ups, drag to reschedule, optional Google Calendar sync. |
+| **Sales** | A sale is a lead in a won stage; payments and refunds are recorded against it by hand. |
+
+<table>
+<tr>
+<td width="50%"><img src="./docs/screenshots/home.png" alt="Home dashboard"></td>
+<td width="50%"><img src="./docs/screenshots/follow-up-calendar.png" alt="Follow-up calendar"></td>
+</tr>
+<tr>
+<td><sub><b>Home</b> — the whole funnel for the period</sub></td>
+<td><sub><b>Follow-up calendar</b> — who is due today, and who is overdue</sub></td>
+</tr>
+<tr>
+<td colspan="2"><img src="./docs/screenshots/contacts-funnel.png" alt="Contacts funnel"></td>
+</tr>
+<tr>
+<td colspan="2"><sub><b>Contacts</b> — how far people got, and where they dropped off</sub></td>
+</tr>
+</table>
+
+---
+
+## Claude & MCP
+
+Forge Growth is itself an MCP server: connect Claude (web, desktop, mobile or Claude Code) and
+ask it to do the work — *"draft a comment automation on my latest reel that DMs the guide link to
+anyone who comments GUIDE"*, *"build a WhatsApp flow for course enquiries"*, *"who is overdue for a
+follow-up?"*.
+
+- **93 tools in categories you switch on one by one**, each labelled with what it can do — reads,
+  builds, reaches customers, costs money, or deletes. Everything starts off.
+- **Anything Claude builds is a draft.** Instagram automations and flows and WhatsApp flows are
+  saved switched off; you review them and switch them on.
+- **Works on any domain.** The server address comes from the install itself; set `PUBLIC_URL` when
+  a proxy in front hides it. Sign-in is OAuth with your Forge Growth login.
+
+![Settings → Claude & MCP](./docs/screenshots/settings-claude-mcp.png)
 
 ---
 
@@ -31,8 +140,8 @@ what was paid all resolve with local joins.
 ### Already on a server with Docker? One command.
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v2.0.0/scripts/install.sh)" -- \
-  --version v2.0.0 --domain crm.example.com --yes
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v3.0.0/scripts/install.sh)" -- \
+  --version v3.0.0 --domain crm.example.com --yes
 ```
 
 Swap `crm.example.com` for your domain. That single command is the entire install: it pulls the
@@ -51,8 +160,8 @@ Two things to have ready first:
 No domain yet? Drop `--domain` and it comes up on `http://<this machine's address>:8080`, which is
 fine for a look around but not for WhatsApp — Meta requires HTTPS for webhooks.
 
-When it finishes, **[attach a WhatsApp number](./docs/whatsapp.md)**. The app does nothing useful
-without one.
+When it finishes, connect a channel — **[a WhatsApp number](./docs/whatsapp.md)**, **[an Instagram
+account](./docs/social-section.md)**, or both.
 
 ---
 
@@ -127,7 +236,7 @@ Two ways in, same result. Pick either.
 
 Everything in one file, with a folder for each operating system.
 
-1. Download **[`forge-growth-v1.0.1.zip`](https://github.com/Forgemind-git/ForgeGrowth-OSS/raw/main/dist/forge-growth-v1.0.1.zip)**
+1. Download **[`forge-growth-v3.0.0.zip`](https://github.com/Forgemind-git/ForgeGrowth-OSS/raw/main/dist/forge-growth-v3.0.0.zip)**
    (~145 KB). It is in this repository under [`dist/`](./dist), and also attached to the
    [releases page](https://github.com/Forgemind-git/ForgeGrowth-OSS/releases/latest) — two hosts, so
    one of them being down or rate-limiting you is not the end of the install.
@@ -153,8 +262,8 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowt
 **On a server with a real domain**, pinned to a release and asking nothing at all:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v2.0.0/scripts/install.sh)" -- \
-  --version v2.0.0 --domain crm.example.com
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v3.0.0/scripts/install.sh)" -- \
+  --version v3.0.0 --domain crm.example.com
 ```
 
 ---
@@ -169,7 +278,7 @@ and leave ports 80 and 443 free.
 > **You still need the internet the first time.** The zip holds the install files, not the
 > application images — those are about 350 MB and are pulled on the first run.
 
-### Step 3 — Sign in, then attach a number
+### Step 3 — Sign in, then connect WhatsApp or Instagram
 
 Open the URL the installer printed and sign in with the credentials it showed. Lost the password?
 
@@ -178,7 +287,7 @@ cd forge-growth
 grep '^BOOTSTRAP_ADMIN_PASSWORD=' .env
 ```
 
-Then **[attach a WhatsApp number](./docs/whatsapp.md)** — the app does nothing useful without one.
+Then connect **[a WhatsApp number](./docs/whatsapp.md)** and/or **[an Instagram account](./docs/social-section.md)**.
 
 ### Afterwards
 
@@ -209,28 +318,6 @@ is in **[`docs/install.md`](./docs/install.md)**.
 
 Nothing else. No Node, Postgres, Redis or MinIO on the host — it all runs in containers.
 
----
-
-## What's in it
-
-| Area | |
-|---|---|
-| **Leads** | Pipeline, funnel and list views of one model, with tags, custom fields and CSV/XLSX import |
-| **Inbox** | 3-pane WhatsApp client with media, transcribed voice notes and 24-hour window enforcement |
-| **Follow-ups** | Pinned lead chats and a follow-up calendar, optionally mirrored to Google Calendar |
-| **Templates** | The full Meta lifecycle — submit, sync, edit, quality score, carousels |
-| **Broadcasts** | 7 message types, scheduling, per-recipient status, stage and tag filters |
-| **Message Costs** | What each send actually owes Meta, derived from your WABA's own pricing |
-| **Automations** | A visual flow builder — 20 block types, every branch visibly wired |
-| **AI Agents** | A no-code LLM agent per number, with tools, memory, handoff and spend limits |
-| **Workflow Agents** | Scheduled or triggered agents that work across leads, chats and sales, behind an approvals queue |
-| **Social** | Instagram — analytics, content library, one inbox, comment-to-DM automations and AI agents |
-| **Google** | Sheets, Calendar and Gmail, with discovery browsers and automation actions |
-| **MCP** | Drive the whole app from Claude — every capability off by default |
-| **Users & RBAC** | Roles are rows, not an enum, so adding one needs no migration |
-
-Each of these has a "why it works this way" worth knowing — **[`docs/features.md`](./docs/features.md)**
-is the full catalogue.
 
 ---
 
@@ -239,12 +326,13 @@ is the full catalogue.
 | | |
 |---|---|
 | **[Installing](./docs/install.md)** | Every route, platform notes, HTTPS, reverse proxies, backups |
-| **[Connecting WhatsApp](./docs/whatsapp.md)** | Meta setup, and the ngrok loop for a laptop |
+| **[Connecting WhatsApp](./docs/whatsapp.md)** | Meta setup, the webhook, and the ngrok loop for a laptop |
+| **[Connecting Instagram](./docs/social-section.md)** | The Meta app, Instagram login, webhooks and the privacy-policy URL |
 | **[Features](./docs/features.md)** | The full catalogue and the reasoning behind it |
 | **[Architecture](./docs/architecture.md)** | Stack, repo layout, invariants, development workflow |
 | **[Reverse proxies](./docs/reverse-proxy.md)** | Traefik and nginx overlays, and the 404-while-healthy trap |
 | **[Deploying](./DEPLOY.md)** | Onto a host you already run |
-| **[Installation guide (PDF)](./docs/ForgeGrowth-Installation-Guide.pdf)** | The printable walkthrough |
+| **[Claude plugin](./forge-growth-plugin/README.md)** · **[Local MCP server](./mcp-server/README.md)** | Connecting Claude |
 | **[Changelog](./CHANGELOG.md)** · **[Contributing](./CONTRIBUTING.md)** · **[Security](./SECURITY.md)** | |
 
 ---
