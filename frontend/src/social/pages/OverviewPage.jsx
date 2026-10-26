@@ -101,7 +101,7 @@ export default function OverviewPage({ period, setPeriod }) {
       <PageHeader
         cycle={`${new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" })} · ${info.label}`}
         title="Overview"
-        right={<div style={{ display: "flex", alignItems: "center", gap: 10 }}>{overview.estimated && <DataQualityBadge kind="estimated" />}<LiveBadge ts={overview.lastSyncAt} /><PeriodPills value={period} onChange={setPeriod} /></div>}
+        right={<div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>{overview.estimated && <DataQualityBadge kind="estimated" />}<LiveBadge ts={overview.lastSyncAt} /><PeriodPills value={period} onChange={setPeriod} /></div>}
       />
 
       {overview.synced === false ? (
@@ -142,7 +142,7 @@ export default function OverviewPage({ period, setPeriod }) {
             <StatCard label="Posts" value={platformData.posts} delta={platformData.postsDelta} deltaLabel={`vs prev. ${info.days}d`} positive={platformData.postsDelta >= 0} info="Posts, videos or reels published in the period." />
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(380px, 100%), 1fr))", gap: 16 }}>
             <Card>
               <SectionHead right={<span style={{ fontSize: 12.5, color: C.textMuted, fontWeight: 500 }}>{info.label}</span>}>Followers</SectionHead>
               {ftLoading && !followersTrend ? (

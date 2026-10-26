@@ -538,7 +538,7 @@ export default function AgentEditor({ agentId, waAccounts, user, navigate, onDon
   // never scrolled, and everything above it in the form no longer steals its
   // height — the phone gets the full pane whatever the form is doing.
   return (
-    <div style={{ display: 'flex', height: '100%', minHeight: 0, width: '100%', fontFamily: FONT }}>
+    <div className="fc-split" style={{ display: 'flex', height: '100%', minHeight: 0, width: '100%', fontFamily: FONT }}>
       {/* LEFT — a flex column: the form scrolls, the action bar is a real
           footer BENEATH it, not a sticky box inside it.
           `position: sticky; bottom: 0` only pins the bar to the bottom of the

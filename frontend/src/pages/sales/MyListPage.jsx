@@ -20,6 +20,7 @@ import { api } from '../../api.js';
 import { showError, showSuccess } from '../../lib/feedback.js';
 import { StageBadge } from '../academy/shared.jsx';
 import ChatWindow from '../../components/ChatWindow.jsx';
+import { useIsPhone } from '../../lib/useIsPhone.js';
 import ChatProfilePanel from '../../components/ChatProfilePanel.jsx';
 import FollowUpModal from '../../components/FollowUpModal.jsx';
 import {
@@ -62,12 +63,13 @@ export default function MyListPage({ user, navigate, subParts = [] }) {
   const setView = (v) => (v === 'calendar' ? navigate('follow-ups', 'calendar') : navigate('follow-ups'));
 
   // Nothing selected yet: open the first lead on the list, so the page is never
-  // an empty middle pane.
+  // an empty middle pane. Not on a phone, where the list IS the page.
+  const phone = useIsPhone();
   useEffect(() => {
-    if (view === 'chats' && !selContact && items?.length) {
+    if (!phone && view === 'chats' && !selContact && items?.length) {
       navigate('follow-ups', items[0].waNumber, items[0].contactNumber);
     }
-  }, [view, selContact, items, navigate]);
+  }, [phone, view, selContact, items, navigate]);
 
   const counts = useMemo(() => {
     const t = todayIST();
@@ -77,7 +79,7 @@ export default function MyListPage({ user, navigate, subParts = [] }) {
   }, [items]);
 
   return (
-    <div style={{ flex: 1, minHeight: 0, height: '100%', display: 'flex', flexDirection: 'column', padding: '20px 24px 16px', boxSizing: 'border-box', fontFamily: FONT }}>
+    <div style={{ flex: 1, minHeight: 0, height: '100%', display: 'flex', flexDirection: 'column', padding: phone ? '12px 12px 10px' : '20px 24px 16px', boxSizing: 'border-box', fontFamily: FONT }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 20, fontWeight: W.heavy, color: C.text, lineHeight: LH.tight }}>Follow-up</div>
@@ -100,7 +102,7 @@ export default function MyListPage({ user, navigate, subParts = [] }) {
 
       {view === 'calendar'
         ? <CalendarView user={user} isAdmin={isAdmin} onOpenChat={openChat} onChanged={loadList} />
-        : <ChatsView user={user} items={items} selWa={selWa} selContact={selContact} onOpenChat={openChat} onChanged={loadList} />}
+        : <ChatsView user={user} items={items} selWa={selWa} selContact={selContact} onOpenChat={openChat} onChanged={loadList} onBack={() => navigate('follow-ups')} />}
     </div>
   );
 }
@@ -115,7 +117,9 @@ const FILTERS = [
   { key: 'none', label: 'No date' },
 ];
 
-function ChatsView({ user, items, selWa, selContact, onOpenChat, onChanged }) {
+function ChatsView({ user, items, selWa, selContact, onOpenChat, onChanged, onBack }) {
+  // Phones: the list, or the chat with a way back — never both, no details pane.
+  const phone = useIsPhone();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
   const [details, setDetails] = useState(() => lsGet(LS_DETAILS, '1') === '1');
@@ -145,7 +149,8 @@ function ChatsView({ user, items, selWa, selContact, onOpenChat, onChanged }) {
       border: `1px solid ${C.border}`, background: 'var(--c-cardBg)',
     }}>
       {/* Lead list */}
-      <aside style={{ width: 330, flexShrink: 0, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${C.border}`, minHeight: 0 }}>
+      <aside style={{ width: phone ? 'auto' : 330, flex: phone ? 1 : undefined, minWidth: 0, flexShrink: 0,
+        ...(phone && selWa && selContact ? { display: 'none' } : {}), display: 'flex', flexDirection: 'column', borderRight: `1px solid ${C.border}`, minHeight: 0 }}>
         <div style={{ padding: 12, borderBottom: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ position: 'relative' }}>
             <Search size={15} color={C.textMuted} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)' }} />
@@ -177,7 +182,7 @@ function ChatsView({ user, items, selWa, selContact, onOpenChat, onChanged }) {
       </aside>
 
       {/* Live chat */}
-      <section style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      <section style={{ flex: 1, minWidth: 0, display: phone && !(selWa && selContact) ? 'none' : 'flex', flexDirection: 'column', position: 'relative' }}>
         {selWa && selContact ? (
           <ChatWindow
             key={`${selWa}-${selContact}`}
@@ -185,6 +190,7 @@ function ChatsView({ user, items, selWa, selContact, onOpenChat, onChanged }) {
             contactNumber={selContact}
             user={user}
             onListChange={onChanged}
+            onBack={phone ? onBack : undefined}
           />
         ) : (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textSecondary, fontSize: T.bodyLg, padding: 30, textAlign: 'center' }}>
@@ -194,7 +200,7 @@ function ChatsView({ user, items, selWa, selContact, onOpenChat, onChanged }) {
       </section>
 
       {/* Lead details */}
-      {selWa && selContact && (
+      {selWa && selContact && !phone && (
         details ? (
           <aside style={{ width: 360, flexShrink: 0, borderLeft: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', padding: '8px 10px 0', justifyContent: 'space-between' }}>
@@ -276,6 +282,8 @@ function LeadRow({ i, today, active, onClick, onUnpin }) {
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 function CalendarView({ user, isAdmin, onOpenChat, onChanged }) {
+  // Phones: month grid on top, the day agenda under it, the whole thing scrolling.
+  const phone = useIsPhone();
   const today = todayIST();
   const [month, setMonth] = useState(today.slice(0, 7));                 // 'YYYY-MM'
   const [selDay, setSelDay] = useState(today);
@@ -328,9 +336,9 @@ function CalendarView({ user, isAdmin, onOpenChat, onChanged }) {
   const dayList = byDay[selDay] || [];
 
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 14 }}>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 14, ...(phone ? { flexDirection: 'column', overflowY: 'auto' } : {}) }}>
       {/* Month grid */}
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', borderRadius: 14, border: `1px solid ${C.border}`, background: 'var(--c-cardBg)', overflow: 'hidden' }}>
+      <div style={{ flex: phone ? 'none' : 1, minWidth: 0, display: 'flex', flexDirection: 'column', borderRadius: 14, border: `1px solid ${C.border}`, background: 'var(--c-cardBg)', overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', borderBottom: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
           <IconBtn onClick={() => shiftMonth(-1)} title="Previous month"><ChevronLeft size={17} /></IconBtn>
           <IconBtn onClick={() => shiftMonth(1)} title="Next month"><ChevronRight size={17} /></IconBtn>
@@ -350,7 +358,7 @@ function CalendarView({ user, isAdmin, onOpenChat, onChanged }) {
             <div key={d} style={{ padding: '8px 10px', fontSize: T.label, fontWeight: W.bold, textTransform: 'uppercase', letterSpacing: '.06em', color: C.textSecondary }}>{d}</div>
           ))}
         </div>
-        <div data-testid="cal-grid" style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gridTemplateRows: 'repeat(6, minmax(92px, 1fr))', overflowY: 'auto' }}>
+        <div data-testid="cal-grid" style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gridTemplateRows: phone ? 'repeat(6, minmax(58px, auto))' : 'repeat(6, minmax(92px, 1fr))', overflowY: 'auto' }}>
           {grid.map((day, idx) => {
             const inMonth = day.slice(0, 7) === month;
             const list = byDay[day] || [];
@@ -399,7 +407,7 @@ function CalendarView({ user, isAdmin, onOpenChat, onChanged }) {
       </div>
 
       {/* Day agenda */}
-      <aside style={{ width: 340, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, overflowY: 'auto' }}>
+      <aside style={{ width: phone ? 'auto' : 340, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, overflowY: phone ? 'visible' : 'auto' }}>
         {overdue.length > 0 && (
           <AgendaCard title={`Overdue · ${overdue.length}`} tone="overdue" icon={AlertTriangle}>
             {overdue.map(f => <AgendaItem key={f.id} f={f} today={today} onOpenChat={onOpenChat} onDone={markDone} onEdit={() => setEditing(f)} />)}

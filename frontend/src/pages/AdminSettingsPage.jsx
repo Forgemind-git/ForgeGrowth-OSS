@@ -23,6 +23,7 @@ import { useTableSelection, SelectAllCheckbox, RowCheckbox, BulkDeleteButton, ru
 import { FunnelSettingsContent } from './sales/FunnelSettingsPage.jsx';
 import EntityFieldsManager from '../components/EntityFieldsManager.jsx';
 import SocialSettingsPart from '../social/SocialSettingsPart.jsx';
+import { useIsPhone } from '../lib/useIsPhone.js';
 
 // Permission units. `admin-settings:<key>` in a user's pages array grants the
 // key's Sales & Chats pane; SOCIAL_PARTS says who may open its Instagram pane.
@@ -1223,6 +1224,7 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
   // 'admin-settings:<pane>' in their pages array (or the Social page, for the
   // Instagram halves SOCIAL_PARTS opens to everyone with it).
   const isAdmin = user?.role === 'admin';
+  const phone = useIsPhone();
   const userPages = new Set(user?.pages || []);
   const hasSocial = isAdmin || userPages.has('social');
   const paneDef = (key) => TABS.find(t => t.key === key);
@@ -1287,7 +1289,7 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
   const renderTab = () => {
     if (!activePage) return null;
     const header = (
-      <div style={{ padding: '24px 28px 6px', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 14 }}>
+      <div style={{ padding: phone ? '12px 14px 4px' : '24px 28px 6px', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 14 }}>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 780, letterSpacing: '-0.02em', color: C.text, fontFamily: FONT }}>{activePage.label}</h1>
         {activePage.sections.length > 1 && (
           <PillStrip size="sm" value={activeSection.id} onChange={id => { setCategoryDetailId(null); goTo(activePage.key, id); }}
@@ -1299,7 +1301,7 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
       return (
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
           {header}
-          <div style={{ padding: '0 28px 28px' }}>
+          <div style={{ padding: phone ? '0 14px 20px' : '0 28px 28px' }}>
             <SocialSettingsPart part={activeSection.pane} platform={socialPlatform} user={user} />
           </div>
         </div>
@@ -1353,6 +1355,33 @@ export default function AdminSettingsPage({ onLogout, onNavigate, subParts = [],
       default: return <GeneralTab onLogout={onLogout} user={user} />;
     }
   };
+
+  // Phones: no side menu (it took the whole width) — Back plus a page picker,
+  // grouped like the menu, above the page at full width.
+  if (phone) {
+    return (
+      <div className="fc-settings" style={{ display: 'flex', flexDirection: 'column', flex: 1, height: '100%', overflow: 'hidden', background: C.pageBg }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 10px 4px', flexShrink: 0 }}>
+          <button onClick={() => onNavigate('home')} aria-label="Back to home" title="Back to home"
+            style={{ width: 40, height: 40, borderRadius: 999, border: 'none', background: 'var(--fc-surface)', color: C.text, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer' }}>
+            <ArrowLeft size={18} />
+          </button>
+          <select aria-label="Settings page" value={activePage?.key || ''} onChange={e => handleTabChange(e.target.value)}
+            style={{ flex: 1, minWidth: 0, height: 40, padding: '0 12px', borderRadius: 12, border: 'none', fontFamily: FONT, fontSize: 16, fontWeight: 650 }}>
+            {NAV_GROUPS.map(g => {
+              const pages = visiblePages.filter(p => p.group === g.key);
+              return pages.length ? (
+                <optgroup key={g.key} label={g.label}>
+                  {pages.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+                </optgroup>
+              ) : null;
+            })}
+          </select>
+        </div>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>{renderTab()}</div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flex: 1, height: '100%', overflow: 'hidden', background: C.pageBg }}>

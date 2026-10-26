@@ -5,6 +5,7 @@ import NumberSidebar from './NumberSidebar.jsx';
 import ContactList from './ContactList.jsx';
 import ChatWindow from './ChatWindow.jsx';
 import { C } from '../constants.js';
+import { useIsPhone } from '../lib/useIsPhone.js';
 
 const MIN_CONTACT_W = 280;
 const MAX_CONTACT_W = 620;
@@ -70,6 +71,44 @@ export default function ChatsPage({ subParts = [], navigate, user }) {
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
   }, [contactWidth]);
+
+  // Phones: one pane at a time, like WhatsApp — numbers, then that number's
+  // contacts, then the chat, each with a way back.
+  const phone = useIsPhone();
+  if (phone) {
+    return (
+      <div style={{ display: 'flex', flex: 1, height: '100%', overflow: 'hidden', background: C.pageBg }}>
+        {selectedContact ? (
+          <ChatWindow
+            key={`${selectedNumber}-${selectedContact}`}
+            waNumber={selectedNumber}
+            contactNumber={selectedContact}
+            user={user}
+            onContactSaved={() => setContactRefreshKey(k => k + 1)}
+            onBack={() => navigate('chats', selectedNumber)}
+          />
+        ) : selectedNumber ? (
+          <ContactList
+            key={selectedNumber}
+            waNumber={selectedNumber}
+            fill
+            selectedContact={null}
+            onSelectContact={selectContact}
+            refreshKey={contactRefreshKey}
+            user={user}
+            onBack={() => navigate('chats')}
+          />
+        ) : (
+          <NumberSidebar
+            fill
+            selectedNumber={null}
+            onSelectNumber={selectNumber}
+            canRename={user?.role === 'admin'}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div ref={rootRef} style={{ display: 'flex', flex: 1, height: '100%', overflow: 'hidden', background: C.pageBg }}>

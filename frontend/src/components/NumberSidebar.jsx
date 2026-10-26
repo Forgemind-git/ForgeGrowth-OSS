@@ -6,7 +6,7 @@ import { useServerEvents } from '../hooks/useServerEvents.js';
 import { api } from '../api.js';
 import { C, FONT, maskPhone } from '../constants.js';
 
-export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollapse, canRename = false }) {
+export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollapse, canRename = false, fill = false }) {
   const [search, setSearch] = useState('');
   const [renaming, setRenaming] = useState(null);
   // 30s polling as a fallback; SSE pushes most updates within ~100ms.
@@ -31,8 +31,9 @@ export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollap
   return (
     <aside style={{
       // Gives way (down to 240) before the chat does when the window is narrow.
-      flex: '0 1 320px',
-      minWidth: 240,
+      // `fill`: the only pane on screen (a phone, ChatsPage).
+      flex: fill ? '1 1 auto' : '0 1 320px',
+      minWidth: fill ? 0 : 240,
       background: 'var(--c-cardBg)',
       borderRight: `1px solid ${C.borderDark}`,
       display: 'flex',
@@ -52,7 +53,7 @@ export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollap
         <span style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: FONT, letterSpacing: '-0.01em' }}>
           WhatsApp Numbers
         </span>
-        <button
+        {onCollapse && <button
           onClick={onCollapse}
           title="Hide WhatsApp numbers"
           style={{
@@ -65,7 +66,7 @@ export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollap
           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
         >
           <ChevronLeft size={18} />
-        </button>
+        </button>}
       </div>
 
       {/* Search */}

@@ -41,7 +41,7 @@ export function PageShell({ heading, subtitle, actions, children }) {
             {heading && <h1 className="fg-page-heading" style={{ margin: 0, fontSize: 20, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{heading}</h1>}
             {subtitle && <div className="fg-page-sub" style={{ fontSize: 14, color: C.textSecondary, marginTop: heading ? 2 : 0 }}>{subtitle}</div>}
           </div>
-          {actions && <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginLeft: 'auto' }}>{actions}</div>}
+          {actions && <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginLeft: 'auto', maxWidth: '100%', minWidth: 0 }}>{actions}</div>}
         </div>
       )}
       {children}

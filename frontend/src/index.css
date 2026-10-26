@@ -5,6 +5,9 @@
 /* Default size of the whole app: 110%. See lib/uiZoom.js for what this means
    for positions and viewport units. Set --fg-zoom: 1 to go back to 100%. */
 :root { --fg-zoom: 1.1; }
+/* Phones and portrait tablets get 100%: every layout px counts there, and they
+   render text at a comfortable size. Keep the width in step with lib/useIsPhone.js. */
+@media (max-width: 900px) { :root { --fg-zoom: 1; } }
 html { zoom: var(--fg-zoom); }
 
 html, body, #root {

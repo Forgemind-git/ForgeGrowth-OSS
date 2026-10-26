@@ -1,7 +1,7 @@
 import { toLayout } from '../lib/uiZoom.js';
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { notify } from '../lib/feedback.js';
-import { Search, Loader2, MoreVertical, Phone, Pencil, X, Send, Lock, Paperclip, Image as ImageIcon, FileText, Video, Music, Library, RefreshCw, CheckCircle2, AlertTriangle, Mic, Square, Trash2, User, Download, Reply, Forward, Tag, UserPlus, Check, Bot, Pin, PinOff, CalendarClock, Flag } from 'lucide-react';
+import { ArrowLeft, Search, Loader2, MoreVertical, Phone, Pencil, X, Send, Lock, Paperclip, Image as ImageIcon, FileText, Video, Music, Library, RefreshCw, CheckCircle2, AlertTriangle, Mic, Square, Trash2, User, Download, Reply, Forward, Tag, UserPlus, Check, Bot, Pin, PinOff, CalendarClock, Flag } from 'lucide-react';
 import PillStrip from './PillStrip.jsx';
 import { usePolling } from '../hooks/usePolling.js';
 import { useServerEvents } from '../hooks/useServerEvents.js';
@@ -123,7 +123,7 @@ function ForwardModal({ waNumber, message, onClose }) {
   );
 }
 
-export default function ChatWindow({ waNumber, contactNumber, user, onContactSaved, onListChange }) {
+export default function ChatWindow({ waNumber, contactNumber, user, onContactSaved, onListChange, onBack }) {
   const [page, setPage] = useState(1);
   const [limit] = useState(50);
   const [search, setSearch] = useState('');
@@ -941,9 +941,9 @@ export default function ChatWindow({ waNumber, contactNumber, user, onContactSav
     }}>
       {/* Chat header — WhatsApp green in light, deep slate in dark */}
       <div ref={headerRef} style={{
-        padding: headerCompact ? '10px 10px' : '10px 16px',
+        padding: headerCompact ? '10px 6px' : '10px 16px',
         background: 'var(--c-chatHeaderBg)',
-        display: 'flex', alignItems: 'center', gap: headerCompact ? 6 : 12,
+        display: 'flex', alignItems: 'center', gap: headerCompact ? 3 : 12,
         flexShrink: 0,
       }}>
         {searchOpen ? (
@@ -970,6 +970,12 @@ export default function ChatWindow({ waNumber, contactNumber, user, onContactSav
           </>
         ) : (
           <>
+            {/* Phones show one pane at a time (ChatsPage): back to the list. */}
+            {onBack && (
+              <button onClick={onBack} aria-label="Back to contacts" title="Back" style={headerIconBtn}>
+                <ArrowLeft size={18} />
+              </button>
+            )}
             {/* Avatar — the way into the full profile, as in WhatsApp. */}
             <button
               onClick={() => setProfileOpen(true)}

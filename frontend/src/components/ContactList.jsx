@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Search, User } from 'lucide-react';
+import { Search, User, ArrowLeft } from 'lucide-react';
 import { usePolling } from '../hooks/usePolling.js';
 import { useServerEvents } from '../hooks/useServerEvents.js';
 import { api } from '../api.js';
@@ -8,7 +8,7 @@ import TagMultiSelect from './TagMultiSelect.jsx';
 
 
 
-export default function ContactList({ waNumber, width = 380, selectedContact, onSelectContact, refreshKey, user }) {
+export default function ContactList({ waNumber, width = 380, selectedContact, onSelectContact, refreshKey, user, fill = false, onBack }) {
   const [search, setSearch] = useState('');
   const [categories, setCategories] = useState([]);
   const [allTags, setAllTags] = useState([]);
@@ -70,7 +70,8 @@ export default function ContactList({ waNumber, width = 380, selectedContact, on
     <div style={{
       // The chosen width is a preference, not a floor: when the window is
       // short of room this list gives way (down to 260) before the chat does.
-      flex: `0 1 ${width}px`, minWidth: Math.min(width, 260),
+      // `fill`: the only pane on screen (a phone, ChatsPage).
+      flex: fill ? '1 1 auto' : `0 1 ${width}px`, minWidth: fill ? 0 : Math.min(width, 260),
       background: 'var(--c-cardBg)',
       borderRight: `1px solid ${C.borderDark}`,
       display: 'flex', flexDirection: 'column',
@@ -81,9 +82,15 @@ export default function ContactList({ waNumber, width = 380, selectedContact, on
         padding: '12px 16px',
         background: 'var(--c-chatPanel)',
         borderBottom: `1px solid ${C.borderDark}`,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
       }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+        {onBack && (
+          <button onClick={onBack} aria-label="Back to WhatsApp numbers" title="Back"
+            style={{ width: 36, height: 36, borderRadius: 999, border: 'none', background: 'var(--c-hover)', color: C.text, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer' }}>
+            <ArrowLeft size={18} />
+          </button>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
           <span style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: FONT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {waName || maskPhone(waNumber) || 'Contacts'}
           </span>
