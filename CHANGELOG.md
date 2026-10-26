@@ -19,6 +19,12 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
 
 ### Added
 
+- **Contact Forgemind.** A "Want it customised?" card above the sidebar's Collapse control, and a
+  matching button beside the avatar in the top bar (the way to it on a phone), open the Forgemind
+  contact details: WhatsApp with a pre-filled message, and email with a pre-filled subject and body.
+
+### Added
+
 - **Phones and tablets.** Below 900 px wide the app switches to a phone layout: a bottom tab bar
   replaces the side rail, the top bar compacts (theme toggle moves into the avatar menu), and the
   page uses the full screen height including the notch and home-indicator insets.

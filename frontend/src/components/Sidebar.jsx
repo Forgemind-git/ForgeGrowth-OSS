@@ -15,6 +15,7 @@ import {
 import { C, FONT } from '../constants.js';
 import { SOCIAL_NAV, SOCIAL_PAGE_ALIASES } from '../social/nav.js';
 import { HUBS, allowedTabs } from './AutomationHub.jsx';
+import { SidebarContactCard } from './ContactForgemind.jsx';
 
 // Home is pinned above the groups — it is the one destination that belongs to
 // no category, and burying it would cost a click on every session.
@@ -357,6 +358,7 @@ export default function Sidebar({ activePage, onPageChange, collapsed, setCollap
       {/* Collapse button + watermark — flexShrink:0 so it is never the thing
           that gets pushed out when the nav is long or the window is short. */}
       <div style={{ flexShrink: 0, padding: '0 12px 4px' }}>
+        <SidebarContactCard collapsed={collapsed} />
         <div
           onClick={() => setCollapsed(p => !p)}
           style={{
