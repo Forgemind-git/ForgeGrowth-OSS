@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Bell, LogOut, Settings, AlertTriangle, MessageSquare, CheckCheck, Sun, Moon, AtSign, TrendingUp } from 'lucide-react';
+import { Bell, LogOut, Settings, AlertTriangle, MessageSquare, CheckCheck, Sun, Moon, AtSign, TrendingUp, Sparkles } from 'lucide-react';
 import { C, FONT, MONO, relativeTime, maskPhone } from '../constants.js';
 import { api } from '../api.js';
 import { showError } from '../lib/feedback.js';
@@ -7,6 +7,7 @@ import { useTheme } from '../theme.jsx';
 import logoUrl from '../assets/forgemind-logo.gif';
 import { HeaderSegmented } from './PillStrip.jsx';
 import { useIsPhone } from '../lib/useIsPhone.js';
+import { ContactDialog } from './ContactForgemind.jsx';
 
 // Two modes, one switch. The icon shows the mode you are IN; clicking flips it.
 
@@ -57,6 +58,7 @@ export default function Topbar({ user, onLogout, onNavigate, navigate, section, 
   // avatar menu — the bar fits a 390px screen with all four controls tappable.
   const phone = useIsPhone();
   const [userOpen, setUserOpen] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
   const [unhealthyAccounts, setUnhealthyAccounts] = useState([]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifs, setNotifs] = useState([]);
@@ -308,6 +310,13 @@ export default function Topbar({ user, onLogout, onNavigate, navigate, section, 
             </div>
           )}
         </div>
+
+        {/* Contact Forgemind for customisation — the same card as the one above
+            the sidebar's Collapse, and the only way to it on a phone. */}
+        <IconButton title="Customise Forge Growth — contact Forgemind" onClick={() => setContactOpen(true)}>
+          <Sparkles size={16} strokeWidth={2} />
+        </IconButton>
+        {contactOpen && <ContactDialog onClose={() => setContactOpen(false)} />}
 
         <div ref={ref} style={{ position: 'relative' }}>
           {/* The avatar is the accent disc — the one saturated thing on the bar
