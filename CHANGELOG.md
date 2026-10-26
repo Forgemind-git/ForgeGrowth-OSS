@@ -28,6 +28,10 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
   An existing value is never changed.
 - The installer's closing "Next steps" named `Admin Settings → WhatsApp Accounts`, a menu that no
   longer exists. It now says `Settings → WhatsApp → Accounts`, and adds where to connect Instagram.
+- **The installer hung forever, silently, on Alpine Linux** (and in `docker:dind`) right after
+  "install name". BusyBox's `lsof` ignores its arguments and reports success, so every port looked
+  taken and the search for a free one never ended. It now uses `netstat` there, and stops with a clear
+  message if a hundred ports in a row read as busy.
 
 ### Documentation
 
