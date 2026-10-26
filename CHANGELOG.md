@@ -29,6 +29,10 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
 
 ### Removed
 
+- **The wa.me link trigger** in the WhatsApp automation builder (and in MCP's `create_automation`).
+  It fired on a tracking code in a wa.me link's pre-filled message, and nothing in this version
+  generates those links any more. A saved flow that still uses it shows the trigger as removed, never
+  starts, and cannot be switched on until another trigger is chosen.
 - **The separate Social MCP server** (`/api/social/mcp/http/<key>`, Settings → Claude & MCP →
   Instagram API keys). The URL it handed out pointed at the main server, which does not know those
   keys, so no connector built from it could connect. Every Instagram tool is on the one MCP server

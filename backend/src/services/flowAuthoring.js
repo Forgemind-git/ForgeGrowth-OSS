@@ -68,7 +68,6 @@ const AUTHORABLE_TYPES = {
  */
 const TRIGGER_KINDS = {
   keyword:    { required: 'keyword',      note: 'Also takes matchType: exact|contains|starts (default exact) and caseSensitive. Optional landingSource (e.g. "claude-landing") fires it only for people whose landing-page details are stored, and exposes those details as {{form_name}} / {{form_summary}}.' },
-  link:       { required: 'trackingCode', note: 'Fires when the opening message contains this code — pair it with a Message Format link.' },
   tagApplied: { required: 'tag',          note: 'Also takes tagDirection: added|removed and fireOncePerTag.' },
   newContact: { required: null,           note: 'Fires the first time a number ever messages in.' },
   anyMessage: { required: null,           note: 'Fires on every inbound message. Use sparingly.' },

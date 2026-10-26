@@ -2749,19 +2749,9 @@ async function evaluateTriggers(messageRecord) {
           const execution = await executeAutomation(client, automation, context);
           if (execution) executions.push(execution);
         }
-      } else if (triggerKind === 'link') {
-        // Click-to-chat link: the wa.me pre-filled text carries a tracking
-        // code. We fire when the inbound message body contains it — that's how
-        // a BSP attributes the source. (The QR variant was removed 2026-08-12;
-        // it was the same mechanism under a different label.)
-        const code = String(triggerNode.trackingCode || '').trim();
-        const body = messageRecord.message_body || '';
-        if (code && messageRecord.message_type !== 'status' && body.toLowerCase().includes(code.toLowerCase())) {
-          console.log(`[engine] link code match "${code}": automation=${automation.id}`);
-          const execution = await executeAutomation(client, automation, context);
-          if (execution) executions.push(execution);
-        }
       }
+      // The wa.me-link trigger ('link') was removed 2026-10-26; a saved flow that
+      // still has one simply never starts, and flowValidator refuses to activate it.
       // tagApplied fires via fireTagAppliedTriggers (tag mutations).
     }
 
