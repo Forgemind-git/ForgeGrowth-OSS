@@ -145,8 +145,8 @@ it while it is still a draft. See **forge-growth-agents**.
 
 ## When something is blocked
 
-- **"The '<name>' tool category is switched off"** → that category is off in Admin Settings
-  → MCP Tools. The error names the category exactly as it appears on that screen, so relay
+- **"The '<name>' tool category is switched off"** → that category is off in Settings
+  → Claude & MCP. The error names the category exactly as it appears on that screen, so relay
   it verbatim — e.g. *Template Builder*, *Media Library*, *Send Messages*, *Broadcasts*,
   *Automations*, *Leads & Funnel*. You cannot enable it yourself, by design.
 - **OUTSIDE_WINDOW** → the customer hasn't messaged in 24h; use `send_template`.

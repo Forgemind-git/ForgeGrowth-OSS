@@ -17,7 +17,7 @@ A Meta app with the WhatsApp product enabled, and from it:
 
 ### 1. Add the account
 
-**Admin Settings → WhatsApp Accounts → Add.** Paste the display number (digits only), Phone Number
+**Settings → WhatsApp → Accounts → Add account.** Paste the display number (digits only), Phone Number
 ID, WABA ID, App ID and access token. The token is encrypted at rest with AES-256-GCM.
 
 ### 2. Point Meta's webhook at this install
@@ -35,7 +35,7 @@ the others.
 
 ### 3. Prove it works
 
-**Admin Settings → Webhooks → Send Test Webhook**, and pick "Incoming text message". A row should
+**Settings → WhatsApp → Webhook → Send Test Webhook**, and pick "Incoming text message". A row should
 appear in the audit log with `processed` status and `records_extracted=1`.
 
 Multiple numbers are supported. Each carries its own encrypted token and its own webhook verify

@@ -18,8 +18,9 @@ Exactly one thing, and it is smaller than it looks:
 > install's **`web` container on port 80**.
 
 Everything else — the certificate, HTTP→HTTPS redirects, compression — belongs to that existing
-proxy and is not this install's business. There is nothing to configure inside the app beyond
-adding the domain in Admin Settings so the API accepts requests from it.
+proxy and is not this install's business. There is nothing to configure inside the app: set
+`CORS_ORIGIN` in `.env` to the address people use, and `PUBLIC_URL` too if the proxy rewrites the
+Host header or hides https (see [`features.md`](./features.md#connecting)).
 
 Two routes into the container, in order of preference:
 

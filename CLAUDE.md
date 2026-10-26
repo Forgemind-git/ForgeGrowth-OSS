@@ -11,8 +11,10 @@ change it safely*.
 
 ## What this is
 
-A self-hosted WhatsApp-native growth stack: WhatsApp conversation → lead → funnel stage → sale,
-with an Instagram workspace beside it, in one Express + React app over one PostgreSQL database.
+Self-hosted Instagram and WhatsApp automation with the sales CRM behind it: Instagram DM
+automations and agents (the Social section, `backend/src/social/`, schema `social`), WhatsApp flows,
+agents, templates and chats, and the conversation → lead → funnel stage → sale path — in one
+Express + React app over one PostgreSQL database.
 
 Single-tenant by design. There is no workspace or organisation concept anywhere — every config
 table is a singleton `id = 1` row. Do not add a `workspace_id` that would only ever hold one value.
@@ -257,6 +259,7 @@ backend/src/
   integrations/    Meta send/media/templates, Google
   queue/           BullMQ workers: send · media · agent runs
   routes/          HTTP surface, one file per area
+  social/          the Instagram sub-app, mounted at /api/social, schema `social`
   services/        logic shared by UI routes and MCP — put it here, not in a route
     metaPayload.js   raw Meta webhook payload → message records (pure; the
                      ingestion contract, covered by test/metaPayload.unit.test.js)
@@ -264,6 +267,7 @@ frontend/src/
   api.js           the only place fetch is called
   components/      chat UI, automation builder, agent editor
   pages/           sales/ · admin · chats
+  social/          the Social section (Instagram) — its own pages, styles scoped under .social-root
 supabase/migrations/   numbered SQL
 caddy/Caddyfile        HTTPS in front of `web`; only used when the `tls` profile is on
 scripts/               install · up · down · uninstall · migrate · generate-secrets
