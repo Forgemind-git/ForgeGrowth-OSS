@@ -17,6 +17,29 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
 
 ## [Unreleased]
 
+## [3.1.1] — 2026-10-26
+
+### Fixed
+
+- **Instagram could not be connected on a fresh install.** The Social section refuses to save
+  Instagram credentials without `SOCIAL_ENCRYPTION_KEY`, and nothing generated it, so every new install
+  needed a hand edit of `.env` that no page mentioned. The installer and `generate-secrets.sh` now
+  generate it with the other secrets; re-run `./install.sh` on an existing install to fill it in.
+  An existing value is never changed.
+- The installer's closing "Next steps" named `Admin Settings → WhatsApp Accounts`, a menu that no
+  longer exists. It now says `Settings → WhatsApp → Accounts`, and adds where to connect Instagram.
+- **The installer hung forever, silently, on Alpine Linux** (and in `docker:dind`) right after
+  "install name". BusyBox's `lsof` ignores its arguments and reports success, so every port looked
+  taken and the search for a free one never ended. It now uses `netstat` there, and stops with a clear
+  message if a hundred ports in a row read as busy.
+
+### Documentation
+
+- **The printable installation guide is rewritten for this release.** The previous PDF dated from
+  before 1.0.0 and sent people to Admin Settings → Domain, which 3.0.0 removed. New: the download
+  bundle, a chapter on connecting Instagram, and domain checks that use `curl`. Its HTML source is now
+  in `docs/guide/`, and `scripts/make-guide.sh` rebuilds the PDF from it.
+
 ## [3.1.0] — 2026-10-26
 
 **Fresh installs work again.** Every new install of 3.0.0 stopped while pulling images, because the
@@ -400,7 +423,8 @@ Published as multi-architecture images (`linux/amd64` and `linux/arm64`) at
 - Playwright end-to-end tests are not run in CI — they need the full stack and browser binaries, so
   run them locally against a live install.
 
-[Unreleased]: https://github.com/Forgemind-git/ForgeGrowth-OSS/compare/v3.1.0...HEAD
+[Unreleased]: https://github.com/Forgemind-git/ForgeGrowth-OSS/compare/v3.1.1...HEAD
+[3.1.1]: https://github.com/Forgemind-git/ForgeGrowth-OSS/compare/v3.1.0...v3.1.1
 [3.1.0]: https://github.com/Forgemind-git/ForgeGrowth-OSS/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/Forgemind-git/ForgeGrowth-OSS/compare/v1.0.1...v3.0.0
 [2.0.0]: https://github.com/Forgemind-git/ForgeGrowth-OSS/compare/v1.0.1...v2.0.0

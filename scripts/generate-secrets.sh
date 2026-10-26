@@ -20,6 +20,7 @@ echo "FORGECRM_ENCRYPTION_KEY=$(openssl rand -hex 32)"
 echo "META_WEBHOOK_VERIFY_TOKEN=$(openssl rand -hex 16)"
 echo "POSTGRES_PASSWORD=$(openssl rand -base64 24 | tr -d '\n=/+' )"
 echo "MINIO_ROOT_PASSWORD=$(openssl rand -base64 24 | tr -d '\n=/+' )"
+echo "SOCIAL_ENCRYPTION_KEY=$(openssl rand -hex 32)"
 echo ""
 echo "# Keep FORGECRM_ENCRYPTION_KEY safe: it decrypts every stored Meta/Google/" >&2
 echo "# gateway credential. Losing it means re-entering all of them." >&2

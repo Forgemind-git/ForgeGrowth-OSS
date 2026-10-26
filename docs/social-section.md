@@ -32,7 +32,7 @@ Required:
 
 | Variable | Purpose |
 |---|---|
-| `SOCIAL_ENCRYPTION_KEY` | Encrypts stored secrets (AI keys, Instagram tokens). Saving any secret is refused until it is set. Use a long random string and never change it once secrets are saved. |
+| `SOCIAL_ENCRYPTION_KEY` | Encrypts stored secrets (AI keys, Instagram tokens). Saving any secret is refused until it is set. **The installer generates it** (3.1.1 and later; re-run `./install.sh` on an older install). By hand: a long random string, `openssl rand -hex 32`. Never change it once secrets are saved. |
 | `SOCIAL_PUBLIC_BASE_URL` | Defaults to this install's own address (`https://$TLS_DOMAIN`, else the first `CORS_ORIGIN`). The OAuth callback is `<base>/api/social/instagram/oauth/callback`. |
 
 The Meta app (Instagram, Webhooks). These can also be entered in
@@ -56,8 +56,8 @@ Optional: `SOCIAL_REDIS_URL` (defaults to ForgeGrowth's), `SOCIAL_SYNC_INTERVAL_
 
 ## Turning it on
 
-1. Set `SOCIAL_ENCRYPTION_KEY` in `.env` and restart. The `social` schema is
-   created on boot.
+1. Check `SOCIAL_ENCRYPTION_KEY` is set in `.env` — the installer generates it; if it is empty,
+   re-run `./install.sh`. The `social` schema is created on boot.
 2. Settings → Instagram → Connection: enter the app credentials and connect each
    account.
 3. Set `SOCIAL_JOBS_ENABLED=1` and restart the backend to start syncing.
