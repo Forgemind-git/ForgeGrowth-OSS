@@ -165,6 +165,58 @@ fine for a look around but not for WhatsApp — Meta requires HTTPS for webhooks
 When it finishes, connect a channel — **[a WhatsApp number](./docs/whatsapp.md)**, **[an Instagram
 account](./docs/social-section.md)**, or both.
 
+### Rather have Claude Code do it?
+
+SSH into the server, start [Claude Code](https://claude.com/claude-code) with `claude`, and paste the
+prompt below. Change the first line to your domain. Claude checks the server first and picks the
+right route — its own HTTPS, behind a proxy you already run, or no domain yet — then runs the same
+installer and proves the result before calling it done.
+
+```text
+Install Forge Growth (https://github.com/Forgemind-git/ForgeGrowth-OSS) on this server, version v3.1.1.
+
+My domain: crm.example.com    <- replace with yours, or write "no domain yet"
+
+Read docs/install.md and docs/reverse-proxy.md at the v3.1.1 tag before you start. Then:
+
+1. Prerequisites. `docker compose version` must work. If Docker or the Compose v2 plugin is
+   missing, tell me and install it from docs.docker.com. Check there are 3 GB of free disk.
+
+2. Pick the route. Find this server's public IP, check whether my domain's A record resolves to
+   it, and check whether ports 80 and 443 are free (`ss -ltnp`).
+   - Domain resolves here and 80/443 are free: use `--domain <my domain>`.
+   - 80/443 are held by a reverse proxy already on this server (Traefik, nginx, Caddy, another
+     app): do NOT stop or reconfigure it globally. Use `--url https://<my domain> --port <a free
+     port>`, then route only my domain to that port in the existing proxy, as docs/reverse-proxy.md
+     describes. Put any extra compose file in COMPOSE_FILE inside the install's .env, never in an
+     exported shell variable.
+   - The domain does not resolve here yet: stop and tell me which DNS record to create.
+   - No domain: use `--url http://<public IP>:8080`, and remind me WhatsApp and Instagram need
+     HTTPS later.
+   Tell me which route you chose and why before running anything.
+
+3. Install, from my home directory, with the pinned one-liner:
+   bash -c "$(curl -fsSL https://raw.githubusercontent.com/Forgemind-git/ForgeGrowth-OSS/v3.1.1/scripts/install.sh)" -- --version v3.1.1 <flags from step 2> --yes
+
+4. Verify the outcome, not the steps:
+   curl -s -o /dev/null -w '%{http_code}\n' https://<my domain>/       -> must print 200
+   curl -s https://<my domain>/api/auth/me                             -> must print {"error":"Unauthorized"}
+   If the installer printed any "!" warning or either check fails, read
+   `docker compose logs caddy` / `docker compose logs backend` in the install directory and fix the
+   cause before telling me it is done.
+
+5. Report: the URL, the admin email, and the admin password (from BOOTSTRAP_ADMIN_PASSWORD in
+   the install's .env), and tell me to store FORGECRM_ENCRYPTION_KEY, SOCIAL_ENCRYPTION_KEY and
+   POSTGRES_PASSWORD from .env somewhere off this server.
+
+Rules: never edit or regenerate the secrets in .env; never run `docker compose down -v`; don't stop,
+restart or change other containers or sites on this server; start and stop Forge Growth only with
+./up.sh and ./down.sh from the install directory.
+
+When it is running, walk me through connecting WhatsApp (docs/whatsapp.md) and/or Instagram
+(docs/social-section.md).
+```
+
 ---
 
 The rest of this section is the same install, spelled out — for laptops, for Windows, and for handing
