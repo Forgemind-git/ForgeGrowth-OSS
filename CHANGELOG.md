@@ -56,6 +56,12 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
   (`util/expressErrors.js`, applied once). A malformed value in the request answers **400**, a body
   that is not JSON answers 400 instead of 500, and other failures a logged JSON 500. A stray
   rejection outside a request is logged rather than fatal.
+- **The chat message box no longer squeezes to a sliver.** With the WhatsApp Numbers list, the
+  contact list and a chat all open, the chat got whatever was left — at a 1440 px window the box was
+  ~125 px wide and "Type a message…" wrapped a word per line. The chat now keeps a usable width
+  (min 440 px, or 55% of the area) and the side lists shrink first; when even that does not fit, the
+  Numbers list folds to its rail while a chat is open (the rail still opens it, and a wider window
+  brings it back). Box width at 1440 px: ~125 → 422 px; at 1100 px: 94 → 210 px.
 - **Voice messages from Chats arrive as real voice notes and play on iPhone.** A recording (and a
   forwarded voice note) is sent with `voice: true` in WhatsApp's own file layout — 48 kHz mono Opus,
   120 ms packets, the audio on one Ogg page, vendor "WhatsApp" — copied from a voice note recorded on
