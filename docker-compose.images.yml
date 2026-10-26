@@ -76,7 +76,13 @@ services:
       retries: 20
 
   minio:
-    image: minio/minio:latest
+    # MinIO, Inc. stopped publishing community images in late 2025 and the
+    # minio/minio repository is gone from Docker Hub, so a fresh install failed
+    # at `docker compose pull`. pgsty/minio is a maintained build of the same
+    # server: same /data layout, same entrypoint, mc included for the healthcheck,
+    # so existing data volumes carry over. Pinned, not `latest` — an unpinned
+    # upstream is what broke installs the first time.
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     restart: unless-stopped
     mem_limit: ${MINIO_MEM_LIMIT:-256m}
     command: ["server", "/data", "--console-address", ":9001"]

@@ -30,7 +30,7 @@ The bundled `docker-compose.yml` brings up five services, plus one optional:
 | `web` | built from `frontend/Dockerfile` (`nginx:alpine` after `vite build`) | React SPA; nginx proxies `/api`, `/uploads`, `/media` to the backend |
 | `postgres` | `postgres:16-alpine` | every table, in the `coexistence` schema |
 | `redis` | `redis:7-alpine` | BullMQ: sends (rate-limited to 60/sec), media downloads, agent runs |
-| `minio` | `minio/minio` | object store for the Media Library |
+| `minio` | `pgsty/minio` (a maintained build of MinIO — the official image is no longer published) | object store for the Media Library |
 | `caddy` *(optional)* | `caddy:2-alpine` | HTTPS. Off unless the `tls` profile is on — see §4 |
 
 The frontend service is called **`web`**, not `frontend`. `docker compose logs -f web`.
