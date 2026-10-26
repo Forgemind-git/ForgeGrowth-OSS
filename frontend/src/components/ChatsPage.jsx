@@ -1,5 +1,5 @@
 import { toLayout } from '../lib/uiZoom.js';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronRight } from 'lucide-react';
 import NumberSidebar from './NumberSidebar.jsx';
 import ContactList from './ContactList.jsx';
@@ -11,6 +11,11 @@ const MAX_CONTACT_W = 620;
 const DEFAULT_CONTACT_W = 380;
 const LS_WIDTH = 'forgecrm.chats.contactWidth';
 const LS_COLLAPSED = 'forgecrm.chats.navCollapsed';
+// Below this much room (layout px) the three panes cannot all sit at a usable
+// width — numbers 320 + contacts 380 + a chat the composer fits in — so with a
+// chat open the numbers pane folds to its rail. Not saved: a wider window
+// brings it back.
+const TIGHT_W = 1100;
 
 export default function ChatsPage({ subParts = [], navigate, user }) {
   const selectedNumber = subParts[0] || null;
@@ -27,10 +32,23 @@ export default function ChatsPage({ subParts = [], navigate, user }) {
   });
 
   useEffect(() => { localStorage.setItem(LS_COLLAPSED, navCollapsed ? '1' : '0'); }, [navCollapsed]);
+
+  const rootRef = useRef(null);
+  const [tight, setTight] = useState(false);
+  // Opened from the rail while tight: stays open until the next chat is chosen.
+  const [peekNumbers, setPeekNumbers] = useState(false);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(() => setTight(toLayout(el.getBoundingClientRect().width) < TIGHT_W));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const numbersFolded = navCollapsed || (tight && !!selectedContact && !peekNumbers);
   useEffect(() => { localStorage.setItem(LS_WIDTH, String(contactWidth)); }, [contactWidth]);
 
   const selectNumber = (n) => navigate('chats', n);
-  const selectContact = (c) => navigate('chats', selectedNumber, c);
+  const selectContact = (c) => { setPeekNumbers(false); navigate('chats', selectedNumber, c); };
 
   // Drag the divider to resize the contacts list; the chat window (flex:1) takes the rest.
   const startResize = useCallback((e) => {
@@ -54,15 +72,15 @@ export default function ChatsPage({ subParts = [], navigate, user }) {
   }, [contactWidth]);
 
   return (
-    <div style={{ display: 'flex', flex: 1, height: '100%', overflow: 'hidden', background: C.pageBg }}>
-      {navCollapsed ? (
+    <div ref={rootRef} style={{ display: 'flex', flex: 1, height: '100%', overflow: 'hidden', background: C.pageBg }}>
+      {numbersFolded ? (
         <div style={{
           width: 48, minWidth: 48, flexShrink: 0,
           background: 'var(--c-cardBg)', borderRight: `1px solid ${C.borderDark}`,
           display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 14,
         }}>
           <button
-            onClick={() => setNavCollapsed(false)}
+            onClick={() => { setNavCollapsed(false); setPeekNumbers(true); }}
             title="Show WhatsApp numbers"
             style={{
               width: 34, height: 34, borderRadius: 8, border: 'none',
@@ -80,7 +98,7 @@ export default function ChatsPage({ subParts = [], navigate, user }) {
           selectedNumber={selectedNumber}
           onSelectNumber={selectNumber}
           canRename={user?.role === 'admin'}
-          onCollapse={() => setNavCollapsed(true)}
+          onCollapse={() => { setNavCollapsed(true); setPeekNumbers(false); }}
         />
       )}
 

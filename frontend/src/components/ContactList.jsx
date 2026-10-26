@@ -68,11 +68,13 @@ export default function ContactList({ waNumber, width = 380, selectedContact, on
 
   return (
     <div style={{
-      width, minWidth: width,
+      // The chosen width is a preference, not a floor: when the window is
+      // short of room this list gives way (down to 260) before the chat does.
+      flex: `0 1 ${width}px`, minWidth: Math.min(width, 260),
       background: 'var(--c-cardBg)',
       borderRight: `1px solid ${C.borderDark}`,
       display: 'flex', flexDirection: 'column',
-      flexShrink: 0, height: '100%', overflow: 'hidden',
+      height: '100%', overflow: 'hidden',
     }}>
       {/* Header */}
       <div style={{

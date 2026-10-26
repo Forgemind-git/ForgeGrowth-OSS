@@ -30,13 +30,13 @@ export default function NumberSidebar({ selectedNumber, onSelectNumber, onCollap
 
   return (
     <aside style={{
-      width: 320,
-      minWidth: 320,
+      // Gives way (down to 240) before the chat does when the window is narrow.
+      flex: '0 1 320px',
+      minWidth: 240,
       background: 'var(--c-cardBg)',
       borderRight: `1px solid ${C.borderDark}`,
       display: 'flex',
       flexDirection: 'column',
-      flexShrink: 0,
       height: '100%',
       overflow: 'hidden',
     }}>

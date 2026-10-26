@@ -933,7 +933,9 @@ export default function ChatWindow({ waNumber, contactNumber, user, onContactSav
 
   return (
     <div style={{
-      flex: 1, display: 'flex', flexDirection: 'column',
+      // The chat claims a usable width before the panes beside it do: they
+      // shrink (ChatsPage) so the composer is never squeezed to a sliver.
+      flex: '1 1 0', minWidth: 'min(440px, 55%)', display: 'flex', flexDirection: 'column',
       overflow: 'hidden',
       background: 'var(--c-chatWall)',
     }}>
@@ -1479,7 +1481,7 @@ export default function ChatWindow({ waNumber, contactNumber, user, onContactSav
         )}
 
         <div
-          style={{ padding: '10px 16px', display: 'flex', alignItems: 'flex-end', gap: 10, position: 'relative' }}
+          style={{ padding: '10px 12px', display: 'flex', alignItems: 'flex-end', gap: 6, position: 'relative' }}
           onDragOver={e => { e.preventDefault(); if (windowStatus?.canSendFreeForm) setDragOver(true); }}
           onDragLeave={e => { e.preventDefault(); setDragOver(false); }}
           onDrop={e => {
@@ -1563,7 +1565,7 @@ export default function ChatWindow({ waNumber, contactNumber, user, onContactSav
               }
               disabled={!windowStatus?.canSendFreeForm || sending || !!pendingFile || !!audioBlob}
               style={{
-                flex: 1, padding: '9px 14px', borderRadius: 8, border: 'none',
+                flex: 1, minWidth: 0, padding: '9px 14px', borderRadius: 8, border: 'none',
                 fontSize: 15, fontFamily: FONT, outline: 'none',
                 // Grows with the text so a pasted message can be read and edited
                 // whole; only past half the screen does it start scrolling.
