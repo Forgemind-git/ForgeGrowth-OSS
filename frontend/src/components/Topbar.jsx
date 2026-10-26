@@ -6,6 +6,7 @@ import { showError } from '../lib/feedback.js';
 import { useTheme } from '../theme.jsx';
 import logoUrl from '../assets/forgemind-logo.gif';
 import { HeaderSegmented } from './PillStrip.jsx';
+import { useIsPhone } from '../lib/useIsPhone.js';
 
 // Two modes, one switch. The icon shows the mode you are IN; clicking flips it.
 
@@ -51,6 +52,10 @@ function IconButton({ title, onClick, children, innerRef, style }) {
 export default function Topbar({ user, onLogout, onNavigate, navigate, section, onSectionChange, hideSections }) {
   const { theme, setTheme } = useTheme();
   const ThemeIcon = theme === 'light' ? Sun : Moon;
+  // Phones: the mark without the wordmark, the Social/Sales switch in the flow
+  // (not centred over the brand), and the theme switch and Settings inside the
+  // avatar menu — the bar fits a 390px screen with all four controls tappable.
+  const phone = useIsPhone();
   const [userOpen, setUserOpen] = useState(false);
   const [unhealthyAccounts, setUnhealthyAccounts] = useState([]);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -162,7 +167,7 @@ export default function Topbar({ user, onLogout, onNavigate, navigate, section, 
           style={{ height: 30, width: 30, objectFit: 'contain', flexShrink: 0 }}
           onError={e => { e.currentTarget.style.display = 'none'; }}
         />
-        <span style={{
+        {!phone && <span style={{
           fontSize: 15, fontWeight: 780, color: '#fff', fontFamily: FONT,
           letterSpacing: '-.01em', textTransform: 'uppercase', lineHeight: 1,
           display: 'inline-flex', alignItems: 'center', gap: 7,
@@ -172,7 +177,7 @@ export default function Topbar({ user, onLogout, onNavigate, navigate, section, 
             background: C.primary, color: '#fff', padding: '2px 8px',
             borderRadius: 8, lineHeight: 1.25, display: 'inline-block',
           }}>GROWTH</span>
-        </span>
+        </span>}
       </button>
 
       {/* The primary mode switch, ABSOLUTELY centred on the bar rather than
@@ -180,7 +185,9 @@ export default function Topbar({ user, onLogout, onNavigate, navigate, section, 
           left or right with the width of the brand and of the right rail, so it
           was never actually on the bar's centre line. */}
       {!hideSections && (
-        <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}>
+        <div style={phone
+          ? { marginLeft: 10, minWidth: 0 }
+          : { position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}>
           {/* ONE accent pill that SLIDES between Social and Sales — never a
               per-item background, which is what makes the selection pop. */}
           <HeaderSegmented items={SECTIONS} value={section} onChange={onSectionChange} />
@@ -189,17 +196,21 @@ export default function Topbar({ user, onLogout, onNavigate, navigate, section, 
 
       {/* Right rail — discs, all 34px, all the same fill. */}
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <IconButton
-          title={`${theme === 'light' ? 'Light' : 'Dark'} mode — click to switch`}
-          onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-        >
-          <ThemeIcon size={16} strokeWidth={2} />
-        </IconButton>
+        {!phone && (
+          <IconButton
+            title={`${theme === 'light' ? 'Light' : 'Dark'} mode — click to switch`}
+            onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+          >
+            <ThemeIcon size={16} strokeWidth={2} />
+          </IconButton>
+        )}
 
         {/* One Settings for the whole app — Sales, Chats and Social. */}
-        <IconButton title="Settings" onClick={() => onNavigate('admin-settings')}>
-          <Settings size={16} strokeWidth={2} />
-        </IconButton>
+        {!phone && (
+          <IconButton title="Settings" onClick={() => onNavigate('admin-settings')}>
+            <Settings size={16} strokeWidth={2} />
+          </IconButton>
+        )}
 
         <div ref={notifRef} style={{ position: 'relative' }}>
           <IconButton
@@ -218,7 +229,9 @@ export default function Topbar({ user, onLogout, onNavigate, navigate, section, 
 
           {notifOpen && (
             <div style={{
-              position: 'absolute', top: 42, right: 0, width: 340, maxHeight: 420, overflowY: 'auto',
+              position: phone ? 'fixed' : 'absolute', top: phone ? 'calc(var(--fc-header-h) + var(--fc-gutter) * 2)' : 42,
+              right: phone ? 'var(--fc-gutter)' : 0, left: phone ? 'var(--fc-gutter)' : undefined,
+              width: phone ? 'auto' : 340, maxHeight: phone ? '70dvh' : 420, overflowY: 'auto',
               background: 'var(--fc-raised)', borderRadius: 'var(--fc-r-md)',
               boxShadow: 'var(--fc-shadow-lg)', padding: 6, zIndex: 200,
               animation: 'fc-pop-in .2s ease', fontFamily: FONT,
@@ -327,6 +340,7 @@ export default function Topbar({ user, onLogout, onNavigate, navigate, section, 
               </div>
               {[
                 { Icon: Settings, label: user?.role === 'admin' ? 'Admin Settings' : 'Settings', color: C.text, act: () => onNavigate('admin-settings') },
+                ...(phone ? [{ Icon: ThemeIcon, label: theme === 'light' ? 'Dark mode' : 'Light mode', color: C.text, act: () => setTheme(theme === 'light' ? 'dark' : 'light') }] : []),
                 { Icon: LogOut, label: 'Sign out', color: C.primary, act: onLogout },
               ].map(row => (
                 <button

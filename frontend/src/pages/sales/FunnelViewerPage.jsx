@@ -110,8 +110,8 @@ export default function FunnelViewerPage({ user, navigate, tabs }) {
     <PageShell
       subtitle="How far your contacts got through the funnel. A contact counts at every stage they passed through."
       actions={
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ width: 210 }}><SearchableSelect value={source} onChange={setSource} options={sourceOpts} placeholder="All sources" /></div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', maxWidth: '100%', minWidth: 0 }}>
+          <div style={{ width: 210, maxWidth: '100%' }}><SearchableSelect value={source} onChange={setSource} options={sourceOpts} placeholder="All sources" /></div>
           <Segmented value={range} onChange={setRange}
             options={[{ value: 'week', label: 'This week' }, { value: 'month', label: 'This month' }, { value: '90d', label: '90 days' }, { value: 'all', label: 'All time' }, { value: 'custom', label: 'Custom' }]} />
         </div>
@@ -148,7 +148,11 @@ export default function FunnelViewerPage({ user, navigate, tabs }) {
           <EmptyChart text="No funnel stages configured" />
         ) : (
           <>
-            <FunnelColumns rows={rows} onOpen={openDrill} />
+            {/* The columns keep a readable width; on a narrow screen they scroll
+                inside the card rather than making the whole page pan sideways. */}
+            <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
+              <FunnelColumns rows={rows} onOpen={openDrill} />
+            </div>
             {branches.length > 0 && (
               <div style={{ marginTop: 18, paddingTop: 14, borderTop: `1px solid ${C.borderSubtle}`, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
                 <span style={{ fontSize: T.meta, fontWeight: W.medium, color: C.textSecondary }}>Left the funnel:</span>

@@ -316,9 +316,38 @@ input, button, textarea, select { font-family: var(--fc-font); }
   min-height: 0;
 }
 .fc-content { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: auto; }
-/* Phones: a narrower gutter, so the page keeps the width the rail leaves it. */
-@media (max-width: 640px) {
+/* ── Phones and portrait tablets (≤900px, lib/useIsPhone.js) ─────────────
+   The side nav becomes a bottom tab bar (Sidebar variant="bottom"), so the
+   content pane gets the full width; the frame uses the DYNAMIC viewport height
+   so iOS Safari's address bar cannot push the tab bar off-screen. Anything wider
+   than the screen scrolls inside its own box instead of pushing the page. */
+@media (max-width: 900px) {
   :root[data-theme] { --fc-gutter: 8px; }
+  .fc-app { height: 100dvh; }
+  .fc-app.fc-has-tabbar { padding-bottom: calc(var(--fc-gutter) * 2 + 64px + env(safe-area-inset-bottom, 0px)); }
+  .fc-pillstrip { max-width: 100%; overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; }
+  .fc-pillstrip::-webkit-scrollbar { display: none; }
+  .fc-content table { display: block; max-width: 100%; overflow-x: auto; }
+  /* The page never pans sideways on a phone: what is wider scrolls in its own box. */
+  .fc-content { overflow-x: hidden; }
+  .fc-content img, .fc-content video { max-width: 100%; }
+  /* Settings tabs pad their content 28px a side for a desktop pane; on a
+     phone that is 15% of the width. Matched on the inline padding they share. */
+  .fc-settings [style*="padding: 16px 28px 28px"] { padding: 12px 14px 20px !important; }
+  /* Editors laid out as a form beside a pinned preview (AgentEditor, the
+     template builder): stacked on a phone — the form, then the preview — and
+     the whole column scrolls. The preview had stretched to the window height;
+     here it gets one. */
+  .fc-split { flex-direction: column !important; overflow-y: auto !important; }
+  .fc-split > * { flex: none !important; width: 100% !important; min-height: auto !important; height: auto !important; }
+  .fc-split > aside { border-left: none !important; height: 640px !important; }
+  /* Dialogs: most are written with a desktop width (440–600px). Whatever sits
+     directly inside a full-screen overlay is held to the screen, and scrolls. */
+  .fc-ui [style*="position: fixed"] > div {
+    max-width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 16px);
+    overflow-y: auto;
+  }
 }
 .fc-sidebar { flex: none; display: flex; flex-direction: column; }
 

@@ -1,3 +1,4 @@
+import { useIsPhone } from './lib/useIsPhone.js';
 import { useState, useEffect, useRef } from 'react';
 import { api } from './api.js';
 import { C, FONT } from './constants.js';
@@ -122,14 +123,9 @@ export default function App() {
   // Only the flow CANVAS (#/chatbot-builder/<id>) takes the rail — the Flows
   // list is now the Automations hub's landing tab and keeps the full sidebar.
   const inBuilder = page === 'chatbot-builder' && !!subParts[0] && subParts[0] !== 'folder';
-  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches);
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 640px)');
-    const on = () => setPhone(mq.matches);
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
-  }, []);
-  const forceRail = inBuilder || phone;
+  // A phone has no side nav at all — the bottom tab bar replaces it (below).
+  const phone = useIsPhone();
+  const forceRail = inBuilder;
   useEffect(() => {
     if (forceRail) {
       setSidebarCollapsed(prev => { pinnedCollapse.current = prev; return true; });
@@ -231,7 +227,7 @@ export default function App() {
     // pane scrolls inside itself. Both are in styles/forge.css rather than
     // inline, because the header, the two panes and the gutter have to agree on
     // one set of numbers and a literal in three files is how they stop agreeing.
-    <div className="fc-app fc-ui" style={{ fontFamily: FONT }}>
+    <div className={`fc-app fc-ui${phone && page !== 'admin-settings' ? ' fc-has-tabbar' : ''}`} style={{ fontFamily: FONT }}>
       <Topbar
         user={user}
         onLogout={handleLogout}
@@ -242,7 +238,7 @@ export default function App() {
         hideSections={page === 'admin-settings'}
       />
       <div className="fc-body">
-        {page !== 'admin-settings' && (
+        {page !== 'admin-settings' && !phone && (
           <Sidebar
             activePage={page === 'sales-pipeline' || page === 'sales-funnel' ? 'leads' : hubOf(navKey) ? hubOf(navKey).id : navKey}
             onPageChange={setPage}
@@ -262,6 +258,15 @@ export default function App() {
           </PageErrorBoundary>
         </main>
       </div>
+      {phone && page !== 'admin-settings' && (
+        <Sidebar
+          variant="bottom"
+          activePage={page === 'sales-pipeline' || page === 'sales-funnel' ? 'leads' : hubOf(navKey) ? hubOf(navKey).id : navKey}
+          onPageChange={setPage}
+          user={user}
+          section={section}
+        />
+      )}
       <FeedbackModal />
     </div>
   );

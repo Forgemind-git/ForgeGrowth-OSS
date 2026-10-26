@@ -1881,7 +1881,7 @@ function BuilderView({ template, initialDraft, onBack, onSave, readOnly, account
 
 
         {/* Two panes. Only the left one scrolls; the right is pinned. */}
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: 0 }}>
+        <div className="fc-split" style={{ flex: 1, minHeight: 0, display: 'flex', gap: 0 }}>
 
           {/* LEFT — step strip, then the step's form (the only scrolling
               region), then Back / Next. The strip and the nav never scroll. */}

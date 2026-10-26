@@ -17,6 +17,21 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
 
 ## [Unreleased]
 
+### Added
+
+- **Phones and tablets.** Below 900 px wide the app switches to a phone layout: a bottom tab bar
+  replaces the side rail, the top bar compacts (theme toggle moves into the avatar menu), and the
+  page uses the full screen height including the notch and home-indicator insets.
+- Chats, Follow-up and the Instagram inbox show one pane at a time on a phone — numbers, then
+  contacts, then the conversation — with a back button at each step.
+- Settings on a phone is a section picker instead of the side menu.
+
+### Fixed
+
+- No page scrolls sideways on a 390 px phone any more: pill strips and wide tables scroll inside
+  their own box, modals fit the screen, and the agent and template editors stack the form above
+  the preview instead of squeezing both side by side.
+
 ## [3.0.0] — 2026-10-26
 
 Instagram and WhatsApp automation first: the Marketing section, Razorpay, the Sales Log, every

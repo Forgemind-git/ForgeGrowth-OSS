@@ -227,7 +227,7 @@ function pageAllowed(allowed, id) {
   return (PAGE_ALIASES[id] || [id]).some(k => allowed.has(k));
 }
 
-export default function Sidebar({ activePage, onPageChange, collapsed, setCollapsed, user, section = 'sales' }) {
+export default function Sidebar({ activePage, onPageChange, collapsed, setCollapsed, user, section = 'sales', variant = 'side' }) {
   const sectionItems = SECTION_NAV[section] || NAV_ITEMS;
   // Filter nav by user.pages (admin sees everything). Home is always visible.
   const allowed = (user?.role === 'admin' || !user?.pages)
@@ -250,6 +250,13 @@ export default function Sidebar({ activePage, onPageChange, collapsed, setCollap
     .filter(g => g.items.length > 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [user?.role, user?.pages && user.pages.join(',')]);
+
+  // Phones: the same destinations as a bottom tab bar. Each section has five,
+  // which is what a tab bar holds; the side rail took a quarter of a 390px
+  // screen and left every page ~290px.
+  if (variant === 'bottom') {
+    return <BottomNav items={visibleItems} activePage={activePage} onSelect={goTo} />;
+  }
 
   const isGrouped = section === 'sales' && groups.length > 0;
   const useGroups = isGrouped && !collapsed;
@@ -406,5 +413,38 @@ export default function Sidebar({ activePage, onPageChange, collapsed, setCollap
         )}
       </div>
     </div>
+  );
+}
+
+// Fixed to the bottom of the screen on phones (App.jsx). Icons with a short
+// label under each, the active one in the accent — thumb-sized targets (≥48px).
+function BottomNav({ items, activePage, onSelect }) {
+  return (
+    <nav aria-label="Main" style={{
+      position: 'fixed', left: 'var(--fc-gutter)', right: 'var(--fc-gutter)',
+      bottom: 'calc(var(--fc-gutter) + env(safe-area-inset-bottom, 0px))',
+      height: 64, zIndex: 150, display: 'flex', alignItems: 'stretch',
+      background: 'var(--fc-card)', borderRadius: 'var(--fc-r-lg)',
+      boxShadow: 'var(--fc-shadow-lg)', padding: '0 4px',
+    }}>
+      {items.map(item => {
+        const on = activePage === item.id;
+        return (
+          <button key={item.id} type="button" onClick={() => onSelect(item.id)}
+            aria-current={on ? 'page' : undefined}
+            style={{
+              flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              gap: 3, background: 'transparent', border: 'none', cursor: 'pointer', padding: '6px 2px',
+              color: on ? C.primary : C.textSecondary, fontFamily: FONT,
+            }}>
+            <item.Icon size={21} strokeWidth={on ? 2.4 : 2} />
+            <span style={{
+              fontSize: 11, fontWeight: on ? 750 : 550, lineHeight: 1.1, maxWidth: '100%',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>{item.label}</span>
+          </button>
+        );
+      })}
+    </nav>
   );
 }

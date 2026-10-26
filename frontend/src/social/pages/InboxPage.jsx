@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { Camera, Film, Mic, Link2, Paperclip, Play, Search, X, MessageSquare, CornerDownRight, ExternalLink, Send, Trash2, ChevronDown, ChevronUp, Clock, Pencil, Reply as ReplyIcon, CheckCheck } from "lucide-react";
+import { Camera, Film, Mic, Link2, Paperclip, Play, Search, X, MessageSquare, CornerDownRight, ExternalLink, Send, Trash2, ChevronDown, ChevronUp, Clock, Pencil, Reply as ReplyIcon, CheckCheck, ArrowLeft } from "lucide-react";
+import { useIsPhone } from '../../lib/useIsPhone.js';
 import { api } from '../api.js';
 import { useApi } from '../hooks/useApi.js';
 import { relativeTime, C, FONT, T, BTN } from '../constants.js';
@@ -534,6 +535,8 @@ function InstagramInbox({ isAdmin, deepLink }) {
   const [tab, setTab] = useState("messages");
   const [account, setAccount] = useState(null);     // null = "All accounts" (Comments tab only; Messages auto-picks first)
   const [activeKey, setActiveKey] = useState(null);
+  const phone = useIsPhone();
+  const [phoneThread, setPhoneThread] = useState(false);
   const [query, setQuery] = useState("");
   const [accountQuery, setAccountQuery] = useState("");
   const [unreadOnly, setUnreadOnly] = useState(false);   // chat-list filter (Messages tab)
@@ -682,7 +685,46 @@ function InstagramInbox({ isAdmin, deepLink }) {
           tabs={[{ id: "messages", label: "Messages", count: conversations.length }, { id: "comments", label: "Comments", count: comments.length }]} />
       </div>
 
-      {tab === "messages" ? (
+      {tab === "messages" && phone ? (
+        // Phones: the chat list, or one thread with a way back — never side by side.
+        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          {phoneThread && activeConv ? (
+            <>
+              <button onClick={() => setPhoneThread(false)}
+                style={{ ...BTN.secondary, alignSelf: "flex-start", marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                <ArrowLeft size={15} /> Chats
+              </button>
+              <ChatThread conv={activeConv} accounts={accounts} onSent={refetch}
+                allTags={allTags} categories={categories}
+                isAdmin={isAdmin}
+                openContactModal={(c) => setEditingContact(c)}
+                refreshContacts={refetch} />
+            </>
+          ) : (
+            <>
+              {accounts.length > 1 && (
+                <select aria-label="Instagram account" value={account || ''} onChange={e => setAccount(e.target.value)}
+                  style={{ height: 40, borderRadius: 12, border: "none", padding: "0 12px", marginBottom: 8, fontFamily: FONT, fontSize: 15, flexShrink: 0 }}>
+                  {accounts.map(a => <option key={a.accountId} value={a.accountId}>{a.name || (a.username ? "@" + a.username : shortId(a.accountId))}</option>)}
+                </select>
+              )}
+              <ChatListPane
+                fill
+                conversations={visibleConversations}
+                activeKey={null}
+                onSelect={(k) => { setActiveKey(k); setPhoneThread(true); }}
+                accounts={accounts}
+                account={account}
+                query={query} setQuery={setQuery}
+                unreadOnly={unreadOnly} setUnreadOnly={setUnreadOnly}
+                totalUnread={totalUnread}
+                loading={loading && !data}
+                chatCount={conversations.length}
+              />
+            </>
+          )}
+        </div>
+      ) : tab === "messages" ? (
         // 3-column layout: Accounts | Chats | Conversation (mirrors Forgechat's chat page).
         // All three column headers share PANE_HEADER_HEIGHT (80px, 2-row pattern: label
         // strip + control strip) so they line up visually. The columns sit ON the
@@ -815,10 +857,12 @@ function AccountPane({ accounts, selectedAccount, onSelect, unreadByAccount, que
 // ── ChatListPane (middle column) ─────────────────────────────────────────
 // 2-row header: "CHATS" label + count chip on top; search box + Unread filter
 // pill on the second row. Below the header is the scrolling chat list.
-function ChatListPane({ conversations, activeKey, onSelect, accounts, account, query, setQuery, unreadOnly, setUnreadOnly, totalUnread, loading, chatCount }) {
+function ChatListPane({ conversations, activeKey, onSelect, accounts, account, query, setQuery, unreadOnly, setUnreadOnly, totalUnread, loading, chatCount, fill = false }) {
   const q = (query || "").trim();
   return (
-    <div style={{ width: 340, minWidth: 280, display: "flex", flexDirection: "column" }}>
+    <div style={fill
+      ? { flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }
+      : { width: 340, minWidth: 280, display: "flex", flexDirection: "column" }}>
       <div style={PANE_HEADER_STYLE}>
         <PaneLabelRow label="Chats" right={<span style={COUNT_CHIP(unreadOnly)}>{conversations.length}</span>} />
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -994,6 +1038,8 @@ function CommentsByPost({
   emptyTitle = "No comments yet",
   emptySub   = "Comments on your posts will appear here.",
 }) {
+  // Phones: no posts column; each comment links to its post, which filters the list.
+  const phone = useIsPhone();
   const [query, setQuery]       = useState("");
   const [range, setRange]       = useState("all");
   const [status, setStatus]     = useState("needs");
@@ -1110,7 +1156,7 @@ function CommentsByPost({
       </div>
       {/* 3 · Posts | Comments */}
       <div style={{ flex: 1, minHeight: 0, display: "flex", gap: 12 }}>
-        <div style={{ width: 300, flexShrink: 0, background: C.raised, borderRadius: 16, display: "flex", flexDirection: "column", minHeight: 0 }}>
+        <div style={{ width: 300, flexShrink: 0, background: C.raised, borderRadius: 16, display: phone ? "none" : "flex", flexDirection: "column", minHeight: 0 }}>
           <div style={{ padding: "12px 12px 8px", flexShrink: 0 }}>
             <div className="fc-searchfield" style={{ ...FIELD_WRAP, padding: "0 10px", height: 34 }}>
               <Search size={14} color={C.textMuted} />

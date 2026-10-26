@@ -182,7 +182,8 @@ export const PillTabs = ({ tabs, ...rest }) => (
 
 // Underline tabs (level-1 tabs inside a page). Never rounded — the accent underline must stay straight.
 export const UnderlineTabs = ({ tabs, value, onChange, style }) => (
-  <div style={{ display: "flex", gap: 4, ...style }}>
+  // Scrolls sideways when the tabs are wider than the screen (phones) instead of pushing the page.
+  <div style={{ display: "flex", gap: 4, maxWidth: "100%", overflowX: "auto", scrollbarWidth: "none", ...style }}>
     {tabs.map((t) => {
       const tab = typeof t === "string" ? { id: t, label: t } : t;
       const on = tab.id === value;

@@ -1,3 +1,4 @@
+import { isPhoneNow } from '../lib/useIsPhone.js';
 import { UNZOOM_STYLE } from '../lib/uiZoom.js';
 import React, { useState, useRef, useEffect, useCallback, useLayoutEffect, useMemo } from "react";
 import { notify as appNotify } from '../lib/feedback.js';
@@ -4669,7 +4670,7 @@ const AutomationBuilderView = ({ automation, onBack, onSave, onToggleStatus, act
               onRowClick={onRowClick}
               canvasTemplates={templates}
               activeNode={activeNode}
-              hideMiniMap={!!selectedNode || showPreview}
+              hideMiniMap={!!selectedNode || showPreview || isPhoneNow()}
             />
 
             {showBlocks && (
