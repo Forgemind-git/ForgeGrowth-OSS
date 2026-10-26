@@ -17,6 +17,12 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
 
 ## [Unreleased]
 
+### Documentation
+
+- **Install with Claude Code.** The README's Quick start has a copy-paste prompt for Claude Code on
+  the server: it checks DNS and ports, picks `--domain`, `--url` behind an existing proxy, or a plain
+  IP, runs the pinned installer, and verifies the site and API before reporting the sign-in.
+
 ## [3.1.1] — 2026-10-26
 
 ### Fixed
