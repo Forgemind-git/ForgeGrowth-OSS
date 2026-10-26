@@ -49,6 +49,13 @@ re-run and leaves `.env` and your database alone. Pin to a specific release with
 
 ### Fixed
 
+- **A bad link can no longer crash the backend.** Express 4 ignored the promise an `async` route
+  returns, so a query that failed inside one — `GET /api/chatbots/<not-a-number>` raising Postgres
+  `22P02`, for example — was an unhandled rejection, and Node exits on those: every user lost the app.
+  Rejections now reach the error handler for every route, in the main app and the Social sub-app
+  (`util/expressErrors.js`, applied once). A malformed value in the request answers **400**, a body
+  that is not JSON answers 400 instead of 500, and other failures a logged JSON 500. A stray
+  rejection outside a request is logged rather than fatal.
 - **Voice messages from Chats arrive as real voice notes and play on iPhone.** A recording (and a
   forwarded voice note) is sent with `voice: true` in WhatsApp's own file layout — 48 kHz mono Opus,
   120 ms packets, the audio on one Ogg page, vendor "WhatsApp" — copied from a voice note recorded on

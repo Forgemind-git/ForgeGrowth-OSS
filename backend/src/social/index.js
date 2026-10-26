@@ -2384,10 +2384,9 @@ app.post('/api/social/agents/:id/test', adminOnly, async (req, res) => {
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 
 // ── Error handler ────────────────────────────────────────────
-app.use((err, req, res, _next) => {
-  console.error(err);
-  res.status(500).json({ error: 'Internal server error' });
-});
+// The same one as the main app (util/expressErrors.js): bad input is a 400, and
+// an async route's rejection lands here instead of crashing the process.
+app.use(require('../util/expressErrors').errorHandler);
 
 // ── Startup ──────────────────────────────────────────────────
 // Boot one-shots that spend platform API calls run only if they haven't run in
